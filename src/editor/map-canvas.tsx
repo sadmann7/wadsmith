@@ -15,6 +15,7 @@ import {
   MapHandle,
   MapLabel,
   MapLookHere,
+  MapMarker,
   MapPort,
   MapSector,
   MapWall,
@@ -43,8 +44,12 @@ function wallsOf(map: GameMap) {
 
 function MapCanvas({
   map,
+  callouts,
   ...props
-}: ComponentProps<typeof MapEditor> & { map: GameMap }) {
+}: ComponentProps<typeof MapEditor> & {
+  map: GameMap;
+  callouts: { id: string; x: number; y: number; text: string }[];
+}) {
   return (
     <MapEditor aria-label="Map" className="map" map={map} {...props}>
       <MapWorld className="map-world">
@@ -153,6 +158,17 @@ function MapCanvas({
             aria-label={`Switch ${item.id}. Drag to a door, or press C.`}
             title="Drag to a door"
           />
+        ))}
+        {callouts.map((callout) => (
+          <MapMarker
+            key={callout.id}
+            value={callout.id}
+            x={callout.x}
+            y={callout.y}
+            className="pointer-events-none origin-bottom-left border border-danger bg-[#3a1513] px-2 py-1 font-mono text-[11px] whitespace-nowrap text-[#ffd5d1] [transform:translateY(-100%)_scale(calc(1/var(--canvas-zoom,1)))]"
+          >
+            {callout.text}
+          </MapMarker>
         ))}
         <MapCamera
           className="map-camera"

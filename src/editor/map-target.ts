@@ -181,6 +181,39 @@ function viewFrom(map: GameMap, room: Sector, at: Point) {
   return spots.find((spot) => sectorAt(map, spot) === room) ?? center;
 }
 
+function targetForIssue(map: GameMap, id: string): MapTarget | null {
+  if (id.includes("|")) {
+    const owner = wallOwners(map).get(id)?.[0];
+    return owner ? wallTarget(owner.id, id, null) : null;
+  }
+  if (map.sectors.some((sector) => sector.id === id)) {
+    return { kind: "room", sector: id, point: null };
+  }
+  if (map.switches.some((item) => item.id === id)) {
+    return { kind: "switch", id, point: null };
+  }
+  return map.things.some((thing) => thing.id === id)
+    ? { kind: "things", ids: [id], point: null }
+    : null;
+}
+
+function pointOfTarget(map: GameMap, target: MapTarget): Point | null {
+  if (target.kind === "room") {
+    const room = map.sectors.find((sector) => sector.id === target.sector);
+    return room ? roomCenter(map, room) : null;
+  }
+  if (target.kind === "things") {
+    const thing = map.things.find((item) => item.id === target.ids[0]);
+    return thing ? { x: thing.x, y: thing.y } : null;
+  }
+  if (target.kind === "wall") return wallMiddle(map, target.wall);
+  if (target.kind === "switch") {
+    const item = map.switches.find((entry) => entry.id === target.id);
+    return item ? wallMiddle(map, wallKey(item.from, item.to)) : null;
+  }
+  return target.point;
+}
+
 function viewOfTarget(map: GameMap, target: MapTarget) {
   if (target.kind === "room") {
     const room = map.sectors.find((sector) => sector.id === target.sector);
@@ -214,7 +247,9 @@ export {
   isSecondaryPress,
   normalizeControlClick,
   openMenuFromKey,
+  pointOfTarget,
   targetExists,
+  targetForIssue,
   targetForKeys,
   targetForSurface,
   viewOfTarget,

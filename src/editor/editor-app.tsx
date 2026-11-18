@@ -29,6 +29,7 @@ import {
 } from "@ui-sdk/react/resizable";
 import {
   CircleCheck,
+  CircleX,
   Expand,
   MousePointer2,
   PenLine,
@@ -61,7 +62,9 @@ import { MapCanvas } from "./map-canvas";
 import { thingIcons } from "./thing-icons";
 import {
   normalizeControlClick,
+  pointOfTarget,
   targetExists,
+  targetForIssue,
   targetForKeys,
   targetForSurface,
   viewOfTarget,
@@ -97,6 +100,7 @@ import {
   watchSavedMap,
 } from "../map/storage";
 import type { GameMap, Point, ThingCategory, ThingKind } from "../map/types";
+import { checkMap, fixIssue, issueText } from "../map/checks";
 import { validateMap } from "../map/validate";
 import { loadIwad } from "../engine/iwad";
 import { SceneCamera } from "../preview/scene-camera";
@@ -203,10 +207,12 @@ function createDraftChannel() {
   return { subscribe, publish };
 }
 
-function isTextEntry(target: EventTarget | null) {
+function ignoresShortcuts(target: EventTarget | null) {
   return (
     target instanceof HTMLElement &&
-    (target.isContentEditable || /^(INPUT|TEXTAREA)$/.test(target.tagName))
+    (target.isContentEditable ||
+      /^(INPUT|TEXTAREA)$/.test(target.tagName) ||
+      target.closest('[role="dialog"]') !== null)
   );
 }
 
@@ -246,6 +252,10 @@ function App() {
   const [layout, setLayout] = useState(initialLayout.view);
   const [findCameraRequest, setFindCameraRequest] = useState(0);
   const [fitRequest, setFitRequest] = useState(0);
+  const [focusRequest, setFocusRequest] = useState<{
+    id: number;
+    point: Point;
+  } | null>(null);
   const [drawRequest, setDrawRequest] = useState<{
     id: number;
     point: Point;
@@ -280,6 +290,32 @@ function App() {
 
   const issues = useMemo(() => validateMap(map), [map]);
   const canPlay = issues.length === 0;
+  const checks = useMemo(() => checkMap(map), [map]);
+  const warningCount = checks.length - issues.length;
+  const checkSummary =
+    checks.length === 0
+      ? "No problems"
+      : [
+          issues.length > 0
+            ? `${issues.length} ${issues.length === 1 ? "error" : "errors"}`
+            : null,
+          warningCount > 0
+            ? `${warningCount} ${warningCount === 1 ? "warning" : "warnings"}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" · ");
+  const callouts = useMemo(
+    () =>
+      issues.slice(0, 5).flatMap((issue) => {
+        const target = issue.target ? targetForIssue(map, issue.target) : null;
+        const point = target ? pointOfTarget(map, target) : null;
+        return point
+          ? [{ id: issue.id, ...point, text: issueText(issue).title }]
+          : [];
+      }),
+    [issues, map],
+  );
   const sector = map.sectors.find((item) => item.id === activeSector);
   const selectedThingKey = selection.find((key) =>
     key.startsWith(thingKeyPrefix),
@@ -320,7 +356,10 @@ function App() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (isTextEntry(event.target) || document.querySelector(".game-stage")) {
+      if (
+        ignoresShortcuts(event.target) ||
+        document.querySelector(".game-stage")
+      ) {
         return;
       }
       if (matchesShortcut(event, "mod+shift+z")) {
@@ -339,7 +378,7 @@ function App() {
     const onKeyDown = (event: KeyboardEvent) => {
       if (
         !matchesShortcut(event, "mod+d") ||
-        isTextEntry(event.target) ||
+        ignoresShortcuts(event.target) ||
         document.querySelector(".game-stage")
       ) {
         return;
@@ -411,7 +450,7 @@ function App() {
         event.ctrlKey ||
         event.metaKey ||
         event.altKey ||
-        isTextEntry(event.target) ||
+        ignoresShortcuts(event.target) ||
         (event.target as Element).closest?.(
           '[role="combobox"], [role="listbox"], [role="menu"]',
         ) ||
@@ -566,6 +605,15 @@ function App() {
     setSurface(null);
     if (keys) setSelection(keys);
     if (nextSector !== undefined) setActiveSector(nextSector);
+  };
+
+  const showTarget = (target: MapTarget) => {
+    selectTarget({ ...target, keepSelection: false });
+    const point = pointOfTarget(map, target);
+    if (visibleLayout === "scene") changeLayout(narrow ? "map" : "split");
+    if (point) {
+      setFocusRequest((request) => ({ id: (request?.id ?? 0) + 1, point }));
+    }
   };
 
   const showInScene = (target: MapTarget) => {
@@ -1100,6 +1148,8 @@ function App() {
                       }
                       findCameraRequest={findCameraRequest}
                       fitRequest={fitRequest}
+                      focusRequest={focusRequest}
+                      callouts={callouts}
                       drawRequest={drawRequest}
                       lookAtRequest={lookAtRequest}
                       onContextTarget={reportMenuTarget}
@@ -1261,6 +1311,7 @@ function App() {
             ) : sector && !selectedSwitch && !thing ? (
               <SectorInspector
                 key={sector.id}
+                map={map}
                 sector={sector}
                 assets={assets}
                 onChange={(patch) =>
@@ -1306,22 +1357,64 @@ function App() {
             >
               <h2>
                 Map check
-                <span>
-                  {issues.length === 0
-                    ? "No problems"
-                    : `${issues.length} ${issues.length === 1 ? "problem" : "problems"}`}
-                </span>
+                <span>{checkSummary}</span>
               </h2>
-              {issues.length === 0 ? (
+              {checks.length === 0 ? (
                 <p className="muted">This map is ready to playtest.</p>
               ) : (
                 <ul>
-                  {issues.slice(0, 8).map((issue) => (
-                    <li key={issue.id} className="check-issue">
-                      <TriangleAlert size={14} aria-hidden="true" />
-                      {issue.message}
-                    </li>
-                  ))}
+                  {checks.slice(0, 8).map((issue) => {
+                    const { title, detail } = issueText(issue);
+                    const fixed = fixIssue(map, issue);
+                    const target = issue.target
+                      ? targetForIssue(map, issue.target)
+                      : null;
+                    const Icon =
+                      issue.severity === "error" ? CircleX : TriangleAlert;
+                    return (
+                      <li key={issue.id} className="check-issue">
+                        <Icon
+                          size={14}
+                          className={
+                            issue.severity === "error"
+                              ? "text-danger"
+                              : "text-key"
+                          }
+                          aria-hidden="true"
+                        />
+                        <span className="sr-only">
+                          {issue.severity === "error" ? "Error: " : "Warning: "}
+                        </span>
+                        <div className="min-w-0">
+                          <div>{title}</div>
+                          {detail ? (
+                            <div className="truncate font-mono text-[11px] text-muted">
+                              {detail}
+                            </div>
+                          ) : null}
+                        </div>
+                        {fixed ? (
+                          <button
+                            type="button"
+                            className="border-0 bg-transparent p-0 text-ember"
+                            aria-label={`Fix: ${title}`}
+                            onClick={() => commit(fixed)}
+                          >
+                            Fix
+                          </button>
+                        ) : target ? (
+                          <button
+                            type="button"
+                            className="border-0 bg-transparent p-0 text-muted hover:text-text"
+                            aria-label={`Show: ${title}`}
+                            onClick={() => showTarget(target)}
+                          >
+                            Show
+                          </button>
+                        ) : null}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </section>

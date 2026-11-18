@@ -73,8 +73,10 @@ import type {
   ThingKind,
   ThingSkill,
 } from "../map/types";
+import { flatUse, wallUse, type TextureUse } from "../map/textures";
 import { TextureSwatch } from "../preview/surface-panel";
 import type { SceneAssets } from "../wad/assets";
+import { TexturePicker, type TextureKind } from "./texture-picker";
 import { thingIcons } from "./thing-icons";
 
 type ThingTab = "enemy" | "item" | "key" | "decor";
@@ -187,6 +189,7 @@ function TextureField({
   assets,
   light,
   whole,
+  browse,
   onChange,
 }: {
   label: string;
@@ -196,20 +199,38 @@ function TextureField({
   assets: SceneAssets;
   light: number;
   whole?: boolean;
+  browse?: { kind: TextureKind; use: TextureUse; context: string };
   onChange: (value: string) => void;
 }) {
+  const [browsing, setBrowsing] = useState(false);
+  const items = options.includes(value) ? options : [value, ...options];
+  const swatch = (
+    <TextureSwatch
+      name={value}
+      picture={picture(value)}
+      assets={assets}
+      light={light}
+      whole={whole}
+    />
+  );
   return (
     <div className="grid grid-cols-[48px_minmax(0,1fr)] items-end gap-2.5">
-      <TextureSwatch
-        name={value}
-        picture={picture(value)}
-        assets={assets}
-        light={light}
-        whole={whole}
-      />
+      {browse ? (
+        <button
+          type="button"
+          aria-label={`Browse ${label.toLowerCase()} textures`}
+          title="Browse textures"
+          className="size-12 cursor-pointer rounded-[3px] border-0 bg-transparent p-0 outline-offset-1 hover:outline-2 hover:outline-ember"
+          onClick={() => setBrowsing(true)}
+        >
+          {swatch}
+        </button>
+      ) : (
+        swatch
+      )}
       <Select
         value={value}
-        items={[...options]}
+        items={[...items]}
         onValueChange={(next) => {
           if (next) onChange(next);
         }}
@@ -222,7 +243,7 @@ function TextureField({
           </SelectTrigger>
         </div>
         <SelectContent className="select-content">
-          {options.map((option) => (
+          {items.map((option) => (
             <SelectItem
               key={option}
               value={option}
@@ -241,6 +262,21 @@ function TextureField({
           ))}
         </SelectContent>
       </Select>
+      {browse && browsing ? (
+        <TexturePicker
+          kind={browse.kind}
+          title={`Choose ${label.toLowerCase()} texture`}
+          context={browse.context}
+          value={value}
+          common={options}
+          use={browse.use}
+          picture={picture}
+          assets={assets}
+          light={light}
+          onApply={onChange}
+          onClose={() => setBrowsing(false)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -349,15 +385,22 @@ function DoorFields({
 }
 
 function SectorInspector({
+  map,
   sector,
   assets,
   onChange,
 }: {
+  map: GameMap;
   sector: Sector;
   assets: SceneAssets;
   onChange: (patch: Partial<Sector>) => void;
 }) {
   const { door } = sector;
+  const flats = {
+    kind: "flat" as const,
+    use: flatUse(map),
+    context: sector.name,
+  };
   return (
     <>
       <InspectorSection title={door ? "Door" : "Room"}>
@@ -418,6 +461,7 @@ function SectorInspector({
           label="Floor"
           value={sector.floorTexture}
           options={floorTextures}
+          browse={flats}
           light={sector.light}
           onChange={(floorTexture) => onChange({ floorTexture })}
         />
@@ -427,6 +471,7 @@ function SectorInspector({
           label="Ceiling"
           value={sector.ceilingTexture}
           options={ceilingTextures}
+          browse={flats}
           light={sector.light}
           onChange={(ceilingTexture) => onChange({ ceilingTexture })}
         />
@@ -436,6 +481,7 @@ function SectorInspector({
           label="Walls"
           value={sector.wallTexture}
           options={wallTextures}
+          browse={{ kind: "wall", use: wallUse(map), context: sector.name }}
           light={sector.light}
           onChange={(wallTexture) =>
             onChange({ wallTexture, wallOverrides: undefined })
@@ -565,6 +611,15 @@ function LineInspector({
             assets={assets}
             light={line.sector.light}
             whole={info.paints === "door" || info.paints === "switch"}
+            browse={
+              info.paints === "wall"
+                ? {
+                    kind: "wall",
+                    use: wallUse(map),
+                    context: `Line ${line.number}, ${line.sector.name}`,
+                  }
+                : undefined
+            }
             label={
               info.paints === "door"
                 ? "Door"

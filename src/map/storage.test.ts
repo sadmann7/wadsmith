@@ -78,6 +78,21 @@ describe("map files", () => {
     expect(parseMapFile(serializeMap(map))).toEqual(map);
   });
 
+  it("opens any Freedoom texture and rejects unknown names", () => {
+    const map = updateSector(starterMap, "sector-1", {
+      floorTexture: "NUKAGE1",
+      wallTexture: "ASHWALL2",
+    });
+    expect(parseMapFile(serializeMap(map))).toEqual(map);
+    expect(() =>
+      parseMapFile(
+        fileWith((file) => {
+          file.sectors[0].floorTexture = "SLAG_PL2";
+        }),
+      ),
+    ).toThrow("unknown texture");
+  });
+
   it("keeps thing difficulty settings", () => {
     const map = updateThing(starterMap, "imp-1", {
       skills: ["easy", "hard"],

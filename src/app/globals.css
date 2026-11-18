@@ -1370,14 +1370,13 @@
 
   .check-issue {
     display: grid;
-    grid-template-columns: 14px minmax(0, 1fr);
+    grid-template-columns: 14px minmax(0, 1fr) auto;
     gap: 8px;
     overflow-wrap: anywhere;
   }
 
   .check-issue svg {
     margin-top: 2px;
-    color: var(--danger);
   }
 
   .text-input,

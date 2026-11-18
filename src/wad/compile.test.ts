@@ -26,6 +26,7 @@ import {
 import {
   canStand,
   targetExists,
+  targetForIssue,
   targetForKeys,
   targetForSurface,
   viewOfTarget,
@@ -34,7 +35,16 @@ import {
 import { sectorAt, wallKey } from "../map/geometry";
 import { fitLineAction, triggersFor } from "../map/lines";
 import { mapBalance } from "../map/balance";
-import { thingCatalog, thingKinds } from "../map/catalog";
+import {
+  ceilingTextures,
+  floorTextures,
+  thingCatalog,
+  thingKinds,
+  wallTextures,
+} from "../map/catalog";
+import { checkMap, fixIssue, issueText } from "../map/checks";
+import { freedoomFlats, freedoomWalls } from "../map/freedoom-textures";
+import { wallUse } from "../map/textures";
 import { starterMap } from "../map/starter-map";
 import { parseMapFile, serializeMap } from "../map/storage";
 import type { GameMap, LineAction } from "../map/types";
@@ -920,5 +930,111 @@ describe("thing settings", () => {
       healthShort: 8,
       ammoShort: 31,
     });
+  });
+});
+
+function checkIds(map: GameMap) {
+  return checkMap(map).map((issue) => issue.id);
+}
+
+describe("map check", () => {
+  it("separates warnings from blocking errors", () => {
+    const checks = checkMap(starterMap);
+    expect(checks.every((issue) => issue.severity === "warning")).toBe(true);
+    expect(checks.map((issue) => issue.id)).toContain("no-exit");
+    expect(validateMap(starterMap)).toEqual([]);
+  });
+
+  it("warns about unused keys and thin supplies", () => {
+    const key = addThing(starterMap, "yellow-key", { x: 64, y: 64 });
+    const crowded = Array.from({ length: 5 }, (_, index) => ({
+      id: `pain-${index}`,
+      kind: "pain-elemental" as const,
+      x: 640,
+      y: 64,
+      angle: 0,
+    }));
+    expect(
+      checkIds({ ...key.map, things: [...key.map.things, ...crowded] }),
+    ).toEqual(
+      expect.arrayContaining([
+        `key-unused:${key.id}`,
+        "low-health",
+        "low-ammo",
+      ]),
+    );
+  });
+
+  it("splits room errors into a title and place", () => {
+    expect(
+      issueText({
+        id: "x",
+        message: "Arena: ceiling must be above the floor.",
+      }),
+    ).toEqual({ title: "Ceiling must be above the floor", detail: "Arena" });
+  });
+
+  it("fixes problems with one safe answer", () => {
+    const low = updateSector(starterMap, "sector-1", { ceiling: 0 });
+    const issue = validateMap(low).find((item) =>
+      item.id.startsWith("height"),
+    )!;
+    expect(validateMap(fixIssue(low, issue)!)).toEqual([]);
+    const unwired = { ...starterMap, switches: [] };
+    const door = validateMap(unwired).find((item) =>
+      item.id.startsWith("door-unwired"),
+    )!;
+    expect(fixIssue(unwired, door)).toBeNull();
+    const wall = wallKey("v1", "v15");
+    const walking = updateLine(starterMap, wall, {
+      action: { kind: "exit", trigger: "walk", repeat: false, tag: 0 },
+    });
+    const walkIssue = validateMap(walking).find((item) =>
+      item.id.startsWith("line-walk"),
+    )!;
+    const fixedWalk = fixIssue(walking, walkIssue)!;
+    expect(fixedWalk.lines?.[wall]?.action).toMatchObject({
+      kind: "exit",
+      trigger: "switch",
+    });
+    expect(validateMap(fixedWalk)).toEqual([]);
+    expect(
+      fixIssue(starterMap, { id: "outside:imp-1", message: "x" }),
+    ).toBeNull();
+  });
+
+  it("finds what an issue points at", () => {
+    expect(targetForIssue(starterMap, "sector-2")).toMatchObject({
+      kind: "room",
+    });
+    expect(targetForIssue(starterMap, "imp-1")).toMatchObject({
+      kind: "things",
+    });
+    expect(targetForIssue(starterMap, "switch-1")).toMatchObject({
+      kind: "switch",
+    });
+    expect(targetForIssue(starterMap, wallKey("v3", "v4"))).toMatchObject({
+      kind: "wall",
+    });
+  });
+
+  it("counts the wall parts a map actually shows", () => {
+    const shared = wallKey("v3", "v4");
+    const painted = updateLineSide(starterMap, shared, "sector-1", {
+      upper: "BRICK1",
+    });
+    expect(wallUse(painted).get("BRICK1")).toBe(1);
+  });
+
+  it("knows every catalog texture is in Freedoom", () => {
+    const flats: readonly string[] = freedoomFlats;
+    const walls: readonly string[] = freedoomWalls;
+    expect(
+      [...floorTextures, ...ceilingTextures].every((name) =>
+        flats.includes(name),
+      ),
+    ).toBe(true);
+    expect(wallTextures.every((name) => walls.includes(name))).toBe(true);
+    expect([...flats, ...walls].every((name) => name.length <= 8)).toBe(true);
   });
 });

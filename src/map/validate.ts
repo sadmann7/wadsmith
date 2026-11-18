@@ -13,7 +13,12 @@ import { keyThings } from "./catalog";
 import { describeLine, lineUsesTag } from "./lines";
 import type { GameMap, Sector, ThingSkill } from "./types";
 
-type MapIssue = { id: string; message: string; target?: string };
+type MapIssue = {
+  id: string;
+  message: string;
+  detail?: string;
+  target?: string;
+};
 
 const skills: ThingSkill[] = ["easy", "medium", "hard"];
 const coordinateLimit = 32000;

@@ -101,6 +101,7 @@ type MapEditorOptions = {
   findCameraRequest?: number;
   fitRequest?: number;
   drawRequest?: { id: number; point: Point } | null;
+  focusRequest?: { id: number; point: Point } | null;
   lookAtRequest?: { id: number; clientX: number; clientY: number } | null;
   onContextTarget?: (target: MapTarget | null) => void;
   contextMenuOpen?: boolean;
@@ -284,6 +285,7 @@ const mapEditor = definePrimitive({
     findCameraRequest: "number",
     fitRequest: "number",
     drawRequest: "value",
+    focusRequest: "value",
     lookAtRequest: "value",
     onContextTarget: "callback",
     contextMenuOpen: "boolean",
@@ -405,11 +407,13 @@ const mapEditor = definePrimitive({
     let fitted = false;
     let reportPointer: ((point: Point | null) => void) | undefined;
     let findAfterFit = false;
+    let focusAfterFit: Point | null = null;
     let stopCameraDrag: (() => void) | undefined;
     let findRequest = context.options().findCameraRequest ?? 0;
     let lookRequest = context.options().lookAtRequest?.id ?? 0;
     let fitRequest = context.options().fitRequest ?? 0;
     let drawRequest = context.options().drawRequest?.id ?? 0;
+    let focusRequest = context.options().focusRequest?.id ?? 0;
     let touchPress: { event: PointerEvent; held: boolean } | null = null;
     let ignoreClick = false;
 
@@ -460,6 +464,22 @@ const mapEditor = definePrimitive({
           pointerType: "touch",
         }),
       );
+    });
+    const centerOn = (point: Point) => {
+      const surface = root();
+      if (!surface) return;
+      const { zoom } = store.get().viewport;
+      viewport.setViewport({
+        x: surface.clientWidth / 2 - point.x * zoom,
+        y: surface.clientHeight / 2 - point.y * zoom,
+        zoom,
+      });
+    };
+    context.onOptions(({ focusRequest: request }) => {
+      if (!request || request.id === focusRequest) return;
+      focusRequest = request.id;
+      if (fitted) centerOn(request.point);
+      else focusAfterFit = request.point;
     });
     context.onOptions(({ drawRequest: request }) => {
       if (!request || request.id === drawRequest) return;
@@ -660,6 +680,7 @@ const mapEditor = definePrimitive({
           this.fitMap();
           fitted = true;
           if (findAfterFit) findCamera();
+          if (focusAfterFit) centerOn(focusAfterFit);
         });
         observer.observe(element);
         return () => {
@@ -1114,6 +1135,16 @@ const mapEditor = definePrimitive({
         return { style: `left:${at.x}px;top:${at.y}px` };
       }),
     }),
+    marker: slot<{ value: string; x: number; y: number }>({
+      props: { value: "string", x: "number", y: "number" },
+      attrs: (_state, { props }) => ({
+        style: css({
+          position: "absolute",
+          left: `${props.x}px`,
+          top: `${props.y}px`,
+        }),
+      }),
+    }),
     camera: slot({
       attrs: (state) => ({
         type: "button",
@@ -1168,6 +1199,7 @@ const parts = createParts(mapEditor, {
   wire: "line",
   connecting: "line",
   label: "div",
+  marker: "div",
   camera: "button",
   findCamera: "button",
   lookHere: "button",
@@ -1185,6 +1217,7 @@ const MapWire = parts.Wire;
 const MapConnecting = parts.Connecting;
 const MapFit = parts.Fit;
 const MapLabel = parts.Label;
+const MapMarker = parts.Marker;
 const MapCamera = parts.Camera;
 const MapFindCamera = parts.FindCamera;
 const MapLookHere = parts.LookHere;
@@ -1199,6 +1232,7 @@ export {
   MapHandle,
   MapLabel,
   MapLookHere,
+  MapMarker,
   MapPort,
   MapSector,
   MapWall,

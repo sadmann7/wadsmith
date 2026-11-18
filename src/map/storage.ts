@@ -1,12 +1,10 @@
 import {
-  ceilingTextures,
   doorTextures,
-  floorTextures,
   sectorEffects,
   switchTextures,
   thingKinds,
-  wallTextures,
 } from "./catalog";
+import { freedoomFlats, freedoomWalls } from "./freedoom-textures";
 import {
   isLineActionKind,
   keyColors,
@@ -146,7 +144,7 @@ function parseSector(value: unknown, vertices: Record<string, Point>): Sector {
       : Object.fromEntries(
           Object.entries(record(sector.wallOverrides, label)).map(
             ([wall, name]) => {
-              return [wallId(wall, label), texture(name, wallTextures, label)];
+              return [wallId(wall, label), texture(name, freedoomWalls, label)];
             },
           ),
         );
@@ -165,9 +163,9 @@ function parseSector(value: unknown, vertices: Record<string, Point>): Sector {
     floor: integer(sector.floor, heightLimit, label),
     ceiling: integer(sector.ceiling, heightLimit, label),
     light,
-    floorTexture: texture(sector.floorTexture, floorTextures, label),
-    ceilingTexture: texture(sector.ceilingTexture, ceilingTextures, label),
-    wallTexture: texture(sector.wallTexture, wallTextures, label),
+    floorTexture: texture(sector.floorTexture, freedoomFlats, label),
+    ceilingTexture: texture(sector.ceilingTexture, freedoomFlats, label),
+    wallTexture: texture(sector.wallTexture, freedoomWalls, label),
     ...(overrides ? { wallOverrides: overrides } : {}),
     ...(sector.door === undefined
       ? {}
@@ -211,10 +209,10 @@ function parseLineSide(value: unknown, label: string): LineSide {
       : { offsetY: integer(side.offsetY, wordLimit, label) }),
     ...(side.upper === undefined
       ? {}
-      : { upper: texture(side.upper, wallTextures, label) }),
+      : { upper: texture(side.upper, freedoomWalls, label) }),
     ...(side.lower === undefined
       ? {}
-      : { lower: texture(side.lower, wallTextures, label) }),
+      : { lower: texture(side.lower, freedoomWalls, label) }),
   };
 }
 
