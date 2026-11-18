@@ -20,7 +20,8 @@ Wadsmith is a Doom map editor built with UI SDK. It compiles maps to real WAD fi
 - `src/wad`: the WAD compiler, including the BSP and blockmap builders.
 - `src/editor`: the `map-editor` primitive and inspector.
 - `src/preview`: the editable 3D view and its software renderer. It is not the game renderer.
-- `src/engine` and `engine/`: the browser runtime, the engine patch and the C exports the page reads. `engine/doom-wasm.patch` comes from tablecn, so keep the two in step; Wadsmith's own engine changes go in `engine/wadsmith.patch`.
+- `src/engine`: the game runs in `doom-worker.ts`, and `game-client.ts` connects it to the page and an AudioWorklet.
+- `engine/doom-wasm.patch`: every change to cloudflare/doom-wasm, including tablecn's browser fixes and Wadsmith's exports.
 
 Editor coordinates are y-down. `toDoom` in `src/wad/compile.ts` is the only place that flips them for the engine.
 

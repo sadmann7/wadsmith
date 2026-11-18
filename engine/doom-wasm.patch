@@ -1,5 +1,5 @@
 diff --git a/configure.ac b/configure.ac
-index ae1320b..16d69fc 100644
+index ae1320b..ef73449 100644
 --- a/configure.ac
 +++ b/configure.ac
 @@ -115,9 +115,9 @@ AS_IF([test "x$with_libpng" != xno], [
@@ -7,7 +7,7 @@ index ae1320b..16d69fc 100644
  # TODO: We currently link everything against libraries that don't need it.
  # Use the specific library CFLAGS/LIBS variables instead of setting them here.
 -EMFLAGS="-gsource-map -s INVOKE_RUN=1 -s USE_SDL=2 -s USE_SDL_MIXER=2 -s LEGACY_GL_EMULATION=0 -s USE_SDL_NET=2 -s ASSERTIONS=0 -s WASM=1 -s ALLOW_MEMORY_GROWTH=0 -s FORCE_FILESYSTEM=1 -s EXTRA_EXPORTED_RUNTIME_METHODS=[['FS','ccall']] -s SAFE_HEAP=1 -s EXIT_RUNTIME=1 -s STACK_OVERFLOW_CHECK=1 -s PROXY_POSIX_SOCKETS=0 -s USE_PTHREADS=0 -s PROXY_TO_PTHREAD=0 -s TOTAL_MEMORY=64MB -s ERROR_ON_UNDEFINED_SYMBOLS=0 -s ASYNCIFY -O3 --source-map-base /"
-+EMFLAGS="-s INVOKE_RUN=1 -s USE_SDL=2 -s USE_SDL_MIXER=2 -s LEGACY_GL_EMULATION=0 -s USE_SDL_NET=2 -s ASSERTIONS=0 -s WASM=1 -s ALLOW_MEMORY_GROWTH=0 -s FORCE_FILESYSTEM=1 -s EXPORTED_RUNTIME_METHODS=FS,ccall,callMain,ENV,HEAPU8 -s MODULARIZE=1 -s EXPORT_ES6=1 -s EXIT_RUNTIME=1 -s STACK_OVERFLOW_CHECK=1 -s PROXY_POSIX_SOCKETS=0 -s USE_PTHREADS=0 -s PROXY_TO_PTHREAD=0 -s TOTAL_MEMORY=64MB -s ERROR_ON_UNDEFINED_SYMBOLS=0 -O3 -g0"
++EMFLAGS="-s INVOKE_RUN=0 -s USE_SDL=2 -s USE_SDL_MIXER=2 -s LEGACY_GL_EMULATION=0 -s USE_SDL_NET=2 -s ASSERTIONS=0 -s WASM=1 -s ALLOW_MEMORY_GROWTH=1 -s FORCE_FILESYSTEM=1 -s EXPORTED_RUNTIME_METHODS=FS,ccall,callMain,ENV,HEAPU8 -s MODULARIZE=1 -s EXPORT_ES6=1 -s EXIT_RUNTIME=1 -s STACK_OVERFLOW_CHECK=1 -s PROXY_POSIX_SOCKETS=0 -s USE_PTHREADS=0 -s PROXY_TO_PTHREAD=0 -s TOTAL_MEMORY=64MB -s ERROR_ON_UNDEFINED_SYMBOLS=0 -O3 -g0"
  
 -CFLAGS="$CFLAGS $SDL_CFLAGS ${SAMPLERATE_CFLAGS:-} ${PNG_CFLAGS:-} $EMFLAGS"
 +CFLAGS="$CFLAGS $SDL_CFLAGS ${SAMPLERATE_CFLAGS:-} ${PNG_CFLAGS:-} $EMFLAGS -std=gnu11"
@@ -47,6 +47,49 @@ index a1aa1d9..331db03 100644
      // Create a callback that will signal this thread after the
      // specified time.
  
+diff --git a/opl/opl_sdl.c b/opl/opl_sdl.c
+index e2c1649..5c18e75 100644
+--- a/opl/opl_sdl.c
++++ b/opl/opl_sdl.c
+@@ -156,6 +156,11 @@ static void AdvanceTime(unsigned int nsamples)
+ 
+ // Call the OPL emulator code to fill the specified buffer.
+ 
++// Set by the page. The music is mixed last, so clearing here also silences effects.
++int wadsmith_output_muted = 0;
++// Weak because the OPL tools link this file without the game.
++extern int musicVolume __attribute__((weak));
++
+ static void FillBuffer(uint8_t *buffer, unsigned int nsamples)
+ {
+     // This seems like a reasonable assumption.  mix_buffer is
+@@ -166,8 +171,12 @@ static void FillBuffer(uint8_t *buffer, unsigned int nsamples)
+     // OPL output is generated into temporary buffer and then mixed
+     // (to avoid overflows etc.)
+     OPL3_GenerateStream(&opl_chip, (Bit16s *) mix_buffer, nsamples);
+-    SDL_MixAudioFormat(buffer, mix_buffer, AUDIO_S16SYS, nsamples * 4,
+-                       SDL_MIX_MAXVOLUME);
++    // The chip keeps a faint output at its lowest level.
++    if (&musicVolume == NULL || musicVolume > 0)
++    {
++        SDL_MixAudioFormat(buffer, mix_buffer, AUDIO_S16SYS, nsamples * 4,
++                           SDL_MIX_MAXVOLUME);
++    }
+ }
+ 
+ // Callback function to fill a new sound buffer:
+@@ -220,6 +229,11 @@ static void OPL_Mix_Callback(void *udata, Uint8 *buffer, int len)
+ 
+         AdvanceTime(nsamples);
+     }
++
++    if (wadsmith_output_muted)
++    {
++        memset(buffer, 0, len);
++    }
+ }
+ 
+ static void OPL_SDL_Shutdown(void)
 diff --git a/src/d_loop.c b/src/d_loop.c
 index e5f3a3c..4b8a938 100644
 --- a/src/d_loop.c
@@ -152,7 +195,7 @@ index 9a462e2..629b3a8 100644
  
  //
 diff --git a/src/doom/g_game.c b/src/doom/g_game.c
-index f23586b..cf36174 100644
+index f23586b..a04cb4d 100644
 --- a/src/doom/g_game.c
 +++ b/src/doom/g_game.c
 @@ -15,6 +15,7 @@
@@ -197,6 +240,12 @@ index f23586b..cf36174 100644
          }
      }
  
+@@ -2059,3 +2078,5 @@ boolean G_CheckDemoStatus(void)
+     return false;
+ }
+ 
++
++#include "wadsmith-exports.c"
 diff --git a/src/doom/p_setup.c b/src/doom/p_setup.c
 index 1a66fa4..db97fec 100644
 --- a/src/doom/p_setup.c
@@ -219,6 +268,65 @@ index 772871e..beb4b9d 100644
  
  
  
+diff --git a/src/doom/wadsmith-exports.c b/src/doom/wadsmith-exports.c
+new file mode 100644
+index 0000000..aa77cfd
+--- /dev/null
++++ b/src/doom/wadsmith-exports.c
+@@ -0,0 +1,53 @@
++#include <emscripten.h>
++#include <SDL_mixer.h>
++
++#include "r_state.h"
++#include "s_sound.h"
++
++extern int sfxVolume;
++extern int musicVolume;
++extern int wadsmith_output_muted;
++
++EMSCRIPTEN_KEEPALIVE int wadsmith_game_state(void) { return gamestate; }
++
++EMSCRIPTEN_KEEPALIVE int wadsmith_game_tic(void) { return gametic; }
++
++EMSCRIPTEN_KEEPALIVE int wadsmith_health(void) {
++  return players[consoleplayer].health;
++}
++
++EMSCRIPTEN_KEEPALIVE int wadsmith_kills(void) {
++  return players[consoleplayer].killcount;
++}
++
++EMSCRIPTEN_KEEPALIVE int wadsmith_total_kills(void) { return totalkills; }
++
++EMSCRIPTEN_KEEPALIVE int wadsmith_player_x(void) {
++  return players[consoleplayer].mo ? players[consoleplayer].mo->x >> 16 : 0;
++}
++
++EMSCRIPTEN_KEEPALIVE int wadsmith_player_y(void) {
++  return players[consoleplayer].mo ? players[consoleplayer].mo->y >> 16 : 0;
++}
++
++EMSCRIPTEN_KEEPALIVE int wadsmith_sector_ceiling(int index) {
++  return index >= 0 && index < numsectors
++             ? sectors[index].ceilingheight >> 16
++             : 0;
++}
++
++EMSCRIPTEN_KEEPALIVE void wadsmith_set_volume(int volume) {
++  sfxVolume = volume;
++  musicVolume = volume;
++  S_SetSfxVolume(volume * 8);
++  S_SetMusicVolume(volume * 8);
++}
++
++EMSCRIPTEN_KEEPALIVE void wadsmith_set_muted(int muted) {
++  wadsmith_output_muted = muted;
++}
++
++EMSCRIPTEN_KEEPALIVE void wadsmith_stop(void) {
++  emscripten_cancel_main_loop();
++  Mix_CloseAudio();
++}
 diff --git a/src/doomtype.h b/src/doomtype.h
 index 9947a07..cd668b5 100644
 --- a/src/doomtype.h

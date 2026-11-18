@@ -9,42 +9,15 @@ import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 import type { GameMap } from "../map/types";
 import { compileMap } from "../wad/compile";
-import { engineBase, loadIwad } from "./iwad";
+import { startGameClient, type GameClient } from "./game-client";
+import { loadIwad } from "./iwad";
 import {
   keysByCode,
   maxVolume,
   screenHeight,
   screenWidth,
-  startDoom,
-  type CreateDoom,
-  type DoomGame,
   type GameStatus,
 } from "./runtime";
-
-let engineFiles: Promise<{
-  createDoom: CreateDoom;
-  iwad: Uint8Array;
-}> | null = null;
-
-function lastEngineError(errors: string[]) {
-  return errors.findLast((line) => line.trim());
-}
-
-function loadEngineFiles() {
-  engineFiles ??= (async () => {
-    const [module, iwad] = await Promise.all([
-      import(/* @vite-ignore */ `${engineBase}websockets-doom.js`) as Promise<{
-        default: CreateDoom;
-      }>,
-      loadIwad(),
-    ]);
-    return { createDoom: module.default, iwad };
-  })().catch((error) => {
-    engineFiles = null;
-    throw error;
-  });
-  return engineFiles;
-}
 
 type SoundSettings = { volume: number; muted: boolean };
 
@@ -93,106 +66,60 @@ function GameSession({
   onExit,
 }: GameSessionProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const gameRef = useRef<DoomGame | null>(null);
+  const gameRef = useRef<GameClient | null>(null);
   const held = useRef(new Set<number>());
   const soundRef = useRef(sound);
   const leaveGame = useEffectEvent(onExit);
   const [status, setStatus] = useState<GameStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [audioUnavailable, setAudioUnavailable] = useState(false);
 
   useEffect(() => {
     soundRef.current = sound;
-    gameRef.current?.setSound(sound.volume, sound.muted);
+    gameRef.current?.setSound(sound);
   }, [sound]);
 
   useEffect(() => {
-    let frame = 0;
     let stopped = false;
-    let running: DoomGame | null = null;
-    let loaded = false;
-    let lastStatus = 0;
-    const errors: string[] = [];
+    let client: GameClient | null = null;
 
-    const fail = (message: string) => {
-      if (!stopped) setError(message);
-    };
-
-    // The engine traps on a fatal error inside its own animation frame.
-    const onError = (event: ErrorEvent) => {
-      if (event.error instanceof WebAssembly.RuntimeError) {
-        running?.stop();
-        fail(lastEngineError(errors) ?? "The engine stopped.");
-      }
-    };
-    window.addEventListener("error", onError);
-
-    (async () => {
-      const { createDoom, iwad } = await loadEngineFiles().catch(
-        (cause: Error) => {
-          throw new Error(
+    loadIwad()
+      .then((iwad) => {
+        const canvas = canvasRef.current;
+        const context = canvas?.getContext("2d");
+        if (stopped || !canvas || !context) return;
+        canvas.focus();
+        client = startGameClient({
+          iwad,
+          map: compileMap(map),
+          sound: soundRef.current,
+          onFrame: (pixels) =>
+            context.putImageData(
+              new ImageData(pixels, screenWidth, screenHeight),
+              0,
+              0,
+            ),
+          onStatus: setStatus,
+          onDropouts: (count) => {
+            canvas.dataset.audioDropouts = String(count);
+          },
+          onAudioUnavailable: () => setAudioUnavailable(true),
+          onError: setError,
+          onExit: leaveGame,
+        });
+        gameRef.current = client;
+      })
+      .catch((cause: Error) => {
+        if (!stopped) {
+          setError(
             `The engine could not load: ${cause.message} Run pnpm setup:engine if it hasn't been built.`,
           );
-        },
-      );
-      loaded = true;
-      const game = await startDoom({
-        createDoom,
-        iwad,
-        map: compileMap(map),
-        options: {
-          print: () => {},
-          printErr: (line) => errors.push(line),
-          // Quit Game in Doom's menu ends the engine.
-          onExit: () => {
-            if (!stopped) leaveGame();
-          },
-        },
-      });
-      if (stopped) {
-        game.stop();
-        return;
-      }
-      running = game;
-      gameRef.current = game;
-      game.setSound(soundRef.current.volume, soundRef.current.muted);
-      const canvas = canvasRef.current;
-      const context = canvas?.getContext("2d");
-      if (!canvas || !context) return;
-      canvas.focus();
-      const image = context.createImageData(screenWidth, screenHeight);
-
-      const loop = (now: number) => {
-        if (stopped) return;
-        try {
-          if (game.hasNewFrame()) {
-            image.data.set(game.frame());
-            context.putImageData(image, 0, 0);
-            if (now - lastStatus > 200) {
-              lastStatus = now;
-              setStatus(game.status());
-            }
-          }
-        } catch {
-          running?.stop();
-          fail(lastEngineError(errors) ?? "The engine stopped.");
-          return;
         }
-        frame = requestAnimationFrame(loop);
-      };
-      frame = requestAnimationFrame(loop);
-    })().catch((cause: Error) => {
-      fail(
-        loaded
-          ? `The game couldn't start: ${lastEngineError(errors) ?? cause.message}`
-          : cause.message,
-      );
-    });
+      });
 
     return () => {
       stopped = true;
-      window.removeEventListener("error", onError);
-      cancelAnimationFrame(frame);
-      running?.stop();
+      client?.stop();
       gameRef.current = null;
     };
   }, [map]);
@@ -227,6 +154,7 @@ function GameSession({
         <p className="game-keys">
           WASD move · ←→ turn · Space fire · E use · Shift run · Shift+Tab
           buttons · {fullscreen ? "Esc leaves fullscreen" : "Esc menu"}
+          {audioUnavailable ? " · Sound needs HTTPS or localhost" : ""}
         </p>
         <div className="game-actions">
           <button
