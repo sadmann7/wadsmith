@@ -36,10 +36,24 @@ const spriteLumps: Record<ThingKind, string> = {
   "red-key": "RKEYA0",
 };
 
-// The engine's colormap for a wall drawn at one texel per screen pixel.
-function gameWallShade(light: number) {
-  const level = (15 - (light >> 4)) * 4 - 8;
+function lightStart(light: number, contrast: number) {
+  const band = Math.max(0, Math.min(15, (light >> 4) + contrast));
+  return (15 - band) * 4;
+}
+
+function clampShade(level: number) {
   return Math.max(0, Math.min(shadeLevels - 1, level));
+}
+
+// These follow the engine's scalelight and zlight tables for a 320-wide view.
+function gameWallShade(light: number, distance = 160, contrast = 0) {
+  const scale = Math.min(47, Math.floor((16 * 160) / distance));
+  return clampShade(lightStart(light, contrast) - (scale >> 1));
+}
+
+function gameFlatShade(light: number, distance: number) {
+  const band = Math.min(127, Math.floor(distance / 16));
+  return clampShade(lightStart(light, 0) - (Math.floor(160 / (band + 1)) >> 1));
 }
 
 function createPicture(width: number, height: number): Picture {
@@ -310,6 +324,7 @@ function createFlatAssets(): SceneAssets {
 
 export {
   createFlatAssets,
+  gameFlatShade,
   gameWallShade,
   readWadAssets,
   shadeLevels,
