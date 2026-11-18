@@ -420,6 +420,18 @@ input {
   cursor: ns-resize;
 }
 
+.scene[data-hover="thing"] {
+  cursor: grab;
+}
+
+.scene[data-hover="place"] {
+  cursor: copy;
+}
+
+.segments button:disabled {
+  opacity: 0.4;
+}
+
 .scene-stage {
   position: absolute;
   inset: 0;

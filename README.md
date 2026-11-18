@@ -21,7 +21,7 @@ pnpm dev
 - **Place:** pick a thing and click inside a room.
 - **Switch:** click a solid wall to add a switch, then drag from it to a door.
 - **Doors:** draw a thin room between two rooms and turn on **Door** in the inspector. It can open with the use key or a switch, and close again or stay open.
-- **3D:** click a floor, ceiling, wall, door, switch or thing to select it. Drag floors and ceilings to change height, or pick a texture in the side panel. Walk with WASD, step through surfaces with N and P, and nudge heights with Page Up and Page Down.
+- **3D:** click a floor, ceiling, wall, door, switch or thing to select it. Drag floors and ceilings to change height, or pick a texture in the side panel. Choose **Place** to put the chosen thing on a floor, and drag things to move them. Walk with WASD, step through surfaces with N and P, nudge heights with Page Up and Page Down, and nudge a selected thing with Alt and the arrow keys.
 - **Play:** builds a WAD and loads it. Move with WASD, turn with the arrow keys, fire with Space and use with E.
 
 `window.agent` exposes the UI SDK agent bridge, with `addConnectedRoom`, `setRoomHeights`, `placeThing`, `makeDoor` and `addDoorSwitch` on the Map component.

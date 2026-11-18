@@ -22,7 +22,8 @@ type Lump = { offset: number; size: number };
 const shadeLevels = 32;
 const flatSize = 64;
 
-const spriteLumps: Partial<Record<ThingKind, string>> = {
+const spriteLumps: Record<ThingKind, string> = {
+  player: "PLAYA1",
   zombieman: "POSSA1",
   "shotgun-guy": "SPOSA1",
   imp: "TROOA1",
@@ -199,7 +200,7 @@ function readWadAssets(bytes: Uint8Array): SceneAssets {
     sprite(kind) {
       const cached = spriteCache.get(kind);
       if (cached !== undefined) return cached;
-      const lump = lumps.get(spriteLumps[kind] ?? "");
+      const lump = lumps.get(spriteLumps[kind]);
       let picture: Picture | null = null;
       if (lump) {
         picture = createPicture(
@@ -285,8 +286,7 @@ function createFlatAssets(): SceneAssets {
     texture: tile,
     flat: tile,
     sprite(kind) {
-      if (kind === "player") return null;
-      const monster = thingCatalog[kind].monster;
+      const monster = thingCatalog[kind].monster || kind === "player";
       const picture = solidPicture(
         monster ? 36 : 22,
         monster ? 56 : 20,

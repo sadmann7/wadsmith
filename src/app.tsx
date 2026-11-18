@@ -49,7 +49,7 @@ import {
   type SceneCamera,
 } from "./preview/scene-editor";
 import { SurfacePanel } from "./preview/surface-panel";
-import { describeSurface, paintSurface } from "./map/surfaces";
+import { describeSurface, paintSurface, parseSurface } from "./map/surfaces";
 import { createFlatAssets, readWadAssets } from "./wad/assets";
 import { compileMap } from "./wad/compile";
 
@@ -183,13 +183,14 @@ function App() {
 
   const selectSurface = (key: string | null) => {
     setSurface(key);
-    const info = describeSurface(map, key);
-    if (info?.thing) {
+    // A thing placed in this same event isn't in this render's map yet.
+    const parsed = key ? parseSurface(key) : null;
+    if (parsed?.kind === "thing") {
       setActiveSector(null);
-      setSelection([`${thingKeyPrefix}${info.thing.id}`]);
+      setSelection([`${thingKeyPrefix}${parsed.thing}`]);
     } else {
       setSelection([]);
-      setActiveSector(info?.sector?.id ?? null);
+      setActiveSector(describeSurface(map, key)?.sector?.id ?? null);
     }
   };
 
@@ -203,6 +204,7 @@ function App() {
       camera={camera}
       draftSource={drafts.subscribe}
       selected={surfaceInfo ? surface : null}
+      placing={tool === "thing" ? thingKind : null}
       renderWidth={width}
       renderHeight={height}
       onMapChange={(next) => commit(next)}
@@ -212,9 +214,11 @@ function App() {
 
   const sceneStatus = (
     <p className="scene-status" role="status">
-      {surfaceInfo
-        ? `${surfaceInfo.label}${surfaceInfo.texture ? ` · ${surfaceInfo.texture}` : ""}${surfaceInfo.height !== null ? ` · height ${surfaceInfo.height}` : ""}`
-        : "Click a floor, ceiling, wall or thing."}
+      {tool === "thing"
+        ? `Placing ${thingCatalog[thingKind].label}. Click a floor, or press Enter to place it ahead.`
+        : surfaceInfo
+          ? `${surfaceInfo.label}${surfaceInfo.texture ? ` · ${surfaceInfo.texture}` : ""}${surfaceInfo.height !== null ? ` · height ${surfaceInfo.height}` : ""}`
+          : "Click a floor, ceiling, wall or thing."}
     </p>
   );
 
@@ -246,7 +250,12 @@ function App() {
           aria-label="Main view"
           className="segments"
           value={mainView}
-          onValueChange={(next) => setMainView(next as MainView)}
+          onValueChange={(next) => {
+            setMainView(next as MainView);
+            if (next === "scene" && (tool === "draw" || tool === "switch")) {
+              setTool("select");
+            }
+          }}
         >
           <SegmentedControlIndicator className="segments-indicator" />
           <SegmentedControlItem value="map">Map</SegmentedControlItem>
@@ -261,9 +270,16 @@ function App() {
           >
             <SegmentedControlIndicator className="segments-indicator" />
             <SegmentedControlItem value="select">Select</SegmentedControlItem>
-            <SegmentedControlItem value="draw">Draw room</SegmentedControlItem>
+            <SegmentedControlItem value="draw" disabled={mainView === "scene"}>
+              Draw room
+            </SegmentedControlItem>
             <SegmentedControlItem value="thing">Place</SegmentedControlItem>
-            <SegmentedControlItem value="switch">Switch</SegmentedControlItem>
+            <SegmentedControlItem
+              value="switch"
+              disabled={mainView === "scene"}
+            >
+              Switch
+            </SegmentedControlItem>
           </SegmentedControl>
           <Select
             value={thingKind}

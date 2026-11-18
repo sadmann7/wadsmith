@@ -13,7 +13,13 @@ import {
 } from "../map/surfaces";
 import { compileLumps } from "../wad/compile";
 import { createFlatAssets, readWadAssets } from "../wad/assets";
-import { createRenderTarget, renderScene, startCamera } from "./render";
+import {
+  createRenderTarget,
+  pointOnPlane,
+  projectPoint,
+  renderScene,
+  startCamera,
+} from "./render";
 
 const assets = createFlatAssets();
 const wadPath = resolve(
@@ -63,6 +69,44 @@ describe("renderScene", () => {
     const pixel = 190 * 320 + 160;
     expect(tinted.colors[pixel]).not.toBe(plain.colors[pixel]);
     expect(tinted.colors[5 * 320 + 160]).toBe(plain.colors[5 * 320 + 160]);
+  });
+
+  it("draws a placement ghost that can't be picked", () => {
+    const camera = startCamera(starterMap);
+    const plain = createRenderTarget(320, 200);
+    const ghosted = createRenderTarget(320, 200);
+    renderScene(plain, starterMap, camera, { assets });
+    renderScene(ghosted, starterMap, camera, {
+      assets,
+      ghost: { kind: "imp", x: 200, y: 160 },
+    });
+    const pixel = 105 * 320 + 160;
+    expect(ghosted.colors[pixel]).not.toBe(plain.colors[pixel]);
+    expect(ghosted.pick[pixel]).toBe(plain.pick[pixel]);
+    expect(ghosted.surfaces).not.toContain("thing:");
+  });
+
+  it("converts between floor points and the screen", () => {
+    const target = createRenderTarget(320, 200);
+    const camera = startCamera(starterMap);
+    const point = { x: 250, y: 200 };
+    const screen = projectPoint(target, starterMap, camera, point, 0)!;
+    const back = pointOnPlane(
+      target,
+      starterMap,
+      camera,
+      screen.x,
+      screen.y,
+      0,
+    )!;
+    expect(back.x).toBeCloseTo(point.x);
+    expect(back.y).toBeCloseTo(point.y);
+  });
+
+  it("finds no floor above the horizon", () => {
+    const target = createRenderTarget(320, 200);
+    const camera = startCamera(starterMap);
+    expect(pointOnPlane(target, starterMap, camera, 160, 20, 0)).toBeNull();
   });
 
   it("moves a floor on screen when its height changes", () => {
@@ -125,6 +169,7 @@ describe.skipIf(!existsSync(wadPath))("readWadAssets", () => {
     const imp = wad.sprite("imp")!;
     expect(imp.height).toBeGreaterThan(30);
     expect(imp.opaque.includes(0)).toBe(true);
+    expect(wad.sprite("player")).not.toBeNull();
     expect(wad.shades[256 * 31 + 100]).not.toBe(wad.shades[100]);
   });
 });

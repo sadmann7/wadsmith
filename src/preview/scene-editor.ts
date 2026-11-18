@@ -8,17 +8,26 @@ import {
 } from "@ui-sdk/core";
 import { createParts } from "@ui-sdk/react/primitive";
 
-import { gridSize } from "../map/edit";
+import {
+  addThing,
+  gridSize,
+  removeThing,
+  snapPoint,
+  updateThing,
+} from "../map/edit";
 import { sectorAt } from "../map/geometry";
 import {
   describeSurface,
   moveSurfaceHeight,
   parseSurface,
 } from "../map/surfaces";
-import type { GameMap } from "../map/types";
+import type { GameMap, Point, ThingKind } from "../map/types";
 import type { SceneAssets } from "../wad/assets";
 import {
+  cameraBasis,
   createRenderTarget,
+  pointOnPlane,
+  projectPoint,
   renderScene,
   startCamera,
   type Camera,
@@ -29,7 +38,13 @@ type SceneCamera = { position: Camera; walked: boolean };
 
 type DraftSource = (listener: (map: GameMap | null) => void) => () => void;
 
-type SceneChangeReason = "height-drag" | "height-key";
+type SceneChangeReason =
+  | "height-drag"
+  | "height-key"
+  | "place"
+  | "thing-drag"
+  | "thing-key"
+  | "delete";
 
 type SceneOptions = {
   map?: GameMap;
@@ -37,6 +52,7 @@ type SceneOptions = {
   camera?: SceneCamera;
   draftSource?: DraftSource;
   selected?: string | null;
+  placing?: ThingKind | null;
   renderWidth?: number;
   renderHeight?: number;
   onMapChange?: (
@@ -56,13 +72,21 @@ type SceneState = {
   hovered: string | null;
   draftMap: GameMap | null;
   frozenEye: number | null;
+  placing: ThingKind | null;
+  ghost: Point | null;
   width: number;
   height: number;
 };
 
 const moveSpeed = 260;
 const turnSpeed = 120;
+const placeDistances = [128, 96, 64, 32];
 const walkKeys = /^(Arrow(Up|Down|Left|Right)|Key[WASD])$/;
+
+function standable(map: GameMap, point: Point) {
+  const sector = sectorAt(map, point);
+  return !!sector && !sector.door;
+}
 
 const sceneEditor = definePrimitive({
   name: "scene-editor",
@@ -72,6 +96,7 @@ const sceneEditor = definePrimitive({
     camera: "value",
     draftSource: "value",
     selected: "value",
+    placing: "value",
     renderWidth: "number",
     renderHeight: "number",
     onMapChange: "callback",
@@ -85,6 +110,8 @@ const sceneEditor = definePrimitive({
     hovered: null,
     draftMap: null,
     frozenEye: null,
+    placing: options.placing ?? null,
+    ghost: null,
     width: options.renderWidth ?? 320,
     height: options.renderHeight ?? 200,
   }),
@@ -92,6 +119,8 @@ const sceneEditor = definePrimitive({
     ...(options.map ? { map: options.map } : {}),
     ...(options.assets ? { assets: options.assets } : {}),
     ...(options.selected !== undefined ? { selected: options.selected } : {}),
+    placing: options.placing ?? null,
+    ...(options.placing ? {} : { ghost: null }),
   }),
   live: ["hovered"],
   api: (context) => {
@@ -115,7 +144,8 @@ const sceneEditor = definePrimitive({
     const draw = () => {
       drawFrame = 0;
       const map = shownMap();
-      const { assets, hovered, selected, frozenEye } = store.get();
+      const { assets, hovered, selected, frozenEye, placing, ghost } =
+        store.get();
       const view = cameraState();
       const output = canvas?.getContext("2d");
       if (!map || !assets || !view || !target || !image || !output) return;
@@ -130,7 +160,12 @@ const sceneEditor = definePrimitive({
           ...view.position,
           eye: frozenEye ?? undefined,
         },
-        { assets, hovered, selected },
+        {
+          assets,
+          hovered: placing ? null : hovered,
+          selected,
+          ghost: placing && ghost ? { ...ghost, kind: placing } : null,
+        },
       );
       output.putImageData(image, 0, 0);
     };
@@ -156,6 +191,152 @@ const sceneEditor = definePrimitive({
         key: target.surfaces[target.pick[index]] || null,
         distance: target.depth[index],
       };
+    };
+
+    const targetPoint = (event: MouseEvent) => {
+      if (!canvas || !target) return null;
+      const box = canvas.getBoundingClientRect();
+      return {
+        x: ((event.clientX - box.left) / box.width) * target.width,
+        y: ((event.clientY - box.top) / box.height) * target.height,
+      };
+    };
+
+    const floorPointAt = (event: MouseEvent) => {
+      const { map } = store.get();
+      const view = cameraState();
+      const key = surfaceAt(event)?.key;
+      const surface = key ? parseSurface(key) : null;
+      const at = targetPoint(event);
+      if (!map || !view || !target || !at || surface?.kind !== "floor") {
+        return null;
+      }
+      const floor = map.sectors.find((item) => item.id === surface.sector);
+      if (!floor) return null;
+      const point = pointOnPlane(
+        target,
+        map,
+        view.position,
+        at.x,
+        at.y,
+        floor.floor,
+      );
+      if (!point) return null;
+      const snapped = snapPoint(point);
+      return standable(map, snapped) ? snapped : null;
+    };
+
+    const place = (point: Point, reason: "press" | "key", event: Event) => {
+      const { map, placing } = store.get();
+      const view = cameraState();
+      if (!map || !placing || !view) return;
+      const angle =
+        placing === "player" ? view.position.angle : view.position.angle + 180;
+      const facing = (((Math.round(angle / 45) * 45) % 360) + 360) % 360;
+      const added = addThing(map, placing, point, facing);
+      // A new player start must not pull the camera away from the person placing it.
+      view.walked = true;
+      change("map", added.map, { reason: "place", event });
+      change("selected", `thing:${added.id}`, { reason });
+    };
+
+    const placeAhead = (event: KeyboardEvent) => {
+      const { map } = store.get();
+      const view = cameraState();
+      if (!map || !view) return;
+      const { forward } = cameraBasis(view.position);
+      for (const distance of placeDistances) {
+        const point = snapPoint({
+          x: view.position.x + forward.x * distance,
+          y: view.position.y + forward.y * distance,
+        });
+        if (standable(map, point)) {
+          place(point, "key", event);
+          return;
+        }
+      }
+    };
+
+    const selectedThing = () => {
+      const { map, selected } = store.get();
+      const surface = selected ? parseSurface(selected) : null;
+      if (!map || surface?.kind !== "thing") return null;
+      return map.things.find((item) => item.id === surface.thing) ?? null;
+    };
+
+    const nudgeThing = (event: KeyboardEvent) => {
+      const { map } = store.get();
+      const thing = selectedThing();
+      const view = cameraState();
+      if (!map || !thing || !view) return false;
+      const { forward, right } = cameraBasis(view.position);
+      const direction = {
+        ArrowUp: forward,
+        ArrowDown: { x: -forward.x, y: -forward.y },
+        ArrowRight: right,
+        ArrowLeft: { x: -right.x, y: -right.y },
+      }[event.key];
+      if (!direction) return false;
+      event.preventDefault();
+      const horizontal = Math.abs(direction.x) >= Math.abs(direction.y);
+      const point = {
+        x: thing.x + (horizontal ? Math.sign(direction.x) * gridSize : 0),
+        y: thing.y + (horizontal ? 0 : Math.sign(direction.y) * gridSize),
+      };
+      if (standable(map, point)) {
+        view.walked = true;
+        change("map", updateThing(map, thing.id, point), {
+          reason: "thing-key",
+          event,
+        });
+      }
+      return true;
+    };
+
+    const dragThing = (event: PointerEvent, thingId: string) => {
+      const { map } = store.get();
+      const view = cameraState();
+      const thing = map?.things.find((item) => item.id === thingId);
+      const pressed = targetPoint(event);
+      if (!canvas || !target || !map || !view || !thing || !pressed) return;
+      const plane = sectorAt(map, thing)?.floor ?? 0;
+      const feet = projectPoint(target, map, view.position, thing, plane);
+      if (!feet) return;
+      const element = canvas;
+      const output = target;
+      const offset = { x: pressed.x - feet.x, y: pressed.y - feet.y };
+      let moved = false;
+      stopDrag = bindDrag(element, event, {
+        threshold: dragThreshold,
+        cancelOnEscape: true,
+        onStart: () => {
+          view.walked = true;
+        },
+        onMove: ({ x, y }) => {
+          const box = element.getBoundingClientRect();
+          const point = pointOnPlane(
+            output,
+            map,
+            view.position,
+            ((x - box.left) / box.width) * output.width - offset.x,
+            ((y - box.top) / box.height) * output.height - offset.y,
+            plane,
+          );
+          if (!point) return;
+          const snapped = snapPoint(point);
+          if (!standable(map, snapped)) return;
+          moved = snapped.x !== thing.x || snapped.y !== thing.y;
+          store.set({ draftMap: updateThing(map, thing.id, snapped) });
+        },
+        onEnd: (end, canceled) => {
+          const { draftMap } = store.get();
+          stopDrag = undefined;
+          store.set({ draftMap: null });
+          if (!canceled && moved && draftMap) {
+            change("map", draftMap, { reason: "thing-drag", event: end });
+          }
+        },
+      });
     };
 
     const select = (key: string | null, reason: "press" | "key") => {
@@ -258,28 +439,37 @@ const sceneEditor = definePrimitive({
       pointermove(event: PointerEvent) {
         if (stopDrag) return;
         const hovered = surfaceAt(event)?.key ?? null;
-        if (hovered !== store.get().hovered) store.set({ hovered });
+        const ghost = store.get().placing ? floorPointAt(event) : null;
+        const current = store.get();
+        if (
+          hovered !== current.hovered ||
+          ghost?.x !== current.ghost?.x ||
+          ghost?.y !== current.ghost?.y
+        ) {
+          store.set({ hovered, ghost });
+        }
       },
       pointerleave() {
-        store.set({ hovered: null });
+        store.set({ hovered: null, ghost: null });
       },
       pointerdown(event: PointerEvent) {
         if (event.button !== 0 || !canvas || !target) return;
         canvas.focus({ preventScroll: true });
         const hit = surfaceAt(event);
         const key = hit?.key ?? null;
-        select(key, "press");
-        const { map } = store.get();
         const surface = key ? parseSurface(key) : null;
-        if (
-          !hit ||
-          !key ||
-          !map ||
-          !canMoveHeight(key) ||
-          surface?.kind === "thing"
-        ) {
+        if (store.get().placing && surface?.kind !== "thing") {
+          const point = floorPointAt(event);
+          if (point) place(point, "press", event);
           return;
         }
+        select(key, "press");
+        const { map } = store.get();
+        if (surface?.kind === "thing") {
+          if (!store.get().placing) dragThing(event, surface.thing);
+          return;
+        }
+        if (!hit || !key || !map || !canMoveHeight(key)) return;
 
         const view = cameraState();
         const owner = view ? sectorAt(map, view.position) : null;
@@ -313,7 +503,25 @@ const sceneEditor = definePrimitive({
         });
       },
       keydown(event: KeyboardEvent) {
-        if (walkKeys.test(event.code)) {
+        if (stopDrag) return;
+        const { map, placing } = store.get();
+        const thing = selectedThing();
+        if (event.altKey && nudgeThing(event)) return;
+        if (event.key === "Enter" && placing) {
+          event.preventDefault();
+          placeAhead(event);
+        } else if (
+          thing &&
+          map &&
+          (event.key === "Delete" || event.key === "Backspace")
+        ) {
+          event.preventDefault();
+          change("map", removeThing(map, thing.id), {
+            reason: "delete",
+            event,
+          });
+          select(null, "key");
+        } else if (walkKeys.test(event.code)) {
           event.preventDefault();
           held.add(event.code);
           if (!walkFrame) walk(performance.now());
@@ -345,14 +553,14 @@ const sceneEditor = definePrimitive({
       }),
       live: live<SceneState, any, {}>((state) => {
         const surface = state.hovered ? parseSurface(state.hovered) : null;
-        return {
-          "data-hover":
-            surface?.kind === "floor" || surface?.kind === "ceiling"
-              ? "height"
-              : surface
-                ? "surface"
-                : undefined,
-        };
+        let hover: string | undefined;
+        if (state.ghost) hover = "place";
+        else if (surface?.kind === "thing") hover = "thing";
+        else if (state.placing) hover = undefined;
+        else if (surface?.kind === "floor" || surface?.kind === "ceiling") {
+          hover = "height";
+        } else if (surface) hover = "surface";
+        return { "data-hover": hover };
       }),
       bind: (el, { api }) => api.attach(el),
       on: {
