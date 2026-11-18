@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import type { GameMap } from "../map/types";
 import { compileMap } from "../wad/compile";
+import { engineBase, loadIwad } from "./iwad";
 import {
   keysByCode,
   screenHeight,
@@ -12,8 +13,6 @@ import {
   type GameStatus,
 } from "./runtime";
 
-const engineBase = `${import.meta.env.BASE_URL}engine/`;
-
 let engineFiles: Promise<{
   createDoom: CreateDoom;
   iwad: Uint8Array;
@@ -21,17 +20,13 @@ let engineFiles: Promise<{
 
 function loadEngineFiles() {
   engineFiles ??= (async () => {
-    const [module, response] = await Promise.all([
+    const [module, iwad] = await Promise.all([
       import(/* @vite-ignore */ `${engineBase}doom.js`) as Promise<{
         default: CreateDoom;
       }>,
-      fetch(`${engineBase}freedoom2.wad`),
+      loadIwad(),
     ]);
-    if (!response.ok) throw new Error("freedoom2.wad is missing.");
-    return {
-      createDoom: module.default,
-      iwad: new Uint8Array(await response.arrayBuffer()),
-    };
+    return { createDoom: module.default, iwad };
   })().catch((error) => {
     engineFiles = null;
     throw error;

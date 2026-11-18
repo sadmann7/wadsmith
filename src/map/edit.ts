@@ -276,7 +276,18 @@ function addSwitch(
             ? [vertex, first, second]
             : [vertex];
         });
-        return { ...sector, vertices: loop };
+        const painted = sector.wallOverrides?.[wallKey(wall.from, wall.to)];
+        return {
+          ...sector,
+          vertices: loop,
+          wallOverrides: painted
+            ? {
+                ...sector.wallOverrides,
+                [wallKey(wall.from, first)]: painted,
+                [wallKey(second, wall.to)]: painted,
+              }
+            : sector.wallOverrides,
+        };
       }),
       switches: [...map.switches, { ...item, from: first, to: second }],
     },

@@ -1,5 +1,10 @@
 import { doorTrackTexture, thingCatalog } from "../map/catalog";
-import { sectorEdges, signedArea, wallKey } from "../map/geometry";
+import {
+  sectorEdges,
+  signedArea,
+  wallKey,
+  wallTextureOf,
+} from "../map/geometry";
 import type { GameMap, Point, Sector } from "../map/types";
 import { buildBlockmap } from "./blockmap";
 import { buildNodes, type Box, type NodeLine } from "./nodes";
@@ -155,12 +160,12 @@ function compileLumps(map: GameMap): Lump[] {
         special = door.closes ? specialDoorRaise : specialDoorOpen;
       }
       front = writeSide(line.frontSector, {
-        upper: door?.texture ?? frontSector.wallTexture,
-        lower: frontSector.wallTexture,
+        upper: door?.texture ?? wallTextureOf(frontSector, line.wall),
+        lower: wallTextureOf(frontSector, line.wall),
       });
       back = writeSide(line.backSector, {
-        upper: door?.texture ?? backSector.wallTexture,
-        lower: backSector.wallTexture,
+        upper: door?.texture ?? wallTextureOf(backSector, line.wall),
+        lower: wallTextureOf(backSector, line.wall),
       });
     } else if (frontSector.door) {
       flags |= lineLowerUnpegged;
@@ -176,7 +181,7 @@ function compileLumps(map: GameMap): Lump[] {
         tag = doorTag(target.id);
       }
       front = writeSide(line.frontSector, {
-        middle: item?.texture ?? frontSector.wallTexture,
+        middle: item?.texture ?? wallTextureOf(frontSector, line.wall),
       });
     }
 

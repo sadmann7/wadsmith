@@ -13,6 +13,10 @@ function wallKey(a: string, b: string) {
   return a < b ? `${a}|${b}` : `${b}|${a}`;
 }
 
+function wallTextureOf(sector: Sector, wall: string) {
+  return sector.wallOverrides?.[wall] ?? sector.wallTexture;
+}
+
 function wallOwners(map: GameMap) {
   const owners = new Map<string, Sector[]>();
   for (const sector of map.sectors) {
@@ -98,5 +102,6 @@ export {
   signedArea,
   wallKey,
   wallOwners,
+  wallTextureOf,
   type Edge,
 };

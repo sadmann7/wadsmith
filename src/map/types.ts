@@ -16,6 +16,7 @@ type Sector = {
   floorTexture: string;
   ceilingTexture: string;
   wallTexture: string;
+  wallOverrides?: Record<string, string>;
   door?: DoorSettings;
 };
 

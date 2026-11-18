@@ -279,7 +279,9 @@ function SectorInspector({
         label="Walls"
         value={sector.wallTexture}
         options={wallTextures}
-        onChange={(wallTexture) => onChange({ wallTexture })}
+        onChange={(wallTexture) =>
+          onChange({ wallTexture, wallOverrides: undefined })
+        }
       />
       <TextureField
         label="Floor texture"

@@ -17,7 +17,7 @@ import {
   ToolbarButton,
   ToolbarSeparator,
 } from "@ui-sdk/react/toolbar";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { agent } from "./agent";
 import {
@@ -41,7 +41,16 @@ import {
 import { starterMap } from "./map/starter-map";
 import type { GameMap, ThingKind } from "./map/types";
 import { validateMap } from "./map/validate";
-import { MapPreview, type MapPreviewHandle } from "./preview/map-preview";
+import { loadIwad } from "./engine/iwad";
+import { startCamera } from "./preview/render";
+import {
+  SceneCanvas,
+  type DraftSource,
+  type SceneCamera,
+} from "./preview/scene-editor";
+import { SurfacePanel } from "./preview/surface-panel";
+import { describeSurface, paintSurface } from "./map/surfaces";
+import { createFlatAssets, readWadAssets } from "./wad/assets";
 import { compileMap } from "./wad/compile";
 
 const toolHints: Record<MapTool, string> = {
@@ -53,6 +62,20 @@ const toolHints: Record<MapTool, string> = {
 };
 
 const roomSides: RoomSide[] = ["north", "east", "south", "west"];
+
+type MainView = "map" | "scene";
+
+function createDraftChannel() {
+  const listeners = new Set<(map: GameMap | null) => void>();
+  const subscribe: DraftSource = (listener) => {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  };
+  const publish = (map: GameMap | null) => {
+    for (const listener of listeners) listener(map);
+  };
+  return { subscribe, publish };
+}
 
 function isTextEntry(target: EventTarget | null) {
   return (
@@ -84,7 +107,14 @@ function App() {
   const [playRun, setPlayRun] = useState(0);
   const [agentLog, setAgentLog] = useState("");
   const [, setHistoryVersion] = useState(0);
-  const previewRef = useRef<MapPreviewHandle>(null);
+  const [mainView, setMainView] = useState<MainView>("map");
+  const [surface, setSurface] = useState<string | null>(null);
+  const [assets, setAssets] = useState(createFlatAssets);
+  const [drafts] = useState(createDraftChannel);
+  const [camera] = useState<SceneCamera>(() => ({
+    position: startCamera(starterMap),
+    walked: false,
+  }));
   const [history] = useState(() =>
     createUndoStack(starterMap, { limit: 200, groupDelay: 500 }),
   );
@@ -134,6 +164,60 @@ function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [history, restore]);
 
+  useEffect(() => {
+    let active = true;
+    loadIwad()
+      .then((bytes) => {
+        if (active) setAssets(readWadAssets(bytes));
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const surfaceInfo = useMemo(
+    () => describeSurface(map, surface),
+    [map, surface],
+  );
+
+  const selectSurface = (key: string | null) => {
+    setSurface(key);
+    const info = describeSurface(map, key);
+    if (info?.thing) {
+      setActiveSector(null);
+      setSelection([`${thingKeyPrefix}${info.thing.id}`]);
+    } else {
+      setSelection([]);
+      setActiveSector(info?.sector?.id ?? null);
+    }
+  };
+
+  const scene = (width: number, height: number) => (
+    <SceneCanvas
+      key={width}
+      aria-label="3D view. Click a surface to select it. W, A, S and D walk, N and P step through surfaces."
+      className="screen scene"
+      map={map}
+      assets={assets}
+      camera={camera}
+      draftSource={drafts.subscribe}
+      selected={surfaceInfo ? surface : null}
+      renderWidth={width}
+      renderHeight={height}
+      onMapChange={(next) => commit(next)}
+      onSelectedChange={selectSurface}
+    />
+  );
+
+  const sceneStatus = (
+    <p className="scene-status" role="status">
+      {surfaceInfo
+        ? `${surfaceInfo.label}${surfaceInfo.texture ? ` · ${surfaceInfo.texture}` : ""}${surfaceInfo.height !== null ? ` · height ${surfaceInfo.height}` : ""}`
+        : "Click a floor, ceiling, wall or thing."}
+    </p>
+  );
+
   const play = () => {
     if (!canPlay) return;
     setPlayedMap(map);
@@ -158,6 +242,16 @@ function App() {
     <div className="app">
       <header className="topbar">
         <h1>Wadsmith</h1>
+        <SegmentedControl
+          aria-label="Main view"
+          className="segments"
+          value={mainView}
+          onValueChange={(next) => setMainView(next as MainView)}
+        >
+          <SegmentedControlIndicator className="segments-indicator" />
+          <SegmentedControlItem value="map">Map</SegmentedControlItem>
+          <SegmentedControlItem value="scene">3D</SegmentedControlItem>
+        </SegmentedControl>
         <Toolbar aria-label="Map tools" className="toolbar">
           <SegmentedControl
             aria-label="Tool"
@@ -244,11 +338,23 @@ function App() {
             selection={selection}
             onMapChange={(next) => commit(next)}
             onToolChange={setTool}
-            onActiveSectorChange={setActiveSector}
-            onSelectionChange={setSelection}
-            onDraftMapChange={(draft) => previewRef.current?.show(draft)}
+            onActiveSectorChange={(next) => {
+              setSurface(null);
+              setActiveSector(next);
+            }}
+            onSelectionChange={(next) => {
+              setSurface(null);
+              setSelection(next);
+            }}
+            onDraftMapChange={(draft) => drafts.publish(draft)}
           />
           <p className="tool-hint">{toolHints[tool]}</p>
+          {mainView === "scene" ? (
+            <div className="scene-stage">
+              {scene(640, 400)}
+              {sceneStatus}
+            </div>
+          ) : null}
         </section>
 
         <aside className="side">
@@ -260,9 +366,14 @@ function App() {
               </TabsTab>
             </TabsList>
             <TabsPanel value="preview" className="panel">
-              {tab === "preview" ? (
-                <MapPreview ref={previewRef} map={map} />
-              ) : null}
+              {tab !== "preview" ? null : mainView === "map" ? (
+                <>
+                  {scene(320, 200)}
+                  {sceneStatus}
+                </>
+              ) : (
+                <p className="muted">The 3D view is open in the main area.</p>
+              )}
             </TabsPanel>
             <TabsPanel value="play" className="panel">
               {tab === "play" && playedMap ? (
@@ -279,6 +390,20 @@ function App() {
                   <li key={issue.id}>{issue.message}</li>
                 ))}
               </ul>
+            </section>
+          ) : null}
+
+          {surfaceInfo && !surfaceInfo.thing ? (
+            <section className="card" aria-label="Selected surface">
+              <h2>Surface</h2>
+              <SurfacePanel
+                key={surface}
+                info={surfaceInfo}
+                assets={assets}
+                onPaint={(texture, wholeRoom) =>
+                  commit(paintSurface(map, surface!, texture, wholeRoom))
+                }
+              />
             </section>
           ) : null}
 
