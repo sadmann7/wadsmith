@@ -511,6 +511,11 @@ input {
   margin-left: auto;
 }
 
+.game-volume {
+  width: 96px;
+  justify-content: center;
+}
+
 .game-screen {
   display: grid;
   place-items: center;

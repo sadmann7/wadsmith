@@ -1,10 +1,18 @@
-import { useEffect, useRef, useState } from "react";
+import {
+  Slider,
+  SliderControl,
+  SliderIndicator,
+  SliderThumb,
+  SliderTrack,
+} from "@ui-sdk/react/slider";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 import type { GameMap } from "../map/types";
 import { compileMap } from "../wad/compile";
 import { engineBase, loadIwad } from "./iwad";
 import {
   keysByCode,
+  maxVolume,
   screenHeight,
   screenWidth,
   startDoom,
@@ -18,10 +26,14 @@ let engineFiles: Promise<{
   iwad: Uint8Array;
 }> | null = null;
 
+function lastEngineError(errors: string[]) {
+  return errors.findLast((line) => line.trim());
+}
+
 function loadEngineFiles() {
   engineFiles ??= (async () => {
     const [module, iwad] = await Promise.all([
-      import(/* @vite-ignore */ `${engineBase}doom.js`) as Promise<{
+      import(/* @vite-ignore */ `${engineBase}websockets-doom.js`) as Promise<{
         default: CreateDoom;
       }>,
       loadIwad(),
@@ -34,8 +46,37 @@ function loadEngineFiles() {
   return engineFiles;
 }
 
+type SoundSettings = { volume: number; muted: boolean };
+
+const soundKey = "wadsmith:sound";
+const defaultSound: SoundSettings = { volume: 8, muted: false };
+
+function loadSound(): SoundSettings {
+  try {
+    const saved = JSON.parse(localStorage.getItem(soundKey) ?? "null");
+    return Number.isInteger(saved?.volume) &&
+      saved.volume >= 0 &&
+      saved.volume <= maxVolume &&
+      typeof saved.muted === "boolean"
+      ? { volume: saved.volume, muted: saved.muted }
+      : defaultSound;
+  } catch {
+    return defaultSound;
+  }
+}
+
+function saveSound(sound: SoundSettings) {
+  try {
+    localStorage.setItem(soundKey, JSON.stringify(sound));
+  } catch {
+    return;
+  }
+}
+
 type GameSessionProps = {
   map: GameMap;
+  sound: SoundSettings;
+  onSoundChange: (sound: SoundSettings) => void;
   fullscreen: boolean;
   onRestart: () => void;
   onToggleFullscreen: () => void;
@@ -44,6 +85,8 @@ type GameSessionProps = {
 
 function GameSession({
   map,
+  sound,
+  onSoundChange,
   fullscreen,
   onRestart,
   onToggleFullscreen,
@@ -52,32 +95,66 @@ function GameSession({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameRef = useRef<DoomGame | null>(null);
   const held = useRef(new Set<number>());
+  const soundRef = useRef(sound);
+  const leaveGame = useEffectEvent(onExit);
   const [status, setStatus] = useState<GameStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    soundRef.current = sound;
+    gameRef.current?.setSound(sound.volume, sound.muted);
+  }, [sound]);
+
+  useEffect(() => {
     let frame = 0;
     let stopped = false;
+    let running: DoomGame | null = null;
+    let loaded = false;
     let lastStatus = 0;
-    const logs: string[] = [];
+    const errors: string[] = [];
 
     const fail = (message: string) => {
       if (!stopped) setError(message);
     };
 
+    // The engine traps on a fatal error inside its own animation frame.
+    const onError = (event: ErrorEvent) => {
+      if (event.error instanceof WebAssembly.RuntimeError) {
+        running?.stop();
+        fail(lastEngineError(errors) ?? "The engine stopped.");
+      }
+    };
+    window.addEventListener("error", onError);
+
     (async () => {
-      const { createDoom, iwad } = await loadEngineFiles();
+      const { createDoom, iwad } = await loadEngineFiles().catch(
+        (cause: Error) => {
+          throw new Error(
+            `The engine could not load: ${cause.message} Run pnpm setup:engine if it hasn't been built.`,
+          );
+        },
+      );
+      loaded = true;
       const game = await startDoom({
         createDoom,
         iwad,
         map: compileMap(map),
         options: {
-          print: (line) => logs.push(line),
-          printErr: (line) => logs.push(line),
+          print: () => {},
+          printErr: (line) => errors.push(line),
+          // Quit Game in Doom's menu ends the engine.
+          onExit: () => {
+            if (!stopped) leaveGame();
+          },
         },
       });
-      if (stopped) return;
+      if (stopped) {
+        game.stop();
+        return;
+      }
+      running = game;
       gameRef.current = game;
+      game.setSound(soundRef.current.volume, soundRef.current.muted);
       const canvas = canvasRef.current;
       const context = canvas?.getContext("2d");
       if (!canvas || !context) return;
@@ -87,7 +164,7 @@ function GameSession({
       const loop = (now: number) => {
         if (stopped) return;
         try {
-          if (game.tick(now)) {
+          if (game.hasNewFrame()) {
             image.data.set(game.frame());
             context.putImageData(image, 0, 0);
             if (now - lastStatus > 200) {
@@ -96,22 +173,26 @@ function GameSession({
             }
           }
         } catch {
-          fail(logs.at(-1) ?? "The engine stopped.");
+          running?.stop();
+          fail(lastEngineError(errors) ?? "The engine stopped.");
           return;
         }
         frame = requestAnimationFrame(loop);
       };
       frame = requestAnimationFrame(loop);
-    })().catch((cause: unknown) => {
-      const detail = logs.at(-1) ?? (cause as Error).message;
+    })().catch((cause: Error) => {
       fail(
-        `The engine could not start: ${detail} Run pnpm setup:engine if it hasn't been built.`,
+        loaded
+          ? `The game couldn't start: ${lastEngineError(errors) ?? cause.message}`
+          : cause.message,
       );
     });
 
     return () => {
       stopped = true;
+      window.removeEventListener("error", onError);
       cancelAnimationFrame(frame);
+      running?.stop();
       gameRef.current = null;
     };
   }, [map]);
@@ -129,7 +210,11 @@ function GameSession({
       <header
         className="game-bar"
         onPointerDown={(event) => {
-          if ((event.target as Element).closest("button")) return;
+          if (
+            (event.target as Element).closest("button, [data-game-control]")
+          ) {
+            return;
+          }
           event.preventDefault();
           canvasRef.current?.focus();
         }}
@@ -144,6 +229,37 @@ function GameSession({
           buttons · {fullscreen ? "Esc leaves fullscreen" : "Esc menu"}
         </p>
         <div className="game-actions">
+          <button
+            type="button"
+            className="button"
+            aria-pressed={sound.muted}
+            onClick={(event) => {
+              onSoundChange({ ...sound, muted: !sound.muted });
+              // A mouse click shouldn't take the keys away from the game.
+              if (event.detail > 0) canvasRef.current?.focus();
+            }}
+          >
+            {sound.muted ? "Unmute" : "Mute"}
+          </button>
+          <Slider
+            className="slider game-volume"
+            data-game-control=""
+            value={sound.volume}
+            min={0}
+            max={maxVolume}
+            step={1}
+            onValueChange={(volume) =>
+              onSoundChange({ volume: volume as number, muted: false })
+            }
+            onPointerUp={() => canvasRef.current?.focus()}
+          >
+            <SliderControl className="slider-control">
+              <SliderTrack className="slider-track">
+                <SliderIndicator className="slider-indicator" />
+                <SliderThumb className="slider-thumb" aria-label="Volume" />
+              </SliderTrack>
+            </SliderControl>
+          </Slider>
           <button type="button" className="button" onClick={onRestart}>
             Restart
           </button>
@@ -181,6 +297,7 @@ function GameSession({
             onContextMenu={(event) => event.preventDefault()}
             onPointerDown={(event) => {
               event.currentTarget.focus();
+              gameRef.current?.resumeAudio();
               if (event.button !== 0) return;
               event.currentTarget.setPointerCapture(event.pointerId);
               setKey(true, keysByCode.Space);
@@ -200,6 +317,7 @@ function GameSession({
               }
               event.preventDefault();
               event.stopPropagation();
+              gameRef.current?.resumeAudio();
               setKey(true, key);
             }}
             onKeyUp={(event) => setKey(false, keysByCode[event.code])}
@@ -214,6 +332,7 @@ function GameView({ map, onExit }: { map: GameMap; onExit: () => void }) {
   const stageRef = useRef<HTMLElement>(null);
   const [run, setRun] = useState(0);
   const [fullscreen, setFullscreen] = useState(false);
+  const [sound, setSound] = useState(loadSound);
 
   useEffect(() => {
     const update = () => setFullscreen(Boolean(document.fullscreenElement));
@@ -238,6 +357,11 @@ function GameView({ map, onExit }: { map: GameMap; onExit: () => void }) {
       <GameSession
         key={run}
         map={map}
+        sound={sound}
+        onSoundChange={(next) => {
+          setSound(next);
+          saveSound(next);
+        }}
         fullscreen={fullscreen}
         onRestart={() => setRun((value) => value + 1)}
         onToggleFullscreen={toggleFullscreen}
