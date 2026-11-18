@@ -84,4 +84,28 @@ const starterMap: GameMap = {
   ],
 };
 
-export { starterMap };
+const blankMap: GameMap = {
+  vertices: {
+    v1: { x: 0, y: 0 },
+    v2: { x: 384, y: 0 },
+    v3: { x: 384, y: 320 },
+    v4: { x: 0, y: 320 },
+  },
+  sectors: [
+    {
+      id: "sector-1",
+      name: "Room 1",
+      vertices: ["v1", "v2", "v3", "v4"],
+      floor: 0,
+      ceiling: 128,
+      light: 176,
+      floorTexture: "FLOOR4_8",
+      ceilingTexture: "CEIL3_5",
+      wallTexture: "STARTAN3",
+    },
+  ],
+  things: [{ id: "player-1", kind: "player", x: 96, y: 160, angle: 0 }],
+  switches: [],
+};
+
+export { blankMap, starterMap };

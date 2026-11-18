@@ -13,6 +13,7 @@ import type { GameMap, Sector } from "./types";
 type MapIssue = { id: string; message: string; target?: string };
 
 const coordinateLimit = 32000;
+const heightLimit = 32767;
 const doorClearance = 4;
 const playerHeight = 56;
 
@@ -46,6 +47,15 @@ function validateSector(map: GameMap, sector: Sector, issues: MapIssue[]) {
   }
   if (!sector.door && sector.ceiling <= sector.floor) {
     add("height", "ceiling must be above the floor.");
+  }
+  if (
+    !Number.isInteger(sector.floor) ||
+    !Number.isInteger(sector.ceiling) ||
+    Math.abs(sector.floor) > heightLimit ||
+    Math.abs(sector.ceiling) > heightLimit ||
+    sector.ceiling - sector.floor > heightLimit
+  ) {
+    add("height-range", "floor and ceiling must be whole numbers in range.");
   }
   const edges = sectorEdges(sector);
   for (let i = 0; i < edges.length; i += 1) {

@@ -34,7 +34,21 @@ function loadEngineFiles() {
   return engineFiles;
 }
 
-function PlayPanel({ map }: { map: GameMap }) {
+type GameSessionProps = {
+  map: GameMap;
+  fullscreen: boolean;
+  onRestart: () => void;
+  onToggleFullscreen: () => void;
+  onExit: () => void;
+};
+
+function GameSession({
+  map,
+  fullscreen,
+  onRestart,
+  onToggleFullscreen,
+  onExit,
+}: GameSessionProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameRef = useRef<DoomGame | null>(null);
   const held = useRef(new Set<number>());
@@ -110,48 +124,127 @@ function PlayPanel({ map }: { map: GameMap }) {
     gameRef.current?.key(pressed, key);
   };
 
-  if (error) {
-    return (
-      <p className="notice" role="alert">
-        {error}
-      </p>
-    );
-  }
-
   return (
-    <div className="play">
-      <canvas
-        ref={canvasRef}
-        className="screen"
-        width={screenWidth}
-        height={screenHeight}
-        tabIndex={0}
-        aria-label="Game. Arrows or W, A, S and D move, Space fires, E uses."
-        onBlur={() => {
-          for (const key of held.current) setKey(false, key);
-        }}
+    <>
+      <header
+        className="game-bar"
         onPointerDown={(event) => {
-          event.currentTarget.focus();
-          setKey(true, keysByCode.Space);
-        }}
-        onPointerUp={() => setKey(false, keysByCode.Space)}
-        onKeyDown={(event) => {
-          const key = keysByCode[event.code];
-          if (key === undefined) return;
+          if ((event.target as Element).closest("button")) return;
           event.preventDefault();
-          event.stopPropagation();
-          setKey(true, key);
+          canvasRef.current?.focus();
         }}
-        onKeyUp={(event) => setKey(false, keysByCode[event.code])}
-      />
-      <p className="hint" aria-live="off">
-        {status
-          ? `Health ${status.health} · Kills ${status.kills}/${status.totalKills}`
-          : "Starting…"}
-        <span>WASD move · ←→ turn · Space fire · E use · Shift run</span>
-      </p>
-    </div>
+      >
+        <p className="hint" aria-live="off">
+          {status
+            ? `Health ${status.health} · Kills ${status.kills}/${status.totalKills}`
+            : "Starting…"}
+        </p>
+        <p className="game-keys">
+          WASD move · ←→ turn · Space fire · E use · Shift run · Shift+Tab
+          buttons · {fullscreen ? "Esc leaves fullscreen" : "Esc menu"}
+        </p>
+        <div className="game-actions">
+          <button type="button" className="button" onClick={onRestart}>
+            Restart
+          </button>
+          <button type="button" className="button" onClick={onToggleFullscreen}>
+            {fullscreen ? "Exit fullscreen" : "Fullscreen"}
+          </button>
+          <button type="button" className="button primary" onClick={onExit}>
+            Back to editor
+          </button>
+        </div>
+      </header>
+      <div
+        className="game-screen"
+        onPointerDown={(event) => {
+          if (event.target !== event.currentTarget) return;
+          event.preventDefault();
+          canvasRef.current?.focus();
+        }}
+      >
+        {error ? (
+          <p className="notice" role="alert">
+            {error}
+          </p>
+        ) : (
+          <canvas
+            ref={canvasRef}
+            className="game-canvas"
+            width={screenWidth}
+            height={screenHeight}
+            tabIndex={0}
+            aria-label="Game. Arrows or W, A, S and D move, Space fires, E uses."
+            onBlur={() => {
+              for (const key of held.current) setKey(false, key);
+            }}
+            onContextMenu={(event) => event.preventDefault()}
+            onPointerDown={(event) => {
+              event.currentTarget.focus();
+              if (event.button !== 0) return;
+              event.currentTarget.setPointerCapture(event.pointerId);
+              setKey(true, keysByCode.Space);
+            }}
+            onPointerUp={(event) => {
+              if (event.button === 0) setKey(false, keysByCode.Space);
+            }}
+            onLostPointerCapture={() => setKey(false, keysByCode.Space)}
+            onKeyDown={(event) => {
+              const key = keysByCode[event.code];
+              // Tab is Doom's automap, so Shift+Tab is the way out to the buttons.
+              if (
+                key === undefined ||
+                (event.shiftKey && event.code === "Tab")
+              ) {
+                return;
+              }
+              event.preventDefault();
+              event.stopPropagation();
+              setKey(true, key);
+            }}
+            onKeyUp={(event) => setKey(false, keysByCode[event.code])}
+          />
+        )}
+      </div>
+    </>
   );
 }
 
-export { PlayPanel };
+function GameView({ map, onExit }: { map: GameMap; onExit: () => void }) {
+  const stageRef = useRef<HTMLElement>(null);
+  const [run, setRun] = useState(0);
+  const [fullscreen, setFullscreen] = useState(false);
+
+  useEffect(() => {
+    const update = () => setFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener("fullscreenchange", update);
+    return () => {
+      document.removeEventListener("fullscreenchange", update);
+      if (document.fullscreenElement) void document.exitFullscreen();
+    };
+  }, []);
+
+  const toggleFullscreen = () => {
+    const request = document.fullscreenElement
+      ? document.exitFullscreen()
+      : stageRef.current?.requestFullscreen();
+    request
+      ?.catch(() => {})
+      .finally(() => stageRef.current?.querySelector("canvas")?.focus());
+  };
+
+  return (
+    <section ref={stageRef} className="game-stage" aria-label="Game">
+      <GameSession
+        key={run}
+        map={map}
+        fullscreen={fullscreen}
+        onRestart={() => setRun((value) => value + 1)}
+        onToggleFullscreen={toggleFullscreen}
+        onExit={onExit}
+      />
+    </section>
+  );
+}
+
+export { GameView };

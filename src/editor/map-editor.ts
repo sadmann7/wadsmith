@@ -75,7 +75,7 @@ type MapEditorOptions = {
     selection: string[],
     details: ChangeDetails<"select">,
   ) => void;
-  onDraftMapChange?: (map: GameMap) => void;
+  onDraftMapChange?: (map: GameMap | null) => void;
 };
 
 type MapEditorState = {
@@ -101,6 +101,29 @@ const emptyMap: GameMap = {
 const hiddenLine = { x1: "0", y1: "0", x2: "0", y2: "0" };
 const clickSlop = 4;
 const switchReach = 32;
+const agentHeightLimit = 2048;
+const agentDepthLimit = 4096;
+
+function agentNumber(value: number, min: number, max: number, label: string) {
+  if (!Number.isFinite(value)) throw new Error(`${label} must be a number.`);
+  return Math.max(min, Math.min(max, Math.round(value)));
+}
+
+function agentHeights(floor: number, ceiling: number) {
+  const heights = {
+    floor: agentNumber(floor, -agentHeightLimit, agentHeightLimit, "Floor"),
+    ceiling: agentNumber(
+      ceiling,
+      -agentHeightLimit,
+      agentHeightLimit,
+      "Ceiling",
+    ),
+  };
+  if (heights.ceiling <= heights.floor) {
+    throw new Error("The ceiling must be above the floor.");
+  }
+  return heights;
+}
 
 function pointOf(state: MapEditorState, key: string): Point {
   const base = state.positions[key] ?? { x: 0, y: 0 };
@@ -269,20 +292,21 @@ const mapEditor = definePrimitive({
       const { moving, map, positions } = store.get();
       if (moving === lastDraft) return;
       lastDraft = moving;
-      const draft = moving
-        ? Object.fromEntries(
-            moving.keys.map((key) => [
-              key,
-              {
-                x: positions[key].x + moving.dx,
-                y: positions[key].y + moving.dy,
-              },
-            ]),
-          )
-        : {};
-      context
-        .options()
-        .onDraftMapChange?.(applyPositions(map, { ...positions, ...draft }));
+      const { onDraftMapChange } = context.options();
+      if (!moving) {
+        onDraftMapChange?.(null);
+        return;
+      }
+      const draft = Object.fromEntries(
+        moving.keys.map((key) => [
+          key,
+          {
+            x: positions[key].x + moving.dx,
+            y: positions[key].y + moving.dy,
+          },
+        ]),
+      );
+      onDraftMapChange?.(applyPositions(map, { ...positions, ...draft }));
     });
     context.onDestroy(stopWatching);
 
@@ -394,14 +418,27 @@ const mapEditor = definePrimitive({
         ceiling?: number,
       ) {
         const source = findRoom(room);
-        const added = addRoomOnSide(store.get().map, source.id, side, depth, {
-          floor: floor ?? source.floor,
-          ceiling: ceiling ?? source.ceiling,
-          light: source.light,
-          floorTexture: source.floorTexture,
-          ceilingTexture: source.ceilingTexture,
-          wallTexture: source.wallTexture,
-        });
+        const roomDepth = agentNumber(
+          depth,
+          gridSize,
+          agentDepthLimit,
+          "Depth",
+        );
+        const added = addRoomOnSide(
+          store.get().map,
+          source.id,
+          side,
+          roomDepth,
+          {
+            ...(floor === undefined && ceiling === undefined
+              ? { floor: source.floor, ceiling: source.ceiling }
+              : agentHeights(floor ?? source.floor, ceiling ?? source.ceiling)),
+            light: source.light,
+            floorTexture: source.floorTexture,
+            ceilingTexture: source.ceilingTexture,
+            wallTexture: source.wallTexture,
+          },
+        );
         if (!added) {
           throw new Error(`${source.name} has no free wall facing ${side}.`);
         }
@@ -411,9 +448,11 @@ const mapEditor = definePrimitive({
       },
       setRoomHeights(room: string, floor: number, ceiling: number) {
         const { id } = findRoom(room);
-        change("map", updateSector(store.get().map, id, { floor, ceiling }), {
-          reason: "agent",
-        });
+        change(
+          "map",
+          updateSector(store.get().map, id, agentHeights(floor, ceiling)),
+          { reason: "agent" },
+        );
       },
       makeDoor(
         room: string,

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { addRoomOnSide, addSwitchInRoom, setRoomDoor } from "../map/edit";
+import {
+  addRoomOnSide,
+  addSwitchInRoom,
+  setRoomDoor,
+  updateSector,
+} from "../map/edit";
 import { starterMap } from "../map/starter-map";
 import type { GameMap } from "../map/types";
 import { validateMap } from "../map/validate";
@@ -194,6 +199,23 @@ describe("validateMap", () => {
       ],
     });
     expect(issues.map((issue) => issue.id)).toContain("outside:imp-2");
+  });
+
+  it("rejects heights the engine can't store", () => {
+    const issues = validateMap(
+      updateSectorCeiling(starterMap, "sector-1", 40000),
+    );
+    expect(issues.map((issue) => issue.id)).toContain("height-range:sector-1");
+  });
+
+  it("rejects a room too tall for the engine", () => {
+    const map = updateSector(starterMap, "sector-1", {
+      floor: -16384,
+      ceiling: 16384,
+    });
+    expect(validateMap(map).map((issue) => issue.id)).toContain(
+      "height-range:sector-1",
+    );
   });
 
   it("rejects a twisted room", () => {

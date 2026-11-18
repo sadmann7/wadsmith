@@ -59,7 +59,7 @@ function NumberField({
         min={min}
         max={max}
         onValueChange={(next) => {
-          if (next !== null) onChange(next);
+          if (next !== null) onChange(Math.round(next));
         }}
       >
         <NumberInputGroup className="number">
@@ -222,6 +222,7 @@ function SectorInspector({
         <span className="label">Name</span>
         <Input
           className="text-input"
+          maxLength={80}
           value={sector.name}
           onValueChange={(name) => onChange({ name })}
         />
