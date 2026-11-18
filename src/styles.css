@@ -375,29 +375,6 @@ input {
   background: var(--panel);
 }
 
-.tabs {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 6px;
-}
-
-.tabs button {
-  padding: 4px 9px;
-  border: 0;
-  border-radius: 5px;
-  background: none;
-  color: var(--muted);
-}
-
-.tabs button[aria-selected="true"] {
-  background: var(--panel-2);
-  color: var(--text);
-}
-
-.tabs button:disabled {
-  opacity: 0.45;
-}
-
 .screen {
   display: block;
   width: 100%;
@@ -500,16 +477,89 @@ input {
   image-rendering: pixelated;
 }
 
-.hint {
+.game-stage {
+  position: fixed;
+  z-index: 40;
+  inset: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  background: #000;
+}
+
+.game-bar {
   display: flex;
   flex-wrap: wrap;
-  gap: 2px 12px;
-  justify-content: space-between;
-  margin-top: 6px;
+  gap: 6px 16px;
+  align-items: center;
+  min-height: 48px;
+  padding: 8px 12px;
+  background: var(--panel);
+}
+
+.hint {
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
-.hint span,
+.game-keys {
+  color: var(--muted);
+}
+
+.game-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.game-screen {
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  overflow: hidden;
+  container-type: size;
+}
+
+/* Doom's 320x200 image was made for 4:3 screens, so its pixels are stretched. */
+.game-canvas {
+  display: block;
+  width: min(100cqw, calc(100cqh * 4 / 3));
+  height: auto;
+  aspect-ratio: 4 / 3;
+  outline: 0;
+  image-rendering: pixelated;
+}
+
+.game-stage:fullscreen .game-bar {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  right: 0;
+  left: 0;
+  opacity: 0;
+  transition: opacity 150ms;
+}
+
+.game-stage:fullscreen .game-bar:hover,
+.game-stage:fullscreen .game-bar:focus-within {
+  opacity: 1;
+}
+
+.game-stage:fullscreen {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.save-state {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.menu-separator {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--line);
+}
+
 .muted {
   color: var(--muted);
 }
