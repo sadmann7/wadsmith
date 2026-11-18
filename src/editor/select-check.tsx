@@ -3,7 +3,7 @@ import { Check } from "lucide-react";
 
 function SelectCheck() {
   return (
-    <SelectItemIndicator className="ml-auto pl-3 text-ember">
+    <SelectItemIndicator className="ml-auto pl-3 text-accent">
       <Check size={14} aria-hidden="true" />
     </SelectItemIndicator>
   );

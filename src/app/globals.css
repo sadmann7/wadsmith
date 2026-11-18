@@ -1,27 +1,48 @@
 @import "tailwindcss";
 
-@theme {
-  --color-bg: oklch(0.16 0.003 67.6);
-  --color-panel: oklch(0.193 0.005 67.5);
-  --color-raised: oklch(0.241 0.009 75.2);
-  --color-line: oklch(0.288 0.011 73.5);
-  --color-text: oklch(0.936 0.015 80.7);
-  --color-muted: oklch(0.699 0.021 80.1);
-  --color-ember: oklch(0.702 0.196 40.7);
-  --color-ember-foreground: oklch(0.161 0.024 47.1);
-  --color-acid: oklch(0.821 0.188 126.1);
-  --color-key: oklch(0.844 0.151 87.9);
-  --color-cold: oklch(0.743 0.109 236.9);
+@theme static {
+  --color-canvas: oklch(0.16 0.003 67.6);
+  --color-surface: oklch(0.193 0.005 67.5);
+  --color-surface-raised: oklch(0.241 0.009 75.2);
+  --color-surface-hover: oklch(0.304 0.013 72.4);
+  --color-border: oklch(0.288 0.011 73.5);
+  --color-border-strong: oklch(0.332 0.014 76.4);
+  --color-border-control: oklch(0.521 0.018 77);
+  --color-fg: oklch(0.936 0.015 80.7);
+  --color-fg-soft: oklch(0.857 0.018 81.3);
+  --color-fg-muted: oklch(0.699 0.021 80.1);
+  --color-fg-disabled: oklch(0.521 0.018 77);
+  --color-accent: oklch(0.702 0.196 40.7);
+  --color-accent-fg: oklch(0.161 0.024 47.1);
+  --color-selection: oklch(0.702 0.196 40.7);
   --color-danger: oklch(0.654 0.195 26.8);
-  --color-line-strong: oklch(0.332 0.014 76.4);
-  --color-hover: oklch(0.304 0.013 72.4);
-  --color-disabled: oklch(0.521 0.018 77);
-  --color-soft: oklch(0.857 0.018 81.3);
-  --color-inset: oklch(0.169 0.004 84.6);
-  --color-row: oklch(0.211 0.007 67.4);
-  --color-danger-surface: oklch(0.253 0.059 25.3);
-  --color-danger-soft: oklch(0.908 0.048 24.5);
-  --color-wall-open: oklch(0.329 0.015 71.6);
+  --color-danger-soft: oklch(0.253 0.059 25.3);
+  --color-danger-soft-fg: oklch(0.908 0.048 24.5);
+  --color-warning: oklch(0.844 0.151 87.9);
+  --color-success: oklch(0.821 0.188 126.1);
+  --color-info: oklch(0.743 0.109 236.9);
+  --color-void: oklch(0 0 0);
+  --color-scrim: oklch(0 0 0 / 65%);
+  --color-map-bg: oklch(0.169 0.004 84.6);
+  --color-map-grid: oklch(0.219 0.007 78.2);
+  --color-map-sector: oklch(0.275 0.008 75.2);
+  --color-map-sector-door: oklch(0.399 0.068 81.1);
+  --color-map-wall: oklch(0.811 0.023 80.7);
+  --color-map-portal: oklch(0.614 0.021 75.2);
+  --color-map-door: oklch(0.844 0.151 87.9);
+  --color-map-wire: oklch(0.844 0.151 87.9);
+  --color-map-switch: oklch(0.821 0.188 126.1);
+  --color-map-camera: oklch(0.844 0.151 87.9);
+  --color-map-note: oklch(0.844 0.151 87.9);
+  --color-thing-start: oklch(0.844 0.151 87.9);
+  --color-thing-enemy: oklch(0.654 0.195 26.8);
+  --color-thing-item: oklch(0.821 0.188 126.1);
+  --color-thing-health: oklch(0.743 0.109 236.9);
+  --color-thing-decor: oklch(0.699 0.021 80.1);
+  --color-key-blue: oklch(0.743 0.109 236.9);
+  --color-key-yellow: oklch(0.844 0.151 87.9);
+  --color-key-red: oklch(0.654 0.195 26.8);
+  --shadow-popover: 0 12px 32px oklch(0 0 0 / 45%);
 }
 
 @theme inline {
@@ -30,23 +51,6 @@
 }
 
 :root {
-  --bg: var(--color-bg);
-  --panel: var(--color-panel);
-  --panel-2: var(--color-raised);
-  --line: var(--color-line);
-  --text: var(--color-text);
-  --muted: var(--color-muted);
-  --accent: var(--color-ember);
-  --accent-text: var(--color-ember-foreground);
-  --select: var(--color-ember);
-  --acid: var(--color-acid);
-  --key: var(--color-key);
-  --cold: var(--color-cold);
-  --danger: var(--color-danger);
-  --wall: var(--color-disabled);
-  --wall-open: var(--color-wall-open);
-  --sans: var(--font-sans);
-  --mono: var(--font-mono);
   color-scheme: dark;
   font: 14px/1.35 var(--font-sans);
 }
@@ -63,8 +67,8 @@
   }
 
   body {
-    background: var(--bg);
-    color: var(--text);
+    background: var(--color-canvas);
+    color: var(--color-fg);
   }
 
   h1,
@@ -81,7 +85,7 @@
   }
 
   :focus-visible {
-    outline: 2px solid var(--select);
+    outline: 2px solid var(--color-selection);
     outline-offset: 1px;
   }
 
@@ -97,8 +101,8 @@
     align-items: center;
     min-width: 0;
     padding: 8px 12px;
-    border-bottom: 1px solid var(--line);
-    background: var(--panel);
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-surface);
   }
 
   .topbar h1 {
@@ -122,7 +126,7 @@
   .separator {
     width: 1px;
     height: 20px;
-    background: var(--line);
+    background: var(--color-border);
   }
 
   .button,
@@ -133,16 +137,16 @@
     justify-content: space-between;
     min-height: 30px;
     padding: 4px 10px;
-    border: 1px solid var(--line);
+    border: 1px solid var(--color-border-control);
     border-radius: 6px;
-    background: var(--panel-2);
+    background: var(--color-surface-raised);
     white-space: nowrap;
     cursor: default;
   }
 
   .button:hover:not(:disabled),
   .select-trigger:hover {
-    border-color: oklch(0.426 0.016 262.3);
+    border-color: var(--color-fg-muted);
   }
 
   .button:disabled {
@@ -151,8 +155,8 @@
 
   .button.primary {
     border-color: transparent;
-    background: var(--accent);
-    color: var(--accent-text);
+    background: var(--color-accent);
+    color: var(--color-accent-fg);
     font-weight: 600;
   }
 
@@ -161,9 +165,9 @@
     display: inline-flex;
     isolation: isolate;
     padding: 2px;
-    border: 1px solid var(--line);
+    border: 1px solid var(--color-border);
     border-radius: 7px;
-    background: var(--bg);
+    background: var(--color-canvas);
   }
 
   .segments button {
@@ -171,12 +175,12 @@
     padding: 2px 10px;
     border: 0;
     background: none;
-    color: var(--muted);
+    color: var(--color-fg-muted);
   }
 
   .segments button[data-checked],
   .segments button[aria-checked="true"] {
-    color: var(--text);
+    color: var(--color-fg);
   }
 
   .segments-indicator {
@@ -187,7 +191,7 @@
     width: var(--segmented-control-indicator-width);
     height: var(--segmented-control-indicator-height);
     border-radius: 5px;
-    background: var(--panel-2);
+    background: var(--color-surface-raised);
   }
 
   .select-content {
@@ -196,10 +200,10 @@
     max-height: var(--available-height);
     overflow-y: auto;
     padding: 4px;
-    border: 1px solid var(--line);
+    border: 1px solid var(--color-border);
     border-radius: 7px;
-    background: var(--panel-2);
-    box-shadow: 0 12px 32px oklch(0 0 0 / 45%);
+    background: var(--color-surface-raised);
+    box-shadow: var(--shadow-popover);
   }
 
   .select-item {
@@ -211,11 +215,11 @@
   }
 
   .select-item[data-destructive] {
-    color: var(--danger);
+    color: var(--color-danger);
   }
 
   .select-item[data-highlighted] {
-    background: oklch(0.34 0.015 264.4);
+    background: var(--color-surface-hover);
   }
 
   .workspace {
@@ -243,7 +247,7 @@
 
   .view-handle {
     width: 6px;
-    background: var(--line);
+    background: var(--color-border);
     cursor: col-resize;
     touch-action: none;
   }
@@ -251,7 +255,7 @@
   .view-handle:hover,
   .view-handle:focus-visible,
   .view-handle[data-dragging] {
-    background: var(--select);
+    background: var(--color-selection);
   }
 
   .views[data-layout="map"] .view-handle,
@@ -277,7 +281,7 @@
   }
 
   .views[data-layout="split"] .pane:focus-within {
-    outline-color: var(--select);
+    outline-color: var(--color-selection);
   }
 
   .pane-actions {
@@ -296,7 +300,6 @@
   .map {
     width: 100%;
     height: 100%;
-    background: oklch(0.164 0.005 264.4);
     outline-offset: -2px;
   }
 
@@ -321,37 +324,20 @@
 
   .map-grid-line {
     fill: none;
-    stroke: oklch(0.242 0.009 255.6);
     stroke-width: 1;
     vector-effect: non-scaling-stroke;
   }
 
-  .map-sector {
-    fill: oklch(0.635 0.185 31.2 / 8%);
-  }
-
-  .map-sector[data-active] {
-    fill: oklch(0.816 0.147 80.2 / 16%);
-  }
-
-  .map-sector[data-door] {
-    fill: oklch(0.714 0.143 254.6 / 22%);
-  }
-
   .map-wall {
-    stroke: oklch(0.876 0.01 87.5);
     stroke-width: 2;
     vector-effect: non-scaling-stroke;
   }
 
   .map-wall[data-portal] {
-    stroke: oklch(0.635 0.185 31.2);
     stroke-dasharray: 6 4;
   }
 
   .map-draft {
-    fill: oklch(0.816 0.147 80.2 / 8%);
-    stroke: var(--select);
     stroke-width: 2;
     vector-effect: non-scaling-stroke;
   }
@@ -369,25 +355,15 @@
   .map-vertex {
     width: 12px;
     height: 12px;
-    border: 2px solid oklch(0.164 0.005 264.4);
     border-radius: 3px;
-    background: oklch(0.876 0.01 87.5);
   }
 
   .map-thing {
     width: 24px;
     height: 24px;
-    border: 2px solid oklch(0.164 0.005 264.4);
     border-radius: 50%;
-    background: var(--thing-color);
-    color: oklch(0.178 0 0);
     font-size: 11px;
     font-weight: 700;
-  }
-
-  .map-vertex[data-selected],
-  .map-thing[data-selected] {
-    box-shadow: 0 0 0 2px var(--select);
   }
 
   .map-vertex[data-dragging],
@@ -403,7 +379,6 @@
   }
 
   .map-wire {
-    stroke: oklch(0.714 0.143 254.6);
     stroke-width: 2;
     stroke-dasharray: 2 5;
     stroke-linecap: round;
@@ -422,7 +397,7 @@
   .map-port {
     display: block;
     padding: 0;
-    border: 2px solid oklch(0.164 0.005 264.4);
+    border: 2px solid var(--color-map-bg);
     transform: translate(-50%, -50%) scale(calc(1 / var(--canvas-zoom, 1)));
   }
 
@@ -430,7 +405,6 @@
     width: 18px;
     height: 18px;
     border-radius: 4px;
-    background: oklch(0.8 0.182 151.7);
     cursor: crosshair;
   }
 
@@ -438,17 +412,16 @@
     width: 20px;
     height: 20px;
     border-radius: 50%;
-    background: oklch(0.714 0.143 254.6);
   }
 
   .map-port[data-selected],
   .map-port[data-connect="source"],
   .map-port[data-connect="target"] {
-    box-shadow: 0 0 0 2px var(--select);
+    box-shadow: 0 0 0 2px var(--color-selection);
   }
 
   .map-port[data-connect="candidate"] {
-    box-shadow: 0 0 0 2px oklch(0.714 0.143 254.6);
+    box-shadow: 0 0 0 2px var(--color-map-wire);
   }
 
   .map-actions {
@@ -468,19 +441,13 @@
     height: 26px;
     padding: 0;
     border: 0;
-    background: oklch(0.816 0.147 80.2);
     clip-path: polygon(100% 50%, 0 8%, 24% 50%, 0 92%);
     transform: translate(-50%, -50%) scale(calc(1 / var(--canvas-zoom, 1)))
       rotate(var(--camera-angle, 0deg));
     cursor: grab;
   }
 
-  .map-camera:focus-visible {
-    background: oklch(1 0 0);
-  }
-
   .map-wall[data-selected] {
-    stroke: var(--select);
     stroke-width: 4;
   }
 
@@ -491,8 +458,7 @@
     max-width: calc(100% - 24px);
     padding: 5px 9px;
     border-radius: 6px;
-    background: oklch(0.182 0.004 264.5 / 88%);
-    color: var(--muted);
+    color: var(--color-fg-muted);
     pointer-events: none;
   }
 
@@ -503,8 +469,8 @@
     min-height: 0;
     padding: 10px;
     overflow-y: auto;
-    border-left: 1px solid var(--line);
-    background: var(--panel);
+    border-left: 1px solid var(--color-border);
+    background: var(--color-surface);
   }
 
   .screen {
@@ -512,7 +478,7 @@
     width: 100%;
     aspect-ratio: 8 / 5;
     border-radius: 6px;
-    background: oklch(0 0 0);
+    background: var(--color-void);
     image-rendering: pixelated;
   }
 
@@ -544,7 +510,7 @@
   .scene-pane {
     display: grid;
     grid-template-rows: minmax(0, 1fr) auto;
-    background: oklch(0.164 0.005 264.4);
+    background: var(--color-map-bg);
   }
 
   .scene-frame {
@@ -569,7 +535,7 @@
     align-items: center;
     justify-content: space-between;
     padding: 6px 8px;
-    background: var(--panel);
+    background: var(--color-surface);
   }
 
   .scene-actions {
@@ -579,7 +545,7 @@
 
   .scene-status {
     min-width: 0;
-    color: var(--muted);
+    color: var(--color-fg-muted);
     font-variant-numeric: tabular-nums;
     overflow-wrap: anywhere;
   }
@@ -597,15 +563,15 @@
     justify-items: center;
     padding: 4px;
     border-radius: 6px;
-    color: var(--muted);
+    color: var(--color-fg-muted);
     font-size: 10px;
     overflow-wrap: anywhere;
   }
 
   .swatch:has([data-checked]) {
-    background: var(--panel-2);
-    color: var(--text);
-    box-shadow: 0 0 0 2px var(--select);
+    background: var(--color-surface-raised);
+    color: var(--color-fg);
+    box-shadow: 0 0 0 2px var(--color-selection);
   }
 
   .swatch-radio {
@@ -632,7 +598,7 @@
     inset: 0;
     display: grid;
     grid-template-rows: minmax(0, 1fr);
-    background: oklch(0 0 0);
+    background: var(--color-void);
   }
 
   .game-screen {
@@ -659,7 +625,7 @@
   }
 
   .save-state {
-    color: var(--muted);
+    color: var(--color-fg-muted);
     font-size: 12px;
     white-space: nowrap;
   }
@@ -667,16 +633,16 @@
   .menu-separator {
     height: 1px;
     margin: 4px 0;
-    background: var(--line);
+    background: var(--color-border);
   }
 
   .muted {
-    color: var(--muted);
+    color: var(--color-fg-muted);
   }
 
   .notice {
     padding: 10px;
-    border: 1px solid var(--accent);
+    border: 1px solid var(--color-accent);
     border-radius: 6px;
     overflow-wrap: anywhere;
   }
@@ -686,7 +652,7 @@
     flex-direction: column;
     gap: 8px;
     padding: 10px;
-    border: 1px solid var(--line);
+    border: 1px solid var(--color-border);
     border-radius: 8px;
   }
 
@@ -695,7 +661,7 @@
   }
 
   .issues {
-    border-color: var(--accent);
+    border-color: var(--color-accent);
   }
 
   .issues ul {
@@ -721,7 +687,7 @@
   }
 
   .label {
-    color: var(--muted);
+    color: var(--color-fg-muted);
     font-size: 12px;
   }
 
@@ -733,9 +699,9 @@
   .number {
     width: 100%;
     min-height: 30px;
-    border: 1px solid var(--line);
+    border: 1px solid var(--color-border-control);
     border-radius: 6px;
-    background: var(--bg);
+    background: var(--color-canvas);
   }
 
   .text-input {
@@ -750,7 +716,7 @@
 
   .number button {
     border: 0;
-    background: var(--panel-2);
+    background: var(--color-surface-raised);
   }
 
   .number input {
@@ -785,20 +751,20 @@
     width: 100%;
     height: 4px;
     border-radius: 2px;
-    background: var(--line);
+    background: var(--color-border);
   }
 
   .slider-indicator {
     height: 100%;
     border-radius: 2px;
-    background: var(--accent);
+    background: var(--color-accent);
   }
 
   .slider-thumb {
     width: 14px;
     height: 14px;
     border-radius: 50%;
-    background: var(--text);
+    background: var(--color-fg);
   }
 
   .toggle {
@@ -815,18 +781,18 @@
     padding: 2px;
     border: 0;
     border-radius: 9px;
-    background: var(--line);
+    background: var(--color-border);
   }
 
   .switch[data-checked] {
-    background: var(--accent);
+    background: var(--color-accent);
   }
 
   .switch-thumb {
     width: 14px;
     height: 14px;
     border-radius: 50%;
-    background: var(--text);
+    background: var(--color-fg);
   }
 
   .switch[data-checked] .switch-thumb {
@@ -862,7 +828,7 @@
 
     .side {
       overflow: visible;
-      border-top: 1px solid var(--line);
+      border-top: 1px solid var(--color-border);
       border-left: 0;
     }
   }
@@ -891,7 +857,7 @@
   }
 
   .topbar h1 {
-    color: var(--accent);
+    color: var(--color-accent);
     font-size: 17px;
     font-weight: 700;
     letter-spacing: 1.5px;
@@ -901,12 +867,12 @@
     padding: 2px 0;
     border: 0;
     background: none;
-    color: var(--muted);
+    color: var(--color-fg-muted);
   }
 
   .menu-trigger:hover,
   .menu-trigger[aria-expanded="true"] {
-    color: var(--text);
+    color: var(--color-fg);
   }
 
   .topbar-end {
@@ -924,8 +890,8 @@
 
   .map-title span {
     flex: none;
-    color: var(--muted);
-    font: 12px var(--mono);
+    color: var(--color-fg-muted);
+    font: 12px var(--font-mono);
   }
 
   .map-title strong {
@@ -950,7 +916,7 @@
   }
 
   .button.primary {
-    color: var(--accent-text);
+    color: var(--color-accent-fg);
   }
 
   .icon-button {
@@ -961,12 +927,12 @@
     padding: 0;
     border: 0;
     background: transparent;
-    color: var(--muted);
+    color: var(--color-fg-muted);
   }
 
   .icon-button:hover:not(:disabled) {
-    background: var(--panel-2);
-    color: var(--text);
+    background: var(--color-surface-raised);
+    color: var(--color-fg);
   }
 
   .icon-button:disabled {
@@ -988,8 +954,8 @@
     gap: 4px;
     align-items: center;
     padding: 10px 0;
-    border-right: 1px solid var(--line);
-    background: var(--panel);
+    border-right: 1px solid var(--color-border);
+    background: var(--color-surface);
   }
 
   .tool-rail button {
@@ -1001,17 +967,17 @@
     border: 0;
     border-radius: 3px;
     background: none;
-    color: var(--muted);
+    color: var(--color-fg-muted);
   }
 
   .tool-rail button:hover:not(:disabled) {
-    color: var(--text);
+    color: var(--color-fg);
   }
 
   .tool-rail button[data-checked],
   .tool-rail button[aria-checked="true"] {
-    background: var(--panel-2);
-    color: var(--accent);
+    background: var(--color-surface-raised);
+    color: var(--color-accent);
   }
 
   .tool-rail button:disabled {
@@ -1019,7 +985,7 @@
   }
 
   .map {
-    background: oklch(0.169 0.004 84.6);
+    background: var(--color-map-bg);
   }
 
   .map-pane {
@@ -1039,16 +1005,16 @@
 
   .map-overlay .select-trigger {
     min-height: 34px;
-    border-color: var(--line);
-    background: var(--panel);
+    border-color: var(--color-border-control);
+    background: var(--color-surface);
   }
 
   .edit-modes {
     display: inline-flex;
     gap: 2px;
     padding: 3px;
-    border: 1px solid var(--line);
-    background: var(--panel);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
   }
 
   .edit-modes button {
@@ -1060,24 +1026,24 @@
     border: 0;
     border-radius: 2px;
     background: none;
-    color: var(--muted);
+    color: var(--color-fg-muted);
   }
 
   .edit-modes kbd {
-    color: var(--muted);
-    font: 11px var(--mono);
+    color: var(--color-fg-muted);
+    font: 11px var(--font-mono);
   }
 
   .edit-modes button[data-checked],
   .edit-modes button[aria-checked="true"] {
-    background: var(--panel-2);
-    color: var(--text);
+    background: var(--color-surface-raised);
+    color: var(--color-fg);
     font-weight: 600;
   }
 
   .edit-modes button[data-checked] kbd,
   .edit-modes button[aria-checked="true"] kbd {
-    color: var(--accent);
+    color: var(--color-accent);
   }
 
   .pane-actions {
@@ -1095,68 +1061,70 @@
 
   .pane-actions .icon-button,
   .map-actions .icon-button {
-    border: 1px solid var(--line);
-    background: var(--panel);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
   }
 
   .map-grid-line {
-    stroke: oklch(0.219 0.007 78.2);
+    stroke: var(--color-map-grid);
   }
 
   .map-sector {
-    fill: oklch(0.275 0.008 75.2);
+    fill: var(--color-map-sector);
   }
 
   .map-sector[data-active] {
-    fill: oklch(0.702 0.196 40.7 / 24%);
+    fill: color-mix(in oklab, var(--color-selection) 24%, transparent);
   }
 
   .map-sector[data-door] {
-    fill: oklch(0.399 0.068 81.1);
+    fill: var(--color-map-sector-door);
   }
 
   .map-wall {
-    stroke: oklch(0.811 0.023 80.7);
+    stroke: var(--color-map-wall);
     stroke-width: 1.5;
   }
 
   .map-wall[data-portal] {
-    stroke: oklch(0.614 0.021 75.2);
+    stroke: var(--color-map-portal);
     stroke-dasharray: 5 4;
   }
 
   .map-wall[data-selected] {
-    stroke: var(--accent);
+    stroke: var(--color-selection);
     stroke-dasharray: none;
     stroke-width: 3;
   }
 
   .map-draft {
-    fill: oklch(0.702 0.196 40.7 / 10%);
-    stroke: var(--accent);
+    fill: color-mix(in oklab, var(--color-selection) 10%, transparent);
+    stroke: var(--color-selection);
   }
 
   .map-vertex {
     width: 9px;
     height: 9px;
-    border: 1px solid oklch(0.811 0.023 80.7);
+    border: 1px solid var(--color-map-wall);
     border-radius: 1px;
-    background: oklch(0.169 0.004 84.6);
+    background: var(--color-map-bg);
   }
 
   .map-vertex[data-selected] {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 2px oklch(0.702 0.196 40.7 / 35%);
+    border-color: var(--color-selection);
+    box-shadow: 0 0 0 2px
+      color-mix(in oklab, var(--color-selection) 35%, transparent);
   }
 
   .map-thing {
     border: 1.5px solid var(--thing-color);
-    background: oklch(0.169 0.004 84.6);
+    background: var(--color-map-bg);
     color: var(--thing-color);
   }
 
   .map-thing[data-selected] {
-    box-shadow: 0 0 0 2px oklch(0.702 0.196 40.7 / 65%);
+    box-shadow: 0 0 0 2px
+      color-mix(in oklab, var(--color-selection) 65%, transparent);
   }
 
   .map[data-mode="lines"] .map-vertex,
@@ -1180,34 +1148,34 @@
   }
 
   .map-label strong {
-    color: var(--text);
+    color: var(--color-fg);
     font-size: 12px;
     font-weight: 600;
   }
 
   .map-label span {
-    color: var(--muted);
-    font: 10px var(--mono);
+    color: var(--color-fg-muted);
+    font: 10px var(--font-mono);
   }
 
   .map-switch {
     border-radius: 3px;
-    background: var(--acid);
+    background: var(--color-map-switch);
   }
 
   .map-door {
-    background: var(--key);
+    background: var(--color-map-door);
   }
 
   .map-wire {
-    stroke: var(--key);
+    stroke: var(--color-map-wire);
   }
 
   .map-camera {
+    background: none;
     overflow: visible;
     width: 22px;
     height: 22px;
-    background: none;
     clip-path: none;
     transform: translate(-50%, -50%) scale(calc(1 / var(--canvas-zoom, 1)))
       rotate(var(--camera-angle, 0deg));
@@ -1220,12 +1188,12 @@
   .map-camera-arrow {
     position: absolute;
     inset: 0;
-    background: var(--key);
+    background: var(--color-map-camera);
     clip-path: polygon(100% 50%, 0 8%, 24% 50%, 0 92%);
   }
 
   .map-camera:focus-visible .map-camera-arrow {
-    background: var(--text);
+    background: var(--color-fg);
   }
 
   .map-camera-cone {
@@ -1236,7 +1204,7 @@
     height: 120px;
     background: linear-gradient(
       90deg,
-      oklch(0.844 0.151 87.9 / 34%),
+      color-mix(in oklab, var(--color-map-camera) 34%, transparent),
       transparent
     );
     clip-path: polygon(0 50%, 100% 0, 100% 100%);
@@ -1245,9 +1213,9 @@
   }
 
   .tool-hint {
-    border: 1px solid var(--line);
+    border: 1px solid var(--color-border);
     border-radius: 3px;
-    background: oklch(0.193 0.005 67.5 / 92%);
+    background: color-mix(in oklab, var(--color-surface) 92%, transparent);
     font-size: 13px;
   }
 
@@ -1263,8 +1231,8 @@
     display: grid;
     grid-template-rows: 28px 162px;
     width: 284px;
-    border: 1px solid var(--line);
-    background: var(--panel);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
   }
 
   .player-dock-bar {
@@ -1272,9 +1240,9 @@
     align-items: center;
     justify-content: space-between;
     padding: 0 4px 0 9px;
-    border-bottom: 1px solid var(--line);
-    color: var(--muted);
-    font: 11px var(--mono);
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-fg-muted);
+    font: 11px var(--font-mono);
   }
 
   .dock-button {
@@ -1285,11 +1253,11 @@
     padding: 0;
     border: 0;
     background: none;
-    color: var(--muted);
+    color: var(--color-fg-muted);
   }
 
   .dock-button:hover {
-    color: var(--text);
+    color: var(--color-fg);
   }
 
   .side {
@@ -1301,7 +1269,7 @@
     display: grid;
     gap: 2px;
     padding: 12px 16px;
-    border-bottom: 1px solid var(--line);
+    border-bottom: 1px solid var(--color-border);
   }
 
   .selection-header h2 {
@@ -1311,8 +1279,8 @@
   }
 
   .selection-header p {
-    color: var(--muted);
-    font: 11px var(--mono);
+    color: var(--color-fg-muted);
+    font: 11px var(--font-mono);
   }
 
   .inspector-section {
@@ -1320,15 +1288,15 @@
     flex-direction: column;
     gap: 10px;
     padding: 12px 16px;
-    border-bottom: 1px solid var(--line);
+    border-bottom: 1px solid var(--color-border);
     outline-offset: -2px;
   }
 
   .inspector-section h2 {
     display: flex;
     justify-content: space-between;
-    color: var(--muted);
-    font: 400 11px var(--mono);
+    color: var(--color-fg-muted);
+    font: 400 11px var(--font-mono);
     letter-spacing: 1px;
     text-transform: uppercase;
   }
@@ -1339,7 +1307,7 @@
   }
 
   .inspector-section.issues {
-    border-left: 2px solid var(--danger);
+    border-left: 2px solid var(--color-danger);
   }
 
   .map-check ul {
@@ -1372,10 +1340,10 @@
     justify-content: space-between;
     min-width: 0;
     padding: 0 12px;
-    border-top: 1px solid var(--line);
-    background: var(--panel);
-    color: var(--muted);
-    font: 11px var(--mono);
+    border-top: 1px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-fg-muted);
+    font: 11px var(--font-mono);
     white-space: pre;
   }
 
@@ -1450,7 +1418,7 @@
       justify-content: center;
       padding: 4px;
       border-right: 0;
-      border-bottom: 1px solid var(--line);
+      border-bottom: 1px solid var(--color-border);
     }
 
     .status-bar div:first-child {
@@ -1462,7 +1430,7 @@
     display: grid;
     place-items: center;
     height: 100%;
-    color: var(--muted);
-    font: 12px var(--mono);
+    color: var(--color-fg-muted);
+    font: 12px var(--font-mono);
   }
 }

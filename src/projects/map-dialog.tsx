@@ -40,9 +40,9 @@ type MapDetails = {
 };
 
 const dialogClass =
-  "fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-32px)] w-[600px] max-w-[calc(100vw-32px)] -translate-1/2 flex-col rounded-[4px] border border-line-strong bg-panel outline-none";
+  "fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-32px)] w-[600px] max-w-[calc(100vw-32px)] -translate-1/2 flex-col rounded-[4px] border border-border-strong bg-surface outline-none";
 const titleClass =
-  "block font-sans text-xl font-bold tracking-normal text-text normal-case";
+  "block font-sans text-xl font-bold tracking-normal text-fg normal-case";
 
 function MapDialog({
   maps,
@@ -91,19 +91,19 @@ function MapDialog({
         if (!open) onClose();
       }}
     >
-      <DialogBackdrop className="fixed inset-0 z-40 bg-black/65" />
+      <DialogBackdrop className="fixed inset-0 z-40 bg-scrim" />
       <DialogContent className={dialogClass}>
         <form
           onSubmit={(event) => void submit(event)}
           className="flex min-h-0 flex-col"
         >
-          <header className="flex h-14 shrink-0 items-center justify-between border-b border-line px-5">
+          <header className="flex h-14 shrink-0 items-center justify-between border-b border-border px-5">
             <DialogTitle className={titleClass}>
               {entry ? "Map settings" : "New map"}
             </DialogTitle>
             <DialogClose
               aria-label="Close"
-              className="border-0 bg-transparent p-1 text-muted hover:text-text"
+              className="border-0 bg-transparent p-1 text-fg-muted hover:text-fg"
             >
               <X size={16} aria-hidden="true" />
             </DialogClose>
@@ -174,13 +174,13 @@ function MapDialog({
                       key={item.value}
                       type="button"
                       aria-pressed={template === item.value}
-                      className="grid gap-1.5 rounded-[3px] border border-line bg-transparent p-2 text-muted aria-pressed:border-ember aria-pressed:bg-ember/10 aria-pressed:text-text"
+                      className="grid gap-1.5 rounded-[3px] border border-border bg-transparent p-2 text-fg-muted aria-pressed:border-accent aria-pressed:bg-accent/10 aria-pressed:text-fg"
                       onClick={() => setTemplate(item.value)}
                     >
                       <MapOutline
                         map={item.map}
-                        className="h-20 w-full bg-bg"
-                        solidColor="var(--muted)"
+                        className="h-20 w-full bg-canvas"
+                        solidColor="var(--color-fg-muted)"
                       />
                       {item.label}
                     </button>
@@ -199,7 +199,7 @@ function MapDialog({
               </div>
             </div>
           </div>
-          <footer className="flex items-center justify-end gap-2 border-t border-line px-5 py-3.5">
+          <footer className="flex items-center justify-end gap-2 border-t border-border px-5 py-3.5">
             {error || !slot ? (
               <p role="alert" className="m-0 mr-auto min-w-0 text-danger">
                 {error ?? "All 32 map slots are in use."}

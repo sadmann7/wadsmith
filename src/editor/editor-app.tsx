@@ -1444,7 +1444,7 @@ function App({
                     >
                       <StickyNote
                         size={14}
-                        className="mt-0.5 text-key"
+                        className="mt-0.5 text-map-note"
                         aria-hidden="true"
                       />
                       <span className="min-w-0 wrap-break-word">
@@ -1452,7 +1452,7 @@ function App({
                       </span>
                       <button
                         type="button"
-                        className="self-start border-0 bg-transparent p-0 text-muted hover:text-text"
+                        className="self-start border-0 bg-transparent p-0 text-fg-muted hover:text-fg"
                         aria-label={`Show note: ${note.text}`}
                         onClick={() =>
                           showTarget({ kind: "empty", point: note })
@@ -1462,7 +1462,7 @@ function App({
                       </button>
                       <button
                         type="button"
-                        className="self-start border-0 bg-transparent p-0 text-muted hover:text-danger"
+                        className="self-start border-0 bg-transparent p-0 text-fg-muted hover:text-danger"
                         aria-label={`Delete note: ${note.text}`}
                         onClick={() => commit(removeNote(map, note.id))}
                       >
@@ -1503,7 +1503,7 @@ function App({
                           className={
                             issue.severity === "error"
                               ? "text-danger"
-                              : "text-key"
+                              : "text-warning"
                           }
                           aria-hidden="true"
                         />
@@ -1513,7 +1513,7 @@ function App({
                         <div className="min-w-0">
                           <div>{title}</div>
                           {detail ? (
-                            <div className="truncate font-mono text-[11px] text-muted">
+                            <div className="truncate font-mono text-[11px] text-fg-muted">
                               {detail}
                             </div>
                           ) : null}
@@ -1521,7 +1521,7 @@ function App({
                         {fixed ? (
                           <button
                             type="button"
-                            className="border-0 bg-transparent p-0 text-ember"
+                            className="border-0 bg-transparent p-0 text-accent"
                             aria-label={`Fix: ${title}`}
                             onClick={() => commit(fixed)}
                           >
@@ -1530,7 +1530,7 @@ function App({
                         ) : target ? (
                           <button
                             type="button"
-                            className="border-0 bg-transparent p-0 text-muted hover:text-text"
+                            className="border-0 bg-transparent p-0 text-fg-muted hover:text-fg"
                             aria-label={`Show: ${title}`}
                             onClick={() => showTarget(target)}
                           >

@@ -27,17 +27,17 @@ type SoundSettings = { volume: number; muted: boolean };
 const ticsPerSecond = 35;
 const ammoNames = ["Bullets", "Shells", "Cells", "Rockets"];
 const keyStyles = [
-  { label: "Blue key", icon: KeyRound, color: "var(--cold)" },
-  { label: "Yellow key", icon: KeyRound, color: "var(--key)" },
-  { label: "Red key", icon: KeyRound, color: "var(--danger)" },
-  { label: "Blue skull key", icon: Skull, color: "var(--cold)" },
-  { label: "Yellow skull key", icon: Skull, color: "var(--key)" },
-  { label: "Red skull key", icon: Skull, color: "var(--danger)" },
+  { label: "Blue key", icon: KeyRound, color: "var(--color-key-blue)" },
+  { label: "Yellow key", icon: KeyRound, color: "var(--color-key-yellow)" },
+  { label: "Red key", icon: KeyRound, color: "var(--color-key-red)" },
+  { label: "Blue skull key", icon: Skull, color: "var(--color-key-blue)" },
+  { label: "Yellow skull key", icon: Skull, color: "var(--color-key-yellow)" },
+  { label: "Red skull key", icon: Skull, color: "var(--color-key-red)" },
 ];
-const panelClass = "pointer-events-auto rounded-[3px] bg-panel/90";
-const buttonClass = `${panelClass} flex items-center gap-2 border-0 px-3 py-2 text-text hover:bg-raised`;
+const panelClass = "pointer-events-auto rounded-[3px] bg-surface/90";
+const buttonClass = `${panelClass} flex items-center gap-2 border-0 px-3 py-2 text-fg hover:bg-surface-raised`;
 const iconButtonClass =
-  "flex size-7 items-center justify-center rounded-[3px] border-0 bg-transparent p-0 text-muted hover:bg-raised hover:text-text";
+  "flex size-7 items-center justify-center rounded-[3px] border-0 bg-transparent p-0 text-fg-muted hover:bg-surface-raised hover:text-fg";
 
 function formatTime(tics: number) {
   const seconds = Math.floor(tics / ticsPerSecond);
@@ -50,7 +50,7 @@ function Minimap({ map, status }: { map: GameMap; status: GameStatus | null }) {
     <MapOutline
       map={map}
       label="Minimap"
-      className="block h-[162px] w-full bg-inset @max-2xl:hidden"
+      className="block h-[162px] w-full bg-map-bg @max-2xl:hidden"
     >
       {(extent) =>
         status ? (
@@ -58,11 +58,11 @@ function Minimap({ map, status }: { map: GameMap; status: GameStatus | null }) {
             <line
               x2={Math.cos(radians) * extent * 0.055}
               y2={-Math.sin(radians) * extent * 0.055}
-              stroke="var(--key)"
+              stroke="var(--color-thing-start)"
               strokeWidth={1.5}
               vectorEffect="non-scaling-stroke"
             />
-            <circle r={extent * 0.025} fill="var(--key)" />
+            <circle r={extent * 0.025} fill="var(--color-thing-start)" />
           </g>
         ) : null
       }
@@ -73,7 +73,7 @@ function Minimap({ map, status }: { map: GameMap; status: GameStatus | null }) {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-3">
-      <dt className="text-muted">{label}</dt>
+      <dt className="text-fg-muted">{label}</dt>
       <dd className="m-0 font-mono text-xs">{value}</dd>
     </div>
   );
@@ -90,9 +90,11 @@ function Vital({
 }) {
   return (
     <div>
-      <div className="font-mono text-[11px] text-soft uppercase">{label}</div>
+      <div className="font-mono text-[11px] text-fg-soft uppercase">
+        {label}
+      </div>
       <div
-        className={`text-[44px] leading-none font-bold @max-2xl:text-2xl ${accent ? "text-ember" : ""}`}
+        className={`text-[44px] leading-none font-bold @max-2xl:text-2xl ${accent ? "text-accent" : ""}`}
       >
         {value}
       </div>
@@ -105,7 +107,7 @@ function NoteForm({ onSave }: { onSave: (text: string) => void }) {
   return (
     <form
       aria-label="Leave a note"
-      className={`${panelClass} absolute bottom-24 left-1/2 flex w-[min(460px,calc(100%-32px))] -translate-x-1/2 gap-2 border border-line-strong p-2`}
+      className={`${panelClass} absolute bottom-24 left-1/2 flex w-[min(460px,calc(100%-32px))] -translate-x-1/2 gap-2 border border-border-strong p-2`}
       onSubmit={(event) => {
         event.preventDefault();
         if (text.trim()) onSave(text.trim());
@@ -176,20 +178,20 @@ function GameHud({
   const SoundIcon = sound.muted ? VolumeX : Volume2;
   const ammoName = status ? ammoNames[status.ammoType] : undefined;
   return (
-    <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden text-text">
-      <div className="absolute inset-x-0 top-0 h-40 bg-linear-to-b from-black/55 to-transparent" />
-      <div className="absolute inset-x-0 bottom-0 h-56 bg-linear-to-t from-black/70 to-transparent" />
+    <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden text-fg">
+      <div className="absolute inset-x-0 top-0 h-40 bg-linear-to-b from-void/55 to-transparent" />
+      <div className="absolute inset-x-0 bottom-0 h-56 bg-linear-to-t from-void/70 to-transparent" />
       <div className="absolute top-5 left-5 flex items-center gap-3">
         <button type="button" className={buttonClass} onClick={onExit}>
           <ArrowLeft size={14} aria-hidden="true" />
           Back to editor
           {fullscreen ? null : (
-            <kbd className="font-mono text-[11px] text-muted">Esc</kbd>
+            <kbd className="font-mono text-[11px] text-fg-muted">Esc</kbd>
           )}
         </button>
         <div className="min-w-0 @max-xl:hidden">
           <div className="truncate text-[15px] font-semibold">{title}</div>
-          <div className="font-mono text-[11px] text-soft">
+          <div className="font-mono text-[11px] text-fg-soft">
             {slot} · Medium · Playtest
           </div>
         </div>
@@ -197,7 +199,7 @@ function GameHud({
       {inLevel && !finished ? (
         <Crosshair
           size={20}
-          className="absolute top-1/2 left-1/2 -translate-1/2 text-text/70"
+          className="absolute top-1/2 left-1/2 -translate-1/2 text-fg/70"
           aria-hidden="true"
         />
       ) : null}
@@ -228,7 +230,7 @@ function GameHud({
             }
           />
         </dl>
-        <div className="flex items-center gap-1 border-t border-line px-2 py-1.5">
+        <div className="flex items-center gap-1 border-t border-border px-2 py-1.5">
           <button
             type="button"
             className={iconButtonClass}
@@ -282,7 +284,7 @@ function GameHud({
           </button>
         </div>
         {audioUnavailable ? (
-          <p className="px-3 pb-2 text-xs text-muted">
+          <p className="px-3 pb-2 text-xs text-fg-muted">
             Sound needs HTTPS or localhost.
           </p>
         ) : null}
@@ -290,10 +292,10 @@ function GameHud({
       {finished && status ? (
         <section
           aria-label="Level complete"
-          className={`${panelClass} absolute top-1/2 left-1/2 grid w-[min(320px,calc(100%-32px))] -translate-1/2 gap-3 border border-line-strong p-4`}
+          className={`${panelClass} absolute top-1/2 left-1/2 grid w-[min(320px,calc(100%-32px))] -translate-1/2 gap-3 border border-border-strong p-4`}
         >
           <h2 className="m-0 text-xl font-semibold">Level complete</h2>
-          <p className="m-0 font-mono text-xs text-muted">
+          <p className="m-0 font-mono text-xs text-fg-muted">
             {formatTime(status.tics)} · {status.kills} / {status.totalKills}{" "}
             enemies
           </p>
@@ -308,14 +310,14 @@ function GameHud({
         </section>
       ) : null}
       {showHelp && !finished ? (
-        <p className="absolute inset-x-4 bottom-24 m-0 text-center text-xs text-soft">
+        <p className="absolute inset-x-4 bottom-24 m-0 text-center text-xs text-fg-soft">
           WASD move · ←→ turn · Space fire · E use · Shift run · Tab automap
         </p>
       ) : null}
       {noteSaved ? (
         <p
           role="status"
-          className="absolute inset-x-4 bottom-24 m-0 text-center text-soft"
+          className="absolute inset-x-4 bottom-24 m-0 text-center text-fg-soft"
         >
           Note saved to this spot.
         </p>
@@ -332,7 +334,9 @@ function GameHud({
               accent
             />
             <div className="pb-1.5">
-              <div className="mb-1.5 font-mono text-[11px] text-soft">KEYS</div>
+              <div className="mb-1.5 font-mono text-[11px] text-fg-soft">
+                KEYS
+              </div>
               <div className="flex h-[22px] gap-1">
                 {keyStyles.map(({ label, icon: Icon, color }, index) =>
                   status.keys & (1 << index) ? (
@@ -359,7 +363,7 @@ function GameHud({
             onClick={onOpenNote}
           >
             Leave a note
-            <kbd className="font-mono text-[11px] text-ember">N</kbd>
+            <kbd className="font-mono text-[11px] text-accent">N</kbd>
           </button>
           <button
             type="button"
@@ -368,7 +372,7 @@ function GameHud({
             onClick={onEditSpot}
           >
             Edit this spot
-            <kbd className="font-mono text-[11px] text-ember">F2</kbd>
+            <kbd className="font-mono text-[11px] text-accent">F2</kbd>
           </button>
         </div>
       </div>

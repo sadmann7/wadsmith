@@ -59,7 +59,7 @@ const fieldOfView = Math.PI / 2;
 const maxPortals = 32;
 const skyColor = 0xff000000;
 const maxFloorDistance = 4096;
-const selectedOutline = 0xff40b7f4;
+const selectedOutline = 0xff2b6aff;
 const hoveredOutline = 0xffffffff;
 const outlineWidth = 2;
 

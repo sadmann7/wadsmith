@@ -126,7 +126,7 @@ describe("renderScene", () => {
     const inside = 190 * 320 + 160;
     expect(outlined.pick[inside]).toBe(plain.pick[inside]);
     expect(outlined.colors[inside]).toBe(plain.colors[inside]);
-    expect(outlined.colors.some((color) => color === 0xff40b7f4)).toBe(true);
+    expect(outlined.colors.some((color) => color === 0xff2b6aff)).toBe(true);
     expect(outlined.colors[5 * 320 + 160]).toBe(plain.colors[5 * 320 + 160]);
   });
 
