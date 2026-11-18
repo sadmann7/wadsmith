@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import { thingKinds } from "../map/catalog";
 import {
   addThing,
   setLineTarget,
@@ -236,4 +237,55 @@ describe.skipIf(!ready)("generated map in the engine", () => {
     await play(game, 4000, () => game.sectorCeiling(doorIndex) === 92);
     expect(game.sectorCeiling(doorIndex)).toBe(92);
   }, 40_000);
+
+  it("loads every thing type and honors difficulty", async () => {
+    const everything = thingKinds
+      .filter((kind) => kind !== "player")
+      .reduce(
+        (map, kind, index) =>
+          addThing(map, kind, {
+            x: 560 + (index % 6) * 64,
+            y: 0 + Math.floor(index / 6) * 64,
+          }).map,
+        openMap,
+      );
+    const hardOnly = everything.things.map((thing) =>
+      thing.id === "imp-1" ? { ...thing, skills: ["hard" as const] } : thing,
+    );
+    const all = await launch(everything);
+    await waitForPlay(all);
+    const total = all.status().totalKills;
+    expect(all.status().inLevel).toBe(true);
+    all.stop();
+    const fewer = await launch({ ...everything, things: hardOnly });
+    await waitForPlay(fewer);
+    expect(fewer.status().totalKills).toBe(total - 1);
+  }, 40_000);
+
+  it("reports the run for the playtest HUD", async () => {
+    const map = playerAt(openMap, 96, 160, 90);
+    const withPickups = addThing(
+      addThing(map, "red-key", { x: 96, y: 128 }).map,
+      "medikit",
+      { x: 300, y: 300 },
+    ).map;
+    const secret = updateSector(withPickups, "sector-3", { effect: "secret" });
+    const game = await launch(secret);
+    await waitForPlay(game);
+    const start = game.status();
+    expect(start).toMatchObject({
+      angle: 90,
+      armor: 0,
+      ammo: 50,
+      ammoType: 0,
+      keys: 0,
+      totalItems: 0,
+      totalSecrets: 1,
+    });
+    game.key(true, doomKeys.up);
+    await play(game, 3000, () => game.status().keys !== 0);
+    game.key(false, doomKeys.up);
+    expect(game.status().keys & 4).toBe(4);
+    expect(game.status().tics).toBeGreaterThan(start.tics);
+  }, 30_000);
 });

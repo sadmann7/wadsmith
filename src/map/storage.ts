@@ -1,12 +1,10 @@
 import {
-  ceilingTextures,
   doorTextures,
-  floorTextures,
   sectorEffects,
   switchTextures,
   thingKinds,
-  wallTextures,
 } from "./catalog";
+import { freedoomFlats, freedoomWalls } from "./freedoom-textures";
 import {
   isLineActionKind,
   keyColors,
@@ -21,12 +19,14 @@ import type {
   LineSettings,
   LineSide,
   LineTrigger,
+  MapNote,
   MapSwitch,
   Point,
   Sector,
   SectorEffect,
   Thing,
   ThingKind,
+  ThingSkill,
 } from "./types";
 
 const fileFormat = "wadsmith-map";
@@ -36,8 +36,10 @@ const backupKey = "wadsmith:map:unreadable";
 // Wider than the engine's range, so a map validateMap flags can still be reopened and fixed.
 const coordinateLimit = 1_000_000;
 const maxNameLength = 80;
+const maxNoteLength = 280;
 const heightLimit = 32767;
 const wordLimit = 32767;
+const thingSkills: ThingSkill[] = ["easy", "medium", "hard"];
 const maxItems = 20000;
 const maxFileBytes = 5 * 1024 * 1024;
 const idPattern = /^[A-Za-z0-9_-]{1,40}$/;
@@ -144,7 +146,7 @@ function parseSector(value: unknown, vertices: Record<string, Point>): Sector {
       : Object.fromEntries(
           Object.entries(record(sector.wallOverrides, label)).map(
             ([wall, name]) => {
-              return [wallId(wall, label), texture(name, wallTextures, label)];
+              return [wallId(wall, label), texture(name, freedoomWalls, label)];
             },
           ),
         );
@@ -163,9 +165,9 @@ function parseSector(value: unknown, vertices: Record<string, Point>): Sector {
     floor: integer(sector.floor, heightLimit, label),
     ceiling: integer(sector.ceiling, heightLimit, label),
     light,
-    floorTexture: texture(sector.floorTexture, floorTextures, label),
-    ceilingTexture: texture(sector.ceilingTexture, ceilingTextures, label),
-    wallTexture: texture(sector.wallTexture, wallTextures, label),
+    floorTexture: texture(sector.floorTexture, freedoomFlats, label),
+    ceilingTexture: texture(sector.ceilingTexture, freedoomFlats, label),
+    wallTexture: texture(sector.wallTexture, freedoomWalls, label),
     ...(overrides ? { wallOverrides: overrides } : {}),
     ...(sector.door === undefined
       ? {}
@@ -209,10 +211,10 @@ function parseLineSide(value: unknown, label: string): LineSide {
       : { offsetY: integer(side.offsetY, wordLimit, label) }),
     ...(side.upper === undefined
       ? {}
-      : { upper: texture(side.upper, wallTextures, label) }),
+      : { upper: texture(side.upper, freedoomWalls, label) }),
     ...(side.lower === undefined
       ? {}
-      : { lower: texture(side.lower, wallTextures, label) }),
+      : { lower: texture(side.lower, freedoomWalls, label) }),
   };
 }
 
@@ -260,11 +262,25 @@ function parseThing(value: unknown): Thing {
   }
   const angle = integer(thing.angle, 359, `Thing ${thingId}`);
   if (angle < 0) fail(`Thing ${thingId} has an invalid angle.`);
+  const skills =
+    thing.skills === undefined
+      ? undefined
+      : list(thing.skills, `Thing ${thingId}`).map((skill) => {
+          if (!thingSkills.includes(skill as ThingSkill)) {
+            fail(`Thing ${thingId} has an unknown difficulty.`);
+          }
+          return skill as ThingSkill;
+        });
+  if (thing.ambush !== undefined && typeof thing.ambush !== "boolean") {
+    fail(`Thing ${thingId} is not valid.`);
+  }
   return {
     id: thingId,
     kind: thing.kind as ThingKind,
     angle,
     ...parsePoint(thing, `Thing ${thingId}`),
+    ...(skills ? { skills } : {}),
+    ...(thing.ambush === undefined ? {} : { ambush: thing.ambush }),
   };
 }
 
@@ -296,6 +312,17 @@ function parseSwitch(
     to,
     door,
     texture: texture(item.texture, switchTextures, label),
+  };
+}
+
+function parseNote(value: unknown): MapNote {
+  const note = record(value, "A note");
+  const noteId = id(note.id, "A note");
+  if (typeof note.text !== "string") fail(`Note ${noteId} is not valid.`);
+  return {
+    id: noteId,
+    ...parsePoint(note, `Note ${noteId}`),
+    text: note.text.slice(0, maxNoteLength),
   };
 }
 
@@ -331,6 +358,11 @@ function parseMap(value: unknown): GameMap {
             parseLine(line, sectors),
           ]),
         );
+  const notes =
+    map.notes === undefined
+      ? undefined
+      : list(map.notes, "The notes").map(parseNote);
+  uniqueIds(notes ?? [], "Note");
   uniqueIds(sectors, "Room");
   uniqueIds(things, "Thing");
   uniqueIds(switches, "Switch");
@@ -343,6 +375,7 @@ function parseMap(value: unknown): GameMap {
     things,
     switches,
     ...(lines ? { lines } : {}),
+    ...(notes ? { notes } : {}),
   };
 }
 
@@ -412,6 +445,7 @@ export {
   loadSavedMap,
   MapFileError,
   maxFileBytes,
+  parseMap,
   parseMapFile,
   saveMap,
   serializeMap,

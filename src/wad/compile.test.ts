@@ -5,17 +5,47 @@ import {
   addSwitch,
   addThing,
   addSwitchInRoom,
+  changeThings,
+  connectedCorners,
+  duplicateThings,
+  faceThings,
+  freeWallAt,
   freeWallNear,
   removeSector,
+  removeThings,
   setLineTarget,
+  snapCorners,
   setRoomDoor,
   updateLine,
   updateLineSide,
   wallNear,
   updateSector,
+  updateThing,
+  updateThings,
 } from "../map/edit";
-import { wallKey } from "../map/geometry";
+import {
+  canStand,
+  targetExists,
+  targetForIssue,
+  targetForKeys,
+  targetForSurface,
+  viewOfTarget,
+  wallTarget,
+} from "../editor/map-target";
+import { sectorAt, wallKey } from "../map/geometry";
 import { fitLineAction, triggersFor } from "../map/lines";
+import { mapBalance } from "../map/balance";
+import {
+  ceilingTextures,
+  floorTextures,
+  thingCatalog,
+  thingKinds,
+  wallTextures,
+} from "../map/catalog";
+import { buildChecks, checkMap, fixIssue, issueText } from "../map/checks";
+import { wadFileName } from "../editor/build-dialog";
+import { freedoomFlats, freedoomWalls } from "../map/freedoom-textures";
+import { wallUse } from "../map/textures";
 import { starterMap } from "../map/starter-map";
 import { parseMapFile, serializeMap } from "../map/storage";
 import type { GameMap, LineAction } from "../map/types";
@@ -636,5 +666,415 @@ describe("line editing", () => {
     expect(
       Object.values(added.map.lines ?? {}).filter((line) => line.hidden),
     ).toHaveLength(2);
+  });
+});
+
+describe("context menu edits", () => {
+  const ids = ["imp-1", "demon-1"];
+  const map: GameMap = {
+    ...starterMap,
+    things: [
+      { id: "player-1", kind: "player", x: 96, y: 160, angle: 0 },
+      { id: "imp-1", kind: "imp", x: 128, y: 64, angle: 90 },
+      { id: "demon-1", kind: "demon", x: 192, y: 64, angle: 0 },
+    ],
+  };
+
+  it("changes and turns every selected thing", () => {
+    const changed = faceThings(changeThings(map, ids, "zombieman"), ids, 180);
+    expect(changed.things.slice(1)).toMatchObject([
+      { kind: "zombieman", angle: 180 },
+      { kind: "zombieman", angle: 180 },
+    ]);
+    expect(changed.things[0].kind).toBe("player");
+  });
+
+  it("duplicates things beside themselves but never the player", () => {
+    const copies = duplicateThings(map, ["player-1", "imp-1"]);
+    expect(copies.ids).toEqual(["imp-2"]);
+    expect(copies.map.things.at(-1)).toMatchObject({
+      kind: "imp",
+      x: 144,
+      y: 80,
+      angle: 90,
+    });
+  });
+
+  it("keeps a duplicate inside the thing's room", () => {
+    const cornered: GameMap = {
+      ...map,
+      things: [
+        ...map.things,
+        { id: "imp-9", kind: "imp", x: 376, y: 304, angle: 0 },
+      ],
+    };
+    const copies = duplicateThings(cornered, ["imp-9"]);
+    const copy = copies.map.things.at(-1)!;
+    expect(sectorAt(copies.map, copy)?.id).toBe("sector-1");
+    expect(validateMap(copies.map).map((issue) => issue.id)).not.toContain(
+      `outside:${copy.id}`,
+    );
+  });
+
+  it("deletes every selected thing", () => {
+    expect(removeThings(map, ids).things.map((item) => item.id)).toEqual([
+      "player-1",
+    ]);
+  });
+
+  it("snaps only the chosen corners", () => {
+    const off = {
+      ...starterMap,
+      vertices: {
+        ...starterMap.vertices,
+        v1: { x: 3, y: 5 },
+        v2: { x: 387, y: 5 },
+      },
+    };
+    const snapped = snapCorners(off, ["v1"]);
+    expect(snapped.vertices.v1).toEqual({ x: 0, y: 8 });
+    expect(snapped.vertices.v2).toEqual({ x: 387, y: 5 });
+  });
+
+  it("selects every corner of the rooms sharing a corner", () => {
+    const corners = connectedCorners(starterMap, ["v3"]);
+    expect(corners).toEqual(expect.arrayContaining(["v1", "v6", "v13", "v14"]));
+    expect(corners).not.toContain("v9");
+  });
+
+  it("only offers a switch on a free solid wall", () => {
+    expect(freeWallAt(starterMap, wallKey("v1", "v15"))).not.toBeNull();
+    expect(freeWallAt(starterMap, wallKey("v3", "v4"))).toBeNull();
+  });
+});
+
+describe("context menu targets", () => {
+  it("uses the pressed item's type in a mixed selection", () => {
+    const keys = ["v1", "thing:imp-1", "v2"];
+    expect(targetForKeys(keys, null, "v2")).toMatchObject({
+      kind: "corners",
+      ids: ["v1", "v2"],
+      keepSelection: true,
+    });
+    expect(targetForKeys(keys, null, "thing:imp-1")).toMatchObject({
+      kind: "things",
+      ids: ["imp-1"],
+      keepSelection: true,
+    });
+  });
+
+  it("notices when undo removes a target", () => {
+    const wall = wallTarget("sector-1", wallKey("v1", "v15"), null);
+    expect(targetExists(starterMap, wall)).toBe(true);
+    expect(targetExists(removeSector(starterMap, "sector-1"), wall)).toBe(
+      false,
+    );
+    expect(
+      targetExists(starterMap, { kind: "things", ids: ["gone"], point: null }),
+    ).toBe(false);
+  });
+
+  it("maps 3D surfaces to the same targets as the map", () => {
+    expect(targetForSurface(starterMap, "floor:sector-1", null)).toMatchObject({
+      kind: "room",
+      sector: "sector-1",
+    });
+    const wall = wallKey("v1", "v15");
+    expect(
+      targetForSurface(starterMap, `wall:sector-1:${wall}:middle`, null),
+    ).toMatchObject({ kind: "wall", sector: "sector-1", wall });
+    const switched = wallKey("v15", "v16");
+    expect(
+      targetForSurface(starterMap, `wall:sector-1:${switched}:middle`, null),
+    ).toMatchObject({ kind: "switch", id: "switch-1" });
+    expect(targetForSurface(starterMap, "thing:player-1", null)).toMatchObject({
+      kind: "things",
+      ids: ["player-1"],
+    });
+  });
+
+  it("frames a wall from inside a room and refuses door rooms", () => {
+    const view = viewOfTarget(
+      starterMap,
+      wallTarget("sector-1", wallKey("v1", "v15"), null),
+    );
+    expect(view?.at).toEqual({ x: 80, y: 0 });
+    expect(view && canStand(starterMap, view.from)).toBe(true);
+    expect(
+      viewOfTarget(starterMap, {
+        kind: "room",
+        sector: "sector-4",
+        point: null,
+      }),
+    ).toBeNull();
+  });
+});
+
+function thingFlagsOf(map: GameMap, index: number) {
+  return new DataView(lump(map, "THINGS").buffer).getInt16(
+    index * 10 + 8,
+    true,
+  );
+}
+
+describe("thing settings", () => {
+  it("writes difficulty and ambush flags", () => {
+    const map = updateThing(
+      updateThing(starterMap, "imp-1", {
+        skills: ["easy", "hard"],
+        ambush: true,
+      }),
+      "player-1",
+      { ambush: true },
+    );
+    const imp = map.things.findIndex((thing) => thing.id === "imp-1");
+    const player = map.things.findIndex((thing) => thing.id === "player-1");
+    expect(thingFlagsOf(map, imp)).toBe(1 | 4 | 8);
+    expect(thingFlagsOf(map, player)).toBe(7);
+  });
+
+  it("requires a locked door's key on every difficulty", () => {
+    const locked = addThing(
+      updateLine(starterMap, wallKey("v3", "v4"), {
+        action: {
+          kind: "door-raise",
+          trigger: "door",
+          repeat: true,
+          key: "blue",
+          tag: 0,
+        },
+      }),
+      "blue-key",
+      { x: 64, y: 64 },
+    );
+    expect(validateMap(locked.map)).toEqual([]);
+    const hardOnly = updateThing(locked.map, locked.id, { skills: ["hard"] });
+    expect(validateMap(hardOnly).map((issue) => issue.id)).toContain(
+      `line-key:${wallKey("v3", "v4")}`,
+    );
+  });
+
+  it("changes each selected thing from its own values", () => {
+    const map = updateThing(starterMap, "imp-1", { skills: ["hard"] });
+    const next = updateThings(map, ["imp-1", "zombieman-1"], (thing) => ({
+      angle: thing.id === "imp-1" ? 90 : 270,
+    }));
+    expect(next.things.find((item) => item.id === "imp-1")).toMatchObject({
+      angle: 90,
+      skills: ["hard"],
+    });
+    expect(next.things.find((item) => item.id === "zombieman-1")?.angle).toBe(
+      270,
+    );
+  });
+
+  it("rejects a thing inside a closed door", () => {
+    const map = updateThing(starterMap, "imp-1", { x: 504, y: 160 });
+    expect(validateMap(map).map((issue) => issue.id)).toContain(
+      "in-door:imp-1",
+    );
+  });
+
+  it("gives every thing a unique engine type", () => {
+    const types = thingKinds.map((kind) => thingCatalog[kind].doomType);
+    expect(new Set(types).size).toBe(types.length);
+  });
+
+  it("copies difficulty settings with a thing", () => {
+    const map = updateThing(starterMap, "imp-1", {
+      skills: ["hard"],
+      ambush: true,
+    });
+    const copies = duplicateThings(map, ["imp-1"]);
+    expect(copies.map.things.at(-1)).toMatchObject({
+      skills: ["hard"],
+      ambush: true,
+    });
+  });
+
+  it("balances only what appears on the difficulty", () => {
+    const things: GameMap["things"] = [
+      { id: "player-1", kind: "player", x: 96, y: 160, angle: 0 },
+      { id: "a", kind: "pain-elemental", x: 64, y: 64, angle: 0 },
+      { id: "b", kind: "imp", x: 96, y: 64, angle: 0, skills: ["hard"] },
+      { id: "c", kind: "medikit", x: 128, y: 64, angle: 0 },
+      { id: "d", kind: "clip", x: 160, y: 64, angle: 0 },
+      { id: "e", kind: "blue-key", x: 192, y: 64, angle: 0 },
+    ];
+    const map = updateLine({ ...starterMap, things }, wallKey("v3", "v4"), {
+      action: {
+        kind: "door-raise",
+        trigger: "door",
+        repeat: true,
+        key: "red",
+        tag: 0,
+      },
+    });
+    expect(mapBalance(map, "medium")).toEqual({
+      enemies: 1,
+      health: 1,
+      ammo: 1,
+      keys: 1,
+      keysNeeded: 1,
+      healthShort: 0,
+      ammoShort: 0,
+    });
+    expect(mapBalance(map, "hard").enemies).toBe(2);
+    const crowded = {
+      ...map,
+      things: Array.from({ length: 6 }, (_, index) => ({
+        ...things[1],
+        id: `p${index}`,
+      })),
+    };
+    expect(mapBalance(crowded, "medium")).toMatchObject({
+      healthShort: 8,
+      ammoShort: 31,
+    });
+  });
+});
+
+function checkIds(map: GameMap) {
+  return checkMap(map).map((issue) => issue.id);
+}
+
+describe("map check", () => {
+  it("separates warnings from blocking errors", () => {
+    const checks = checkMap(starterMap);
+    expect(checks.every((issue) => issue.severity === "warning")).toBe(true);
+    expect(checks.map((issue) => issue.id)).toContain("no-exit");
+    expect(validateMap(starterMap)).toEqual([]);
+  });
+
+  it("warns about unused keys and thin supplies", () => {
+    const key = addThing(starterMap, "yellow-key", { x: 64, y: 64 });
+    const crowded = Array.from({ length: 5 }, (_, index) => ({
+      id: `pain-${index}`,
+      kind: "pain-elemental" as const,
+      x: 640,
+      y: 64,
+      angle: 0,
+    }));
+    expect(
+      checkIds({ ...key.map, things: [...key.map.things, ...crowded] }),
+    ).toEqual(
+      expect.arrayContaining([
+        `key-unused:${key.id}`,
+        "low-health",
+        "low-ammo",
+      ]),
+    );
+  });
+
+  it("groups every issue for the build dialog", () => {
+    const broken = updateSector({ ...starterMap, things: [] }, "sector-1", {
+      ceiling: 0,
+    });
+    const checks = buildChecks(broken);
+    const names = (name: string) =>
+      checks
+        .find((check) => check.name === name)
+        ?.issues.map((item) => item.id);
+    expect(names("Closed sectors")).toContain("height:sector-1");
+    expect(names("Player start")).toContain("no-player");
+    expect(names("Exit")).toContain("no-exit");
+    expect(checks.flatMap((check) => check.issues)).toHaveLength(
+      checkMap(broken).length,
+    );
+  });
+
+  it("keeps range errors in one group and marks unknown groups", () => {
+    const tall = updateSector(starterMap, "sector-1", { ceiling: 40000 });
+    const checks = buildChecks(tall);
+    const holding = checks.filter((check) =>
+      check.issues.some((issue) => issue.id === "height-range:sector-1"),
+    );
+    expect(holding.map((check) => check.name)).toEqual(["Format limits"]);
+    expect(checks.find((check) => check.name === "Wall sides")?.waiting).toBe(
+      true,
+    );
+    expect(buildChecks(starterMap).some((check) => check.waiting)).toBe(false);
+  });
+
+  it("makes safe WAD file names", () => {
+    expect(wadFileName("Cinder Works!")).toBe("Cinder-Works.wad");
+    expect(wadFileName("level.WAD")).toBe("level.wad");
+    expect(wadFileName("***")).toBe("wadsmith-map01.wad");
+    expect(wadFileName("..")).toBe("wadsmith-map01.wad");
+    expect(wadFileName("level.wad.")).toBe("level.wad");
+    expect(wadFileName("x".repeat(300))).toHaveLength(68);
+  });
+
+  it("splits room errors into a title and place", () => {
+    expect(
+      issueText({
+        id: "x",
+        message: "Arena: ceiling must be above the floor.",
+      }),
+    ).toEqual({ title: "Ceiling must be above the floor", detail: "Arena" });
+  });
+
+  it("fixes problems with one safe answer", () => {
+    const low = updateSector(starterMap, "sector-1", { ceiling: 0 });
+    const issue = validateMap(low).find((item) =>
+      item.id.startsWith("height"),
+    )!;
+    expect(validateMap(fixIssue(low, issue)!)).toEqual([]);
+    const unwired = { ...starterMap, switches: [] };
+    const door = validateMap(unwired).find((item) =>
+      item.id.startsWith("door-unwired"),
+    )!;
+    expect(fixIssue(unwired, door)).toBeNull();
+    const wall = wallKey("v1", "v15");
+    const walking = updateLine(starterMap, wall, {
+      action: { kind: "exit", trigger: "walk", repeat: false, tag: 0 },
+    });
+    const walkIssue = validateMap(walking).find((item) =>
+      item.id.startsWith("line-walk"),
+    )!;
+    const fixedWalk = fixIssue(walking, walkIssue)!;
+    expect(fixedWalk.lines?.[wall]?.action).toMatchObject({
+      kind: "exit",
+      trigger: "switch",
+    });
+    expect(validateMap(fixedWalk)).toEqual([]);
+    expect(
+      fixIssue(starterMap, { id: "outside:imp-1", message: "x" }),
+    ).toBeNull();
+  });
+
+  it("finds what an issue points at", () => {
+    expect(targetForIssue(starterMap, "sector-2")).toMatchObject({
+      kind: "room",
+    });
+    expect(targetForIssue(starterMap, "imp-1")).toMatchObject({
+      kind: "things",
+    });
+    expect(targetForIssue(starterMap, "switch-1")).toMatchObject({
+      kind: "switch",
+    });
+    expect(targetForIssue(starterMap, wallKey("v3", "v4"))).toMatchObject({
+      kind: "wall",
+    });
+  });
+
+  it("counts the wall parts a map actually shows", () => {
+    const shared = wallKey("v3", "v4");
+    const painted = updateLineSide(starterMap, shared, "sector-1", {
+      upper: "BRICK1",
+    });
+    expect(wallUse(painted).get("BRICK1")).toBe(1);
+  });
+
+  it("knows every catalog texture is in Freedoom", () => {
+    const flats: readonly string[] = freedoomFlats;
+    const walls: readonly string[] = freedoomWalls;
+    expect(
+      [...floorTextures, ...ceilingTextures].every((name) =>
+        flats.includes(name),
+      ),
+    ).toBe(true);
+    expect(wallTextures.every((name) => walls.includes(name))).toBe(true);
+    expect([...flats, ...walls].every((name) => name.length <= 8)).toBe(true);
   });
 });

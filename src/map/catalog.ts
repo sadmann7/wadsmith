@@ -1,4 +1,4 @@
-import type { KeyColor, SectorEffect, ThingKind } from "./types";
+import type { KeyColor, SectorEffect, ThingCategory, ThingKind } from "./types";
 
 const wallTextures = [
   "STARTAN3",
@@ -50,58 +50,141 @@ const sectorEffects: Record<SectorEffect, { label: string; special: number }> =
 
 const thingCatalog: Record<
   ThingKind,
-  { label: string; doomType: number; color: string; monster: boolean }
+  { label: string; doomType: number; color: string; category: ThingCategory }
 > = {
   player: {
     label: "Player start",
     doomType: 1,
     color: "#4ade80",
-    monster: false,
+    category: "start",
   },
+  imp: { label: "Imp", doomType: 3001, color: "#fb923c", category: "enemy" },
   zombieman: {
     label: "Zombieman",
     doomType: 3004,
     color: "#f87171",
-    monster: true,
+    category: "enemy",
   },
   "shotgun-guy": {
     label: "Shotgun guy",
     doomType: 9,
     color: "#fb7185",
-    monster: true,
+    category: "enemy",
   },
-  imp: { label: "Imp", doomType: 3001, color: "#fb923c", monster: true },
-  demon: { label: "Demon", doomType: 3002, color: "#f472b6", monster: true },
+  demon: {
+    label: "Demon",
+    doomType: 3002,
+    color: "#f472b6",
+    category: "enemy",
+  },
+  spectre: {
+    label: "Spectre",
+    doomType: 58,
+    color: "#c084fc",
+    category: "enemy",
+  },
+  "lost-soul": {
+    label: "Lost soul",
+    doomType: 3006,
+    color: "#fdba74",
+    category: "enemy",
+  },
+  chaingunner: {
+    label: "Chaingunner",
+    doomType: 65,
+    color: "#ef4444",
+    category: "enemy",
+  },
+  "pain-elemental": {
+    label: "Pain elemental",
+    doomType: 71,
+    color: "#a16207",
+    category: "enemy",
+  },
   shotgun: {
     label: "Shotgun",
     doomType: 2001,
     color: "#facc15",
-    monster: false,
+    category: "item",
   },
-  shells: { label: "Shells", doomType: 2008, color: "#fde68a", monster: false },
+  chaingun: {
+    label: "Chaingun",
+    doomType: 2002,
+    color: "#eab308",
+    category: "item",
+  },
+  clip: { label: "Clip", doomType: 2007, color: "#d9f99d", category: "item" },
+  shells: {
+    label: "Shells",
+    doomType: 2008,
+    color: "#fde68a",
+    category: "item",
+  },
+  stimpack: {
+    label: "Stimpack",
+    doomType: 2011,
+    color: "#93c5fd",
+    category: "item",
+  },
   medikit: {
     label: "Medikit",
     doomType: 2012,
     color: "#60a5fa",
-    monster: false,
+    category: "item",
+  },
+  "green-armor": {
+    label: "Green armor",
+    doomType: 2018,
+    color: "#4ade80",
+    category: "item",
+  },
+  "blue-armor": {
+    label: "Blue armor",
+    doomType: 2019,
+    color: "#38bdf8",
+    category: "item",
   },
   "blue-key": {
     label: "Blue key",
     doomType: 5,
     color: "#3b82f6",
-    monster: false,
+    category: "key",
   },
   "yellow-key": {
     label: "Yellow key",
     doomType: 6,
     color: "#eab308",
-    monster: false,
+    category: "key",
   },
   "red-key": {
     label: "Red key",
     doomType: 13,
     color: "#ef4444",
-    monster: false,
+    category: "key",
+  },
+  barrel: {
+    label: "Barrel",
+    doomType: 2035,
+    color: "#84cc16",
+    category: "decor",
+  },
+  lamp: {
+    label: "Floor lamp",
+    doomType: 2028,
+    color: "#e5e7eb",
+    category: "decor",
+  },
+  "tech-column": {
+    label: "Tech column",
+    doomType: 48,
+    color: "#9ca3af",
+    category: "decor",
+  },
+  "red-torch": {
+    label: "Red torch",
+    doomType: 46,
+    color: "#f97316",
+    category: "decor",
   },
 };
 

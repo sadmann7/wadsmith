@@ -72,9 +72,11 @@ function startGameClient(options: GameClientOptions) {
   const audio = new AudioContext();
   let stopped = false;
   let sound = options.sound;
+  let held = false;
 
-  const onVisibilityChange = () =>
-    send({ type: "pause", paused: document.hidden });
+  const sendPause = () =>
+    send({ type: "pause", paused: document.hidden || held });
+  const onVisibilityChange = sendPause;
   document.addEventListener("visibilitychange", onVisibilityChange);
 
   const send = (message: DoomWorkerRequest, transfer: Transferable[] = []) => {
@@ -157,7 +159,7 @@ function startGameClient(options: GameClientOptions) {
         iwad: options.iwad,
         map: options.map,
         sound,
-        paused: document.hidden,
+        paused: document.hidden || held,
         sampleRate: audio.sampleRate,
         audioPort,
       },
@@ -171,6 +173,10 @@ function startGameClient(options: GameClientOptions) {
     setSound: (next: SoundLevel) => {
       sound = next;
       send({ type: "sound", sound: next });
+    },
+    setHeld: (next: boolean) => {
+      held = next;
+      sendPause();
     },
     // Browsers can start audio suspended until the page gets a key or press.
     resumeAudio: () => {

@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { thingKinds } from "../map/catalog";
 import { updateLineSide, updateSector } from "../map/edit";
 import { wallKey } from "../map/geometry";
 import { starterMap } from "../map/starter-map";
@@ -15,6 +16,8 @@ import type { GameMap } from "../map/types";
 import { compileLumps } from "../wad/compile";
 import {
   createFlatAssets,
+  gameFlatShade,
+  gameWallShade,
   readWadAssets,
   type SceneAssets,
 } from "../wad/assets";
@@ -111,18 +114,20 @@ describe("renderScene", () => {
     expect(renderStarter(map)(160, 100)).toBe("thing:imp-2");
   });
 
-  it("tints the selected surface", () => {
+  it("outlines the selected surface without recoloring it", () => {
     const plain = createRenderTarget(320, 200);
-    const tinted = createRenderTarget(320, 200);
+    const outlined = createRenderTarget(320, 200);
     const camera = startCamera(starterMap);
     renderScene(plain, starterMap, camera, { assets });
-    renderScene(tinted, starterMap, camera, {
+    renderScene(outlined, starterMap, camera, {
       assets,
       selected: "floor:sector-1",
     });
-    const pixel = 190 * 320 + 160;
-    expect(tinted.colors[pixel]).not.toBe(plain.colors[pixel]);
-    expect(tinted.colors[5 * 320 + 160]).toBe(plain.colors[5 * 320 + 160]);
+    const inside = 190 * 320 + 160;
+    expect(outlined.pick[inside]).toBe(plain.pick[inside]);
+    expect(outlined.colors[inside]).toBe(plain.colors[inside]);
+    expect(outlined.colors.some((color) => color === 0xff40b7f4)).toBe(true);
+    expect(outlined.colors[5 * 320 + 160]).toBe(plain.colors[5 * 320 + 160]);
   });
 
   it("draws a placement ghost that can't be picked", () => {
@@ -225,6 +230,24 @@ describe("surface edits", () => {
   });
 });
 
+describe("game lighting", () => {
+  it("follows the engine's light bands", () => {
+    expect(gameWallShade(255)).toBe(0);
+    expect(gameWallShade(176)).toBe(8);
+    expect(gameWallShade(160)).toBe(12);
+    expect(gameWallShade(112)).toBe(24);
+    expect(gameWallShade(0)).toBe(31);
+  });
+
+  it("darkens walls and floors with distance", () => {
+    expect(gameWallShade(160, 80)).toBe(4);
+    expect(gameWallShade(160, 640)).toBe(18);
+    expect(gameWallShade(160, 160, -1)).toBe(16);
+    expect(gameFlatShade(160, 80)).toBe(7);
+    expect(gameFlatShade(160, 4096)).toBe(20);
+  });
+});
+
 describe.skipIf(!existsSync(wadPath))("readWadAssets", () => {
   it("composes textures, flats and sprites from Freedoom", () => {
     const wad = readWadAssets(readFileSync(wadPath));
@@ -236,6 +259,9 @@ describe.skipIf(!existsSync(wadPath))("readWadAssets", () => {
     expect(imp.height).toBeGreaterThan(30);
     expect(imp.opaque.includes(0)).toBe(true);
     expect(wad.sprite("player")).not.toBeNull();
+    for (const kind of thingKinds) {
+      expect(wad.sprite(kind), kind).not.toBeNull();
+    }
     expect(wad.shades[256 * 31 + 100]).not.toBe(wad.shades[100]);
   });
 });

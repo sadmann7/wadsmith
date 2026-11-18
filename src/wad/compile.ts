@@ -13,6 +13,8 @@ import type {
   LineSide,
   Point,
   Sector,
+  Thing,
+  ThingSkill,
 } from "../map/types";
 import { buildBlockmap } from "./blockmap";
 import { buildNodes, type Box, type NodeLine } from "./nodes";
@@ -28,7 +30,13 @@ const specialDoorRaise = 1;
 const specialDoorOpen = 31;
 const specialSwitchDoorRaise = 63;
 const specialSwitchDoorOpen = 61;
+const thingSkillFlags: Record<ThingSkill, number> = {
+  easy: 0x0001,
+  medium: 0x0002,
+  hard: 0x0004,
+};
 const thingOnAllSkills = 0x0007;
+const thingAmbush = 0x0008;
 const noSidedef = 0xffff;
 
 type Lump = { name: string; data: Uint8Array };
@@ -118,6 +126,14 @@ function buildLevel(map: GameMap) {
   return { vertices, sectors, lines };
 }
 
+function thingFlags(thing: Thing) {
+  const skills = thing.skills
+    ? thing.skills.reduce((flags, skill) => flags | thingSkillFlags[skill], 0)
+    : thingOnAllSkills;
+  const enemy = thingCatalog[thing.kind].category === "enemy";
+  return skills | (enemy && thing.ambush ? thingAmbush : 0);
+}
+
 function lineFlags(line: LineSettings | undefined) {
   return (
     (line?.blocksEnemies ? lineBlocksEnemies : 0) |
@@ -143,7 +159,7 @@ function sectorTags(map: GameMap, sectors: Sector[]) {
   });
 }
 
-function compileLumps(map: GameMap): Lump[] {
+function compileLumps(map: GameMap, slot = mapLumpName): Lump[] {
   const { vertices, sectors, lines } = buildLevel(map);
   const bsp = buildNodes(vertices, lines);
 
@@ -155,7 +171,7 @@ function compileLumps(map: GameMap): Lump[] {
       .int16(at.y)
       .int16(thing.angle)
       .int16(thingCatalog[thing.kind].doomType)
-      .int16(thingOnAllSkills);
+      .int16(thingFlags(thing));
   }
 
   const linedefs = new LumpWriter();
@@ -317,7 +333,7 @@ function compileLumps(map: GameMap): Lump[] {
   for (const word of blockmapWords) blockmap.int16(word);
 
   return [
-    { name: mapLumpName, data: new Uint8Array() },
+    { name: slot, data: new Uint8Array() },
     { name: "THINGS", data: things.finish() },
     { name: "LINEDEFS", data: linedefs.finish() },
     { name: "SIDEDEFS", data: sidedefs.finish() },
@@ -358,8 +374,19 @@ function packWad(lumps: Lump[]) {
   return output;
 }
 
-function compileMap(map: GameMap) {
-  return packWad(compileLumps(map));
+function compileMap(map: GameMap, slot = mapLumpName) {
+  return packWad(compileLumps(map, slot));
 }
 
-export { buildLevel, compileLumps, compileMap, mapLumpName, toDoom };
+function compileEpisode(maps: { slot: string; map: GameMap }[]) {
+  return packWad(maps.flatMap(({ slot, map }) => compileLumps(map, slot)));
+}
+
+export {
+  buildLevel,
+  compileEpisode,
+  compileLumps,
+  compileMap,
+  mapLumpName,
+  toDoom,
+};

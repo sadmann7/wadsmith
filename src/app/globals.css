@@ -1,20 +1,32 @@
 @import "tailwindcss";
 
 @theme {
-  --color-bg: #0e0d0c;
-  --color-panel: #161412;
-  --color-raised: #221f1b;
-  --color-line: #2e2a25;
-  --color-text: #efe9df;
-  --color-muted: #a59d90;
-  --color-ember: #ff6a2b;
-  --color-ember-foreground: #160a05;
-  --color-acid: #a6d93a;
-  --color-key: #f5c542;
-  --color-cold: #62b6e8;
-  --color-danger: #f0524a;
-  --font-sans: "IBM Plex Sans Condensed", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --color-bg: oklch(0.16 0.003 67.6);
+  --color-panel: oklch(0.193 0.005 67.5);
+  --color-raised: oklch(0.241 0.009 75.2);
+  --color-line: oklch(0.288 0.011 73.5);
+  --color-text: oklch(0.936 0.015 80.7);
+  --color-muted: oklch(0.699 0.021 80.1);
+  --color-ember: oklch(0.702 0.196 40.7);
+  --color-ember-foreground: oklch(0.161 0.024 47.1);
+  --color-acid: oklch(0.821 0.188 126.1);
+  --color-key: oklch(0.844 0.151 87.9);
+  --color-cold: oklch(0.743 0.109 236.9);
+  --color-danger: oklch(0.654 0.195 26.8);
+  --color-line-strong: oklch(0.332 0.014 76.4);
+  --color-hover: oklch(0.304 0.013 72.4);
+  --color-disabled: oklch(0.521 0.018 77);
+  --color-soft: oklch(0.857 0.018 81.3);
+  --color-inset: oklch(0.169 0.004 84.6);
+  --color-row: oklch(0.211 0.007 67.4);
+  --color-danger-surface: oklch(0.253 0.059 25.3);
+  --color-danger-soft: oklch(0.908 0.048 24.5);
+  --color-wall-open: oklch(0.329 0.015 71.6);
+}
+
+@theme inline {
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
 }
 
 :root {
@@ -31,6 +43,8 @@
   --key: var(--color-key);
   --cold: var(--color-cold);
   --danger: var(--color-danger);
+  --wall: var(--color-disabled);
+  --wall-open: var(--color-wall-open);
   --sans: var(--font-sans);
   --mono: var(--font-mono);
   color-scheme: dark;
@@ -128,7 +142,7 @@
 
   .button:hover:not(:disabled),
   .select-trigger:hover {
-    border-color: #4a4f58;
+    border-color: oklch(0.426 0.016 262.3);
   }
 
   .button:disabled {
@@ -185,16 +199,23 @@
     border: 1px solid var(--line);
     border-radius: 7px;
     background: var(--panel-2);
-    box-shadow: 0 12px 32px rgb(0 0 0 / 45%);
+    box-shadow: 0 12px 32px oklch(0 0 0 / 45%);
   }
 
   .select-item {
+    display: flex;
+    gap: 8px;
+    align-items: center;
     padding: 5px 8px;
     border-radius: 4px;
   }
 
+  .select-item[data-destructive] {
+    color: var(--danger);
+  }
+
   .select-item[data-highlighted] {
-    background: #343840;
+    background: oklch(0.34 0.015 264.4);
   }
 
   .workspace {
@@ -275,7 +296,7 @@
   .map {
     width: 100%;
     height: 100%;
-    background: #0d0e10;
+    background: oklch(0.164 0.005 264.4);
     outline-offset: -2px;
   }
 
@@ -300,36 +321,36 @@
 
   .map-grid-line {
     fill: none;
-    stroke: #1d2024;
+    stroke: oklch(0.242 0.009 255.6);
     stroke-width: 1;
     vector-effect: non-scaling-stroke;
   }
 
   .map-sector {
-    fill: rgb(229 83 61 / 8%);
+    fill: oklch(0.635 0.185 31.2 / 8%);
   }
 
   .map-sector[data-active] {
-    fill: rgb(244 183 64 / 16%);
+    fill: oklch(0.816 0.147 80.2 / 16%);
   }
 
   .map-sector[data-door] {
-    fill: rgb(96 165 250 / 22%);
+    fill: oklch(0.714 0.143 254.6 / 22%);
   }
 
   .map-wall {
-    stroke: #d9d6cf;
+    stroke: oklch(0.876 0.01 87.5);
     stroke-width: 2;
     vector-effect: non-scaling-stroke;
   }
 
   .map-wall[data-portal] {
-    stroke: #e5533d;
+    stroke: oklch(0.635 0.185 31.2);
     stroke-dasharray: 6 4;
   }
 
   .map-draft {
-    fill: rgb(244 183 64 / 8%);
+    fill: oklch(0.816 0.147 80.2 / 8%);
     stroke: var(--select);
     stroke-width: 2;
     vector-effect: non-scaling-stroke;
@@ -348,18 +369,18 @@
   .map-vertex {
     width: 12px;
     height: 12px;
-    border: 2px solid #0d0e10;
+    border: 2px solid oklch(0.164 0.005 264.4);
     border-radius: 3px;
-    background: #d9d6cf;
+    background: oklch(0.876 0.01 87.5);
   }
 
   .map-thing {
     width: 24px;
     height: 24px;
-    border: 2px solid #0d0e10;
+    border: 2px solid oklch(0.164 0.005 264.4);
     border-radius: 50%;
     background: var(--thing-color);
-    color: #111;
+    color: oklch(0.178 0 0);
     font-size: 11px;
     font-weight: 700;
   }
@@ -382,7 +403,7 @@
   }
 
   .map-wire {
-    stroke: #60a5fa;
+    stroke: oklch(0.714 0.143 254.6);
     stroke-width: 2;
     stroke-dasharray: 2 5;
     stroke-linecap: round;
@@ -401,7 +422,7 @@
   .map-port {
     display: block;
     padding: 0;
-    border: 2px solid #0d0e10;
+    border: 2px solid oklch(0.164 0.005 264.4);
     transform: translate(-50%, -50%) scale(calc(1 / var(--canvas-zoom, 1)));
   }
 
@@ -409,7 +430,7 @@
     width: 18px;
     height: 18px;
     border-radius: 4px;
-    background: #4ade80;
+    background: oklch(0.8 0.182 151.7);
     cursor: crosshair;
   }
 
@@ -417,7 +438,7 @@
     width: 20px;
     height: 20px;
     border-radius: 50%;
-    background: #60a5fa;
+    background: oklch(0.714 0.143 254.6);
   }
 
   .map-port[data-selected],
@@ -427,7 +448,7 @@
   }
 
   .map-port[data-connect="candidate"] {
-    box-shadow: 0 0 0 2px #60a5fa;
+    box-shadow: 0 0 0 2px oklch(0.714 0.143 254.6);
   }
 
   .map-actions {
@@ -447,7 +468,7 @@
     height: 26px;
     padding: 0;
     border: 0;
-    background: #f4b740;
+    background: oklch(0.816 0.147 80.2);
     clip-path: polygon(100% 50%, 0 8%, 24% 50%, 0 92%);
     transform: translate(-50%, -50%) scale(calc(1 / var(--canvas-zoom, 1)))
       rotate(var(--camera-angle, 0deg));
@@ -455,7 +476,7 @@
   }
 
   .map-camera:focus-visible {
-    background: #fff;
+    background: oklch(1 0 0);
   }
 
   .map-wall[data-selected] {
@@ -470,7 +491,7 @@
     max-width: calc(100% - 24px);
     padding: 5px 9px;
     border-radius: 6px;
-    background: rgb(17 18 20 / 88%);
+    background: oklch(0.182 0.004 264.5 / 88%);
     color: var(--muted);
     pointer-events: none;
   }
@@ -491,7 +512,7 @@
     width: 100%;
     aspect-ratio: 8 / 5;
     border-radius: 6px;
-    background: #000;
+    background: oklch(0 0 0);
     image-rendering: pixelated;
   }
 
@@ -523,7 +544,7 @@
   .scene-pane {
     display: grid;
     grid-template-rows: minmax(0, 1fr) auto;
-    background: #0d0e10;
+    background: oklch(0.164 0.005 264.4);
   }
 
   .scene-frame {
@@ -610,38 +631,8 @@
     z-index: 40;
     inset: 0;
     display: grid;
-    grid-template-rows: auto minmax(0, 1fr);
-    background: #000;
-  }
-
-  .game-bar {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px 16px;
-    align-items: center;
-    min-height: 48px;
-    padding: 8px 12px;
-    background: var(--panel);
-  }
-
-  .hint {
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-  }
-
-  .game-keys {
-    color: var(--muted);
-  }
-
-  .game-actions {
-    display: flex;
-    gap: 8px;
-    margin-left: auto;
-  }
-
-  .game-volume {
-    width: 96px;
-    justify-content: center;
+    grid-template-rows: minmax(0, 1fr);
+    background: oklch(0 0 0);
   }
 
   .game-screen {
@@ -653,32 +644,18 @@
   }
 
   /* Doom's 320x200 image was made for 4:3 screens, so its pixels are stretched. */
+  .game-frame {
+    position: relative;
+    width: min(100cqw, calc(100cqh * 4 / 3));
+    aspect-ratio: 4 / 3;
+  }
+
   .game-canvas {
     display: block;
-    width: min(100cqw, calc(100cqh * 4 / 3));
-    height: auto;
-    aspect-ratio: 4 / 3;
+    width: 100%;
+    height: 100%;
     outline: 0;
     image-rendering: pixelated;
-  }
-
-  .game-stage:fullscreen .game-bar {
-    position: absolute;
-    z-index: 1;
-    top: 0;
-    right: 0;
-    left: 0;
-    opacity: 0;
-    transition: opacity 150ms;
-  }
-
-  .game-stage:fullscreen .game-bar:hover,
-  .game-stage:fullscreen .game-bar:focus-within {
-    opacity: 1;
-  }
-
-  .game-stage:fullscreen {
-    grid-template-rows: minmax(0, 1fr);
   }
 
   .save-state {
@@ -1042,7 +1019,7 @@
   }
 
   .map {
-    background: #100f0d;
+    background: oklch(0.169 0.004 84.6);
   }
 
   .map-pane {
@@ -1123,28 +1100,28 @@
   }
 
   .map-grid-line {
-    stroke: #1c1a17;
+    stroke: oklch(0.219 0.007 78.2);
   }
 
   .map-sector {
-    fill: #2a2723;
+    fill: oklch(0.275 0.008 75.2);
   }
 
   .map-sector[data-active] {
-    fill: rgb(255 106 43 / 24%);
+    fill: oklch(0.702 0.196 40.7 / 24%);
   }
 
   .map-sector[data-door] {
-    fill: #5a4316;
+    fill: oklch(0.399 0.068 81.1);
   }
 
   .map-wall {
-    stroke: #c9c0b1;
+    stroke: oklch(0.811 0.023 80.7);
     stroke-width: 1.5;
   }
 
   .map-wall[data-portal] {
-    stroke: #8c8377;
+    stroke: oklch(0.614 0.021 75.2);
     stroke-dasharray: 5 4;
   }
 
@@ -1155,31 +1132,31 @@
   }
 
   .map-draft {
-    fill: rgb(255 106 43 / 10%);
+    fill: oklch(0.702 0.196 40.7 / 10%);
     stroke: var(--accent);
   }
 
   .map-vertex {
     width: 9px;
     height: 9px;
-    border: 1px solid #c9c0b1;
+    border: 1px solid oklch(0.811 0.023 80.7);
     border-radius: 1px;
-    background: #100f0d;
+    background: oklch(0.169 0.004 84.6);
   }
 
   .map-vertex[data-selected] {
     border-color: var(--accent);
-    box-shadow: 0 0 0 2px rgb(255 106 43 / 35%);
+    box-shadow: 0 0 0 2px oklch(0.702 0.196 40.7 / 35%);
   }
 
   .map-thing {
     border: 1.5px solid var(--thing-color);
-    background: #100f0d;
+    background: oklch(0.169 0.004 84.6);
     color: var(--thing-color);
   }
 
   .map-thing[data-selected] {
-    box-shadow: 0 0 0 2px rgb(255 106 43 / 65%);
+    box-shadow: 0 0 0 2px oklch(0.702 0.196 40.7 / 65%);
   }
 
   .map[data-mode="lines"] .map-vertex,
@@ -1257,7 +1234,11 @@
     left: 50%;
     width: 150px;
     height: 120px;
-    background: linear-gradient(90deg, rgb(245 197 66 / 34%), transparent);
+    background: linear-gradient(
+      90deg,
+      oklch(0.844 0.151 87.9 / 34%),
+      transparent
+    );
     clip-path: polygon(0 50%, 100% 0, 100% 100%);
     transform: translateY(-50%);
     pointer-events: none;
@@ -1266,7 +1247,7 @@
   .tool-hint {
     border: 1px solid var(--line);
     border-radius: 3px;
-    background: rgb(22 20 18 / 92%);
+    background: oklch(0.193 0.005 67.5 / 92%);
     font-size: 13px;
   }
 
@@ -1370,14 +1351,13 @@
 
   .check-issue {
     display: grid;
-    grid-template-columns: 14px minmax(0, 1fr);
+    grid-template-columns: 14px minmax(0, 1fr) auto;
     gap: 8px;
     overflow-wrap: anywhere;
   }
 
   .check-issue svg {
     margin-top: 2px;
-    color: var(--danger);
   }
 
   .text-input,

@@ -1,21 +1,10 @@
-import {
-  ArrowRight,
-  Box,
-  Crosshair,
-  Focus,
-  KeyRound,
-  LocateFixed,
-  Maximize,
-  Plus,
-  Skull,
-  type LucideIcon,
-} from "lucide-react";
+import { Focus, LocateFixed, Maximize, StickyNote } from "lucide-react";
 import type { ComponentProps, CSSProperties } from "react";
 
 import { thingCatalog } from "../map/catalog";
 import { doorKeyPrefix, switchKeyPrefix, thingKeyPrefix } from "../map/edit";
 import { sectorEdges } from "../map/geometry";
-import type { GameMap, ThingKind } from "../map/types";
+import type { GameMap } from "../map/types";
 import {
   MapCamera,
   MapConnecting,
@@ -26,28 +15,16 @@ import {
   MapHandle,
   MapLabel,
   MapLookHere,
+  MapMarker,
   MapPort,
   MapSector,
   MapWall,
   MapWire,
   MapWorld,
 } from "./map-editor";
+import { thingIcons } from "./thing-icons";
 
 const worldSize = 65536;
-
-const thingStyles: Record<ThingKind, { icon: LucideIcon; color: string }> = {
-  player: { icon: ArrowRight, color: "var(--key)" },
-  zombieman: { icon: Skull, color: "var(--danger)" },
-  "shotgun-guy": { icon: Skull, color: "var(--danger)" },
-  imp: { icon: Skull, color: "var(--danger)" },
-  demon: { icon: Skull, color: "var(--danger)" },
-  shotgun: { icon: Crosshair, color: "var(--acid)" },
-  shells: { icon: Box, color: "var(--acid)" },
-  medikit: { icon: Plus, color: "var(--cold)" },
-  "blue-key": { icon: KeyRound, color: "var(--cold)" },
-  "yellow-key": { icon: KeyRound, color: "var(--key)" },
-  "red-key": { icon: KeyRound, color: "var(--danger)" },
-};
 
 function wallsOf(map: GameMap) {
   const walls = new Map<
@@ -67,8 +44,12 @@ function wallsOf(map: GameMap) {
 
 function MapCanvas({
   map,
+  callouts,
   ...props
-}: ComponentProps<typeof MapEditor> & { map: GameMap }) {
+}: ComponentProps<typeof MapEditor> & {
+  map: GameMap;
+  callouts: { id: string; x: number; y: number; text: string }[];
+}) {
   return (
     <MapEditor aria-label="Map" className="map" map={map} {...props}>
       <MapWorld className="map-world">
@@ -144,7 +125,7 @@ function MapCanvas({
         ))}
         {map.things.map((thing) => {
           const { label } = thingCatalog[thing.kind];
-          const { icon: Icon, color } = thingStyles[thing.kind];
+          const { icon: Icon, color } = thingIcons[thing.kind];
           return (
             <MapHandle
               key={thing.id}
@@ -177,6 +158,29 @@ function MapCanvas({
             aria-label={`Switch ${item.id}. Drag to a door, or press C.`}
             title="Drag to a door"
           />
+        ))}
+        {map.notes?.map((note) => (
+          <MapMarker
+            key={note.id}
+            value={note.id}
+            x={note.x}
+            y={note.y}
+            title={note.text}
+            className="pointer-events-none flex size-5 origin-center items-center justify-center rounded-[3px] bg-key text-ember-foreground [transform:translate(-50%,-50%)_scale(calc(1/var(--canvas-zoom,1)))]"
+          >
+            <StickyNote size={12} aria-hidden="true" />
+          </MapMarker>
+        ))}
+        {callouts.map((callout) => (
+          <MapMarker
+            key={callout.id}
+            value={callout.id}
+            x={callout.x}
+            y={callout.y}
+            className="pointer-events-none origin-bottom-left border border-danger bg-danger-surface px-2 py-1 font-mono text-[11px] whitespace-nowrap text-danger-soft [transform:translateY(-100%)_scale(calc(1/var(--canvas-zoom,1)))]"
+          >
+            {callout.text}
+          </MapMarker>
         ))}
         <MapCamera
           className="map-camera"

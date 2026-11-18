@@ -1,11 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  addNote,
   addRoomOnSide,
+  removeNote,
   setRoomDoor,
   updateLine,
   updateLineSide,
   updateSector,
+  updateThing,
 } from "./edit";
 import { blankMap, starterMap } from "./starter-map";
 import { loadSavedMap, parseMapFile, saveMap, serializeMap } from "./storage";
@@ -75,6 +78,45 @@ describe("map files", () => {
       { effect: "secret", tag: 7 },
     );
     expect(parseMapFile(serializeMap(map))).toEqual(map);
+  });
+
+  it("opens any Freedoom texture and rejects unknown names", () => {
+    const map = updateSector(starterMap, "sector-1", {
+      floorTexture: "NUKAGE1",
+      wallTexture: "ASHWALL2",
+    });
+    expect(parseMapFile(serializeMap(map))).toEqual(map);
+    expect(() =>
+      parseMapFile(
+        fileWith((file) => {
+          file.sectors[0].floorTexture = "SLAG_PL2";
+        }),
+      ),
+    ).toThrow("unknown texture");
+  });
+
+  it("keeps playtest notes", () => {
+    const map = addNote(starterMap, { x: 96.4, y: 160 }, "Too dark here");
+    expect(map.notes).toEqual([
+      { id: "note-1", x: 96, y: 160, text: "Too dark here" },
+    ]);
+    expect(parseMapFile(serializeMap(map))).toEqual(map);
+    expect(removeNote(map, "note-1").notes).toBeUndefined();
+  });
+
+  it("keeps thing difficulty settings", () => {
+    const map = updateThing(starterMap, "imp-1", {
+      skills: ["easy", "hard"],
+      ambush: true,
+    });
+    expect(parseMapFile(serializeMap(map))).toEqual(map);
+    expect(() =>
+      parseMapFile(
+        fileWith((file) => {
+          file.things[1].skills = ["nightmare"];
+        }),
+      ),
+    ).toThrow("unknown difficulty");
   });
 
   it("rejects line actions the engine doesn't have", () => {

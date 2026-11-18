@@ -17,7 +17,12 @@ import type {
   Sector,
   ThingKind,
 } from "../map/types";
-import { shadeLevels, type Picture, type SceneAssets } from "../wad/assets";
+import {
+  gameFlatShade,
+  gameWallShade,
+  type Picture,
+  type SceneAssets,
+} from "../wad/assets";
 
 type Camera = Point & { angle: number; eye?: number };
 
@@ -54,6 +59,9 @@ const fieldOfView = Math.PI / 2;
 const maxPortals = 32;
 const skyColor = 0xff000000;
 const maxFloorDistance = 4096;
+const selectedOutline = 0xff40b7f4;
+const hoveredOutline = 0xffffffff;
+const outlineWidth = 2;
 
 function createRenderTarget(width: number, height: number): RenderTarget {
   const pixels = new Uint8ClampedArray(width * height * 4);
@@ -113,27 +121,9 @@ function withClosedDoors(map: GameMap): GameMap {
   };
 }
 
-function shadeLevel(light: number, depth: number, contrast = 0) {
-  const level = Math.round((255 - light) / 8 + depth / 96 - 4 + contrast);
-  return Math.max(0, Math.min(shadeLevels - 1, level));
-}
-
 function wrap(value: number, size: number) {
   const remainder = Math.floor(value) % size;
   return remainder < 0 ? remainder + size : remainder;
-}
-
-function tint(color: number, red: number, green: number, blue: number) {
-  const amount = 0.32;
-  const mix = (channel: number, target: number) =>
-    Math.round(channel + (target - channel) * amount);
-  return (
-    ((255 << 24) |
-      (mix((color >>> 16) & 255, blue) << 16) |
-      (mix((color >>> 8) & 255, green) << 8) |
-      mix(color & 255, red)) >>>
-    0
-  );
 }
 
 function blend(under: number, over: number) {
@@ -253,7 +243,7 @@ function renderScene(
         const v = wrap(-(camera.y + ray.y * distance), size);
         const color = picture.pixels[u * size + v];
         const index = y * width + x;
-        colors[index] = shades[shadeLevel(light, distance) * 256 + color];
+        colors[index] = shades[gameFlatShade(light, distance) * 256 + color];
         depths[index] = distance;
         pick[index] = id;
       }
@@ -303,8 +293,8 @@ function renderScene(
       );
 
       const contrast =
-        wall.a.x === wall.b.x ? -1 : wall.a.y === wall.b.y ? 1 : 0;
-      const level = shadeLevel(current.light, distance, contrast);
+        wall.a.x === wall.b.x ? 1 : wall.a.y === wall.b.y ? -1 : 0;
+      const level = gameWallShade(current.light, distance, contrast);
       const paintWall = (
         from: number,
         to: number,
@@ -413,7 +403,7 @@ function renderScene(
     const scale = focal / distance;
     const left = width / 2 + side * scale - picture.leftOffset * scale;
     const peak = horizon - (floor + picture.topOffset - eye) * scale;
-    const level = shadeLevel(owner?.light ?? start.light, distance);
+    const level = gameWallShade(owner?.light ?? start.light, distance);
     const id = isGhost
       ? 0
       : idOf(surfaceKey({ kind: "thing", thing: thing.id }));
@@ -452,12 +442,30 @@ function renderScene(
 
   const hoveredId = hovered ? surfaceIds.get(hovered) : undefined;
   const selectedId = selected ? surfaceIds.get(selected) : undefined;
+  const isEdge = (x: number, y: number, id: number) => {
+    for (let step = 1; step <= outlineWidth; step += 1) {
+      for (const [nextX, nextY] of [
+        [x - step, y],
+        [x + step, y],
+        [x, y - step],
+        [x, y + step],
+      ]) {
+        if (nextX < 0 || nextX >= width || nextY < 0 || nextY >= height)
+          continue;
+        if (pick[nextY * width + nextX] !== id) return true;
+      }
+    }
+    return false;
+  };
   if (hoveredId !== undefined || selectedId !== undefined) {
-    for (let index = 0; index < pick.length; index += 1) {
-      if (pick[index] === selectedId) {
-        colors[index] = tint(colors[index], 244, 183, 64);
-      } else if (pick[index] === hoveredId) {
-        colors[index] = tint(colors[index], 255, 255, 255);
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const index = y * width + x;
+        const id = pick[index];
+        if (id !== selectedId && id !== hoveredId) continue;
+        if (isEdge(x, y, id)) {
+          colors[index] = id === selectedId ? selectedOutline : hoveredOutline;
+        }
       }
     }
   }

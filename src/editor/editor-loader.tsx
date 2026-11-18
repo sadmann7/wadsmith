@@ -3,8 +3,8 @@
 import dynamic from "next/dynamic";
 
 // The editor reads browser storage and canvas APIs from its first render.
-const EditorApp = dynamic(
-  () => import("./editor-app").then((editor) => editor.App),
+const ProjectApp = dynamic(
+  () => import("../projects/project-app").then((app) => app.ProjectApp),
   {
     ssr: false,
     loading: () => (
@@ -16,7 +16,7 @@ const EditorApp = dynamic(
 );
 
 function EditorLoader() {
-  return <EditorApp />;
+  return <ProjectApp />;
 }
 
 export { EditorLoader };

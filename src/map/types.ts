@@ -73,21 +73,40 @@ type LineSettings = {
 
 type ThingKind =
   | "player"
+  | "imp"
   | "zombieman"
   | "shotgun-guy"
-  | "imp"
   | "demon"
+  | "spectre"
+  | "lost-soul"
+  | "chaingunner"
+  | "pain-elemental"
   | "shotgun"
+  | "chaingun"
+  | "clip"
   | "shells"
+  | "stimpack"
   | "medikit"
+  | "green-armor"
+  | "blue-armor"
   | "blue-key"
   | "yellow-key"
-  | "red-key";
+  | "red-key"
+  | "barrel"
+  | "lamp"
+  | "tech-column"
+  | "red-torch";
+
+type ThingCategory = "start" | "enemy" | "item" | "key" | "decor";
+
+type ThingSkill = "easy" | "medium" | "hard";
 
 type Thing = Point & {
   id: string;
   kind: ThingKind;
   angle: number;
+  skills?: ThingSkill[];
+  ambush?: boolean;
 };
 
 type MapSwitch = {
@@ -99,6 +118,8 @@ type MapSwitch = {
   door: string | null;
 };
 
+type MapNote = Point & { id: string; text: string };
+
 type GameMap = {
   name?: string;
   vertices: Record<string, Point>;
@@ -106,6 +127,7 @@ type GameMap = {
   things: Thing[];
   switches: MapSwitch[];
   lines?: Record<string, LineSettings>;
+  notes?: MapNote[];
 };
 
 export type {
@@ -117,10 +139,13 @@ export type {
   LineSettings,
   LineSide,
   LineTrigger,
+  MapNote,
   MapSwitch,
   Point,
   Sector,
   SectorEffect,
   Thing,
+  ThingCategory,
   ThingKind,
+  ThingSkill,
 };

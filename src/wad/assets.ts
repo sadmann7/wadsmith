@@ -24,17 +24,50 @@ const flatSize = 64;
 
 const spriteLumps: Record<ThingKind, string> = {
   player: "PLAYA1",
+  imp: "TROOA1",
   zombieman: "POSSA1",
   "shotgun-guy": "SPOSA1",
-  imp: "TROOA1",
   demon: "SARGA1",
+  spectre: "SARGA1",
+  "lost-soul": "SKULA1",
+  chaingunner: "CPOSA1",
+  "pain-elemental": "PAINA1",
   shotgun: "SHOTA0",
-  shells: "SBOXA0",
+  chaingun: "MGUNA0",
+  clip: "CLIPA0",
+  shells: "SHELA0",
+  stimpack: "STIMA0",
   medikit: "MEDIA0",
+  "green-armor": "ARM1A0",
+  "blue-armor": "ARM2A0",
   "blue-key": "BKEYA0",
   "yellow-key": "YKEYA0",
   "red-key": "RKEYA0",
+  barrel: "BAR1A0",
+  lamp: "COLUA0",
+  "tech-column": "ELECA0",
+  "red-torch": "TREDA0",
 };
+
+function lightStart(light: number, contrast: number) {
+  const band = Math.max(0, Math.min(15, (light >> 4) + contrast));
+  return (15 - band) * 4;
+}
+
+function clampShade(level: number) {
+  return Math.max(0, Math.min(shadeLevels - 1, level));
+}
+
+// These follow the engine's scalelight and zlight tables for a 320-wide view.
+function gameWallShade(light: number, distance = 160, contrast = 0) {
+  const scale = Math.min(47, Math.floor((16 * 160) / distance));
+  return clampShade(lightStart(light, contrast) - (scale >> 1));
+}
+
+function gameFlatShade(light: number, distance: number) {
+  const band = Math.min(127, Math.floor(distance / 16));
+  return clampShade(lightStart(light, 0) - (Math.floor(160 / (band + 1)) >> 1));
+}
 
 function createPicture(width: number, height: number): Picture {
   return {
@@ -289,7 +322,8 @@ function createFlatAssets(): SceneAssets {
     texture: tile,
     flat: tile,
     sprite(kind) {
-      const monster = thingCatalog[kind].monster || kind === "player";
+      const monster =
+        thingCatalog[kind].category === "enemy" || kind === "player";
       const picture = solidPicture(
         monster ? 36 : 22,
         monster ? 56 : 20,
@@ -304,6 +338,8 @@ function createFlatAssets(): SceneAssets {
 
 export {
   createFlatAssets,
+  gameFlatShade,
+  gameWallShade,
   readWadAssets,
   shadeLevels,
   type Picture,

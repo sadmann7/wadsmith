@@ -2,8 +2,10 @@
 
 import { createUndoStack, matchesShortcut } from "@ui-sdk/core";
 import {
+  createMenuController,
   Menu,
   MenuContent,
+  MenuContextTrigger,
   MenuItem,
   MenuSeparator,
   MenuTrigger,
@@ -27,12 +29,14 @@ import {
 } from "@ui-sdk/react/resizable";
 import {
   CircleCheck,
+  CircleX,
   Expand,
   MousePointer2,
   PenLine,
   Play,
   Redo2,
   Rows2,
+  StickyNote,
   ToggleRight,
   TriangleAlert,
   Undo2,
@@ -48,6 +52,8 @@ import {
 } from "react";
 
 import { agent } from "../agent";
+import { BuildDialog } from "./build-dialog";
+import { MapContextMenu } from "./context-menu";
 import {
   LineInspector,
   SectorInspector,
@@ -55,10 +61,26 @@ import {
   ThingInspector,
 } from "./inspector";
 import { MapCanvas } from "./map-canvas";
+import { SelectCheck } from "./select-check";
+import { NewMapPanel } from "./new-map-panel";
+import { thingIcons } from "./thing-icons";
+import {
+  normalizeControlClick,
+  pointOfTarget,
+  targetExists,
+  targetForIssue,
+  targetForKeys,
+  targetForSurface,
+  viewOfTarget,
+  type MapTarget,
+} from "./map-target";
 import type { EditMode, MapTool, MapViewStatus } from "./map-editor";
-import { GameView } from "../engine/play-panel";
+import { GameView, type PlayerSpot } from "../engine/play-panel";
 import { thingCatalog, thingKinds } from "../map/catalog";
 import {
+  addNote,
+  duplicateThings,
+  removeNote,
   setLineTarget,
   setRoomDoor,
   setRoomWalls,
@@ -69,21 +91,18 @@ import {
   updateLineSide,
   updateSector,
   updateSwitch,
-  updateThing,
+  updateThings,
   type RoomSide,
 } from "../map/edit";
 import { describeLine } from "../map/lines";
-import { blankMap, starterMap } from "../map/starter-map";
 import {
-  loadSavedMap,
   MapFileError,
   maxFileBytes,
   parseMapFile,
-  saveMap,
   serializeMap,
-  watchSavedMap,
 } from "../map/storage";
-import type { GameMap, ThingKind } from "../map/types";
+import type { GameMap, Point, ThingCategory, ThingKind } from "../map/types";
+import { checkMap, fixIssue, issueText } from "../map/checks";
 import { validateMap } from "../map/validate";
 import { loadIwad } from "../engine/iwad";
 import { SceneCamera } from "../preview/scene-camera";
@@ -95,7 +114,7 @@ import {
   parseSurface,
   surfaceKey,
 } from "../map/surfaces";
-import { wallKey, wallOwners } from "../map/geometry";
+import { sectorAt, wallKey, wallOwners } from "../map/geometry";
 import { createFlatAssets, readWadAssets } from "../wad/assets";
 import { compileMap } from "../wad/compile";
 
@@ -112,11 +131,18 @@ const roomSides: RoomSide[] = ["north", "east", "south", "west"];
 type ViewLayout = "map" | "split" | "scene";
 type SinglePane = Exclude<ViewLayout, "split">;
 
+const thingCategoryLabels: Record<ThingCategory, string> = {
+  start: "Start",
+  enemy: "Enemy",
+  item: "Item",
+  key: "Key",
+  decor: "Decor",
+};
+
 const layoutKey = "wadsmith:layout";
 // Below this width, two panes can't hold the map controls and a usable 3D view.
 const narrowQuery = "(max-width: 1100px)";
 const defaultSplit = [50, 50];
-const mapSlot = "MAP01";
 
 const tools: { value: MapTool; label: string; icon: typeof PenLine }[] = [
   { value: "select", label: "Select", icon: MousePointer2 },
@@ -182,10 +208,12 @@ function createDraftChannel() {
   return { subscribe, publish };
 }
 
-function isTextEntry(target: EventTarget | null) {
+function ignoresShortcuts(target: EventTarget | null) {
   return (
     target instanceof HTMLElement &&
-    (target.isContentEditable || /^(INPUT|TEXTAREA)$/.test(target.tagName))
+    (target.isContentEditable ||
+      /^(INPUT|TEXTAREA)$/.test(target.tagName) ||
+      target.closest('[role="dialog"]') !== null)
   );
 }
 
@@ -198,16 +226,46 @@ function downloadFile(name: string, data: BlobPart, type: string) {
   URL.revokeObjectURL(url);
 }
 
-function downloadWad(map: GameMap) {
+function downloadWad(map: GameMap, slot: string, fileName: string) {
   downloadFile(
-    "wadsmith-map01.wad",
-    compileMap(map).slice().buffer,
+    fileName,
+    compileMap(map, slot).slice().buffer,
     "application/octet-stream",
   );
 }
 
-function App() {
-  const [initialMap] = useState(() => loadSavedMap() ?? starterMap);
+type AppProps = {
+  initialMap: GameMap;
+  mapName: string;
+  slot: string;
+  par: number | null;
+  saveStatus: "saving" | "saved" | "failed" | "session";
+  onSave: (map: GameMap) => void;
+  watchExternal: (listener: (map: GameMap) => void) => () => void;
+  onOpenProjects: () => void;
+  onNewMap: () => void;
+  onMapSettings: () => void;
+};
+
+const saveLabels: Record<AppProps["saveStatus"], string> = {
+  saving: "Saving…",
+  saved: "Saved in this browser",
+  failed: "Not saved: storage is unavailable",
+  session: "Browser storage is off: saved for this session only",
+};
+
+function App({
+  initialMap,
+  mapName,
+  slot,
+  par,
+  saveStatus,
+  onSave,
+  watchExternal,
+  onOpenProjects,
+  onNewMap,
+  onMapSettings,
+}: AppProps) {
   const [map, setMap] = useState(initialMap);
   const [tool, setTool] = useState<MapTool>("select");
   const [thingKind, setThingKind] = useState<ThingKind>("imp");
@@ -215,7 +273,6 @@ function App() {
   const [selection, setSelection] = useState<string[]>([]);
   const [playedMap, setPlayedMap] = useState<GameMap | null>(null);
   const [mapVersion, setMapVersion] = useState(0);
-  const [saved, setSaved] = useState(true);
   const [fileError, setFileError] = useState<string | null>(null);
   const playButton = useRef<HTMLButtonElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -224,6 +281,22 @@ function App() {
   const [initialLayout] = useState(loadLayout);
   const [layout, setLayout] = useState(initialLayout.view);
   const [findCameraRequest, setFindCameraRequest] = useState(0);
+  const [fitRequest, setFitRequest] = useState(0);
+  const [focusRequest, setFocusRequest] = useState<{
+    id: number;
+    point: Point;
+  } | null>(null);
+  const [drawRequest, setDrawRequest] = useState<{
+    id: number;
+    point: Point;
+  } | null>(null);
+  const [menu] = useState(() => createMenuController());
+  const [menuTarget, setMenuTarget] = useState<MapTarget | null>(null);
+  const menuTargetRef = useRef<MapTarget | null>(null);
+  const menuOpen = useRef(false);
+  const [contextMenuOpen, setContextMenuOpen] = useState(false);
+  const [building, setBuilding] = useState(false);
+  const [draftCorners, setDraftCorners] = useState(0);
   const [showDock, setShowDock] = useState(initialLayout.dock);
   const [editMode, setEditMode] = useState<EditMode>("vertices");
   const pointerStatus = useRef<HTMLSpanElement>(null);
@@ -249,6 +322,32 @@ function App() {
 
   const issues = useMemo(() => validateMap(map), [map]);
   const canPlay = issues.length === 0;
+  const checks = useMemo(() => checkMap(map), [map]);
+  const warningCount = checks.length - issues.length;
+  const checkSummary =
+    checks.length === 0
+      ? "No problems"
+      : [
+          issues.length > 0
+            ? `${issues.length} ${issues.length === 1 ? "error" : "errors"}`
+            : null,
+          warningCount > 0
+            ? `${warningCount} ${warningCount === 1 ? "warning" : "warnings"}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" · ");
+  const callouts = useMemo(
+    () =>
+      issues.slice(0, 5).flatMap((issue) => {
+        const target = issue.target ? targetForIssue(map, issue.target) : null;
+        const point = target ? pointOfTarget(map, target) : null;
+        return point
+          ? [{ id: issue.id, ...point, text: issueText(issue).title }]
+          : [];
+      }),
+    [issues, map],
+  );
   const sector = map.sectors.find((item) => item.id === activeSector);
   const selectedThingKey = selection.find((key) =>
     key.startsWith(thingKeyPrefix),
@@ -256,17 +355,23 @@ function App() {
   const thing = map.things.find(
     (item) => `${thingKeyPrefix}${item.id}` === selectedThingKey,
   );
+  const selectedThings = map.things.filter((item) =>
+    selection.includes(`${thingKeyPrefix}${item.id}`),
+  );
 
   const selectedSwitch = map.switches.find((item) =>
     selection.includes(`${switchKeyPrefix}${item.id}`),
   );
   const doors = map.sectors.filter((item) => item.door);
 
-  const showMap = useCallback((next: GameMap) => {
-    setMap(next);
-    setSaved(saveMap(next));
-    setHistoryVersion((version) => version + 1);
-  }, []);
+  const showMap = useCallback(
+    (next: GameMap) => {
+      setMap(next);
+      onSave(next);
+      setHistoryVersion((version) => version + 1);
+    },
+    [onSave],
+  );
 
   const commit = (next: GameMap, group?: string) => {
     history.record(next, group ? { group } : undefined);
@@ -286,7 +391,10 @@ function App() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (isTextEntry(event.target) || document.querySelector(".game-stage")) {
+      if (
+        ignoresShortcuts(event.target) ||
+        document.querySelector(".game-stage")
+      ) {
         return;
       }
       if (matchesShortcut(event, "mod+shift+z")) {
@@ -300,6 +408,31 @@ function App() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [history, restore]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (
+        !matchesShortcut(event, "mod+d") ||
+        ignoresShortcuts(event.target) ||
+        document.querySelector(".game-stage")
+      ) {
+        return;
+      }
+      const ids = selection
+        .filter((key) => key.startsWith(thingKeyPrefix))
+        .map((key) => key.slice(thingKeyPrefix.length));
+      const copies = duplicateThings(map, ids);
+      if (copies.ids.length === 0) return;
+      event.preventDefault();
+      history.record(copies.map);
+      showMap(copies.map);
+      setSurface(null);
+      setActiveSector(null);
+      setSelection(copies.ids.map((id) => `${thingKeyPrefix}${id}`));
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [history, map, selection, showMap]);
 
   useEffect(() => {
     let active = true;
@@ -352,7 +485,7 @@ function App() {
         event.ctrlKey ||
         event.metaKey ||
         event.altKey ||
-        isTextEntry(event.target) ||
+        ignoresShortcuts(event.target) ||
         (event.target as Element).closest?.(
           '[role="combobox"], [role="listbox"], [role="menu"]',
         ) ||
@@ -446,22 +579,111 @@ function App() {
     }
   };
 
+  const selectTarget = (target: MapTarget) => {
+    if (target.keepSelection) return;
+    if (target.surface) {
+      selectSurface(target.surface);
+      return;
+    }
+    setSurface(null);
+    if (target.kind === "room") {
+      setSelection([]);
+      setActiveSector(target.sector);
+      return;
+    }
+    setActiveSector(null);
+    if (target.kind === "things") {
+      setSelection(target.ids.map((id) => `${thingKeyPrefix}${id}`));
+    } else if (target.kind === "corners") {
+      setSelection(target.ids);
+    } else if (target.kind === "switch") {
+      setSelection([`${switchKeyPrefix}${target.id}`]);
+    } else {
+      setSelection([]);
+    }
+  };
+
+  const reportMenuTarget = (target: MapTarget | null) => {
+    menuTargetRef.current = target;
+    setMenuTarget(target);
+    if (!menuOpen.current) return;
+    if (target) selectTarget(target);
+    else menu.close();
+  };
+
+  const reportSceneTarget = (
+    key: string | null,
+    point: Point | null,
+    keyboard: boolean,
+  ) => {
+    const picked = key ? parseSurface(key) : null;
+    const pressed =
+      picked?.kind === "thing" ? `${thingKeyPrefix}${picked.thing}` : null;
+    const group =
+      keyboard || (pressed && selection.includes(pressed)) ? selection : [];
+    const fromSelection =
+      group.length > 0
+        ? targetForKeys(group, point, pressed ?? undefined)
+        : null;
+    reportMenuTarget(
+      fromSelection ?? (key ? targetForSurface(map, key, point) : null),
+    );
+  };
+
+  const applyMenuSelection = ({
+    keys,
+    sector: nextSector,
+  }: {
+    keys?: string[];
+    sector?: string | null;
+  }) => {
+    setSurface(null);
+    if (keys) setSelection(keys);
+    if (nextSector !== undefined) setActiveSector(nextSector);
+  };
+
+  const showTarget = (target: MapTarget) => {
+    selectTarget({ ...target, keepSelection: false });
+    const point = pointOfTarget(map, target);
+    if (visibleLayout === "scene") changeLayout(narrow ? "map" : "split");
+    if (point) {
+      setFocusRequest((request) => ({ id: (request?.id ?? 0) + 1, point }));
+    }
+  };
+
+  const showInScene = (target: MapTarget) => {
+    const view = viewOfTarget(map, target);
+    if (!view) return;
+    camera.lookAt(map, view.from, view.at);
+    if (visibleLayout === "map" && (narrow || !showDock)) {
+      changeLayout(narrow ? "scene" : "split");
+    }
+  };
+
   const scene = (
-    <SceneCanvas
-      aria-label="3D view. Click a surface to select it. W, A, S and D walk, N and P step through surfaces."
-      className="screen scene"
-      map={map}
-      assets={assets}
-      camera={camera}
-      draftSource={drafts.subscribe}
-      selected={surfaceInfo ? surface : null}
-      linked={sceneInfo ? sceneSelection : null}
-      placing={tool === "thing" ? thingKind : null}
-      renderWidth={640}
-      renderHeight={400}
-      onMapChange={(next) => commit(next)}
-      onSelectedChange={selectSurface}
-    />
+    <MenuContextTrigger
+      controller={menu}
+      className="contents"
+      onContextMenuCapture={normalizeControlClick}
+    >
+      <SceneCanvas
+        aria-label="3D view. Click a surface to select it. W, A, S and D walk, N and P step through surfaces."
+        className="screen scene"
+        map={map}
+        assets={assets}
+        camera={camera}
+        draftSource={drafts.subscribe}
+        selected={surfaceInfo ? surface : null}
+        linked={sceneInfo ? sceneSelection : null}
+        placing={tool === "thing" ? thingKind : null}
+        renderWidth={640}
+        renderHeight={400}
+        onMapChange={(next) => commit(next)}
+        onSelectedChange={selectSurface}
+        onContextSurface={reportSceneTarget}
+        contextMenuOpen={contextMenuOpen}
+      />
+    </MenuContextTrigger>
   );
 
   const thingPicker = (
@@ -482,11 +704,16 @@ function App() {
         <span aria-hidden="true">▾</span>
       </SelectTrigger>
       <SelectContent className="select-content">
-        {thingKinds.map((kind) => (
-          <SelectItem key={kind} value={kind} className="select-item">
-            {thingCatalog[kind].label}
-          </SelectItem>
-        ))}
+        {thingKinds.map((kind) => {
+          const { icon: Icon, color } = thingIcons[kind];
+          return (
+            <SelectItem key={kind} value={kind} className="select-item">
+              <Icon size={14} style={{ color }} aria-hidden="true" />
+              {thingCatalog[kind].label}
+              <SelectCheck />
+            </SelectItem>
+          );
+        })}
       </SelectContent>
     </Select>
   );
@@ -503,16 +730,21 @@ function App() {
 
   useEffect(
     () =>
-      watchSavedMap((next) => {
+      watchExternal((next) => {
         history.record(next);
         setMap(next);
         setSelection([]);
         setSurface(null);
-        setSaved(true);
         setHistoryVersion((version) => version + 1);
       }),
-    [history],
+    [history, watchExternal],
   );
+
+  useEffect(() => {
+    if (menuOpen.current && menuTarget && !targetExists(map, menuTarget)) {
+      menu.close();
+    }
+  }, [map, menu, menuTarget]);
 
   const buildProblem = () => {
     try {
@@ -560,33 +792,66 @@ function App() {
     else if (action === "play") play();
   };
 
+  const thingRoom = thing ? sectorAt(map, thing) : null;
+  const thingMeta = thing
+    ? [
+        `Thing ${String(map.things.indexOf(thing) + 1).padStart(2, "0")}`,
+        thingCategoryLabels[thingCatalog[thing.kind].category],
+        ...(thingRoom ? [thingRoom.name] : []),
+      ].join(" · ")
+    : "";
+  const placingThings = editMode === "things";
   const selectionTitle = selectedSwitch
     ? "Switch"
-    : thing
-      ? thingCatalog[thing.kind].label
-      : line
-        ? `Line ${line.number}`
-        : surfaceInfo && !surfaceInfo.thing
-          ? surfaceInfo.label
-          : (sector?.name ?? "Nothing selected");
+    : selectedThings.length > 1
+      ? `${selectedThings.length} things`
+      : thing
+        ? thingCatalog[thing.kind].label
+        : line
+          ? `Line ${line.number}`
+          : surfaceInfo && !surfaceInfo.thing
+            ? surfaceInfo.label
+            : placingThings
+              ? "Things"
+              : (sector?.name ?? "Nothing selected");
   const selectionMeta = selectedSwitch
     ? selectedSwitch.door
       ? "Wired to a door"
       : "Not connected"
-    : thing
-      ? `${thing.id} · X ${thing.x} Y ${-thing.y}`
-      : line
-        ? `${line.back ? "Two-sided" : "One-sided"} · ${line.length} long · ${
-            line.back
-              ? `${line.front.name} to ${line.back.name}`
-              : line.front.name
-          }`
-        : sector
-          ? `${sector.door ? "Door" : "Sector"} · ${sector.vertices.length} walls`
-          : "Click a room, line or thing on the map";
+    : selectedThings.length > 1
+      ? "Changes apply to every selected thing"
+      : thing
+        ? thingMeta
+        : placingThings
+          ? "Pick a thing, then click the map"
+          : line
+            ? `${line.back ? "Two-sided" : "One-sided"} · ${line.length} long · ${
+                line.back
+                  ? `${line.front.name} to ${line.back.name}`
+                  : line.front.name
+              }`
+            : sector
+              ? `${sector.door ? "Door" : "Sector"} · ${sector.vertices.length} walls`
+              : "Click a room, line or thing on the map";
 
   const play = () => {
     if (canPlay && !buildProblem()) setPlayedMap(map);
+  };
+
+  const editPlayedSpot = ({ angle, ...point }: PlayerSpot) => {
+    setPlayedMap(null);
+    camera.placeAt(map, point, angle);
+    const room = sectorAt(map, point);
+    showTarget(
+      room
+        ? { kind: "room", sector: room.id, point }
+        : { kind: "empty", point },
+    );
+    if (narrow) changeLayout("scene");
+    else if (visibleLayout === "map" && !showDock) changeLayout("split");
+    requestAnimationFrame(() =>
+      document.querySelector<HTMLElement>(".map")?.focus(),
+    );
   };
 
   const exitGame = () => {
@@ -600,6 +865,7 @@ function App() {
     setActiveSector(null);
     setSurface(null);
     setFileError(null);
+    setDraftCorners(0);
     camera.reset(next);
     setMapVersion((version) => version + 1);
   };
@@ -621,12 +887,18 @@ function App() {
   };
 
   const runFileAction = (action: string) => {
-    if (action === "new") replaceMap(blankMap);
+    if (action === "new") onNewMap();
+    else if (action === "projects") onOpenProjects();
+    else if (action === "settings") onMapSettings();
     else if (action === "open") fileInput.current?.click();
     else if (action === "save") {
-      downloadFile("wadsmith-map.json", serializeMap(map), "application/json");
-    } else if (action === "wad" && canPlay && !buildProblem()) {
-      downloadWad(map);
+      downloadFile(
+        "wadsmith-map.json",
+        serializeMap({ ...map, name: mapName }),
+        "application/json",
+      );
+    } else if (action === "wad") {
+      setBuilding(true);
     }
   };
 
@@ -648,26 +920,38 @@ function App() {
       <div className="app" inert={Boolean(playedMap)}>
         <header className="topbar">
           <div className="topbar-start">
-            <h1>WADSMITH</h1>
+            <h1>
+              <button
+                type="button"
+                className="border-0 bg-transparent p-0 font-[inherit] text-inherit"
+                aria-label="All projects"
+                title="All projects"
+                onClick={onOpenProjects}
+              >
+                WADSMITH
+              </button>
+            </h1>
             <Menu onAction={(action) => runFileAction(action as string)}>
               <MenuTrigger className="menu-trigger">File</MenuTrigger>
               <MenuContent className="select-content">
+                <MenuItem value="projects" className="select-item">
+                  All projects
+                </MenuItem>
                 <MenuItem value="new" className="select-item">
-                  New map
+                  New map…
+                </MenuItem>
+                <MenuItem value="settings" className="select-item">
+                  Map settings…
                 </MenuItem>
                 <MenuItem value="open" className="select-item">
-                  Open map…
+                  Replace with map file…
                 </MenuItem>
                 <MenuItem value="save" className="select-item">
                   Save map file
                 </MenuItem>
                 <MenuSeparator className="menu-separator" />
-                <MenuItem
-                  value="wad"
-                  className="select-item"
-                  disabled={!canPlay}
-                >
-                  Download WAD
+                <MenuItem value="wad" className="select-item">
+                  Build WAD…
                 </MenuItem>
               </MenuContent>
             </Menu>
@@ -742,10 +1026,15 @@ function App() {
               event.target.value = "";
             }}
           />
-          <div className="map-title">
-            <span>{mapSlot}</span>
-            <strong>{map.name ?? "Untitled map"}</strong>
-          </div>
+          <button
+            type="button"
+            className="map-title border-0 bg-transparent p-0 text-inherit"
+            title="Map settings"
+            onClick={onMapSettings}
+          >
+            <span>{slot}</span>
+            <strong>{mapName}</strong>
+          </button>
           <div className="topbar-end">
             <SegmentedControl
               aria-label="Main view"
@@ -892,38 +1181,53 @@ function App() {
                       )}
                     </button>
                   </div>
-                  <MapCanvas
-                    key={mapVersion}
-                    map={map}
-                    tool={tool}
-                    editMode={editMode}
-                    onWallSelect={(wallSector, wall) =>
-                      selectSurface(
-                        surfaceKey({
-                          kind: "wall",
-                          sector: wallSector,
-                          wall,
-                          part: "middle",
-                        }),
-                      )
-                    }
-                    onViewChange={updateViewStatus}
-                    thingKind={thingKind}
-                    activeSector={activeSector}
-                    selection={selection}
-                    onMapChange={(next) => commit(next)}
-                    onToolChange={setTool}
-                    onActiveSectorChange={setActiveSector}
-                    onSelectionChange={setSelection}
-                    onMapSelect={() => setSurface(null)}
-                    onDraftMapChange={(draft) => drafts.publish(draft)}
-                    camera={camera}
-                    highlightedWall={
-                      parsedSurface?.kind === "wall" ? parsedSurface.wall : null
-                    }
-                    findCameraRequest={findCameraRequest}
-                    lookAtRequest={lookAtRequest}
-                  />
+                  <MenuContextTrigger
+                    controller={menu}
+                    className="contents"
+                    onContextMenuCapture={normalizeControlClick}
+                  >
+                    <MapCanvas
+                      key={mapVersion}
+                      map={map}
+                      tool={tool}
+                      editMode={editMode}
+                      onWallSelect={(wallSector, wall) =>
+                        selectSurface(
+                          surfaceKey({
+                            kind: "wall",
+                            sector: wallSector,
+                            wall,
+                            part: "middle",
+                          }),
+                        )
+                      }
+                      onViewChange={updateViewStatus}
+                      thingKind={thingKind}
+                      activeSector={activeSector}
+                      selection={selection}
+                      onMapChange={(next) => commit(next)}
+                      onToolChange={setTool}
+                      onActiveSectorChange={setActiveSector}
+                      onSelectionChange={setSelection}
+                      onMapSelect={() => setSurface(null)}
+                      onDraftMapChange={(draft) => drafts.publish(draft)}
+                      camera={camera}
+                      highlightedWall={
+                        parsedSurface?.kind === "wall"
+                          ? parsedSurface.wall
+                          : null
+                      }
+                      findCameraRequest={findCameraRequest}
+                      fitRequest={fitRequest}
+                      focusRequest={focusRequest}
+                      callouts={callouts}
+                      drawRequest={drawRequest}
+                      lookAtRequest={lookAtRequest}
+                      onContextTarget={reportMenuTarget}
+                      onDrawingChange={setDraftCorners}
+                      contextMenuOpen={contextMenuOpen}
+                    />
+                  </MenuContextTrigger>
                   <p className="tool-hint">{toolHints[tool]}</p>
                   {visibleLayout === "map" && showDock && !narrow ? (
                     <div className="player-dock">
@@ -1056,9 +1360,30 @@ function App() {
                   commit(setLineTarget(map, line.wall, target))
                 }
               />
+            ) : !selectedSwitch && (thing || placingThings) ? (
+              <ThingInspector
+                map={map}
+                things={selectedThings}
+                placing={thingKind}
+                onChange={(patch) =>
+                  commit(
+                    updateThings(
+                      map,
+                      selectedThings.map((item) => item.id),
+                      patch,
+                    ),
+                    `thing:${selectedThings.map((item) => item.id).join()}`,
+                  )
+                }
+                onPlace={(kind) => {
+                  setThingKind(kind);
+                  setTool("thing");
+                }}
+              />
             ) : sector && !selectedSwitch && !thing ? (
               <SectorInspector
                 key={sector.id}
+                map={map}
                 sector={sector}
                 assets={assets}
                 onChange={(patch) =>
@@ -1074,27 +1399,20 @@ function App() {
               />
             ) : (
               <section className="inspector-section">
-                <h2>
-                  {selectedSwitch ? "Switch" : thing ? "Thing" : "Inspector"}
-                </h2>
+                <h2>{selectedSwitch ? "Switch" : "Inspector"}</h2>
                 {selectedSwitch ? (
                   <SwitchInspector
                     key={selectedSwitch.id}
                     item={selectedSwitch}
                     doors={doors}
+                    assets={assets}
+                    light={
+                      map.sectors.find(
+                        (item) => item.id === selectedSwitch.sector,
+                      )?.light ?? 255
+                    }
                     onChange={(patch) =>
                       commit(updateSwitch(map, selectedSwitch.id, patch))
-                    }
-                  />
-                ) : thing ? (
-                  <ThingInspector
-                    key={thing.id}
-                    thing={thing}
-                    onChange={(patch) =>
-                      commit(
-                        updateThing(map, thing.id, patch),
-                        `thing:${thing.id}`,
-                      )
                     }
                   />
                 ) : (
@@ -1102,6 +1420,59 @@ function App() {
                 )}
               </section>
             )}
+
+            <NewMapPanel
+              map={map}
+              corners={draftCorners}
+              drawing={tool === "draw"}
+            />
+
+            {map.notes?.length ? (
+              <section
+                className="inspector-section"
+                aria-label="Playtest notes"
+              >
+                <h2>
+                  Playtest notes
+                  <span>{map.notes.length}</span>
+                </h2>
+                <ul className="m-0 grid list-none gap-2 p-0">
+                  {map.notes.map((note) => (
+                    <li
+                      key={note.id}
+                      className="grid grid-cols-[14px_minmax(0,1fr)_auto_auto] gap-2"
+                    >
+                      <StickyNote
+                        size={14}
+                        className="mt-0.5 text-key"
+                        aria-hidden="true"
+                      />
+                      <span className="min-w-0 wrap-break-word">
+                        {note.text}
+                      </span>
+                      <button
+                        type="button"
+                        className="self-start border-0 bg-transparent p-0 text-muted hover:text-text"
+                        aria-label={`Show note: ${note.text}`}
+                        onClick={() =>
+                          showTarget({ kind: "empty", point: note })
+                        }
+                      >
+                        Show
+                      </button>
+                      <button
+                        type="button"
+                        className="self-start border-0 bg-transparent p-0 text-muted hover:text-danger"
+                        aria-label={`Delete note: ${note.text}`}
+                        onClick={() => commit(removeNote(map, note.id))}
+                      >
+                        Delete
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
 
             <section
               ref={mapCheck}
@@ -1111,22 +1482,64 @@ function App() {
             >
               <h2>
                 Map check
-                <span>
-                  {issues.length === 0
-                    ? "No problems"
-                    : `${issues.length} ${issues.length === 1 ? "problem" : "problems"}`}
-                </span>
+                <span>{checkSummary}</span>
               </h2>
-              {issues.length === 0 ? (
+              {checks.length === 0 ? (
                 <p className="muted">This map is ready to playtest.</p>
               ) : (
                 <ul>
-                  {issues.slice(0, 8).map((issue) => (
-                    <li key={issue.id} className="check-issue">
-                      <TriangleAlert size={14} aria-hidden="true" />
-                      {issue.message}
-                    </li>
-                  ))}
+                  {checks.slice(0, 8).map((issue) => {
+                    const { title, detail } = issueText(issue);
+                    const fixed = fixIssue(map, issue);
+                    const target = issue.target
+                      ? targetForIssue(map, issue.target)
+                      : null;
+                    const Icon =
+                      issue.severity === "error" ? CircleX : TriangleAlert;
+                    return (
+                      <li key={issue.id} className="check-issue">
+                        <Icon
+                          size={14}
+                          className={
+                            issue.severity === "error"
+                              ? "text-danger"
+                              : "text-key"
+                          }
+                          aria-hidden="true"
+                        />
+                        <span className="sr-only">
+                          {issue.severity === "error" ? "Error: " : "Warning: "}
+                        </span>
+                        <div className="min-w-0">
+                          <div>{title}</div>
+                          {detail ? (
+                            <div className="truncate font-mono text-[11px] text-muted">
+                              {detail}
+                            </div>
+                          ) : null}
+                        </div>
+                        {fixed ? (
+                          <button
+                            type="button"
+                            className="border-0 bg-transparent p-0 text-ember"
+                            aria-label={`Fix: ${title}`}
+                            onClick={() => commit(fixed)}
+                          >
+                            Fix
+                          </button>
+                        ) : target ? (
+                          <button
+                            type="button"
+                            className="border-0 bg-transparent p-0 text-muted hover:text-text"
+                            aria-label={`Show: ${title}`}
+                            onClick={() => showTarget(target)}
+                          >
+                            Show
+                          </button>
+                        ) : null}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </section>
@@ -1189,15 +1602,76 @@ function App() {
             <span>Grid {gridSize}</span>
             <span>Snap on</span>
             <span ref={zoomStatus}>Zoom 100%</span>
-            <span role="status">
-              {saved
-                ? "Saved in this browser"
-                : "Not saved: storage is unavailable"}
-            </span>
+            <span role="status">{saveLabels[saveStatus]}</span>
           </div>
         </footer>
       </div>
-      {playedMap ? <GameView map={playedMap} onExit={exitGame} /> : null}
+      <MapContextMenu
+        controller={menu}
+        map={map}
+        target={menuTarget}
+        thingKind={thingKind}
+        onOpenChange={(open, details) => {
+          const target = menuTargetRef.current;
+          if (open && !target) {
+            details.cancel();
+            return;
+          }
+          menuOpen.current = open;
+          setContextMenuOpen(open);
+          if (open && target) selectTarget(target);
+        }}
+        onCommit={(next, selected) => {
+          commit(next);
+          if (selected) applyMenuSelection(selected);
+        }}
+        onSelect={applyMenuSelection}
+        onMoveCamera={(point) => camera.moveTo(map, point)}
+        onShow={showInScene}
+        onFindCamera={findCameraOnMap}
+        onFitMap={() => setFitRequest((request) => request + 1)}
+        onDrawRoom={(point) =>
+          setDrawRequest((request) => ({
+            id: (request?.id ?? 0) + 1,
+            point,
+          }))
+        }
+      />
+      {building ? (
+        <BuildDialog
+          map={map}
+          name={mapName}
+          slot={slot}
+          onBuild={(fileName) => {
+            try {
+              downloadWad(map, slot, fileName);
+            } catch (error) {
+              return `Couldn't build the map. ${(error as Error).message}`;
+            }
+            setBuilding(false);
+            return null;
+          }}
+          onShow={(issue) => {
+            const target = issue.target
+              ? targetForIssue(map, issue.target)
+              : null;
+            setBuilding(false);
+            if (target) showTarget(target);
+          }}
+          onClose={() => setBuilding(false)}
+        />
+      ) : null}
+      {playedMap ? (
+        <GameView
+          map={playedMap}
+          title={mapName}
+          slot={slot}
+          par={par}
+          onExit={exitGame}
+          onAddNote={(point, text) => commit(addNote(map, point, text))}
+          onEditSpot={editPlayedSpot}
+        />
+      ) : null}
     </>
   );
 }
