@@ -36,6 +36,12 @@ const spriteLumps: Record<ThingKind, string> = {
   "red-key": "RKEYA0",
 };
 
+// The engine's colormap for a wall drawn at one texel per screen pixel.
+function gameWallShade(light: number) {
+  const level = (15 - (light >> 4)) * 4 - 8;
+  return Math.max(0, Math.min(shadeLevels - 1, level));
+}
+
 function createPicture(width: number, height: number): Picture {
   return {
     width,
@@ -304,6 +310,7 @@ function createFlatAssets(): SceneAssets {
 
 export {
   createFlatAssets,
+  gameWallShade,
   readWadAssets,
   shadeLevels,
   type Picture,

@@ -15,6 +15,7 @@ import type { GameMap } from "../map/types";
 import { compileLumps } from "../wad/compile";
 import {
   createFlatAssets,
+  gameWallShade,
   readWadAssets,
   type SceneAssets,
 } from "../wad/assets";
@@ -222,6 +223,16 @@ describe("surface edits", () => {
     expect(describeSurface(starterMap, face)?.paints).toBe("switch");
     const map = paintSurface(starterMap, face, "SW1GRAY");
     expect(map.switches[0].texture).toBe("SW1GRAY");
+  });
+});
+
+describe("gameWallShade", () => {
+  it("follows the engine's light bands", () => {
+    expect(gameWallShade(255)).toBe(0);
+    expect(gameWallShade(176)).toBe(8);
+    expect(gameWallShade(160)).toBe(12);
+    expect(gameWallShade(112)).toBe(24);
+    expect(gameWallShade(0)).toBe(31);
   });
 });
 

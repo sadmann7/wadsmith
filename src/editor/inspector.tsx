@@ -155,6 +155,8 @@ function TextureField({
   options,
   picture,
   assets,
+  light,
+  whole,
   onChange,
 }: {
   label: string;
@@ -162,11 +164,19 @@ function TextureField({
   options: readonly string[];
   picture: SceneAssets["texture"];
   assets: SceneAssets;
+  light: number;
+  whole?: boolean;
   onChange: (value: string) => void;
 }) {
   return (
     <div className="grid grid-cols-[48px_minmax(0,1fr)] items-end gap-2.5">
-      <TextureSwatch name={value} picture={picture(value)} assets={assets} />
+      <TextureSwatch
+        name={value}
+        picture={picture(value)}
+        assets={assets}
+        light={light}
+        whole={whole}
+      />
       <Select
         value={value}
         items={[...options]}
@@ -192,6 +202,8 @@ function TextureField({
                 name={option}
                 picture={picture(option)}
                 assets={assets}
+                light={light}
+                whole={whole}
                 className="size-8 shrink-0 rounded-xs [image-rendering:pixelated]"
               />
               {option}
@@ -266,10 +278,12 @@ function ToggleField({
 function DoorFields({
   door,
   assets,
+  light,
   onChange,
 }: {
   door: DoorSettings;
   assets: SceneAssets;
+  light: number;
   onChange: (door: DoorSettings) => void;
 }) {
   return (
@@ -296,6 +310,8 @@ function DoorFields({
         options={doorTextures}
         picture={assets.texture}
         assets={assets}
+        light={light}
+        whole
         onChange={(texture) => onChange({ ...door, texture })}
       />
     </>
@@ -335,6 +351,7 @@ function SectorInspector({
           <DoorFields
             door={door}
             assets={assets}
+            light={sector.light}
             onChange={(next) => onChange({ door: next })}
           />
         ) : null}
@@ -371,6 +388,7 @@ function SectorInspector({
           label="Floor"
           value={sector.floorTexture}
           options={floorTextures}
+          light={sector.light}
           onChange={(floorTexture) => onChange({ floorTexture })}
         />
         <TextureField
@@ -379,6 +397,7 @@ function SectorInspector({
           label="Ceiling"
           value={sector.ceilingTexture}
           options={ceilingTextures}
+          light={sector.light}
           onChange={(ceilingTexture) => onChange({ ceilingTexture })}
         />
         <TextureField
@@ -387,6 +406,7 @@ function SectorInspector({
           label="Walls"
           value={sector.wallTexture}
           options={wallTextures}
+          light={sector.light}
           onChange={(wallTexture) =>
             onChange({ wallTexture, wallOverrides: undefined })
           }
@@ -513,6 +533,8 @@ function LineInspector({
             key={part}
             picture={assets.texture}
             assets={assets}
+            light={line.sector.light}
+            whole={info.paints === "door" || info.paints === "switch"}
             label={
               info.paints === "door"
                 ? "Door"
@@ -703,11 +725,13 @@ function SwitchInspector({
   item,
   doors,
   assets,
+  light,
   onChange,
 }: {
   item: MapSwitch;
   doors: Sector[];
   assets: SceneAssets;
+  light: number;
   onChange: (patch: Partial<MapSwitch>) => void;
 }) {
   return (
@@ -727,6 +751,8 @@ function SwitchInspector({
         options={switchTextures}
         picture={assets.texture}
         assets={assets}
+        light={light}
+        whole
         onChange={(texture) => onChange({ texture })}
       />
     </div>

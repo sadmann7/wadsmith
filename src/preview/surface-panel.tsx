@@ -2,19 +2,24 @@ import { Radio, RadioGroup } from "@ui-sdk/react/radio";
 import { useEffect, useRef } from "react";
 
 import type { SurfaceInfo } from "../map/surfaces";
-import type { Picture, SceneAssets } from "../wad/assets";
+import { gameWallShade, type Picture, type SceneAssets } from "../wad/assets";
 
 const swatchSize = 48;
+const tileSize = 64;
 
 function TextureSwatch({
   name,
   picture,
   assets,
+  light = 255,
+  whole = false,
   className = "swatch-image",
 }: {
   name: string;
   picture: Picture;
   assets: SceneAssets;
+  light?: number;
+  whole?: boolean;
   className?: string;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -24,21 +29,24 @@ function TextureSwatch({
     if (!context) return;
     const image = context.createImageData(swatchSize, swatchSize);
     const colors = new Uint32Array(image.data.buffer);
-    const step = Math.max(picture.width, picture.height) / swatchSize;
-    const left = (swatchSize - picture.width / step) / 2;
-    const top = (swatchSize - picture.height / step) / 2;
+    const { width, height, pixels } = picture;
+    const shade = gameWallShade(light) * 256;
+    // Walls tile at one scale in the game, while doors and switches are single objects.
+    const step = (whole ? Math.max(width, height) : tileSize) / swatchSize;
+    const left = whole ? (swatchSize - width / step) / 2 : 0;
+    const top = whole ? (swatchSize - height / step) / 2 : 0;
     for (let x = 0; x < swatchSize; x += 1) {
       for (let y = 0; y < swatchSize; y += 1) {
-        const column = Math.floor((x - left) * step);
-        const row = Math.floor((y - top) * step);
-        if (column < 0 || column >= picture.width) continue;
-        if (row < 0 || row >= picture.height) continue;
-        colors[y * swatchSize + x] =
-          assets.shades[picture.pixels[column * picture.height + row]];
+        const across = Math.floor((x - left) * step);
+        const down = Math.floor((y - top) * step);
+        if (whole && (across < 0 || across >= width)) continue;
+        if (whole && (down < 0 || down >= height)) continue;
+        const color = pixels[(across % width) * height + (down % height)];
+        colors[y * swatchSize + x] = assets.shades[shade + color];
       }
     }
     context.putImageData(image, 0, 0);
-  }, [assets, picture]);
+  }, [assets, light, picture, whole]);
 
   return (
     <canvas
@@ -86,6 +94,8 @@ function SurfacePanel({
                   name={name}
                   assets={assets}
                   picture={usesFlats ? assets.flat(name) : assets.texture(name)}
+                  light={info.sector?.light}
+                  whole={info.paints === "door" || info.paints === "switch"}
                 />
                 <span>{name}</span>
               </label>

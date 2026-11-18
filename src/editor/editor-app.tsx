@@ -1083,6 +1083,11 @@ function App() {
                     item={selectedSwitch}
                     doors={doors}
                     assets={assets}
+                    light={
+                      map.sectors.find(
+                        (item) => item.id === selectedSwitch.sector,
+                      )?.light ?? 255
+                    }
                     onChange={(patch) =>
                       commit(updateSwitch(map, selectedSwitch.id, patch))
                     }
