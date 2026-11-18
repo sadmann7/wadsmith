@@ -208,14 +208,14 @@ async function startDoom({
   options?: DoomModuleOptions;
   sound?: boolean;
 }) {
-  const module = await createDoom(options ?? {});
-  module.FS.writeFile("/freedoom2.wad", iwad);
-  module.FS.writeFile("/wadsmith.wad", map);
-  module.FS.writeFile("/default.cfg", engineConfig);
-  module.FS.writeFile("/extra.cfg", engineExtraConfig);
+  const doomModule = await createDoom(options ?? {});
+  doomModule.FS.writeFile("/freedoom2.wad", iwad);
+  doomModule.FS.writeFile("/wadsmith.wad", map);
+  doomModule.FS.writeFile("/default.cfg", engineConfig);
+  doomModule.FS.writeFile("/extra.cfg", engineExtraConfig);
   // A map error can stop startup after the music has begun.
   try {
-    module.callMain([
+    doomModule.callMain([
       "-iwad",
       "/freedoom2.wad",
       "-file",
@@ -234,10 +234,10 @@ async function startDoom({
       ...(sound ? [] : ["-nosound", "-nomusic"]),
     ]);
   } catch (error) {
-    stopModule(module);
+    stopModule(doomModule);
     throw error;
   }
-  return new DoomGame(module);
+  return new DoomGame(doomModule);
 }
 
 export {

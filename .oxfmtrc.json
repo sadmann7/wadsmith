@@ -9,7 +9,8 @@
   "endOfLine": "lf",
   "sortPackageJson": false,
   "ignorePatterns": [
-    "dist/**",
+    ".next/**",
+    "next-env.d.ts",
     "public/**",
     ".cache/**",
     "pnpm-lock.yaml",
