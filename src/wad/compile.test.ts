@@ -42,7 +42,8 @@ import {
   thingKinds,
   wallTextures,
 } from "../map/catalog";
-import { checkMap, fixIssue, issueText } from "../map/checks";
+import { buildChecks, checkMap, fixIssue, issueText } from "../map/checks";
+import { wadFileName } from "../editor/build-dialog";
 import { freedoomFlats, freedoomWalls } from "../map/freedoom-textures";
 import { wallUse } from "../map/textures";
 import { starterMap } from "../map/starter-map";
@@ -963,6 +964,45 @@ describe("map check", () => {
         "low-ammo",
       ]),
     );
+  });
+
+  it("groups every issue for the build dialog", () => {
+    const broken = updateSector({ ...starterMap, things: [] }, "sector-1", {
+      ceiling: 0,
+    });
+    const checks = buildChecks(broken);
+    const names = (name: string) =>
+      checks
+        .find((check) => check.name === name)
+        ?.issues.map((item) => item.id);
+    expect(names("Closed sectors")).toContain("height:sector-1");
+    expect(names("Player start")).toContain("no-player");
+    expect(names("Exit")).toContain("no-exit");
+    expect(checks.flatMap((check) => check.issues)).toHaveLength(
+      checkMap(broken).length,
+    );
+  });
+
+  it("keeps range errors in one group and marks unknown groups", () => {
+    const tall = updateSector(starterMap, "sector-1", { ceiling: 40000 });
+    const checks = buildChecks(tall);
+    const holding = checks.filter((check) =>
+      check.issues.some((issue) => issue.id === "height-range:sector-1"),
+    );
+    expect(holding.map((check) => check.name)).toEqual(["Format limits"]);
+    expect(checks.find((check) => check.name === "Wall sides")?.waiting).toBe(
+      true,
+    );
+    expect(buildChecks(starterMap).some((check) => check.waiting)).toBe(false);
+  });
+
+  it("makes safe WAD file names", () => {
+    expect(wadFileName("Cinder Works!")).toBe("Cinder-Works.wad");
+    expect(wadFileName("level.WAD")).toBe("level.wad");
+    expect(wadFileName("***")).toBe("wadsmith-map01.wad");
+    expect(wadFileName("..")).toBe("wadsmith-map01.wad");
+    expect(wadFileName("level.wad.")).toBe("level.wad");
+    expect(wadFileName("x".repeat(300))).toHaveLength(68);
   });
 
   it("splits room errors into a title and place", () => {

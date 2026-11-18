@@ -682,6 +682,7 @@ export {
   removeThing,
   removeThings,
   roomCenter,
+  roomDefaults,
   setLineTarget,
   setRoomDoor,
   setRoomWalls,

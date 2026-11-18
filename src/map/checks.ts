@@ -45,7 +45,7 @@ function mapWarnings(map: GameMap): CheckedIssue[] {
       detail: `${balance.ammo} pickups on this map`,
     });
   }
-  if (!actions.some(({ action }) => action.kind === "exit")) {
+  if (!hasExit(map)) {
     warnings.push({
       id: "no-exit",
       severity: "warning",
@@ -54,6 +54,75 @@ function mapWarnings(map: GameMap): CheckedIssue[] {
     });
   }
   return warnings;
+}
+
+function hasExit(map: GameMap) {
+  return activeLineActions(map).some(({ action }) => action.kind === "exit");
+}
+
+const buildGroups: {
+  name: string;
+  passed: string;
+  ids: RegExp;
+  needsValidRooms?: boolean;
+}[] = [
+  {
+    name: "Closed sectors",
+    passed: "Every room is closed",
+    ids: /^(empty|repeat|corners|missing|area|height|twist)(:|$)/,
+  },
+  {
+    name: "Wall sides",
+    passed: "Walls connect cleanly",
+    ids: /^(shared|cross|overlap|line-door|line-walk|line-target|line-tag)(:|$)/,
+    needsValidRooms: true,
+  },
+  {
+    name: "Locked doors",
+    passed: "Doors and keys match",
+    ids: /^(door-[a-z]+|switch-[a-z]+|line-key|key-unused)(:|$)/,
+    needsValidRooms: true,
+  },
+  {
+    name: "Player start",
+    passed: "1 found",
+    ids: /^(no-player|many-players|outside|in-door)(:|$)/,
+    needsValidRooms: true,
+  },
+  { name: "Exit", passed: "The level can end", ids: /^no-exit(:|$)/ },
+  {
+    name: "Item balance",
+    passed: "Enough for Medium",
+    ids: /^low-[a-z]+(:|$)/,
+  },
+  {
+    name: "Format limits",
+    passed: "Within classic Doom limits",
+    ids: /^(range|height-range)(:|$)/,
+  },
+];
+
+// validateMap stops at the first layer of errors, so later groups stay unknown.
+function buildChecks(map: GameMap) {
+  const issues = checkMap(map);
+  const blocked = issues.some((issue) => issue.severity === "error");
+  const grouped = buildGroups.map(({ name, passed, ids, needsValidRooms }) => {
+    const found = issues.filter((issue) => ids.test(issue.id));
+    return {
+      name,
+      passed,
+      issues: found,
+      waiting: Boolean(needsValidRooms && blocked && found.length === 0),
+    };
+  });
+  const known = new Set(grouped.flatMap((group) => group.issues));
+  const other = issues.filter((issue) => !known.has(issue));
+  return other.length === 0
+    ? grouped
+    : [
+        ...grouped,
+        { name: "Other problems", passed: "", issues: other, waiting: false },
+      ];
 }
 
 function checkMap(map: GameMap): CheckedIssue[] {
@@ -105,4 +174,12 @@ function fixIssue(map: GameMap, { id, target }: MapIssue): GameMap | null {
   return null;
 }
 
-export { checkMap, fixIssue, issueText, mapWarnings, type CheckedIssue };
+export {
+  buildChecks,
+  checkMap,
+  fixIssue,
+  hasExit,
+  issueText,
+  mapWarnings,
+  type CheckedIssue,
+};

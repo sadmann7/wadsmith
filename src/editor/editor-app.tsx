@@ -51,6 +51,7 @@ import {
 } from "react";
 
 import { agent } from "../agent";
+import { BuildDialog } from "./build-dialog";
 import { MapContextMenu } from "./context-menu";
 import {
   LineInspector,
@@ -59,6 +60,7 @@ import {
   ThingInspector,
 } from "./inspector";
 import { MapCanvas } from "./map-canvas";
+import { NewMapPanel } from "./new-map-panel";
 import { thingIcons } from "./thing-icons";
 import {
   normalizeControlClick,
@@ -225,9 +227,9 @@ function downloadFile(name: string, data: BlobPart, type: string) {
   URL.revokeObjectURL(url);
 }
 
-function downloadWad(map: GameMap) {
+function downloadWad(map: GameMap, fileName: string) {
   downloadFile(
-    "wadsmith-map01.wad",
+    fileName,
     compileMap(map).slice().buffer,
     "application/octet-stream",
   );
@@ -265,6 +267,8 @@ function App() {
   const menuTargetRef = useRef<MapTarget | null>(null);
   const menuOpen = useRef(false);
   const [contextMenuOpen, setContextMenuOpen] = useState(false);
+  const [building, setBuilding] = useState(false);
+  const [draftCorners, setDraftCorners] = useState(0);
   const [showDock, setShowDock] = useState(initialLayout.dock);
   const [editMode, setEditMode] = useState<EditMode>("vertices");
   const pointerStatus = useRef<HTMLSpanElement>(null);
@@ -818,6 +822,7 @@ function App() {
     setActiveSector(null);
     setSurface(null);
     setFileError(null);
+    setDraftCorners(0);
     camera.reset(next);
     setMapVersion((version) => version + 1);
   };
@@ -843,8 +848,8 @@ function App() {
     else if (action === "open") fileInput.current?.click();
     else if (action === "save") {
       downloadFile("wadsmith-map.json", serializeMap(map), "application/json");
-    } else if (action === "wad" && canPlay && !buildProblem()) {
-      downloadWad(map);
+    } else if (action === "wad") {
+      setBuilding(true);
     }
   };
 
@@ -880,12 +885,8 @@ function App() {
                   Save map file
                 </MenuItem>
                 <MenuSeparator className="menu-separator" />
-                <MenuItem
-                  value="wad"
-                  className="select-item"
-                  disabled={!canPlay}
-                >
-                  Download WAD
+                <MenuItem value="wad" className="select-item">
+                  Build WAD…
                 </MenuItem>
               </MenuContent>
             </Menu>
@@ -1153,6 +1154,7 @@ function App() {
                       drawRequest={drawRequest}
                       lookAtRequest={lookAtRequest}
                       onContextTarget={reportMenuTarget}
+                      onDrawingChange={setDraftCorners}
                       contextMenuOpen={contextMenuOpen}
                     />
                   </MenuContextTrigger>
@@ -1349,6 +1351,12 @@ function App() {
               </section>
             )}
 
+            <NewMapPanel
+              map={map}
+              corners={draftCorners}
+              drawing={tool === "draw"}
+            />
+
             <section
               ref={mapCheck}
               className="inspector-section map-check"
@@ -1516,6 +1524,29 @@ function App() {
           }))
         }
       />
+      {building ? (
+        <BuildDialog
+          map={map}
+          slot={mapSlot}
+          onBuild={(fileName) => {
+            try {
+              downloadWad(map, fileName);
+            } catch (error) {
+              return `Couldn't build the map. ${(error as Error).message}`;
+            }
+            setBuilding(false);
+            return null;
+          }}
+          onShow={(issue) => {
+            const target = issue.target
+              ? targetForIssue(map, issue.target)
+              : null;
+            setBuilding(false);
+            if (target) showTarget(target);
+          }}
+          onClose={() => setBuilding(false)}
+        />
+      ) : null}
       {playedMap ? <GameView map={playedMap} onExit={exitGame} /> : null}
     </>
   );

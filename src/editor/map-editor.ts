@@ -104,6 +104,7 @@ type MapEditorOptions = {
   focusRequest?: { id: number; point: Point } | null;
   lookAtRequest?: { id: number; clientX: number; clientY: number } | null;
   onContextTarget?: (target: MapTarget | null) => void;
+  onDrawingChange?: (corners: number) => void;
   contextMenuOpen?: boolean;
 };
 
@@ -288,6 +289,7 @@ const mapEditor = definePrimitive({
     focusRequest: "value",
     lookAtRequest: "value",
     onContextTarget: "callback",
+    onDrawingChange: "callback",
     contextMenuOpen: "boolean",
   },
   controlled: ["map", "tool", "activeSector", "selection"],
@@ -379,6 +381,15 @@ const mapEditor = definePrimitive({
           details,
         ),
     });
+
+    let lastCorners = 0;
+    const stopCorners = store.subscribe(() => {
+      const corners = store.get().drawing.length;
+      if (corners === lastCorners) return;
+      lastCorners = corners;
+      context.options().onDrawingChange?.(corners);
+    });
+    context.onDestroy(stopCorners);
 
     let lastDraft: MoveDraft | null = null;
     const stopWatching = store.subscribe(() => {
