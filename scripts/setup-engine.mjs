@@ -10,6 +10,7 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+import { gzipSync } from "node:zlib";
 
 const root = resolve(import.meta.dirname, "..");
 const cache = join(root, ".cache");
@@ -68,8 +69,6 @@ function prepareSource() {
 }
 
 function fetchFreedoom() {
-  const wad = join(output, "freedoom2.wad");
-  if (existsSync(wad)) return;
   const zip = join(cache, `freedoom-${freedoomVersion}.zip`);
   if (!existsSync(zip)) {
     run("curl", ["-fsSL", "-o", zip, freedoomUrl]);
@@ -83,7 +82,11 @@ function fetchFreedoom() {
     ["-p", zip, `freedoom-${freedoomVersion}/freedoom2.wad`],
     { maxBuffer: 64 * 1024 * 1024 },
   );
-  writeFileSync(wad, data);
+  writeFileSync(join(output, "freedoom2.wad"), data);
+  writeFileSync(
+    join(output, `freedoom-${freedoomVersion}.wad.gz`),
+    gzipSync(data, { level: 9 }),
+  );
 }
 
 function buildEngine() {
