@@ -228,7 +228,7 @@ function GameHud({
           </div>
         </div>
       </div>
-      {inLevel ? (
+      {inLevel && !finished ? (
         <Crosshair
           size={20}
           className="absolute top-1/2 left-1/2 -translate-1/2 text-text/70"
