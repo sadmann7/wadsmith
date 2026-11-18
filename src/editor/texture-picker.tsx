@@ -7,13 +7,15 @@ import {
   DialogTitle,
 } from "@ui-sdk/react/dialog";
 import { Input } from "@ui-sdk/react/input";
+import { Toggle, ToggleGroup } from "@ui-sdk/react/toggle";
 import { Search, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState, type KeyboardEvent } from "react";
 
 import { freedoomFlats, freedoomWalls } from "../map/freedoom-textures";
 import type { TextureUse } from "../map/textures";
 import { TextureSwatch } from "../preview/surface-panel";
 import type { Picture, SceneAssets } from "../wad/assets";
+import { TextureGrid, TextureTile } from "./texture-grid";
 
 type TextureKind = "flat" | "wall";
 
@@ -92,17 +94,40 @@ function TexturePicker({
   const [category, setCategory] = useState("all");
   const [query, setQuery] = useState("");
   const [chosen, setChosen] = useState(value);
-  const [shown, setShown] = useState(pageSize);
+  const [shown, setShown] = useState(() => {
+    const index = categories[0].names.indexOf(value);
+    return Math.ceil((Math.max(index, 0) + 1) / pageSize) * pageSize;
+  });
+  const grid = useRef<HTMLDivElement>(null);
+  const searchInput = useRef<HTMLInputElement>(null);
   const search = query.trim().toUpperCase();
   const active =
     categories.find((item) => item.id === category) ?? categories[0];
   const names = active.names.filter((name) => name.includes(search));
+  const firstResult = names.includes(chosen) ? chosen : names[0];
   const preview = picture(chosen);
   const uses = use.get(chosen) ?? 0;
+
+  const tileFor = (name: string) =>
+    grid.current?.querySelector<HTMLElement>(`[data-texture="${name}"]`);
+
   const apply = (name: string) => {
     if (name !== value) onApply(name);
     onClose();
   };
+
+  const onSearchKey = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (!firstResult) return;
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setChosen(firstResult);
+      tileFor(firstResult)?.focus();
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      apply(firstResult);
+    }
+  };
+
   return (
     <Dialog
       open
@@ -111,7 +136,10 @@ function TexturePicker({
       }}
     >
       <DialogBackdrop className="fixed inset-0 z-40 bg-black/65" />
-      <DialogContent className="fixed top-1/2 left-1/2 z-50 flex h-[620px] max-h-[calc(100vh-32px)] w-[1000px] max-w-[calc(100vw-32px)] -translate-1/2 flex-col rounded-[4px] border border-[#3a352e] bg-panel outline-none">
+      <DialogContent
+        initialFocus={() => tileFor(value)}
+        className="fixed top-1/2 left-1/2 z-50 flex h-[620px] max-h-[calc(100vh-32px)] w-[1000px] max-w-[calc(100vw-32px)] -translate-1/2 flex-col rounded-[4px] border border-line-strong bg-panel outline-none"
+      >
         <header className="flex h-14 shrink-0 items-center justify-between border-b border-line px-5">
           <div className="flex min-w-0 items-baseline gap-2.5">
             <DialogTitle className="block font-sans text-xl font-semibold tracking-normal text-text normal-case">
@@ -131,31 +159,41 @@ function TexturePicker({
         <div className="grid min-h-0 flex-1 grid-cols-[168px_minmax(0,1fr)_244px] max-[820px]:grid-cols-[minmax(0,1fr)_200px]">
           <nav
             aria-label="Texture categories"
-            className="grid content-start gap-0.5 overflow-y-auto border-r border-line p-3 max-[820px]:hidden"
+            className="min-h-0 overflow-y-auto border-r border-line p-3 max-[820px]:hidden"
           >
-            {categories.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                aria-pressed={item.id === category}
-                className="flex h-8 items-center justify-between gap-2 rounded-[3px] border-0 bg-transparent px-2 text-left text-muted hover:text-text aria-pressed:bg-raised aria-pressed:text-text"
-                onClick={() => {
-                  setCategory(item.id);
-                  setShown(pageSize);
-                }}
-              >
-                <span className="truncate">{item.label}</span>
-                <span className="font-mono text-[11px] text-muted">
-                  {item.names.length}
-                </span>
-              </button>
-            ))}
+            <ToggleGroup
+              aria-label="Category"
+              orientation="vertical"
+              deselectable={false}
+              className="grid content-start gap-0.5"
+              value={[category]}
+              onValueChange={(next) => {
+                if (!next[0]) return;
+                setCategory(next[0]);
+                setShown(pageSize);
+              }}
+            >
+              {categories.map((item) => (
+                <Toggle
+                  key={item.id}
+                  value={item.id}
+                  className="flex h-8 items-center justify-between gap-2 rounded-[3px] border-0 bg-transparent px-2 text-left text-muted hover:text-text aria-pressed:bg-raised aria-pressed:text-text"
+                >
+                  <span className="truncate">{item.label}</span>
+                  <span className="font-mono text-[11px] text-muted">
+                    {item.names.length}
+                  </span>
+                </Toggle>
+              ))}
+            </ToggleGroup>
           </nav>
           <div className="flex min-h-0 flex-col gap-3 p-4">
             <label className="flex h-[34px] shrink-0 items-center gap-2 rounded-[2px] border border-line bg-bg px-2.5">
               <Search size={14} className="text-muted" aria-hidden="true" />
               <Input
+                ref={searchInput}
                 aria-label="Search textures"
+                onKeyDown={onSearchKey}
                 placeholder={`Search ${active.names.length} textures`}
                 className="w-full min-w-0 border-0 bg-transparent outline-none"
                 value={query}
@@ -169,16 +207,35 @@ function TexturePicker({
               {names.length === 0 ? (
                 <p className="muted">No textures match.</p>
               ) : (
-                <div className="grid grid-cols-[repeat(auto-fill,minmax(112px,1fr))] gap-3">
+                <TextureGrid
+                  ref={grid}
+                  aria-label="Textures"
+                  className="grid grid-cols-[repeat(auto-fill,minmax(112px,1fr))] gap-3 p-0.5"
+                  value={chosen}
+                  names={names}
+                  onValueChange={setChosen}
+                  onApply={apply}
+                  onLeave={() => searchInput.current?.focus()}
+                  onReveal={(name) =>
+                    setShown(
+                      Math.ceil((names.indexOf(name) + 1) / pageSize) *
+                        pageSize,
+                    )
+                  }
+                  onType={(text) => {
+                    setQuery((current) =>
+                      text === null ? current.slice(0, -1) : current + text,
+                    );
+                    setShown(pageSize);
+                    searchInput.current?.focus();
+                  }}
+                >
                   {names.slice(0, shown).map((name) => (
-                    <button
+                    <TextureTile
                       key={name}
-                      type="button"
-                      aria-pressed={name === chosen}
+                      value={name}
                       aria-label={name}
-                      className="group relative grid min-w-0 gap-1 border-0 bg-transparent p-0 text-left font-mono text-[11px] text-muted aria-pressed:text-text"
-                      onClick={() => setChosen(name)}
-                      onDoubleClick={() => apply(name)}
+                      className="group relative grid min-w-0 gap-1 border-0 bg-transparent p-0 text-left font-mono text-[11px] text-muted outline-none aria-selected:text-text"
                     >
                       <TextureSwatch
                         name={name}
@@ -186,7 +243,7 @@ function TexturePicker({
                         assets={assets}
                         light={light}
                         whole={kind === "wall"}
-                        className="aspect-square w-full outline-2 -outline-offset-2 outline-transparent [image-rendering:pixelated] group-aria-pressed:outline-ember"
+                        className="aspect-square w-full outline-2 -outline-offset-2 outline-transparent [image-rendering:pixelated] group-focus-visible:outline-text group-aria-selected:outline-ember"
                       />
                       {name === value ? (
                         <span className="absolute top-1.5 left-1.5 bg-bg px-1.5 py-0.5 text-text">
@@ -194,9 +251,9 @@ function TexturePicker({
                         </span>
                       ) : null}
                       <span className="truncate">{name}</span>
-                    </button>
+                    </TextureTile>
                   ))}
-                </div>
+                </TextureGrid>
               )}
               {names.length > shown ? (
                 <button
@@ -237,6 +294,9 @@ function TexturePicker({
               </dl>
             </div>
             <div className="grid gap-2">
+              <p className="m-0 font-mono text-[11px] text-muted">
+                Arrows move · Enter applies · Type to search
+              </p>
               <button
                 type="button"
                 className="button primary justify-center"

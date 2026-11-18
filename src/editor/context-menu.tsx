@@ -104,11 +104,13 @@ type MapContextMenuProps = {
 type BodyProps = Omit<MapContextMenuProps, "controller" | "onOpenChange">;
 
 const contentClass =
-  "z-30 w-54 rounded-[7px] border border-[#3a352e] bg-raised p-1 shadow-[0_12px_32px_rgb(0_0_0/45%)] outline-none";
+  "z-30 w-54 rounded-[7px] border border-line-strong bg-raised p-1 shadow-[0_12px_32px_rgb(0_0_0/45%)] outline-none";
 const itemClass =
-  "flex h-7 cursor-default items-center gap-2 rounded-[4px] px-2 outline-none select-none data-[disabled]:text-[#6f685e] data-[highlighted]:bg-[#332e28] data-[popup-open]:bg-[#332e28]";
+  "flex h-7 cursor-default items-center gap-2 rounded-[4px] px-2 outline-none select-none data-[disabled]:text-disabled data-[highlighted]:bg-hover data-[popup-open]:bg-hover";
 const iconClass = "flex w-3.5 shrink-0 justify-center text-muted";
+const destructiveIconClass = "flex w-3.5 shrink-0 justify-center text-danger";
 const hintClass = "ml-auto font-mono text-[11px] text-muted";
+const destructiveHintClass = "ml-auto font-mono text-[11px] text-danger/80";
 
 const roomSides: { side: RoomSide; label: string }[] = [
   { side: "north", label: "North" },
@@ -144,6 +146,7 @@ function Item({
   icon: Icon,
   hint,
   children,
+  destructive,
   ...props
 }: {
   icon: LucideIcon;
@@ -155,14 +158,19 @@ function Item({
 }) {
   return (
     <MenuItem
-      className={`${itemClass} data-[destructive]:text-danger`}
+      className={`${itemClass} data-[destructive]:text-danger data-[destructive]:data-[highlighted]:bg-danger/15`}
+      destructive={destructive}
       {...props}
     >
-      <MenuItemIcon className={iconClass}>
+      <MenuItemIcon className={destructive ? destructiveIconClass : iconClass}>
         <Icon size={14} />
       </MenuItemIcon>
       {children}
-      {hint ? <span className={hintClass}>{hint}</span> : null}
+      {hint ? (
+        <span className={destructive ? destructiveHintClass : hintClass}>
+          {hint}
+        </span>
+      ) : null}
     </MenuItem>
   );
 }
@@ -258,19 +266,11 @@ function Choices({
             >
               <item.icon size={14} />
             </MenuItemIcon>
-          ) : (
-            <span className={iconClass}>
-              <MenuItemIndicator className="text-ember">
-                <Check size={14} />
-              </MenuItemIndicator>
-            </span>
-          )}
-          {item.label}
-          {item.icon ? (
-            <MenuItemIndicator className="ml-auto text-ember">
-              <Check size={14} />
-            </MenuItemIndicator>
           ) : null}
+          {item.label}
+          <MenuItemIndicator className="ml-auto text-ember">
+            <Check size={14} />
+          </MenuItemIndicator>
         </MenuRadioItem>
       ))}
     </MenuRadioGroup>
@@ -465,7 +465,6 @@ function RoomMenu({
                 next && onCommit(next.map, { keys: [], sector: next.id })
               }
             >
-              <span className={iconClass} />
               {label}
             </MenuItem>
           );

@@ -61,6 +61,7 @@ import {
   ThingInspector,
 } from "./inspector";
 import { MapCanvas } from "./map-canvas";
+import { SelectCheck } from "./select-check";
 import { NewMapPanel } from "./new-map-panel";
 import { thingIcons } from "./thing-icons";
 import {
@@ -706,13 +707,10 @@ function App({
         {thingKinds.map((kind) => {
           const { icon: Icon, color } = thingIcons[kind];
           return (
-            <SelectItem
-              key={kind}
-              value={kind}
-              className="select-item flex items-center gap-2"
-            >
+            <SelectItem key={kind} value={kind} className="select-item">
               <Icon size={14} style={{ color }} aria-hidden="true" />
               {thingCatalog[kind].label}
+              <SelectCheck />
             </SelectItem>
           );
         })}
@@ -925,7 +923,7 @@ function App({
             <h1>
               <button
                 type="button"
-                className="border-0 bg-transparent p-0 font-[inherit] text-[inherit]"
+                className="border-0 bg-transparent p-0 font-[inherit] text-inherit"
                 aria-label="All projects"
                 title="All projects"
                 onClick={onOpenProjects}
@@ -1449,7 +1447,9 @@ function App({
                         className="mt-0.5 text-key"
                         aria-hidden="true"
                       />
-                      <span className="min-w-0 break-words">{note.text}</span>
+                      <span className="min-w-0 wrap-break-word">
+                        {note.text}
+                      </span>
                       <button
                         type="button"
                         className="self-start border-0 bg-transparent p-0 text-muted hover:text-text"

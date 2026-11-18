@@ -50,7 +50,7 @@ function Minimap({ map, status }: { map: GameMap; status: GameStatus | null }) {
     <MapOutline
       map={map}
       label="Minimap"
-      className="block h-[162px] w-full bg-[#100f0d] @max-2xl:hidden"
+      className="block h-[162px] w-full bg-inset @max-2xl:hidden"
     >
       {(extent) =>
         status ? (
@@ -90,9 +90,7 @@ function Vital({
 }) {
   return (
     <div>
-      <div className="font-mono text-[11px] text-[#d6cfc3] uppercase">
-        {label}
-      </div>
+      <div className="font-mono text-[11px] text-soft uppercase">{label}</div>
       <div
         className={`text-[44px] leading-none font-bold @max-2xl:text-2xl ${accent ? "text-ember" : ""}`}
       >
@@ -107,7 +105,7 @@ function NoteForm({ onSave }: { onSave: (text: string) => void }) {
   return (
     <form
       aria-label="Leave a note"
-      className={`${panelClass} absolute bottom-24 left-1/2 flex w-[min(460px,calc(100%-32px))] -translate-x-1/2 gap-2 border border-[#3a352e] p-2`}
+      className={`${panelClass} absolute bottom-24 left-1/2 flex w-[min(460px,calc(100%-32px))] -translate-x-1/2 gap-2 border border-line-strong p-2`}
       onSubmit={(event) => {
         event.preventDefault();
         if (text.trim()) onSave(text.trim());
@@ -191,7 +189,7 @@ function GameHud({
         </button>
         <div className="min-w-0 @max-xl:hidden">
           <div className="truncate text-[15px] font-semibold">{title}</div>
-          <div className="font-mono text-[11px] text-[#d6cfc3]">
+          <div className="font-mono text-[11px] text-soft">
             {slot} · Medium · Playtest
           </div>
         </div>
@@ -292,7 +290,7 @@ function GameHud({
       {finished && status ? (
         <section
           aria-label="Level complete"
-          className={`${panelClass} absolute top-1/2 left-1/2 grid w-[min(320px,calc(100%-32px))] -translate-1/2 gap-3 border border-[#3a352e] p-4`}
+          className={`${panelClass} absolute top-1/2 left-1/2 grid w-[min(320px,calc(100%-32px))] -translate-1/2 gap-3 border border-line-strong p-4`}
         >
           <h2 className="m-0 text-xl font-semibold">Level complete</h2>
           <p className="m-0 font-mono text-xs text-muted">
@@ -310,14 +308,14 @@ function GameHud({
         </section>
       ) : null}
       {showHelp && !finished ? (
-        <p className="absolute inset-x-4 bottom-24 m-0 text-center text-xs text-[#d6cfc3]">
+        <p className="absolute inset-x-4 bottom-24 m-0 text-center text-xs text-soft">
           WASD move · ←→ turn · Space fire · E use · Shift run · Tab automap
         </p>
       ) : null}
       {noteSaved ? (
         <p
           role="status"
-          className="absolute inset-x-4 bottom-24 m-0 text-center text-[#d6cfc3]"
+          className="absolute inset-x-4 bottom-24 m-0 text-center text-soft"
         >
           Note saved to this spot.
         </p>
@@ -334,9 +332,7 @@ function GameHud({
               accent
             />
             <div className="pb-1.5">
-              <div className="mb-1.5 font-mono text-[11px] text-[#d6cfc3]">
-                KEYS
-              </div>
+              <div className="mb-1.5 font-mono text-[11px] text-soft">KEYS</div>
               <div className="flex h-[22px] gap-1">
                 {keyStyles.map(({ label, icon: Icon, color }, index) =>
                   status.keys & (1 << index) ? (

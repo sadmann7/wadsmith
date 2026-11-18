@@ -31,7 +31,7 @@ import {
 import { Switch, SwitchThumb } from "@ui-sdk/react/switch";
 import { Toggle, ToggleGroup } from "@ui-sdk/react/toggle";
 import { Check, Search, TriangleAlert } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 
 import {
   ceilingTextures,
@@ -76,6 +76,7 @@ import type {
 import { flatUse, wallUse, type TextureUse } from "../map/textures";
 import { TextureSwatch } from "../preview/surface-panel";
 import type { SceneAssets } from "../wad/assets";
+import { SelectCheck } from "./select-check";
 import { TexturePicker, type TextureKind } from "./texture-picker";
 import { thingIcons } from "./thing-icons";
 
@@ -203,6 +204,7 @@ function TextureField({
   onChange: (value: string) => void;
 }) {
   const [browsing, setBrowsing] = useState(false);
+  const browseButton = useRef<HTMLButtonElement>(null);
   const items = options.includes(value) ? options : [value, ...options];
   const swatch = (
     <TextureSwatch
@@ -217,6 +219,7 @@ function TextureField({
     <div className="grid grid-cols-[48px_minmax(0,1fr)] items-end gap-2.5">
       {browse ? (
         <button
+          ref={browseButton}
           type="button"
           aria-label={`Browse ${label.toLowerCase()} textures`}
           title="Browse textures"
@@ -244,11 +247,7 @@ function TextureField({
         </div>
         <SelectContent className="select-content">
           {items.map((option) => (
-            <SelectItem
-              key={option}
-              value={option}
-              className="select-item flex items-center gap-2"
-            >
+            <SelectItem key={option} value={option} className="select-item">
               <TextureSwatch
                 name={option}
                 picture={picture(option)}
@@ -258,6 +257,7 @@ function TextureField({
                 className="size-8 shrink-0 rounded-xs [image-rendering:pixelated]"
               />
               {option}
+              <SelectCheck />
             </SelectItem>
           ))}
         </SelectContent>
@@ -274,7 +274,10 @@ function TextureField({
           assets={assets}
           light={light}
           onApply={onChange}
-          onClose={() => setBrowsing(false)}
+          onClose={() => {
+            setBrowsing(false);
+            requestAnimationFrame(() => browseButton.current?.focus());
+          }}
         />
       ) : null}
     </div>
@@ -315,6 +318,7 @@ function ChoiceField({
             className="select-item"
           >
             {item.label}
+            <SelectCheck />
           </SelectItem>
         ))}
       </SelectContent>

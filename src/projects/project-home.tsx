@@ -183,7 +183,7 @@ function MapRow({
   const name = mapName(entry);
   return (
     <tr
-      className="h-[88px] border-b border-line hover:bg-[#1b1815]"
+      className="h-[88px] border-b border-line hover:bg-row"
       onClick={(event) => {
         if (
           !entry.broken &&
@@ -198,7 +198,7 @@ function MapRow({
         <MapOutline
           map={entry.map}
           className="h-[68px] w-[120px] bg-bg"
-          solidColor="#a59d90"
+          solidColor="var(--muted)"
         />
       </td>
       <td className="max-w-0 pr-4">
@@ -255,7 +255,11 @@ function MapRow({
               Duplicate
             </MenuItem>
             <MenuSeparator className="menu-separator" />
-            <MenuItem className="select-item text-danger" onSelect={onDelete}>
+            <MenuItem
+              className="select-item data-[highlighted]:bg-danger/15"
+              destructive
+              onSelect={onDelete}
+            >
               Delete
             </MenuItem>
           </MenuContent>

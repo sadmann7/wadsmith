@@ -7,8 +7,8 @@ function MapOutline({
   map,
   className,
   label,
-  solidColor = "#6f685e",
-  openColor = "#3a342d",
+  solidColor = "var(--wall)",
+  openColor = "var(--wall-open)",
   children,
 }: {
   map: GameMap;

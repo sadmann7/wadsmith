@@ -18,6 +18,7 @@ import { X } from "lucide-react";
 import { useState, type FormEvent } from "react";
 
 import { MapOutline } from "../editor/map-outline";
+import { SelectCheck } from "../editor/select-check";
 import {
   formatPar,
   freeSlots,
@@ -39,7 +40,7 @@ type MapDetails = {
 };
 
 const dialogClass =
-  "fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-32px)] w-[600px] max-w-[calc(100vw-32px)] -translate-1/2 flex-col rounded-[4px] border border-[#3a352e] bg-panel outline-none";
+  "fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-32px)] w-[600px] max-w-[calc(100vw-32px)] -translate-1/2 flex-col rounded-[4px] border border-line-strong bg-panel outline-none";
 const titleClass =
   "block font-sans text-xl font-bold tracking-normal text-text normal-case";
 
@@ -136,6 +137,7 @@ function MapDialog({
                   {slots.map((item) => (
                     <SelectItem key={item} value={item} className="select-item">
                       {item}
+                      <SelectCheck />
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -178,7 +180,7 @@ function MapDialog({
                       <MapOutline
                         map={item.map}
                         className="h-20 w-full bg-bg"
-                        solidColor="#a59d90"
+                        solidColor="var(--muted)"
                       />
                       {item.label}
                     </button>

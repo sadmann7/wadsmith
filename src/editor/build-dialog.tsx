@@ -86,7 +86,7 @@ function BuildDialog({
       }}
     >
       <DialogBackdrop className="fixed inset-0 z-40 bg-black/65" />
-      <DialogContent className="fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-32px)] w-[560px] max-w-[calc(100vw-32px)] -translate-1/2 flex-col rounded-[4px] border border-[#3a352e] bg-panel outline-none">
+      <DialogContent className="fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-32px)] w-[560px] max-w-[calc(100vw-32px)] -translate-1/2 flex-col rounded-[4px] border border-line-strong bg-panel outline-none">
         <header className="flex h-14 shrink-0 items-center justify-between border-b border-line px-5">
           <div className="flex min-w-0 items-baseline gap-2.5">
             <DialogTitle className="block font-sans text-xl font-semibold tracking-normal text-text normal-case">
