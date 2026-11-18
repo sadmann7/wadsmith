@@ -4,6 +4,7 @@ import {
   addRoomOnSide,
   addSwitchInRoom,
   setRoomDoor,
+  wallNear,
   updateSector,
 } from "../map/edit";
 import { starterMap } from "../map/starter-map";
@@ -253,6 +254,49 @@ describe("validateMap", () => {
       switches: [{ ...item, from: "v3", to: "v4" }],
     });
     expect(issues.map((issue) => issue.id)).toContain("switch-open:switch-1");
+  });
+});
+
+describe("wallNear", () => {
+  it("picks the side of a shared wall under the pointer", () => {
+    const wall = "v3|v4";
+    expect(wallNear(starterMap, { x: 378, y: 160 }, 14)).toEqual({
+      sector: "sector-1",
+      wall,
+    });
+    expect(wallNear(starterMap, { x: 390, y: 160 }, 14)).toEqual({
+      sector: "sector-2",
+      wall,
+    });
+  });
+
+  it("handles a diagonal shared wall", () => {
+    const map: GameMap = {
+      ...lShape,
+      vertices: {
+        a: { x: 0, y: 0 },
+        b: { x: 96, y: 128 },
+        c: { x: 0, y: 128 },
+        d: { x: 96, y: 0 },
+      },
+      sectors: [
+        { ...lShape.sectors[0], id: "left", vertices: ["a", "b", "c"] },
+        { ...lShape.sectors[0], id: "right", vertices: ["a", "d", "b"] },
+      ],
+    };
+    for (let step = 8; step < 120; step += 7) {
+      const onWall = { x: (step * 96) / 128, y: step };
+      expect(
+        wallNear(map, { x: onWall.x - 3, y: onWall.y + 3 }, 14)?.sector,
+      ).toBe("left");
+      expect(
+        wallNear(map, { x: onWall.x + 3, y: onWall.y - 3 }, 14)?.sector,
+      ).toBe("right");
+    }
+  });
+
+  it("ignores walls out of reach", () => {
+    expect(wallNear(starterMap, { x: 190, y: 160 }, 14)).toBeNull();
   });
 });
 

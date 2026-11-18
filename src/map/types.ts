@@ -46,6 +46,7 @@ type MapSwitch = {
 };
 
 type GameMap = {
+  name?: string;
   vertices: Record<string, Point>;
   sectors: Sector[];
   things: Thing[];

@@ -38,6 +38,7 @@ import {
   thingKeyPrefix,
   updateSector,
   updateSwitch,
+  wallNear,
   type RoomSide,
 } from "../map/edit";
 import { sectorAt } from "../map/geometry";
@@ -52,6 +53,8 @@ import type {
 } from "../map/types";
 
 type MapTool = "select" | "draw" | "thing" | "switch";
+type EditMode = "vertices" | "lines" | "sectors" | "things";
+type MapViewStatus = { pointer: Point | null; zoom: number };
 
 type MapChangeReason =
   | "drag"
@@ -66,6 +69,9 @@ type MapChangeReason =
 type MapEditorOptions = {
   map?: GameMap;
   tool?: MapTool;
+  editMode?: EditMode;
+  onWallSelect?: (sector: string, wall: string) => void;
+  onViewChange?: (status: MapViewStatus) => void;
   thingKind?: ThingKind;
   activeSector?: string | null;
   selection?: string[];
@@ -94,6 +100,7 @@ type MapEditorState = {
   moving: MoveDraft | null;
   connecting: ConnectDraft | null;
   tool: MapTool;
+  editMode: EditMode;
   thingKind: ThingKind;
   activeSector: string | null;
   selection: string[];
@@ -113,6 +120,8 @@ const hiddenLine = { x1: "0", y1: "0", x2: "0", y2: "0" };
 const clickSlop = 4;
 const switchReach = 32;
 const cameraNudge = 16;
+const wallReach = 14;
+const labelInset = 24;
 const agentHeightLimit = 2048;
 const agentDepthLimit = 4096;
 
@@ -163,6 +172,14 @@ function portPoint(state: MapEditorState, key: string): Point {
     x: points.reduce((sum, point) => sum + point.x, 0) / count,
     y: points.reduce((sum, point) => sum + point.y, 0) / count,
   };
+}
+
+function labelPoint(state: MapEditorState, id: string): Point {
+  const center = portPoint(state, `${doorKeyPrefix}${id}`);
+  const vertices =
+    state.map.sectors.find((sector) => sector.id === id)?.vertices ?? [];
+  const top = Math.min(...vertices.map((key) => pointOf(state, key).y));
+  return { x: center.x, y: top + labelInset / state.viewport.zoom };
 }
 
 function lineAttrs(a: Point, b: Point) {
@@ -237,6 +254,9 @@ const mapEditor = definePrimitive({
   options: {
     map: "value",
     tool: "string",
+    editMode: "string",
+    onWallSelect: "callback",
+    onViewChange: "callback",
     thingKind: "string",
     activeSector: "value",
     selection: "value",
@@ -261,6 +281,7 @@ const mapEditor = definePrimitive({
       moving: null,
       connecting: null,
       tool: options.tool ?? "select",
+      editMode: options.editMode ?? "vertices",
       thingKind: options.thingKind ?? "imp",
       activeSector: options.activeSector ?? null,
       selection: options.selection ?? [],
@@ -275,6 +296,7 @@ const mapEditor = definePrimitive({
       ? { map: options.map, positions: positionsOf(options.map) }
       : {}),
     ...(options.tool ? { tool: options.tool } : {}),
+    ...(options.editMode ? { editMode: options.editMode } : {}),
     ...(options.thingKind ? { thingKind: options.thingKind } : {}),
     ...(options.activeSector !== undefined
       ? { activeSector: options.activeSector }
@@ -364,6 +386,7 @@ const mapEditor = definePrimitive({
 
     let press: { x: number; y: number } | null = null;
     let fitted = false;
+    let reportPointer: ((point: Point | null) => void) | undefined;
     let findAfterFit = false;
     let stopCameraDrag: (() => void) | undefined;
     let findRequest = context.options().findCameraRequest ?? 0;
@@ -443,7 +466,8 @@ const mapEditor = definePrimitive({
     };
 
     const deleteSelection = () => {
-      const { map, selection, activeSector } = store.get();
+      const { map, selection, activeSector, highlightedWall, editMode } =
+        store.get();
       const idsWith = (prefix: string) =>
         selection
           .filter((key) => key.startsWith(prefix))
@@ -459,7 +483,12 @@ const mapEditor = definePrimitive({
         select([]);
         return true;
       }
-      if (activeSector) {
+      // A selected line isn't its room, and lines can't be deleted yet.
+      if (
+        activeSector &&
+        !highlightedWall &&
+        (editMode === "vertices" || editMode === "sectors")
+      ) {
         change("map", removeSector(map, activeSector), { reason: "delete" });
         select([]);
         return true;
@@ -491,6 +520,17 @@ const mapEditor = definePrimitive({
             cameraPosition: context.options().camera?.position ?? null,
           }),
         );
+        let pointerAt: Point | null = null;
+        const reportView = () =>
+          context.options().onViewChange?.({
+            pointer: pointerAt,
+            zoom: store.get().viewport.zoom,
+          });
+        reportPointer = (point) => {
+          pointerAt = point;
+          reportView();
+        };
+        const stopView = store.subscribe(reportView);
         // A hidden pane has no size to fit until it is first shown.
         const observer = new ResizeObserver(() => {
           if (element.clientWidth === 0 || element.clientHeight === 0) return;
@@ -502,6 +542,7 @@ const mapEditor = definePrimitive({
         observer.observe(element);
         return () => {
           stopCamera?.();
+          stopView();
           observer.disconnect();
         };
       },
@@ -654,7 +695,11 @@ const mapEditor = definePrimitive({
           viewport.pointerdown(event);
         }
       },
+      pointerleave() {
+        reportPointer?.(null);
+      },
       pointermove(event: PointerEvent) {
+        reportPointer?.(pointFromEvent(event));
         if (store.get().tool === "draw") {
           store.set({ cursor: pointFromEvent(event) });
         }
@@ -687,7 +732,20 @@ const mapEditor = definePrimitive({
           select([`${switchKeyPrefix}${added.id}`]);
           change("tool", "select", { reason: "draw" });
         } else if (!key) {
-          select([], sectorAt(map, point)?.id ?? null);
+          const { editMode } = store.get();
+          if (editMode === "lines") {
+            const at = viewport.toCanvas(event.clientX, event.clientY);
+            const wall = wallNear(map, at, wallReach / view.zoom);
+            select([]);
+            if (wall) {
+              context.options().onWallSelect?.(wall.sector, wall.wall);
+            }
+          } else {
+            select(
+              [],
+              editMode === "things" ? null : (sectorAt(map, point)?.id ?? null),
+            );
+          }
         }
       },
       keydown(event: KeyboardEvent) {
@@ -758,6 +816,7 @@ const mapEditor = definePrimitive({
         tabindex: "0",
         "aria-roledescription": "map editor",
         "data-tool": state.tool,
+        "data-mode": state.editMode,
         style: css({
           position: "relative",
           overflow: "clip",
@@ -769,6 +828,7 @@ const mapEditor = definePrimitive({
         wheel: (event, { api }) => api.viewport.wheel(event),
         pointerdown: (event, { api }) => api.pointerdown(event),
         pointermove: (event, { api }) => api.pointermove(event),
+        pointerleave: (_event, { api }) => api.pointerleave(),
         click: (event, { api }) => api.click(event),
         dblclick: (event, { api }) => api.doubleClick(event),
         keydown: (event, { api }) => api.keydown(event),
@@ -888,6 +948,23 @@ const mapEditor = definePrimitive({
       attrs: (state) => connectingAttrs(state),
       live: live<MapEditorState, any, {}>((state) => connectingAttrs(state)),
     }),
+    label: slot<{ value: string }>({
+      props: { value: "string" },
+      attrs: (state, { key }) => {
+        const at = labelPoint(state, key);
+        return {
+          style: css({
+            position: "absolute",
+            left: `${at.x}px`,
+            top: `${at.y}px`,
+          }),
+        };
+      },
+      live: live<MapEditorState, any, { value: string }>((state, { key }) => {
+        const at = labelPoint(state, key);
+        return { style: `left:${at.x}px;top:${at.y}px` };
+      }),
+    }),
     camera: slot({
       attrs: (state) => ({
         type: "button",
@@ -941,6 +1018,7 @@ const parts = createParts(mapEditor, {
   port: "button",
   wire: "line",
   connecting: "line",
+  label: "div",
   camera: "button",
   findCamera: "button",
   lookHere: "button",
@@ -957,6 +1035,7 @@ const MapPort = parts.Port;
 const MapWire = parts.Wire;
 const MapConnecting = parts.Connecting;
 const MapFit = parts.Fit;
+const MapLabel = parts.Label;
 const MapCamera = parts.Camera;
 const MapFindCamera = parts.FindCamera;
 const MapLookHere = parts.LookHere;
@@ -969,11 +1048,14 @@ export {
   MapFindCamera,
   MapFit,
   MapHandle,
+  MapLabel,
   MapLookHere,
   MapPort,
   MapSector,
   MapWall,
   MapWire,
   MapWorld,
+  type EditMode,
   type MapTool,
+  type MapViewStatus,
 };

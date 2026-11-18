@@ -1,6 +1,7 @@
 import type { GameMap } from "./types";
 
 const starterMap: GameMap = {
+  name: "Starter map",
   vertices: {
     v1: { x: 0, y: 0 },
     v2: { x: 384, y: 0 },
@@ -85,6 +86,7 @@ const starterMap: GameMap = {
 };
 
 const blankMap: GameMap = {
+  name: "Untitled map",
   vertices: {
     v1: { x: 0, y: 0 },
     v2: { x: 384, y: 0 },

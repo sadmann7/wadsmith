@@ -215,7 +215,15 @@ function parseMap(value: unknown): GameMap {
   uniqueIds(sectors, "Room");
   uniqueIds(things, "Thing");
   uniqueIds(switches, "Switch");
-  return { vertices, sectors, things, switches };
+  return {
+    ...(typeof map.name === "string"
+      ? { name: map.name.slice(0, maxNameLength) }
+      : {}),
+    vertices,
+    sectors,
+    things,
+    switches,
+  };
 }
 
 function serializeMap(map: GameMap) {
