@@ -159,7 +159,7 @@ function sectorTags(map: GameMap, sectors: Sector[]) {
   });
 }
 
-function compileLumps(map: GameMap): Lump[] {
+function compileLumps(map: GameMap, slot = mapLumpName): Lump[] {
   const { vertices, sectors, lines } = buildLevel(map);
   const bsp = buildNodes(vertices, lines);
 
@@ -333,7 +333,7 @@ function compileLumps(map: GameMap): Lump[] {
   for (const word of blockmapWords) blockmap.int16(word);
 
   return [
-    { name: mapLumpName, data: new Uint8Array() },
+    { name: slot, data: new Uint8Array() },
     { name: "THINGS", data: things.finish() },
     { name: "LINEDEFS", data: linedefs.finish() },
     { name: "SIDEDEFS", data: sidedefs.finish() },
@@ -374,8 +374,19 @@ function packWad(lumps: Lump[]) {
   return output;
 }
 
-function compileMap(map: GameMap) {
-  return packWad(compileLumps(map));
+function compileMap(map: GameMap, slot = mapLumpName) {
+  return packWad(compileLumps(map, slot));
 }
 
-export { buildLevel, compileLumps, compileMap, mapLumpName, toDoom };
+function compileEpisode(maps: { slot: string; map: GameMap }[]) {
+  return packWad(maps.flatMap(({ slot, map }) => compileLumps(map, slot)));
+}
+
+export {
+  buildLevel,
+  compileEpisode,
+  compileLumps,
+  compileMap,
+  mapLumpName,
+  toDoom,
+};

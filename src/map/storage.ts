@@ -445,6 +445,7 @@ export {
   loadSavedMap,
   MapFileError,
   maxFileBytes,
+  parseMap,
   parseMapFile,
   saveMap,
   serializeMap,

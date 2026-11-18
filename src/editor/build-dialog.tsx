@@ -41,24 +41,26 @@ function wadFileName(name: string) {
   return `${safe || "wadsmith-map01"}.wad`;
 }
 
-function defaultFileName(map: GameMap) {
-  return wadFileName((map.name ?? "wadsmith-map01").toLowerCase());
+function defaultFileName(name: string) {
+  return wadFileName(name.toLowerCase());
 }
 
 function BuildDialog({
   map,
+  name,
   slot,
   onBuild,
   onShow,
   onClose,
 }: {
   map: GameMap;
+  name: string;
   slot: string;
   onBuild: (fileName: string) => string | null;
   onShow: (issue: CheckedIssue) => void;
   onClose: () => void;
 }) {
-  const [fileName, setFileName] = useState(() => defaultFileName(map));
+  const [fileName, setFileName] = useState(() => defaultFileName(name));
   const [buildError, setBuildError] = useState<string | null>(null);
   const checks = buildChecks(map);
   const issues = checks.flatMap((check) => check.issues);
@@ -91,7 +93,7 @@ function BuildDialog({
               Build WAD
             </DialogTitle>
             <DialogDescription className="truncate font-mono text-xs text-muted">
-              {slot} {map.name ?? "Untitled map"}
+              {slot} {name}
             </DialogDescription>
           </div>
           <DialogClose

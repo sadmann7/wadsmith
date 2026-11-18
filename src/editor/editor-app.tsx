@@ -94,15 +94,11 @@ import {
   type RoomSide,
 } from "../map/edit";
 import { describeLine } from "../map/lines";
-import { blankMap, starterMap } from "../map/starter-map";
 import {
-  loadSavedMap,
   MapFileError,
   maxFileBytes,
   parseMapFile,
-  saveMap,
   serializeMap,
-  watchSavedMap,
 } from "../map/storage";
 import type { GameMap, Point, ThingCategory, ThingKind } from "../map/types";
 import { checkMap, fixIssue, issueText } from "../map/checks";
@@ -146,7 +142,6 @@ const layoutKey = "wadsmith:layout";
 // Below this width, two panes can't hold the map controls and a usable 3D view.
 const narrowQuery = "(max-width: 1100px)";
 const defaultSplit = [50, 50];
-const mapSlot = "MAP01";
 
 const tools: { value: MapTool; label: string; icon: typeof PenLine }[] = [
   { value: "select", label: "Select", icon: MousePointer2 },
@@ -230,16 +225,46 @@ function downloadFile(name: string, data: BlobPart, type: string) {
   URL.revokeObjectURL(url);
 }
 
-function downloadWad(map: GameMap, fileName: string) {
+function downloadWad(map: GameMap, slot: string, fileName: string) {
   downloadFile(
     fileName,
-    compileMap(map).slice().buffer,
+    compileMap(map, slot).slice().buffer,
     "application/octet-stream",
   );
 }
 
-function App() {
-  const [initialMap] = useState(() => loadSavedMap() ?? starterMap);
+type AppProps = {
+  initialMap: GameMap;
+  mapName: string;
+  slot: string;
+  par: number | null;
+  saveStatus: "saving" | "saved" | "failed" | "session";
+  onSave: (map: GameMap) => void;
+  watchExternal: (listener: (map: GameMap) => void) => () => void;
+  onOpenProjects: () => void;
+  onNewMap: () => void;
+  onMapSettings: () => void;
+};
+
+const saveLabels: Record<AppProps["saveStatus"], string> = {
+  saving: "Saving…",
+  saved: "Saved in this browser",
+  failed: "Not saved: storage is unavailable",
+  session: "Browser storage is off: saved for this session only",
+};
+
+function App({
+  initialMap,
+  mapName,
+  slot,
+  par,
+  saveStatus,
+  onSave,
+  watchExternal,
+  onOpenProjects,
+  onNewMap,
+  onMapSettings,
+}: AppProps) {
   const [map, setMap] = useState(initialMap);
   const [tool, setTool] = useState<MapTool>("select");
   const [thingKind, setThingKind] = useState<ThingKind>("imp");
@@ -247,7 +272,6 @@ function App() {
   const [selection, setSelection] = useState<string[]>([]);
   const [playedMap, setPlayedMap] = useState<GameMap | null>(null);
   const [mapVersion, setMapVersion] = useState(0);
-  const [saved, setSaved] = useState(true);
   const [fileError, setFileError] = useState<string | null>(null);
   const playButton = useRef<HTMLButtonElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -339,11 +363,14 @@ function App() {
   );
   const doors = map.sectors.filter((item) => item.door);
 
-  const showMap = useCallback((next: GameMap) => {
-    setMap(next);
-    setSaved(saveMap(next));
-    setHistoryVersion((version) => version + 1);
-  }, []);
+  const showMap = useCallback(
+    (next: GameMap) => {
+      setMap(next);
+      onSave(next);
+      setHistoryVersion((version) => version + 1);
+    },
+    [onSave],
+  );
 
   const commit = (next: GameMap, group?: string) => {
     history.record(next, group ? { group } : undefined);
@@ -705,15 +732,14 @@ function App() {
 
   useEffect(
     () =>
-      watchSavedMap((next) => {
+      watchExternal((next) => {
         history.record(next);
         setMap(next);
         setSelection([]);
         setSurface(null);
-        setSaved(true);
         setHistoryVersion((version) => version + 1);
       }),
-    [history],
+    [history, watchExternal],
   );
 
   useEffect(() => {
@@ -863,10 +889,16 @@ function App() {
   };
 
   const runFileAction = (action: string) => {
-    if (action === "new") replaceMap(blankMap);
+    if (action === "new") onNewMap();
+    else if (action === "projects") onOpenProjects();
+    else if (action === "settings") onMapSettings();
     else if (action === "open") fileInput.current?.click();
     else if (action === "save") {
-      downloadFile("wadsmith-map.json", serializeMap(map), "application/json");
+      downloadFile(
+        "wadsmith-map.json",
+        serializeMap({ ...map, name: mapName }),
+        "application/json",
+      );
     } else if (action === "wad") {
       setBuilding(true);
     }
@@ -890,15 +922,31 @@ function App() {
       <div className="app" inert={Boolean(playedMap)}>
         <header className="topbar">
           <div className="topbar-start">
-            <h1>WADSMITH</h1>
+            <h1>
+              <button
+                type="button"
+                className="border-0 bg-transparent p-0 font-[inherit] text-[inherit]"
+                aria-label="All projects"
+                title="All projects"
+                onClick={onOpenProjects}
+              >
+                WADSMITH
+              </button>
+            </h1>
             <Menu onAction={(action) => runFileAction(action as string)}>
               <MenuTrigger className="menu-trigger">File</MenuTrigger>
               <MenuContent className="select-content">
+                <MenuItem value="projects" className="select-item">
+                  All projects
+                </MenuItem>
                 <MenuItem value="new" className="select-item">
-                  New map
+                  New map…
+                </MenuItem>
+                <MenuItem value="settings" className="select-item">
+                  Map settings…
                 </MenuItem>
                 <MenuItem value="open" className="select-item">
-                  Open map…
+                  Replace with map file…
                 </MenuItem>
                 <MenuItem value="save" className="select-item">
                   Save map file
@@ -980,10 +1028,15 @@ function App() {
               event.target.value = "";
             }}
           />
-          <div className="map-title">
-            <span>{mapSlot}</span>
-            <strong>{map.name ?? "Untitled map"}</strong>
-          </div>
+          <button
+            type="button"
+            className="map-title border-0 bg-transparent p-0 text-inherit"
+            title="Map settings"
+            onClick={onMapSettings}
+          >
+            <span>{slot}</span>
+            <strong>{mapName}</strong>
+          </button>
           <div className="topbar-end">
             <SegmentedControl
               aria-label="Main view"
@@ -1549,11 +1602,7 @@ function App() {
             <span>Grid {gridSize}</span>
             <span>Snap on</span>
             <span ref={zoomStatus}>Zoom 100%</span>
-            <span role="status">
-              {saved
-                ? "Saved in this browser"
-                : "Not saved: storage is unavailable"}
-            </span>
+            <span role="status">{saveLabels[saveStatus]}</span>
           </div>
         </footer>
       </div>
@@ -1591,10 +1640,11 @@ function App() {
       {building ? (
         <BuildDialog
           map={map}
-          slot={mapSlot}
+          name={mapName}
+          slot={slot}
           onBuild={(fileName) => {
             try {
-              downloadWad(map, fileName);
+              downloadWad(map, slot, fileName);
             } catch (error) {
               return `Couldn't build the map. ${(error as Error).message}`;
             }
@@ -1614,7 +1664,9 @@ function App() {
       {playedMap ? (
         <GameView
           map={playedMap}
-          slot={mapSlot}
+          title={mapName}
+          slot={slot}
+          par={par}
           onExit={exitGame}
           onAddNote={(point, text) => commit(addNote(map, point, text))}
           onEditSpot={editPlayedSpot}

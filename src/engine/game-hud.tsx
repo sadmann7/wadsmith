@@ -16,9 +16,9 @@ import {
   Volume2,
   VolumeX,
 } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
-import { wallOwners } from "../map/geometry";
+import { MapOutline } from "../editor/map-outline";
 import type { GameMap } from "../map/types";
 import { maxVolume, type GameStatus } from "./runtime";
 
@@ -45,62 +45,28 @@ function formatTime(tics: number) {
 }
 
 function Minimap({ map, status }: { map: GameMap; status: GameStatus | null }) {
-  const { walls, box } = useMemo(() => {
-    const points = Object.values(map.vertices);
-    const xs = points.map((point) => point.x);
-    const ys = points.map((point) => point.y);
-    const left = Math.min(...xs);
-    const top = Math.min(...ys);
-    const width = Math.max(...xs) - left || 1;
-    const height = Math.max(...ys) - top || 1;
-    const pad = Math.max(width, height) * 0.08;
-    return {
-      box: {
-        x: left - pad,
-        y: top - pad,
-        width: width + pad * 2,
-        height: height + pad * 2,
-      },
-      walls: [...wallOwners(map)].map(([key, owners]) => {
-        const [from, to] = key.split("|").map((id) => map.vertices[id]);
-        return { key, from, to, open: owners.length > 1 };
-      }),
-    };
-  }, [map]);
-  const size = Math.max(box.width, box.height) * 0.025;
   const radians = ((status?.angle ?? 0) * Math.PI) / 180;
   return (
-    <svg
-      role="img"
-      aria-label="Minimap"
+    <MapOutline
+      map={map}
+      label="Minimap"
       className="block h-[162px] w-full bg-[#100f0d] @max-2xl:hidden"
-      viewBox={`${box.x} ${box.y} ${box.width} ${box.height}`}
     >
-      {walls.map(({ key, from, to, open }) => (
-        <line
-          key={key}
-          x1={from.x}
-          y1={from.y}
-          x2={to.x}
-          y2={to.y}
-          stroke={open ? "#3a342d" : "#6f685e"}
-          strokeWidth={open ? 1 : 1.5}
-          vectorEffect="non-scaling-stroke"
-        />
-      ))}
-      {status ? (
-        <g transform={`translate(${status.x} ${-status.y})`}>
-          <line
-            x2={Math.cos(radians) * size * 2.2}
-            y2={-Math.sin(radians) * size * 2.2}
-            stroke="var(--key)"
-            strokeWidth={1.5}
-            vectorEffect="non-scaling-stroke"
-          />
-          <circle r={size} fill="var(--key)" />
-        </g>
-      ) : null}
-    </svg>
+      {(extent) =>
+        status ? (
+          <g transform={`translate(${status.x} ${0 - status.y})`}>
+            <line
+              x2={Math.cos(radians) * extent * 0.055}
+              y2={-Math.sin(radians) * extent * 0.055}
+              stroke="var(--key)"
+              strokeWidth={1.5}
+              vectorEffect="non-scaling-stroke"
+            />
+            <circle r={extent * 0.025} fill="var(--key)" />
+          </g>
+        ) : null
+      }
+    </MapOutline>
   );
 }
 
@@ -166,7 +132,9 @@ function NoteForm({ onSave }: { onSave: (text: string) => void }) {
 
 function GameHud({
   map,
+  title,
   slot,
+  par,
   status,
   sound,
   fullscreen,
@@ -185,7 +153,9 @@ function GameHud({
   onControlUsed,
 }: {
   map: GameMap;
+  title: string;
   slot: string;
+  par: number | null;
   status: GameStatus | null;
   sound: SoundSettings;
   fullscreen: boolean;
@@ -220,9 +190,7 @@ function GameHud({
           )}
         </button>
         <div className="min-w-0 @max-xl:hidden">
-          <div className="truncate text-[15px] font-semibold">
-            {map.name ?? "Untitled map"}
-          </div>
+          <div className="truncate text-[15px] font-semibold">{title}</div>
           <div className="font-mono text-[11px] text-[#d6cfc3]">
             {slot} · Medium · Playtest
           </div>
@@ -253,7 +221,14 @@ function GameHud({
             label="Secrets"
             value={status ? `${status.secrets} / ${status.totalSecrets}` : "-"}
           />
-          <Stat label="Time" value={status ? formatTime(status.tics) : "-"} />
+          <Stat
+            label="Time"
+            value={
+              status
+                ? `${formatTime(status.tics)}${par ? ` / par ${formatTime(par * ticsPerSecond)}` : ""}`
+                : "-"
+            }
+          />
         </dl>
         <div className="flex items-center gap-1 border-t border-line px-2 py-1.5">
           <button

@@ -49,7 +49,9 @@ function spotOf({ x, y }: GameStatus): Point {
 
 type GameSessionProps = {
   map: GameMap;
+  title: string;
   slot: string;
+  par: number | null;
   sound: SoundSettings;
   onSoundChange: (sound: SoundSettings) => void;
   fullscreen: boolean;
@@ -62,7 +64,9 @@ type GameSessionProps = {
 
 function GameSession({
   map,
+  title,
   slot,
+  par,
   sound,
   onSoundChange,
   fullscreen,
@@ -222,7 +226,9 @@ function GameSession({
       >
         <GameHud
           map={map}
+          title={title}
           slot={slot}
+          par={par}
           status={status}
           sound={sound}
           fullscreen={fullscreen}
@@ -301,13 +307,17 @@ function GameSession({
 
 function GameView({
   map,
+  title,
   slot,
+  par,
   onExit,
   onAddNote,
   onEditSpot,
 }: {
   map: GameMap;
+  title: string;
   slot: string;
+  par: number | null;
   onExit: () => void;
   onAddNote: (point: Point, text: string) => void;
   onEditSpot: (spot: PlayerSpot) => void;
@@ -340,7 +350,9 @@ function GameView({
       <GameSession
         key={run}
         map={map}
+        title={title}
         slot={slot}
+        par={par}
         sound={sound}
         onSoundChange={(next) => {
           setSound(next);
