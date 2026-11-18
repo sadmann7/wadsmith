@@ -4,9 +4,16 @@ import { pathToFileURL } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { setRoomDoor, updateThing } from "../map/edit";
+import {
+  addThing,
+  setLineTarget,
+  setRoomDoor,
+  updateLine,
+  updateSector,
+  updateThing,
+} from "../map/edit";
 import { starterMap } from "../map/starter-map";
-import type { GameMap } from "../map/types";
+import type { GameMap, LineAction } from "../map/types";
 import { compileMap } from "../wad/compile";
 import { doomKeys, startDoom, type CreateDoom, type DoomGame } from "./runtime";
 
@@ -54,6 +61,16 @@ const doorFloor = starterMap.sectors[doorIndex].floor;
 
 function playerAt(map: GameMap, x: number, y: number, angle: number) {
   return updateThing(map, "player-1", { x, y, angle });
+}
+
+function withDoorAction(wall: string, trigger: LineAction["trigger"]) {
+  return setLineTarget(
+    updateLine(starterMap, wall, {
+      action: { kind: "door-open", trigger, repeat: false, tag: 0 },
+    }),
+    wall,
+    "sector-4",
+  );
 }
 
 // Game time stands still during the opening screen melt, so input there is lost.
@@ -158,4 +175,65 @@ describe.skipIf(!ready)("generated map in the engine", () => {
     await play(game, 20_000, () => game.status().kills > 0);
     expect(game.status().kills).toBeGreaterThan(0);
   }, 30_000);
+
+  it("runs a walk-over line on the sector it targets", async () => {
+    const map = playerAt(withDoorAction("v3|v4", "walk"), 340, 160, 0);
+    const game = await launch(
+      updateSector(map, "sector-1", { effect: "glow" }),
+    );
+    await waitForPlay(game);
+    expect(game.sectorCeiling(doorIndex)).toBe(doorFloor);
+    game.key(true, doomKeys.up);
+    await play(game, 3000, () => game.status().x > 400);
+    game.key(false, doomKeys.up);
+    await play(game, 4000, () => game.sectorCeiling(doorIndex) === 92);
+    expect(game.sectorCeiling(doorIndex)).toBe(92);
+  }, 30_000);
+
+  it("runs a press-switch line on a solid wall", async () => {
+    const map = playerAt(withDoorAction("v1|v15", "switch"), 80, 40, 90);
+    const game = await launch(map);
+    await waitForPlay(game);
+    await pressUse(game);
+    await play(game, 4000, () => game.sectorCeiling(doorIndex) === 92);
+    expect(game.sectorCeiling(doorIndex)).toBe(92);
+  }, 30_000);
+
+  it("opens a locked door only after the key is picked up", async () => {
+    const wall = "v13|v14";
+    const locked = playerAt(
+      updateLine(starterMap, wall, {
+        action: {
+          kind: "door-open",
+          trigger: "door",
+          repeat: false,
+          key: "red",
+          tag: 0,
+        },
+      }),
+      430,
+      160,
+      0,
+    );
+    const noKey = await launch(locked);
+    await waitForPlay(noKey);
+    noKey.key(true, doomKeys.up);
+    await play(noKey, 800);
+    noKey.key(false, doomKeys.up);
+    await pressUse(noKey);
+    await play(noKey, 1000);
+    expect(noKey.sectorCeiling(doorIndex)).toBe(doorFloor);
+    noKey.stop();
+
+    const game = await launch(
+      addThing(locked, "red-key", { x: 456, y: 160 }).map,
+    );
+    await waitForPlay(game);
+    game.key(true, doomKeys.up);
+    await play(game, 800);
+    game.key(false, doomKeys.up);
+    await pressUse(game);
+    await play(game, 4000, () => game.sectorCeiling(doorIndex) === 92);
+    expect(game.sectorCeiling(doorIndex)).toBe(92);
+  }, 40_000);
 });

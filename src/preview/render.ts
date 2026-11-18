@@ -1,8 +1,22 @@
 import { doorTrackTexture } from "../map/catalog";
-import { sectorAt, sectorEdges, wallKey, wallTextureOf } from "../map/geometry";
+import {
+  sectorAt,
+  sectorEdges,
+  sectorPolygon,
+  signedArea,
+  wallKey,
+  wallPartTexture,
+} from "../map/geometry";
 import type { WallPart } from "../map/surfaces";
 import { surfaceKey } from "../map/surfaces";
-import type { GameMap, Point, Sector, ThingKind } from "../map/types";
+import type {
+  GameMap,
+  LineSettings,
+  LineSide,
+  Point,
+  Sector,
+  ThingKind,
+} from "../map/types";
 import { shadeLevels, type Picture, type SceneAssets } from "../wad/assets";
 
 type Camera = Point & { angle: number; eye?: number };
@@ -31,6 +45,8 @@ type Wall = {
   key: string;
   neighbor: Sector | null;
   switchTexture: string | null;
+  line: LineSettings | undefined;
+  side: LineSide | undefined;
 };
 
 const eyeHeight = 41;
@@ -65,19 +81,26 @@ function wallsBySector(map: GameMap) {
     map.switches.map((item) => [wallKey(item.from, item.to), item.texture]),
   );
   return new Map(
-    map.sectors.map((sector) => [
-      sector.id,
-      sectorEdges(sector).map(({ from, to }): Wall => {
-        const key = wallKey(from, to);
-        return {
-          a: map.vertices[from],
-          b: map.vertices[to],
-          key,
-          neighbor: owners.get(key)?.find((item) => item !== sector) ?? null,
-          switchTexture: switches.get(key) ?? null,
-        };
-      }),
-    ]),
+    map.sectors.map((sector) => {
+      // The engine runs textures left to right as seen from inside the room.
+      const flipped = signedArea(sectorPolygon(map, sector)) < 0;
+      return [
+        sector.id,
+        sectorEdges(sector).map(({ from, to }): Wall => {
+          const key = wallKey(from, to);
+          const line = map.lines?.[key];
+          return {
+            a: map.vertices[flipped ? to : from],
+            b: map.vertices[flipped ? from : to],
+            key,
+            neighbor: owners.get(key)?.find((item) => item !== sector) ?? null,
+            switchTexture: switches.get(key) ?? null,
+            line,
+            side: line?.sides?.[sector.id],
+          };
+        }),
+      ];
+    }),
   );
 }
 
@@ -297,10 +320,11 @@ function renderScene(
             part,
           }),
         );
-        const column = wrap(along, picture.width);
+        const column = wrap(along + (wall.side?.offsetX ?? 0), picture.width);
+        const rowOffset = wall.side?.offsetY ?? 0;
         for (let y = Math.max(from, top); y <= Math.min(to, bottom); y += 1) {
           const plane = eye + ((horizon - y - 0.5) * distance) / focal;
-          const row = wrap(textureRow(plane), picture.height);
+          const row = wrap(textureRow(plane) + rowOffset, picture.height);
           const color = picture.pixels[column * picture.height + row];
           const index = y * width + x;
           colors[index] = shades[level * 256 + color];
@@ -308,14 +332,15 @@ function renderScene(
           pick[index] = id;
         }
       };
-      const wallPicture = assets.texture(wallTextureOf(current, wall.key));
+      const partPicture = (part: WallPart) =>
+        assets.texture(wallPartTexture(map, current, wall.key, part));
 
       const next: Sector | null = wall.neighbor;
       if (!next) {
         const name =
           wall.switchTexture ?? (current.door ? doorTrackTexture : null);
-        const picture = name ? assets.texture(name) : wallPicture;
-        const pegged = name !== null;
+        const picture = name ? assets.texture(name) : partPicture("middle");
+        const pegged = name !== null || wall.line?.lowerFixed;
         paintWall(ceilingRow, floorRow, "middle", picture, (plane) =>
           pegged
             ? picture.height - (plane - current.floor)
@@ -334,13 +359,11 @@ function renderScene(
       if (next.ceiling < current.ceiling) {
         const picture = next.door
           ? assets.texture(next.door.texture)
-          : wallPicture;
-        paintWall(
-          ceilingRow,
-          upperRow - 1,
-          "upper",
-          picture,
-          (plane) => upperPlane + picture.height - plane,
+          : partPicture("upper");
+        paintWall(ceilingRow, upperRow - 1, "upper", picture, (plane) =>
+          wall.line?.upperFixed
+            ? current.ceiling - plane
+            : upperPlane + picture.height - plane,
         );
       }
       if (next.floor > current.floor) {
@@ -348,8 +371,11 @@ function renderScene(
           lowerRow + 1,
           floorRow,
           "lower",
-          wallPicture,
-          (plane) => lowerPlane - plane,
+          partPicture("lower"),
+          (plane) =>
+            wall.line?.lowerFixed
+              ? current.ceiling - plane
+              : lowerPlane - plane,
         );
       }
       top = Math.max(top, Math.max(ceilingRow, upperRow));

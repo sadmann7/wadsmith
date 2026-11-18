@@ -3,6 +3,7 @@ import {
   Box,
   Crosshair,
   Focus,
+  KeyRound,
   LocateFixed,
   Maximize,
   Plus,
@@ -43,6 +44,9 @@ const thingStyles: Record<ThingKind, { icon: LucideIcon; color: string }> = {
   shotgun: { icon: Crosshair, color: "var(--acid)" },
   shells: { icon: Box, color: "var(--acid)" },
   medikit: { icon: Plus, color: "var(--cold)" },
+  "blue-key": { icon: KeyRound, color: "var(--cold)" },
+  "yellow-key": { icon: KeyRound, color: "var(--key)" },
+  "red-key": { icon: KeyRound, color: "var(--danger)" },
 };
 
 function wallsOf(map: GameMap) {

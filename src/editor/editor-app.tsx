@@ -48,21 +48,31 @@ import {
 } from "react";
 
 import { agent } from "../agent";
-import { SectorInspector, SwitchInspector, ThingInspector } from "./inspector";
+import {
+  LineInspector,
+  SectorInspector,
+  SwitchInspector,
+  ThingInspector,
+} from "./inspector";
 import { MapCanvas } from "./map-canvas";
 import type { EditMode, MapTool, MapViewStatus } from "./map-editor";
 import { GameView } from "../engine/play-panel";
 import { thingCatalog, thingKinds } from "../map/catalog";
 import {
+  setLineTarget,
   setRoomDoor,
+  setRoomWalls,
   switchKeyPrefix,
   gridSize,
   thingKeyPrefix,
+  updateLine,
+  updateLineSide,
   updateSector,
   updateSwitch,
   updateThing,
   type RoomSide,
 } from "../map/edit";
+import { describeLine } from "../map/lines";
 import { blankMap, starterMap } from "../map/starter-map";
 import {
   loadSavedMap,
@@ -416,6 +426,12 @@ function App() {
     [map, sceneSelection],
   );
   const parsedSurface = surface ? parseSurface(surface) : null;
+  const selectedWall =
+    surfaceInfo && parsedSurface?.kind === "wall" ? parsedSurface : null;
+  const line =
+    selectedWall && !selectedSwitch && !thing
+      ? describeLine(map, selectedWall.wall, selectedWall.sector)
+      : null;
 
   const selectSurface = (key: string | null) => {
     setSurface(key);
@@ -548,18 +564,26 @@ function App() {
     ? "Switch"
     : thing
       ? thingCatalog[thing.kind].label
-      : surfaceInfo && !surfaceInfo.thing
-        ? surfaceInfo.label
-        : (sector?.name ?? "Nothing selected");
+      : line
+        ? `Line ${line.number}`
+        : surfaceInfo && !surfaceInfo.thing
+          ? surfaceInfo.label
+          : (sector?.name ?? "Nothing selected");
   const selectionMeta = selectedSwitch
     ? selectedSwitch.door
       ? "Wired to a door"
       : "Not connected"
     : thing
       ? `${thing.id} · X ${thing.x} Y ${-thing.y}`
-      : sector
-        ? `${sector.door ? "Door" : "Sector"} · ${sector.vertices.length} walls`
-        : "Click a room, line or thing on the map";
+      : line
+        ? `${line.back ? "Two-sided" : "One-sided"} · ${line.length} long · ${
+            line.back
+              ? `${line.front.name} to ${line.back.name}`
+              : line.front.name
+          }`
+        : sector
+          ? `${sector.door ? "Door" : "Sector"} · ${sector.vertices.length} walls`
+          : "Click a room, line or thing on the map";
 
   const play = () => {
     if (canPlay && !buildProblem()) setPlayedMap(map);
@@ -982,7 +1006,7 @@ function App() {
               </section>
             ) : null}
 
-            {surfaceInfo && !surfaceInfo.thing ? (
+            {surfaceInfo && !surfaceInfo.thing && !selectedWall ? (
               <section
                 className="inspector-section"
                 aria-label="Selected surface"
@@ -999,55 +1023,85 @@ function App() {
               </section>
             ) : null}
 
-            <section className="inspector-section">
-              <h2>
-                {selectedSwitch
-                  ? "Switch"
-                  : thing
-                    ? "Thing"
-                    : sector?.door
-                      ? "Door"
-                      : sector
-                        ? "Room"
-                        : "Inspector"}
-              </h2>
-              {selectedSwitch ? (
-                <SwitchInspector
-                  key={selectedSwitch.id}
-                  item={selectedSwitch}
-                  doors={doors}
-                  onChange={(patch) =>
-                    commit(updateSwitch(map, selectedSwitch.id, patch))
-                  }
-                />
-              ) : thing ? (
-                <ThingInspector
-                  key={thing.id}
-                  thing={thing}
-                  onChange={(patch) =>
-                    commit(
-                      updateThing(map, thing.id, patch),
-                      `thing:${thing.id}`,
-                    )
-                  }
-                />
-              ) : sector ? (
-                <SectorInspector
-                  key={sector.id}
-                  sector={sector}
-                  onChange={(patch) =>
-                    commit(
-                      "door" in patch
-                        ? setRoomDoor(map, sector.id, patch.door)
+            {line && selectedWall ? (
+              <LineInspector
+                key={`${line.wall}:${line.sector.id}`}
+                map={map}
+                wall={line.wall}
+                sector={line.sector.id}
+                assets={assets}
+                onSelectSide={(side) =>
+                  selectSurface(surfaceKey({ ...selectedWall, sector: side }))
+                }
+                onPaint={(part, texture, wholeRoom) =>
+                  commit(
+                    paintSurface(
+                      map,
+                      surfaceKey({ ...selectedWall, part }),
+                      texture,
+                      wholeRoom,
+                    ),
+                  )
+                }
+                onLineChange={(patch) =>
+                  commit(updateLine(map, line.wall, patch), `line:${line.wall}`)
+                }
+                onSideChange={(patch) =>
+                  commit(
+                    updateLineSide(map, line.wall, line.sector.id, patch),
+                    `line:${line.wall}:${line.sector.id}`,
+                  )
+                }
+                onTargetChange={(target) =>
+                  commit(setLineTarget(map, line.wall, target))
+                }
+              />
+            ) : sector && !selectedSwitch && !thing ? (
+              <SectorInspector
+                key={sector.id}
+                sector={sector}
+                assets={assets}
+                onChange={(patch) =>
+                  commit(
+                    "door" in patch
+                      ? setRoomDoor(map, sector.id, patch.door)
+                      : patch.wallTexture
+                        ? setRoomWalls(map, sector.id, patch.wallTexture)
                         : updateSector(map, sector.id, patch),
-                      `sector:${sector.id}`,
-                    )
-                  }
-                />
-              ) : (
-                <p className="muted">Click a room or thing on the map.</p>
-              )}
-            </section>
+                    `sector:${sector.id}`,
+                  )
+                }
+              />
+            ) : (
+              <section className="inspector-section">
+                <h2>
+                  {selectedSwitch ? "Switch" : thing ? "Thing" : "Inspector"}
+                </h2>
+                {selectedSwitch ? (
+                  <SwitchInspector
+                    key={selectedSwitch.id}
+                    item={selectedSwitch}
+                    doors={doors}
+                    onChange={(patch) =>
+                      commit(updateSwitch(map, selectedSwitch.id, patch))
+                    }
+                  />
+                ) : thing ? (
+                  <ThingInspector
+                    key={thing.id}
+                    thing={thing}
+                    onChange={(patch) =>
+                      commit(
+                        updateThing(map, thing.id, patch),
+                        `thing:${thing.id}`,
+                      )
+                    }
+                  />
+                ) : (
+                  <p className="muted">Click a room or thing on the map.</p>
+                )}
+              </section>
+            )}
 
             <section
               ref={mapCheck}

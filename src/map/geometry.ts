@@ -17,6 +17,19 @@ function wallTextureOf(sector: Sector, wall: string) {
   return sector.wallOverrides?.[wall] ?? sector.wallTexture;
 }
 
+function wallPartTexture(
+  map: GameMap,
+  sector: Sector,
+  wall: string,
+  part: "upper" | "middle" | "lower",
+) {
+  const side = map.lines?.[wall]?.sides?.[sector.id];
+  return (
+    (part === "middle" ? undefined : side?.[part]) ??
+    wallTextureOf(sector, wall)
+  );
+}
+
 function wallOwners(map: GameMap) {
   const owners = new Map<string, Sector[]>();
   for (const sector of map.sectors) {
@@ -102,6 +115,7 @@ export {
   signedArea,
   wallKey,
   wallOwners,
+  wallPartTexture,
   wallTextureOf,
   type Edge,
 };

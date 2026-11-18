@@ -6,8 +6,13 @@ import {
   thingCatalog,
   wallTextures,
 } from "./catalog";
-import { updateSector, updateSwitch } from "./edit";
-import { sectorEdges, wallKey, wallOwners, wallTextureOf } from "./geometry";
+import {
+  setRoomWalls,
+  updateLineSide,
+  updateSector,
+  updateSwitch,
+} from "./edit";
+import { sectorEdges, wallKey, wallOwners, wallPartTexture } from "./geometry";
 import type { GameMap, MapSwitch, Sector, Thing } from "./types";
 
 type WallPart = "middle" | "upper" | "lower";
@@ -141,7 +146,7 @@ function describeSurface(map: GameMap, key: string | null): SurfaceInfo | null {
     ...empty,
     sector,
     label: `${sector.name} wall`,
-    texture: wallTextureOf(sector, surface.wall),
+    texture: wallPartTexture(map, sector, surface.wall, surface.part),
     textures: wallTextures,
     paints: "wall",
   };
@@ -175,10 +180,10 @@ function paintSurface(
       ? updateSector(map, door.id, { door: { ...door.door, texture } })
       : map;
   }
-  if (wholeRoom) {
-    return updateSector(map, sector.id, {
-      wallTexture: texture,
-      wallOverrides: undefined,
+  if (wholeRoom) return setRoomWalls(map, sector.id, texture);
+  if (surface.part !== "middle" && wallOwners(map).get(surface.wall)?.[1]) {
+    return updateLineSide(map, surface.wall, sector.id, {
+      [surface.part]: texture,
     });
   }
   return updateSector(map, sector.id, {

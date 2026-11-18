@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { addRoomOnSide, setRoomDoor } from "./edit";
+import {
+  addRoomOnSide,
+  setRoomDoor,
+  updateLine,
+  updateLineSide,
+  updateSector,
+} from "./edit";
 import { blankMap, starterMap } from "./starter-map";
 import { loadSavedMap, parseMapFile, saveMap, serializeMap } from "./storage";
 import type { GameMap } from "./types";
@@ -21,6 +27,12 @@ function fileWith(change: (map: any) => void) {
   return JSON.stringify(file);
 }
 
+function fileWithAction(action: object) {
+  return fileWith((map) => {
+    map.lines = { "v3|v4": { action } };
+  });
+}
+
 describe("map files", () => {
   it("round-trips a map", () => {
     expect(parseMapFile(serializeMap(starterMap))).toEqual(starterMap);
@@ -39,6 +51,41 @@ describe("map files", () => {
       index === 0 ? { ...sector, wallOverrides: { [wall]: "BRICK1" } } : sector,
     );
     expect(parseMapFile(serializeMap(map))).toEqual(map);
+  });
+
+  it("keeps line settings and sector behaviour", () => {
+    const wall = "v3|v4";
+    const map = updateSector(
+      updateLineSide(
+        updateLine(starterMap, wall, {
+          hidden: true,
+          action: {
+            kind: "door-open",
+            trigger: "switch",
+            repeat: false,
+            key: "red",
+            tag: 7,
+          },
+        }),
+        wall,
+        "sector-2",
+        { offsetX: -4, upper: "BRICK1" },
+      ),
+      "sector-1",
+      { effect: "secret", tag: 7 },
+    );
+    expect(parseMapFile(serializeMap(map))).toEqual(map);
+  });
+
+  it("rejects line actions the engine doesn't have", () => {
+    const base = { kind: "exit", trigger: "walk", repeat: false, tag: 0 };
+    expect(() => parseMapFile(fileWithAction(base))).not.toThrow();
+    expect(() =>
+      parseMapFile(fileWithAction({ ...base, trigger: "shoot" })),
+    ).toThrow("unknown action");
+    expect(() =>
+      parseMapFile(fileWithAction({ ...base, kind: "constructor" })),
+    ).toThrow("unknown action");
   });
 
   it("reopens a map whose corner is outside the engine's range", () => {

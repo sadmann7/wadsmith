@@ -1,18 +1,29 @@
-import { doorTrackTexture, thingCatalog } from "../map/catalog";
+import { doorTrackTexture, sectorEffects, thingCatalog } from "../map/catalog";
 import {
   sectorEdges,
   signedArea,
   wallKey,
+  wallPartTexture,
   wallTextureOf,
 } from "../map/geometry";
-import type { GameMap, Point, Sector } from "../map/types";
+import { lineSpecial, lineUsesTag } from "../map/lines";
+import type {
+  GameMap,
+  LineSettings,
+  LineSide,
+  Point,
+  Sector,
+} from "../map/types";
 import { buildBlockmap } from "./blockmap";
 import { buildNodes, type Box, type NodeLine } from "./nodes";
 
 const mapLumpName = "MAP01";
 const lineBlocksPlayer = 0x0001;
+const lineBlocksEnemies = 0x0002;
 const lineTwoSided = 0x0004;
+const lineUpperUnpegged = 0x0008;
 const lineLowerUnpegged = 0x0010;
+const lineHidden = 0x0080;
 const specialDoorRaise = 1;
 const specialDoorOpen = 31;
 const specialSwitchDoorRaise = 63;
@@ -107,6 +118,31 @@ function buildLevel(map: GameMap) {
   return { vertices, sectors, lines };
 }
 
+function lineFlags(line: LineSettings | undefined) {
+  return (
+    (line?.blocksEnemies ? lineBlocksEnemies : 0) |
+    (line?.upperFixed ? lineUpperUnpegged : 0) |
+    (line?.lowerFixed ? lineLowerUnpegged : 0) |
+    (line?.hidden ? lineHidden : 0)
+  );
+}
+
+// A switch's door gets a tag no line or sector in the map has chosen.
+function sectorTags(map: GameMap, sectors: Sector[]) {
+  const used = new Set([
+    ...sectors.map((sector) => sector.tag ?? 0),
+    ...Object.values(map.lines ?? {}).map((line) => line.action?.tag ?? 0),
+  ]);
+  return sectors.map((sector, index) => {
+    if (sector.tag) return sector.tag;
+    if (!map.switches.some((item) => item.door === sector.id)) return 0;
+    let tag = index + 1;
+    while (used.has(tag)) tag += 1;
+    used.add(tag);
+    return tag;
+  });
+}
+
 function compileLumps(map: GameMap): Lump[] {
   const { vertices, sectors, lines } = buildLevel(map);
   const bsp = buildNodes(vertices, lines);
@@ -128,10 +164,11 @@ function compileLumps(map: GameMap): Lump[] {
   const writeSide = (
     sector: number,
     textures: { upper?: string; lower?: string; middle?: string },
+    side: LineSide | undefined,
   ) => {
     sidedefs
-      .int16(0)
-      .int16(0)
+      .int16(side?.offsetX ?? 0)
+      .int16(side?.offsetY ?? 0)
       .name(textures.upper ?? "-")
       .name(textures.lower ?? "-")
       .name(textures.middle ?? "-")
@@ -139,13 +176,17 @@ function compileLumps(map: GameMap): Lump[] {
     sideCount += 1;
     return sideCount - 1;
   };
+  const tags = sectorTags(map, sectors);
   const doorTag = (id: string) =>
-    sectors.findIndex((sector) => sector.id === id) + 1;
+    tags[sectors.findIndex((sector) => sector.id === id)];
   const switches = new Map(
     map.switches.map((item) => [wallKey(item.from, item.to), item]),
   );
   for (const line of lines) {
     const frontSector = sectors[line.frontSector];
+    const settings = map.lines?.[line.wall];
+    const sideOf = (sector: Sector) => settings?.sides?.[sector.id];
+    let wired = false;
     let flags = lineBlocksPlayer;
     let special = 0;
     let tag = 0;
@@ -155,40 +196,64 @@ function compileLumps(map: GameMap): Lump[] {
     if (line.backSector !== null) {
       const backSector = sectors[line.backSector];
       const door = backSector.door;
-      flags = lineTwoSided;
+      flags = lineTwoSided | (settings?.blocksAll ? lineBlocksPlayer : 0);
       if (door?.opensBy === "use") {
         special = door.closes ? specialDoorRaise : specialDoorOpen;
       }
-      front = writeSide(line.frontSector, {
-        upper: door?.texture ?? wallTextureOf(frontSector, line.wall),
-        lower: wallTextureOf(frontSector, line.wall),
-      });
-      back = writeSide(line.backSector, {
-        upper: door?.texture ?? wallTextureOf(backSector, line.wall),
-        lower: wallTextureOf(backSector, line.wall),
-      });
+      front = writeSide(
+        line.frontSector,
+        {
+          upper:
+            door?.texture ??
+            wallPartTexture(map, frontSector, line.wall, "upper"),
+          lower: wallPartTexture(map, frontSector, line.wall, "lower"),
+        },
+        sideOf(frontSector),
+      );
+      back = writeSide(
+        line.backSector,
+        {
+          upper:
+            door?.texture ??
+            wallPartTexture(map, backSector, line.wall, "upper"),
+          lower: wallPartTexture(map, backSector, line.wall, "lower"),
+        },
+        sideOf(backSector),
+      );
     } else if (frontSector.door) {
       flags |= lineLowerUnpegged;
-      front = writeSide(line.frontSector, { middle: doorTrackTexture });
+      front = writeSide(
+        line.frontSector,
+        { middle: doorTrackTexture },
+        sideOf(frontSector),
+      );
     } else {
       const item = switches.get(line.wall);
       const target = sectors.find((sector) => sector.id === item?.door);
+      if (item) flags |= lineLowerUnpegged;
       if (item && target?.door) {
-        flags |= lineLowerUnpegged;
+        wired = true;
         special = target.door.closes
           ? specialSwitchDoorRaise
           : specialSwitchDoorOpen;
         tag = doorTag(target.id);
       }
-      front = writeSide(line.frontSector, {
-        middle: item?.texture ?? wallTextureOf(frontSector, line.wall),
-      });
+      front = writeSide(
+        line.frontSector,
+        { middle: item?.texture ?? wallTextureOf(frontSector, line.wall) },
+        sideOf(frontSector),
+      );
+    }
+
+    if (settings?.action && !wired) {
+      special = lineSpecial(settings.action) ?? 0;
+      tag = lineUsesTag(settings.action) ? settings.action.tag : 0;
     }
 
     linedefs
       .int16(line.start)
       .int16(line.end)
-      .int16(flags)
+      .int16(flags | lineFlags(settings))
       .int16(special)
       .int16(tag)
       .int16(front)
@@ -238,10 +303,8 @@ function compileLumps(map: GameMap): Lump[] {
       .name(sector.floorTexture)
       .name(sector.ceilingTexture)
       .int16(sector.light)
-      .int16(0)
-      .int16(
-        map.switches.some((item) => item.door === sector.id) ? index + 1 : 0,
-      );
+      .int16(sector.effect ? sectorEffects[sector.effect].special : 0)
+      .int16(tags[index]);
   });
 
   const blockmapWords = buildBlockmap(

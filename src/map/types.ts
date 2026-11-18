@@ -6,6 +6,17 @@ type DoorSettings = {
   texture: string;
 };
 
+type SectorEffect =
+  | "flicker"
+  | "blink"
+  | "strobe-slow"
+  | "strobe-fast"
+  | "glow"
+  | "secret"
+  | "damage-5"
+  | "damage-10"
+  | "damage-20";
+
 type Sector = {
   id: string;
   name: string;
@@ -18,6 +29,46 @@ type Sector = {
   wallTexture: string;
   wallOverrides?: Record<string, string>;
   door?: DoorSettings;
+  effect?: SectorEffect;
+  tag?: number;
+};
+
+type LineActionKind =
+  | "door-raise"
+  | "door-open"
+  | "door-close"
+  | "floor-lower"
+  | "floor-raise"
+  | "lift"
+  | "exit";
+
+type LineTrigger = "door" | "switch" | "walk" | "shoot";
+
+type KeyColor = "blue" | "yellow" | "red";
+
+type LineAction = {
+  kind: LineActionKind;
+  trigger: LineTrigger;
+  repeat: boolean;
+  key?: KeyColor;
+  tag: number;
+};
+
+type LineSide = {
+  offsetX?: number;
+  offsetY?: number;
+  upper?: string;
+  lower?: string;
+};
+
+type LineSettings = {
+  blocksAll?: boolean;
+  blocksEnemies?: boolean;
+  upperFixed?: boolean;
+  lowerFixed?: boolean;
+  hidden?: boolean;
+  action?: LineAction;
+  sides?: Record<string, LineSide>;
 };
 
 type ThingKind =
@@ -28,7 +79,10 @@ type ThingKind =
   | "demon"
   | "shotgun"
   | "shells"
-  | "medikit";
+  | "medikit"
+  | "blue-key"
+  | "yellow-key"
+  | "red-key";
 
 type Thing = Point & {
   id: string;
@@ -51,14 +105,22 @@ type GameMap = {
   sectors: Sector[];
   things: Thing[];
   switches: MapSwitch[];
+  lines?: Record<string, LineSettings>;
 };
 
 export type {
   DoorSettings,
   GameMap,
+  KeyColor,
+  LineAction,
+  LineActionKind,
+  LineSettings,
+  LineSide,
+  LineTrigger,
   MapSwitch,
   Point,
   Sector,
+  SectorEffect,
   Thing,
   ThingKind,
 };
