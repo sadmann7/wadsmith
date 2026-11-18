@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { setRoomDoor, updateThing } from "../map/edit";
 import { starterMap } from "../map/starter-map";
@@ -11,25 +11,35 @@ import { compileMap } from "../wad/compile";
 import { doomKeys, startDoom, type CreateDoom, type DoomGame } from "./runtime";
 
 const engineDirectory = resolve(import.meta.dirname, "../../public/engine");
-const ready = existsSync(resolve(engineDirectory, "doom.js"));
+const ready = existsSync(resolve(engineDirectory, "websockets-doom.js"));
+
+const running: DoomGame[] = [];
+
+afterEach(() => {
+  for (const game of running.splice(0)) game.stop();
+});
 
 async function launch(map: GameMap) {
-  const url = pathToFileURL(resolve(engineDirectory, "doom.js")).href;
+  const url = pathToFileURL(
+    resolve(engineDirectory, "websockets-doom.js"),
+  ).href;
   const { default: createDoom } = (await import(/* @vite-ignore */ url)) as {
     default: CreateDoom;
   };
-  return startDoom({
+  const game = await startDoom({
     createDoom,
     iwad: readFileSync(resolve(engineDirectory, "freedoom2.wad")),
     map: compileMap(map),
     options: { print: () => {}, printErr: () => {} },
+    sound: false,
   });
+  running.push(game);
+  return game;
 }
 
-async function play(game: DoomGame, ms: number, until?: () => boolean) {
+async function play(_game: DoomGame, ms: number, until?: () => boolean) {
   const end = performance.now() + ms;
   while (performance.now() < end) {
-    game.tick(performance.now());
     if (until?.()) return;
     await new Promise((done) => setTimeout(done, 5));
   }
@@ -46,6 +56,12 @@ function playerAt(map: GameMap, x: number, y: number, angle: number) {
   return updateThing(map, "player-1", { x, y, angle });
 }
 
+// Game time stands still during the opening screen melt, so input there is lost.
+async function waitForPlay(game: DoomGame) {
+  const startTic = game.gameTic();
+  await play(game, 10_000, () => game.gameTic() > startTic + 5);
+}
+
 async function pressUse(game: DoomGame) {
   game.key(true, doomKeys.use);
   await play(game, 150);
@@ -55,7 +71,7 @@ async function pressUse(game: DoomGame) {
 describe.skipIf(!ready)("generated map in the engine", () => {
   it("loads the level at the player start", async () => {
     const game = await launch(openMap);
-    await play(game, 500);
+    await waitForPlay(game);
     const status = game.status();
     expect(status.inLevel).toBe(true);
     expect(status.health).toBe(100);
@@ -66,7 +82,7 @@ describe.skipIf(!ready)("generated map in the engine", () => {
 
   it("walks through a portal and kills a monster", async () => {
     const game = await launch(openMap);
-    await play(game, 300);
+    await waitForPlay(game);
     game.key(true, doomKeys.up);
     game.key(true, doomKeys.fire);
     await play(game, 25_000, () => {
@@ -78,18 +94,22 @@ describe.skipIf(!ready)("generated map in the engine", () => {
     expect(status.kills).toBeGreaterThan(0);
   }, 40_000);
 
+  it("reports a map the engine refuses", async () => {
+    await expect(launch({ ...openMap, things: [] })).rejects.toBeDefined();
+  }, 30_000);
+
   it("opens a door from a connected switch", async () => {
     const game = await launch(playerAt(starterMap, 192, 40, 90));
-    await play(game, 300);
+    await waitForPlay(game);
     expect(game.sectorCeiling(doorIndex)).toBe(doorFloor);
     await pressUse(game);
-    await play(game, 1500);
+    await play(game, 2000);
     expect(game.sectorCeiling(doorIndex)).toBe(92);
   }, 30_000);
 
   it("ignores the use key on a switch-only door", async () => {
     const game = await launch(playerAt(starterMap, 450, 160, 0));
-    await play(game, 300);
+    await waitForPlay(game);
     await pressUse(game);
     await play(game, 800);
     expect(game.sectorCeiling(doorIndex)).toBe(doorFloor);
@@ -113,9 +133,9 @@ describe.skipIf(!ready)("generated map in the engine", () => {
       // A monster walking into the doorway would hold the door open.
       things: map.things.filter((thing) => thing.kind === "player"),
     });
-    await play(game, 300);
+    await waitForPlay(game);
     await pressUse(game);
-    await play(game, 1500);
+    await play(game, 2000);
     expect(game.sectorCeiling(doorIndex)).toBe(92);
     await play(game, 7000, () => game.sectorCeiling(doorIndex) === doorFloor);
     expect(game.sectorCeiling(doorIndex)).toBe(doorFloor);
@@ -130,7 +150,7 @@ describe.skipIf(!ready)("generated map in the engine", () => {
       0,
     );
     const game = await launch({ ...map, switches: [] });
-    await play(game, 300);
+    await waitForPlay(game);
     game.key(true, doomKeys.fire);
     await play(game, 1000);
     expect(game.status().kills).toBe(0);
