@@ -25,7 +25,6 @@ import {
   Grid3x3,
   Link,
   LocateFixed,
-  MapPin,
   Maximize,
   MousePointer2,
   PenLine,
@@ -41,7 +40,7 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { keyThings, thingCatalog, thingKinds } from "../map/catalog";
+import { thingCatalog, thingKinds } from "../map/catalog";
 import {
   addRoomOnSide,
   addSwitch,
@@ -83,6 +82,7 @@ import {
   wallMiddle,
   type MapTarget,
 } from "./map-target";
+import { thingIcons } from "./thing-icons";
 
 type Selection = { keys?: string[]; sector?: string | null };
 
@@ -129,16 +129,10 @@ const facings = [
 ];
 
 function swappableKinds(kind: ThingKind) {
-  const keys: ThingKind[] = Object.values(keyThings);
-  if (kind === "player") return [];
-  if (keys.includes(kind)) return keys;
-  const { monster } = thingCatalog[kind];
-  return thingKinds.filter(
-    (item) =>
-      item !== "player" &&
-      !keys.includes(item) &&
-      thingCatalog[item].monster === monster,
-  );
+  const { category } = thingCatalog[kind];
+  return category === "start"
+    ? []
+    : thingKinds.filter((item) => thingCatalog[item].category === category);
 }
 
 function addsNoProblems(map: GameMap, next: GameMap) {
@@ -225,7 +219,7 @@ function SubMenu({
           <ChevronRight size={14} />
         </MenuItemIcon>
       </MenuSubTrigger>
-      <MenuSubContent className={`${contentClass} w-41`} sideOffset={4}>
+      <MenuSubContent className={`${contentClass} w-44`} sideOffset={4}>
         {children}
       </MenuSubContent>
     </MenuSub>
@@ -238,7 +232,13 @@ function Choices({
   onChange,
 }: {
   value: string | null;
-  items: { value: string; label: string; disabled?: boolean }[];
+  items: {
+    value: string;
+    label: string;
+    disabled?: boolean;
+    icon?: LucideIcon;
+    color?: string;
+  }[];
   onChange: (value: string) => void;
 }) {
   return (
@@ -251,12 +251,26 @@ function Choices({
           closeOnSelect
           className={itemClass}
         >
-          <span className={iconClass}>
-            <MenuItemIndicator className="text-ember">
+          {item.icon ? (
+            <MenuItemIcon
+              className="flex w-3.5 shrink-0 justify-center"
+              style={{ color: item.color }}
+            >
+              <item.icon size={14} />
+            </MenuItemIcon>
+          ) : (
+            <span className={iconClass}>
+              <MenuItemIndicator className="text-ember">
+                <Check size={14} />
+              </MenuItemIndicator>
+            </span>
+          )}
+          {item.label}
+          {item.icon ? (
+            <MenuItemIndicator className="ml-auto text-ember">
               <Check size={14} />
             </MenuItemIndicator>
-          </span>
-          {item.label}
+          ) : null}
         </MenuRadioItem>
       ))}
     </MenuRadioGroup>
@@ -312,7 +326,7 @@ function PlaceItem({
 }: BodyProps & { point: Point | null }) {
   return (
     <Item
-      icon={MapPin}
+      icon={thingIcons[thingKind].icon}
       disabled={!canStand(map, point)}
       onSelect={() => {
         if (!point) return;
@@ -358,6 +372,7 @@ function ThingsMenu({
           items={kinds.map((kind) => ({
             value: kind,
             label: thingCatalog[kind].label,
+            ...thingIcons[kind],
           }))}
           onChange={(kind) =>
             onCommit(changeThings(map, ids, kind as ThingKind))

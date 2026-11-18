@@ -24,16 +24,29 @@ const flatSize = 64;
 
 const spriteLumps: Record<ThingKind, string> = {
   player: "PLAYA1",
+  imp: "TROOA1",
   zombieman: "POSSA1",
   "shotgun-guy": "SPOSA1",
-  imp: "TROOA1",
   demon: "SARGA1",
+  spectre: "SARGA1",
+  "lost-soul": "SKULA1",
+  chaingunner: "CPOSA1",
+  "pain-elemental": "PAINA1",
   shotgun: "SHOTA0",
-  shells: "SBOXA0",
+  chaingun: "MGUNA0",
+  clip: "CLIPA0",
+  shells: "SHELA0",
+  stimpack: "STIMA0",
   medikit: "MEDIA0",
+  "green-armor": "ARM1A0",
+  "blue-armor": "ARM2A0",
   "blue-key": "BKEYA0",
   "yellow-key": "YKEYA0",
   "red-key": "RKEYA0",
+  barrel: "BAR1A0",
+  lamp: "COLUA0",
+  "tech-column": "ELECA0",
+  "red-torch": "TREDA0",
 };
 
 function lightStart(light: number, contrast: number) {
@@ -309,7 +322,8 @@ function createFlatAssets(): SceneAssets {
     texture: tile,
     flat: tile,
     sprite(kind) {
-      const monster = thingCatalog[kind].monster || kind === "player";
+      const monster =
+        thingCatalog[kind].category === "enemy" || kind === "player";
       const picture = solidPicture(
         monster ? 36 : 22,
         monster ? 56 : 20,

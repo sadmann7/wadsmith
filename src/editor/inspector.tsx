@@ -1,3 +1,4 @@
+import { Checkbox, CheckboxIndicator } from "@ui-sdk/react/checkbox";
 import { Input } from "@ui-sdk/react/input";
 import {
   NumberInput,
@@ -28,7 +29,9 @@ import {
   SegmentedControlItem,
 } from "@ui-sdk/react/segmented-control";
 import { Switch, SwitchThumb } from "@ui-sdk/react/switch";
-import type { ReactNode } from "react";
+import { Toggle, ToggleGroup } from "@ui-sdk/react/toggle";
+import { Check, Search, TriangleAlert } from "lucide-react";
+import { useState, type ReactNode } from "react";
 
 import {
   ceilingTextures,
@@ -37,9 +40,11 @@ import {
   sectorEffects,
   switchTextures,
   thingCatalog,
+  thingKinds,
   wallTextures,
 } from "../map/catalog";
-import { defaultDoor } from "../map/edit";
+import { appearsOn, mapBalance } from "../map/balance";
+import { defaultDoor, gridSize } from "../map/edit";
 import {
   canRepeatChoice,
   describeLine,
@@ -65,10 +70,30 @@ import type {
   Sector,
   SectorEffect,
   Thing,
+  ThingKind,
+  ThingSkill,
 } from "../map/types";
 import { TextureSwatch } from "../preview/surface-panel";
 import type { SceneAssets } from "../wad/assets";
+import { thingIcons } from "./thing-icons";
 
+type ThingTab = "enemy" | "item" | "key" | "decor";
+
+const thingTabs: { value: ThingTab; label: string }[] = [
+  { value: "enemy", label: "Enemies" },
+  { value: "item", label: "Items" },
+  { value: "key", label: "Keys" },
+  { value: "decor", label: "Decor" },
+];
+const allSkills: ThingSkill[] = ["easy", "medium", "hard"];
+const skillLabels: Record<ThingSkill, string> = {
+  easy: "Easy",
+  medium: "Medium",
+  hard: "Hard",
+};
+// Playtests launch the engine on skill 3.
+const playtestSkill: ThingSkill = "medium";
+const coordinateLimit = 32000;
 const offsetLimit = 32767;
 const tagLimit = 32767;
 const keyLabels: Record<KeyColor, string> = {
@@ -87,6 +112,11 @@ const lineFlags: { flag: keyof LineSettings; label: string }[] = [
   { flag: "lowerFixed", label: "Keep lower texture fixed" },
   { flag: "hidden", label: "Hide on automap" },
 ];
+
+function tabOf(kind: ThingKind): ThingTab {
+  const { category } = thingCatalog[kind];
+  return category === "start" ? "item" : category;
+}
 
 function InspectorSection({
   title,
@@ -699,25 +729,339 @@ function LineInspector({
   );
 }
 
-function ThingInspector({
-  thing,
+function CompactNumber({
+  label,
+  value,
+  min,
+  max,
+  step,
+  suffix,
   onChange,
 }: {
-  thing: Thing;
-  onChange: (patch: Partial<Thing>) => void;
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  suffix?: string;
+  onChange: (value: number) => void;
 }) {
   return (
-    <div className="stack">
-      <p className="thing-name">{thingCatalog[thing.kind].label}</p>
-      <NumberField
-        label="Facing"
-        value={thing.angle}
-        step={45}
-        min={0}
-        max={315}
-        onChange={(angle) => onChange({ angle })}
-      />
+    <div className="field min-w-0 flex-1">
+      <span className="label">{label}</span>
+      <NumberInput
+        value={value}
+        min={min}
+        max={max}
+        step={step}
+        onValueChange={(next) => {
+          if (next !== null) onChange(Math.round(next));
+        }}
+      >
+        <NumberInputGroup className="flex h-8 items-center rounded-[2px] border border-line bg-bg px-2">
+          <NumberInputControl
+            aria-label={label}
+            className="w-full min-w-0 border-0 bg-transparent font-mono text-xs tabular-nums outline-none"
+          />
+          {suffix ? (
+            <span className="font-mono text-xs text-muted">{suffix}</span>
+          ) : null}
+        </NumberInputGroup>
+      </NumberInput>
     </div>
+  );
+}
+
+function Meter({
+  label,
+  value,
+  fill,
+  color,
+}: {
+  label: string;
+  value: number;
+  fill: number;
+  color: string;
+}) {
+  return (
+    <div className="grid gap-1">
+      <div className="flex justify-between">
+        <span className="label">{label}</span>
+        <span className="font-mono text-xs">{value}</span>
+      </div>
+      <div className="h-1 bg-raised">
+        <div
+          className="h-full"
+          style={{ width: `${Math.min(1, fill) * 100}%`, background: color }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function BalancePanel({ map }: { map: GameMap }) {
+  const balance = mapBalance(map, playtestSkill);
+  const { enemies, health, ammo, keys, keysNeeded, healthShort, ammoShort } =
+    balance;
+  const advice = [
+    ammoShort > 0 ? `about ${ammoShort} more ammo` : null,
+    healthShort > 0 ? `about ${healthShort} more health` : null,
+    keysNeeded > 0
+      ? `${keysNeeded} missing ${keysNeeded === 1 ? "key" : "keys"}`
+      : null,
+  ].filter(Boolean);
+  return (
+    <InspectorSection title="Balance" detail={skillLabels[playtestSkill]}>
+      <Meter
+        label="Enemies"
+        value={enemies}
+        fill={enemies > 0 ? 1 : 0}
+        color="var(--danger)"
+      />
+      <Meter
+        label="Health pickups"
+        value={health}
+        fill={health / (health + healthShort || 1)}
+        color="var(--cold)"
+      />
+      <Meter
+        label="Ammo pickups"
+        value={ammo}
+        fill={ammo / (ammo + ammoShort || 1)}
+        color="var(--acid)"
+      />
+      <Meter
+        label="Keys"
+        value={keys}
+        fill={keys / (keys + keysNeeded || 1)}
+        color="var(--key)"
+      />
+      {advice.length > 0 ? (
+        <p className="flex gap-2">
+          <TriangleAlert
+            size={14}
+            className="mt-0.5 shrink-0 text-key"
+            aria-hidden="true"
+          />
+          Add {advice.join(", ")}.
+        </p>
+      ) : null}
+    </InspectorSection>
+  );
+}
+
+function PlaceThings({
+  kind,
+  onPick,
+}: {
+  kind: ThingKind;
+  onPick: (kind: ThingKind) => void;
+}) {
+  const [tab, setTab] = useState(() => tabOf(kind));
+  const [query, setQuery] = useState("");
+  const search = query.trim().toLowerCase();
+  const shown = thingKinds.filter((item) =>
+    search
+      ? thingCatalog[item].label.toLowerCase().includes(search)
+      : tabOf(item) === tab,
+  );
+  return (
+    <InspectorSection title="Place a thing">
+      <label className="flex h-8 items-center gap-2 rounded-[2px] border border-line bg-bg px-2">
+        <Search size={14} className="text-muted" aria-hidden="true" />
+        <Input
+          aria-label="Search things"
+          placeholder="Search things"
+          className="w-full min-w-0 border-0 bg-transparent outline-none"
+          value={query}
+          onValueChange={setQuery}
+        />
+      </label>
+      <SegmentedControl
+        aria-label="Thing type"
+        className="segments w-full [&>button]:flex-1 [&>button]:px-1"
+        value={tab}
+        onValueChange={(next) => setTab(next as ThingTab)}
+      >
+        <SegmentedControlIndicator className="segments-indicator" />
+        {thingTabs.map(({ value, label }) => (
+          <SegmentedControlItem key={value} value={value}>
+            {label}
+          </SegmentedControlItem>
+        ))}
+      </SegmentedControl>
+      {shown.length > 0 ? (
+        <div className="grid grid-cols-4 gap-1.5">
+          {shown.map((item) => {
+            const { icon: Icon, color } = thingIcons[item];
+            const active = item === kind;
+            return (
+              <button
+                key={item}
+                type="button"
+                aria-pressed={active}
+                title={thingCatalog[item].label}
+                className="grid h-[58px] min-w-0 content-center justify-items-center gap-1 rounded-[2px] border-0 bg-raised px-1 text-xs text-muted hover:text-text aria-pressed:bg-ember/15 aria-pressed:text-text"
+                onClick={() => onPick(item)}
+              >
+                <Icon
+                  size={18}
+                  style={{ color: active ? "var(--accent)" : color }}
+                  aria-hidden="true"
+                />
+                <span className="w-full truncate text-center">
+                  {thingCatalog[item].label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="muted">No things match.</p>
+      )}
+    </InspectorSection>
+  );
+}
+
+type ThingChange = (thing: Thing) => Partial<Omit<Thing, "id">>;
+
+function ThingFields({
+  things,
+  onChange,
+}: {
+  things: Thing[];
+  onChange: (change: ThingChange) => void;
+}) {
+  const [first] = things;
+  const single = things.length === 1 ? first : null;
+  const placed = things.filter((thing) => thing.kind !== "player");
+  const enemies = things.filter(
+    (thing) => thingCatalog[thing.kind].category === "enemy",
+  );
+  const pressed = allSkills.filter((skill) =>
+    placed.every((thing) => appearsOn(thing.skills, skill)),
+  );
+  const toggleSkill = (skill: ThingSkill, on: boolean) =>
+    onChange((thing) => {
+      if (thing.kind === "player") return {};
+      const next = allSkills.filter((item) =>
+        item === skill ? on : appearsOn(thing.skills, item),
+      );
+      if (next.length === 0) return {};
+      return {
+        skills: next.length === allSkills.length ? undefined : next,
+      };
+    });
+  return (
+    <>
+      <InspectorSection title="Placement">
+        <div className="flex gap-2.5">
+          {single ? (
+            <>
+              <CompactNumber
+                label="X"
+                value={single.x}
+                min={-coordinateLimit}
+                max={coordinateLimit}
+                step={gridSize}
+                onChange={(x) => onChange(() => ({ x }))}
+              />
+              <CompactNumber
+                label="Y"
+                value={0 - single.y}
+                min={-coordinateLimit}
+                max={coordinateLimit}
+                step={gridSize}
+                onChange={(y) => onChange(() => ({ y: 0 - y }))}
+              />
+            </>
+          ) : null}
+          <CompactNumber
+            label="Facing"
+            value={first.angle}
+            min={0}
+            max={359}
+            step={45}
+            suffix="°"
+            onChange={(angle) => onChange(() => ({ angle }))}
+          />
+        </div>
+      </InspectorSection>
+      {placed.length > 0 ? (
+        <InspectorSection title="Appears on">
+          <ToggleGroup
+            aria-label="Difficulties"
+            multiple
+            className="grid grid-cols-3 gap-0.5 rounded-[3px] bg-bg p-0.5"
+            value={pressed}
+            onValueChange={(next) => {
+              const changed = allSkills.find(
+                (skill) => next.includes(skill) !== pressed.includes(skill),
+              );
+              if (changed) toggleSkill(changed, next.includes(changed));
+            }}
+          >
+            {allSkills.map((skill) => (
+              <Toggle
+                key={skill}
+                value={skill}
+                className="h-[26px] rounded-[2px] border-0 bg-transparent text-muted aria-pressed:bg-raised aria-pressed:text-text"
+              >
+                {skillLabels[skill]}
+              </Toggle>
+            ))}
+          </ToggleGroup>
+          {enemies.length > 0 ? (
+            <label className="flex items-center gap-2">
+              <Checkbox
+                className="flex size-4 items-center justify-center rounded-[2px] border border-line bg-bg p-0 text-ember-foreground aria-checked:border-ember aria-checked:bg-ember"
+                checked={enemies.every((thing) => thing.ambush)}
+                onCheckedChange={(checked) =>
+                  onChange((thing) =>
+                    thingCatalog[thing.kind].category === "enemy"
+                      ? { ambush: checked === true || undefined }
+                      : {},
+                  )
+                }
+              >
+                <CheckboxIndicator>
+                  <Check size={12} aria-hidden="true" />
+                </CheckboxIndicator>
+              </Checkbox>
+              Wait until player is seen
+            </label>
+          ) : null}
+        </InspectorSection>
+      ) : null}
+    </>
+  );
+}
+
+function ThingInspector({
+  map,
+  things,
+  placing,
+  onChange,
+  onPlace,
+}: {
+  map: GameMap;
+  things: Thing[];
+  placing: ThingKind;
+  onChange: (change: ThingChange) => void;
+  onPlace: (kind: ThingKind) => void;
+}) {
+  return (
+    <>
+      {things.length > 0 ? (
+        <ThingFields
+          key={things.map((thing) => thing.id).join()}
+          things={things}
+          onChange={onChange}
+        />
+      ) : null}
+      <PlaceThings kind={placing} onPick={onPlace} />
+      <BalancePanel map={map} />
+    </>
   );
 }
 

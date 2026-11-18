@@ -1,21 +1,10 @@
-import {
-  ArrowRight,
-  Box,
-  Crosshair,
-  Focus,
-  KeyRound,
-  LocateFixed,
-  Maximize,
-  Plus,
-  Skull,
-  type LucideIcon,
-} from "lucide-react";
+import { Focus, LocateFixed, Maximize } from "lucide-react";
 import type { ComponentProps, CSSProperties } from "react";
 
 import { thingCatalog } from "../map/catalog";
 import { doorKeyPrefix, switchKeyPrefix, thingKeyPrefix } from "../map/edit";
 import { sectorEdges } from "../map/geometry";
-import type { GameMap, ThingKind } from "../map/types";
+import type { GameMap } from "../map/types";
 import {
   MapCamera,
   MapConnecting,
@@ -32,22 +21,9 @@ import {
   MapWire,
   MapWorld,
 } from "./map-editor";
+import { thingIcons } from "./thing-icons";
 
 const worldSize = 65536;
-
-const thingStyles: Record<ThingKind, { icon: LucideIcon; color: string }> = {
-  player: { icon: ArrowRight, color: "var(--key)" },
-  zombieman: { icon: Skull, color: "var(--danger)" },
-  "shotgun-guy": { icon: Skull, color: "var(--danger)" },
-  imp: { icon: Skull, color: "var(--danger)" },
-  demon: { icon: Skull, color: "var(--danger)" },
-  shotgun: { icon: Crosshair, color: "var(--acid)" },
-  shells: { icon: Box, color: "var(--acid)" },
-  medikit: { icon: Plus, color: "var(--cold)" },
-  "blue-key": { icon: KeyRound, color: "var(--cold)" },
-  "yellow-key": { icon: KeyRound, color: "var(--key)" },
-  "red-key": { icon: KeyRound, color: "var(--danger)" },
-};
 
 function wallsOf(map: GameMap) {
   const walls = new Map<
@@ -144,7 +120,7 @@ function MapCanvas({
         ))}
         {map.things.map((thing) => {
           const { label } = thingCatalog[thing.kind];
-          const { icon: Icon, color } = thingStyles[thing.kind];
+          const { icon: Icon, color } = thingIcons[thing.kind];
           return (
             <MapHandle
               key={thing.id}

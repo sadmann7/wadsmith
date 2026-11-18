@@ -6,6 +6,7 @@ import {
   updateLine,
   updateLineSide,
   updateSector,
+  updateThing,
 } from "./edit";
 import { blankMap, starterMap } from "./starter-map";
 import { loadSavedMap, parseMapFile, saveMap, serializeMap } from "./storage";
@@ -75,6 +76,21 @@ describe("map files", () => {
       { effect: "secret", tag: 7 },
     );
     expect(parseMapFile(serializeMap(map))).toEqual(map);
+  });
+
+  it("keeps thing difficulty settings", () => {
+    const map = updateThing(starterMap, "imp-1", {
+      skills: ["easy", "hard"],
+      ambush: true,
+    });
+    expect(parseMapFile(serializeMap(map))).toEqual(map);
+    expect(() =>
+      parseMapFile(
+        fileWith((file) => {
+          file.things[1].skills = ["nightmare"];
+        }),
+      ),
+    ).toThrow("unknown difficulty");
   });
 
   it("rejects line actions the engine doesn't have", () => {

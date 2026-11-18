@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import { thingKinds } from "../map/catalog";
 import {
   addThing,
   setLineTarget,
@@ -235,5 +236,29 @@ describe.skipIf(!ready)("generated map in the engine", () => {
     await pressUse(game);
     await play(game, 4000, () => game.sectorCeiling(doorIndex) === 92);
     expect(game.sectorCeiling(doorIndex)).toBe(92);
+  }, 40_000);
+
+  it("loads every thing type and honors difficulty", async () => {
+    const everything = thingKinds
+      .filter((kind) => kind !== "player")
+      .reduce(
+        (map, kind, index) =>
+          addThing(map, kind, {
+            x: 560 + (index % 6) * 64,
+            y: 0 + Math.floor(index / 6) * 64,
+          }).map,
+        openMap,
+      );
+    const hardOnly = everything.things.map((thing) =>
+      thing.id === "imp-1" ? { ...thing, skills: ["hard" as const] } : thing,
+    );
+    const all = await launch(everything);
+    await waitForPlay(all);
+    const total = all.status().totalKills;
+    expect(all.status().inLevel).toBe(true);
+    all.stop();
+    const fewer = await launch({ ...everything, things: hardOnly });
+    await waitForPlay(fewer);
+    expect(fewer.status().totalKills).toBe(total - 1);
   }, 40_000);
 });

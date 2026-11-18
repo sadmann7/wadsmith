@@ -27,6 +27,7 @@ import type {
   SectorEffect,
   Thing,
   ThingKind,
+  ThingSkill,
 } from "./types";
 
 const fileFormat = "wadsmith-map";
@@ -38,6 +39,7 @@ const coordinateLimit = 1_000_000;
 const maxNameLength = 80;
 const heightLimit = 32767;
 const wordLimit = 32767;
+const thingSkills: ThingSkill[] = ["easy", "medium", "hard"];
 const maxItems = 20000;
 const maxFileBytes = 5 * 1024 * 1024;
 const idPattern = /^[A-Za-z0-9_-]{1,40}$/;
@@ -260,11 +262,25 @@ function parseThing(value: unknown): Thing {
   }
   const angle = integer(thing.angle, 359, `Thing ${thingId}`);
   if (angle < 0) fail(`Thing ${thingId} has an invalid angle.`);
+  const skills =
+    thing.skills === undefined
+      ? undefined
+      : list(thing.skills, `Thing ${thingId}`).map((skill) => {
+          if (!thingSkills.includes(skill as ThingSkill)) {
+            fail(`Thing ${thingId} has an unknown difficulty.`);
+          }
+          return skill as ThingSkill;
+        });
+  if (thing.ambush !== undefined && typeof thing.ambush !== "boolean") {
+    fail(`Thing ${thingId} is not valid.`);
+  }
   return {
     id: thingId,
     kind: thing.kind as ThingKind,
     angle,
     ...parsePoint(thing, `Thing ${thingId}`),
+    ...(skills ? { skills } : {}),
+    ...(thing.ambush === undefined ? {} : { ambush: thing.ambush }),
   };
 }
 

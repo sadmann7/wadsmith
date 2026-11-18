@@ -20,6 +20,8 @@ import {
   updateLineSide,
   wallNear,
   updateSector,
+  updateThing,
+  updateThings,
 } from "../map/edit";
 import {
   canStand,
@@ -31,6 +33,8 @@ import {
 } from "../editor/map-target";
 import { sectorAt, wallKey } from "../map/geometry";
 import { fitLineAction, triggersFor } from "../map/lines";
+import { mapBalance } from "../map/balance";
+import { thingCatalog, thingKinds } from "../map/catalog";
 import { starterMap } from "../map/starter-map";
 import { parseMapFile, serializeMap } from "../map/storage";
 import type { GameMap, LineAction } from "../map/types";
@@ -792,5 +796,129 @@ describe("context menu targets", () => {
         point: null,
       }),
     ).toBeNull();
+  });
+});
+
+function thingFlagsOf(map: GameMap, index: number) {
+  return new DataView(lump(map, "THINGS").buffer).getInt16(
+    index * 10 + 8,
+    true,
+  );
+}
+
+describe("thing settings", () => {
+  it("writes difficulty and ambush flags", () => {
+    const map = updateThing(
+      updateThing(starterMap, "imp-1", {
+        skills: ["easy", "hard"],
+        ambush: true,
+      }),
+      "player-1",
+      { ambush: true },
+    );
+    const imp = map.things.findIndex((thing) => thing.id === "imp-1");
+    const player = map.things.findIndex((thing) => thing.id === "player-1");
+    expect(thingFlagsOf(map, imp)).toBe(1 | 4 | 8);
+    expect(thingFlagsOf(map, player)).toBe(7);
+  });
+
+  it("requires a locked door's key on every difficulty", () => {
+    const locked = addThing(
+      updateLine(starterMap, wallKey("v3", "v4"), {
+        action: {
+          kind: "door-raise",
+          trigger: "door",
+          repeat: true,
+          key: "blue",
+          tag: 0,
+        },
+      }),
+      "blue-key",
+      { x: 64, y: 64 },
+    );
+    expect(validateMap(locked.map)).toEqual([]);
+    const hardOnly = updateThing(locked.map, locked.id, { skills: ["hard"] });
+    expect(validateMap(hardOnly).map((issue) => issue.id)).toContain(
+      `line-key:${wallKey("v3", "v4")}`,
+    );
+  });
+
+  it("changes each selected thing from its own values", () => {
+    const map = updateThing(starterMap, "imp-1", { skills: ["hard"] });
+    const next = updateThings(map, ["imp-1", "zombieman-1"], (thing) => ({
+      angle: thing.id === "imp-1" ? 90 : 270,
+    }));
+    expect(next.things.find((item) => item.id === "imp-1")).toMatchObject({
+      angle: 90,
+      skills: ["hard"],
+    });
+    expect(next.things.find((item) => item.id === "zombieman-1")?.angle).toBe(
+      270,
+    );
+  });
+
+  it("rejects a thing inside a closed door", () => {
+    const map = updateThing(starterMap, "imp-1", { x: 504, y: 160 });
+    expect(validateMap(map).map((issue) => issue.id)).toContain(
+      "in-door:imp-1",
+    );
+  });
+
+  it("gives every thing a unique engine type", () => {
+    const types = thingKinds.map((kind) => thingCatalog[kind].doomType);
+    expect(new Set(types).size).toBe(types.length);
+  });
+
+  it("copies difficulty settings with a thing", () => {
+    const map = updateThing(starterMap, "imp-1", {
+      skills: ["hard"],
+      ambush: true,
+    });
+    const copies = duplicateThings(map, ["imp-1"]);
+    expect(copies.map.things.at(-1)).toMatchObject({
+      skills: ["hard"],
+      ambush: true,
+    });
+  });
+
+  it("balances only what appears on the difficulty", () => {
+    const things: GameMap["things"] = [
+      { id: "player-1", kind: "player", x: 96, y: 160, angle: 0 },
+      { id: "a", kind: "pain-elemental", x: 64, y: 64, angle: 0 },
+      { id: "b", kind: "imp", x: 96, y: 64, angle: 0, skills: ["hard"] },
+      { id: "c", kind: "medikit", x: 128, y: 64, angle: 0 },
+      { id: "d", kind: "clip", x: 160, y: 64, angle: 0 },
+      { id: "e", kind: "blue-key", x: 192, y: 64, angle: 0 },
+    ];
+    const map = updateLine({ ...starterMap, things }, wallKey("v3", "v4"), {
+      action: {
+        kind: "door-raise",
+        trigger: "door",
+        repeat: true,
+        key: "red",
+        tag: 0,
+      },
+    });
+    expect(mapBalance(map, "medium")).toEqual({
+      enemies: 1,
+      health: 1,
+      ammo: 1,
+      keys: 1,
+      keysNeeded: 1,
+      healthShort: 0,
+      ammoShort: 0,
+    });
+    expect(mapBalance(map, "hard").enemies).toBe(2);
+    const crowded = {
+      ...map,
+      things: Array.from({ length: 6 }, (_, index) => ({
+        ...things[1],
+        id: `p${index}`,
+      })),
+    };
+    expect(mapBalance(crowded, "medium")).toMatchObject({
+      healthShort: 8,
+      ammoShort: 31,
+    });
   });
 });

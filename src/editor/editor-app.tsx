@@ -58,6 +58,7 @@ import {
   ThingInspector,
 } from "./inspector";
 import { MapCanvas } from "./map-canvas";
+import { thingIcons } from "./thing-icons";
 import {
   normalizeControlClick,
   targetExists,
@@ -81,7 +82,7 @@ import {
   updateLineSide,
   updateSector,
   updateSwitch,
-  updateThing,
+  updateThings,
   type RoomSide,
 } from "../map/edit";
 import { describeLine } from "../map/lines";
@@ -95,7 +96,7 @@ import {
   serializeMap,
   watchSavedMap,
 } from "../map/storage";
-import type { GameMap, Point, ThingKind } from "../map/types";
+import type { GameMap, Point, ThingCategory, ThingKind } from "../map/types";
 import { validateMap } from "../map/validate";
 import { loadIwad } from "../engine/iwad";
 import { SceneCamera } from "../preview/scene-camera";
@@ -107,7 +108,7 @@ import {
   parseSurface,
   surfaceKey,
 } from "../map/surfaces";
-import { wallKey, wallOwners } from "../map/geometry";
+import { sectorAt, wallKey, wallOwners } from "../map/geometry";
 import { createFlatAssets, readWadAssets } from "../wad/assets";
 import { compileMap } from "../wad/compile";
 
@@ -123,6 +124,14 @@ const roomSides: RoomSide[] = ["north", "east", "south", "west"];
 
 type ViewLayout = "map" | "split" | "scene";
 type SinglePane = Exclude<ViewLayout, "split">;
+
+const thingCategoryLabels: Record<ThingCategory, string> = {
+  start: "Start",
+  enemy: "Enemy",
+  item: "Item",
+  key: "Key",
+  decor: "Decor",
+};
 
 const layoutKey = "wadsmith:layout";
 // Below this width, two panes can't hold the map controls and a usable 3D view.
@@ -277,6 +286,9 @@ function App() {
   );
   const thing = map.things.find(
     (item) => `${thingKeyPrefix}${item.id}` === selectedThingKey,
+  );
+  const selectedThings = map.things.filter((item) =>
+    selection.includes(`${thingKeyPrefix}${item.id}`),
   );
 
   const selectedSwitch = map.switches.find((item) =>
@@ -609,11 +621,19 @@ function App() {
         <span aria-hidden="true">▾</span>
       </SelectTrigger>
       <SelectContent className="select-content">
-        {thingKinds.map((kind) => (
-          <SelectItem key={kind} value={kind} className="select-item">
-            {thingCatalog[kind].label}
-          </SelectItem>
-        ))}
+        {thingKinds.map((kind) => {
+          const { icon: Icon, color } = thingIcons[kind];
+          return (
+            <SelectItem
+              key={kind}
+              value={kind}
+              className="select-item flex items-center gap-2"
+            >
+              <Icon size={14} style={{ color }} aria-hidden="true" />
+              {thingCatalog[kind].label}
+            </SelectItem>
+          );
+        })}
       </SelectContent>
     </Select>
   );
@@ -693,30 +713,47 @@ function App() {
     else if (action === "play") play();
   };
 
+  const thingRoom = thing ? sectorAt(map, thing) : null;
+  const thingMeta = thing
+    ? [
+        `Thing ${String(map.things.indexOf(thing) + 1).padStart(2, "0")}`,
+        thingCategoryLabels[thingCatalog[thing.kind].category],
+        ...(thingRoom ? [thingRoom.name] : []),
+      ].join(" · ")
+    : "";
+  const placingThings = editMode === "things";
   const selectionTitle = selectedSwitch
     ? "Switch"
-    : thing
-      ? thingCatalog[thing.kind].label
-      : line
-        ? `Line ${line.number}`
-        : surfaceInfo && !surfaceInfo.thing
-          ? surfaceInfo.label
-          : (sector?.name ?? "Nothing selected");
+    : selectedThings.length > 1
+      ? `${selectedThings.length} things`
+      : thing
+        ? thingCatalog[thing.kind].label
+        : line
+          ? `Line ${line.number}`
+          : surfaceInfo && !surfaceInfo.thing
+            ? surfaceInfo.label
+            : placingThings
+              ? "Things"
+              : (sector?.name ?? "Nothing selected");
   const selectionMeta = selectedSwitch
     ? selectedSwitch.door
       ? "Wired to a door"
       : "Not connected"
-    : thing
-      ? `${thing.id} · X ${thing.x} Y ${-thing.y}`
-      : line
-        ? `${line.back ? "Two-sided" : "One-sided"} · ${line.length} long · ${
-            line.back
-              ? `${line.front.name} to ${line.back.name}`
-              : line.front.name
-          }`
-        : sector
-          ? `${sector.door ? "Door" : "Sector"} · ${sector.vertices.length} walls`
-          : "Click a room, line or thing on the map";
+    : selectedThings.length > 1
+      ? "Changes apply to every selected thing"
+      : thing
+        ? thingMeta
+        : placingThings
+          ? "Pick a thing, then click the map"
+          : line
+            ? `${line.back ? "Two-sided" : "One-sided"} · ${line.length} long · ${
+                line.back
+                  ? `${line.front.name} to ${line.back.name}`
+                  : line.front.name
+              }`
+            : sector
+              ? `${sector.door ? "Door" : "Sector"} · ${sector.vertices.length} walls`
+              : "Click a room, line or thing on the map";
 
   const play = () => {
     if (canPlay && !buildProblem()) setPlayedMap(map);
@@ -1201,6 +1238,26 @@ function App() {
                   commit(setLineTarget(map, line.wall, target))
                 }
               />
+            ) : !selectedSwitch && (thing || placingThings) ? (
+              <ThingInspector
+                map={map}
+                things={selectedThings}
+                placing={thingKind}
+                onChange={(patch) =>
+                  commit(
+                    updateThings(
+                      map,
+                      selectedThings.map((item) => item.id),
+                      patch,
+                    ),
+                    `thing:${selectedThings.map((item) => item.id).join()}`,
+                  )
+                }
+                onPlace={(kind) => {
+                  setThingKind(kind);
+                  setTool("thing");
+                }}
+              />
             ) : sector && !selectedSwitch && !thing ? (
               <SectorInspector
                 key={sector.id}
@@ -1219,9 +1276,7 @@ function App() {
               />
             ) : (
               <section className="inspector-section">
-                <h2>
-                  {selectedSwitch ? "Switch" : thing ? "Thing" : "Inspector"}
-                </h2>
+                <h2>{selectedSwitch ? "Switch" : "Inspector"}</h2>
                 {selectedSwitch ? (
                   <SwitchInspector
                     key={selectedSwitch.id}
@@ -1235,17 +1290,6 @@ function App() {
                     }
                     onChange={(patch) =>
                       commit(updateSwitch(map, selectedSwitch.id, patch))
-                    }
-                  />
-                ) : thing ? (
-                  <ThingInspector
-                    key={thing.id}
-                    thing={thing}
-                    onChange={(patch) =>
-                      commit(
-                        updateThing(map, thing.id, patch),
-                        `thing:${thing.id}`,
-                      )
                     }
                   />
                 ) : (

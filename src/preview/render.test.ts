@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { thingKinds } from "../map/catalog";
 import { updateLineSide, updateSector } from "../map/edit";
 import { wallKey } from "../map/geometry";
 import { starterMap } from "../map/starter-map";
@@ -258,6 +259,9 @@ describe.skipIf(!existsSync(wadPath))("readWadAssets", () => {
     expect(imp.height).toBeGreaterThan(30);
     expect(imp.opaque.includes(0)).toBe(true);
     expect(wad.sprite("player")).not.toBeNull();
+    for (const kind of thingKinds) {
+      expect(wad.sprite(kind), kind).not.toBeNull();
+    }
     expect(wad.shades[256 * 31 + 100]).not.toBe(wad.shades[100]);
   });
 });

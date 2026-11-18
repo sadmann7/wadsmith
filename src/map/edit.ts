@@ -224,6 +224,17 @@ function changeThings(map: GameMap, ids: string[], kind: ThingKind) {
   return ids.reduce((next, id) => updateThing(next, id, { kind }), map);
 }
 
+function updateThings(
+  map: GameMap,
+  ids: string[],
+  patch: (thing: Thing) => Partial<Omit<Thing, "id">>,
+) {
+  return ids.reduce((next, id) => {
+    const thing = next.things.find((item) => item.id === id);
+    return thing ? updateThing(next, id, patch(thing)) : next;
+  }, map);
+}
+
 function faceThings(map: GameMap, ids: string[], angle: number) {
   return ids.reduce((next, id) => updateThing(next, id, { angle }), map);
 }
@@ -257,7 +268,10 @@ function duplicateThings(map: GameMap, ids: string[]) {
     const thing = map.things.find((item) => item.id === id);
     if (!thing || thing.kind === "player") continue;
     const added = addThing(next, thing.kind, copySpot(map, thing), thing.angle);
-    next = added.map;
+    next = updateThing(added.map, added.id, {
+      skills: thing.skills,
+      ambush: thing.ambush,
+    });
     copies.push(added.id);
   }
   return { map: next, ids: copies };
@@ -681,6 +695,7 @@ export {
   updateSector,
   updateSwitch,
   updateThing,
+  updateThings,
   wallNear,
   type RoomSide,
 };

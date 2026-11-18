@@ -8,12 +8,14 @@ import {
   wallKey,
   wallOwners,
 } from "./geometry";
+import { appearsOn } from "./balance";
 import { keyThings } from "./catalog";
 import { describeLine, lineUsesTag } from "./lines";
-import type { GameMap, Sector } from "./types";
+import type { GameMap, Sector, ThingSkill } from "./types";
 
 type MapIssue = { id: string; message: string; target?: string };
 
+const skills: ThingSkill[] = ["easy", "medium", "hard"];
 const coordinateLimit = 32000;
 const heightLimit = 32767;
 const doorClearance = 4;
@@ -248,11 +250,16 @@ function validateLines(map: GameMap, issues: MapIssue[]) {
     } else if (!line.twoSided && action.trigger === "walk") {
       add("line-walk", "nothing can walk over a solid wall.");
     }
-    if (
-      action.key &&
-      !map.things.some((thing) => thing.kind === keyThings[action.key!])
-    ) {
-      add("line-key", `place the ${action.key} key it needs.`);
+    if (action.key) {
+      const kind = keyThings[action.key];
+      const keys = map.things.filter((thing) => thing.kind === kind);
+      if (
+        !skills.every((skill) =>
+          keys.some((key) => appearsOn(key.skills, skill)),
+        )
+      ) {
+        add("line-key", `place the ${action.key} key on every difficulty.`);
+      }
     }
     if (!lineUsesTag(action)) continue;
     if (!action.tag) {
@@ -301,7 +308,15 @@ function validateMap(map: GameMap): MapIssue[] {
   }
   if (issues.length === 0) {
     for (const thing of map.things) {
-      if (!sectorAt(map, thing)) {
+      const room = sectorAt(map, thing);
+      if (room?.door) {
+        issues.push({
+          id: `in-door:${thing.id}`,
+          message: `${thing.id} is inside a closed door.`,
+          target: thing.id,
+        });
+      }
+      if (!room) {
         issues.push({
           id: `outside:${thing.id}`,
           message: `${thing.id} is outside every room.`,
@@ -313,4 +328,4 @@ function validateMap(map: GameMap): MapIssue[] {
   return issues;
 }
 
-export { validateMap, type MapIssue };
+export { activeLineActions, validateMap, type MapIssue };
