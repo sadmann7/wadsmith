@@ -19,9 +19,11 @@ pnpm dev
 - **Select:** drag corners and things, click a room to edit it, and drag empty space to pan.
 - **Draw room:** click corners, then click the first corner or press Enter. Reuse another room's corners to connect the two.
 - **Place:** pick a thing and click inside a room.
+- **Switch:** click a solid wall to add a switch, then drag from it to a door.
+- **Doors:** draw a thin room between two rooms and turn on **Door** in the inspector. It can open with the use key or a switch, and close again or stay open.
 - **Play:** builds a WAD and loads it. Move with WASD, turn with the arrow keys, fire with Space and use with E.
 
-`window.agent` exposes the UI SDK agent bridge, with `addConnectedRoom`, `setRoomHeights` and `placeThing` on the Map component.
+`window.agent` exposes the UI SDK agent bridge, with `addConnectedRoom`, `setRoomHeights`, `placeThing`, `makeDoor` and `addDoorSwitch` on the Map component.
 
 ## License
 

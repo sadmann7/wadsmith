@@ -1,11 +1,13 @@
 import {
   createChange,
+  createConnect,
   createMove,
   createViewport,
   css,
   definePrimitive,
   live,
   type ChangeDetails,
+  type ConnectDraft,
   type MoveDraft,
   type Viewport,
 } from "@ui-sdk/core";
@@ -15,22 +17,37 @@ import { thingKinds } from "../map/catalog";
 import {
   addRoom,
   addRoomOnSide,
+  addSwitch,
+  addSwitchInRoom,
   addThing,
   applyPositions,
+  defaultDoor,
+  doorKeyPrefix,
+  freeWallNear,
   gridSize,
   positionsOf,
   removeSector,
+  removeSwitch,
   removeThing,
   roomCenter,
+  setRoomDoor,
   snapPoint,
+  switchKeyPrefix,
   thingKeyPrefix,
   updateSector,
+  updateSwitch,
   type RoomSide,
 } from "../map/edit";
 import { sectorAt } from "../map/geometry";
-import type { GameMap, Point, Sector, ThingKind } from "../map/types";
+import type {
+  DoorSettings,
+  GameMap,
+  Point,
+  Sector,
+  ThingKind,
+} from "../map/types";
 
-type MapTool = "select" | "draw" | "thing";
+type MapTool = "select" | "draw" | "thing" | "switch";
 
 type MapChangeReason =
   | "drag"
@@ -39,6 +56,7 @@ type MapChangeReason =
   | "draw"
   | "place"
   | "delete"
+  | "connect-key"
   | "agent";
 
 type MapEditorOptions = {
@@ -65,6 +83,7 @@ type MapEditorState = {
   positions: Record<string, Point>;
   viewport: Viewport;
   moving: MoveDraft | null;
+  connecting: ConnectDraft | null;
   tool: MapTool;
   thingKind: ThingKind;
   activeSector: string | null;
@@ -73,8 +92,15 @@ type MapEditorState = {
   cursor: Point | null;
 };
 
-const emptyMap: GameMap = { vertices: {}, sectors: [], things: [] };
+const emptyMap: GameMap = {
+  vertices: {},
+  sectors: [],
+  things: [],
+  switches: [],
+};
+const hiddenLine = { x1: "0", y1: "0", x2: "0", y2: "0" };
 const clickSlop = 4;
+const switchReach = 32;
 
 function pointOf(state: MapEditorState, key: string): Point {
   const base = state.positions[key] ?? { x: 0, y: 0 };
@@ -82,6 +108,47 @@ function pointOf(state: MapEditorState, key: string): Point {
   return moving?.keys.includes(key)
     ? { x: base.x + moving.dx, y: base.y + moving.dy }
     : base;
+}
+
+function portPoint(state: MapEditorState, key: string): Point {
+  if (key.startsWith(switchKeyPrefix)) {
+    const id = key.slice(switchKeyPrefix.length);
+    const item = state.map.switches.find((entry) => entry.id === id);
+    if (!item) return { x: 0, y: 0 };
+    const a = pointOf(state, item.from);
+    const b = pointOf(state, item.to);
+    return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  }
+  const id = key.slice(doorKeyPrefix.length);
+  const vertices =
+    state.map.sectors.find((sector) => sector.id === id)?.vertices ?? [];
+  const points = vertices.map((vertex) => pointOf(state, vertex));
+  const count = points.length || 1;
+  return {
+    x: points.reduce((sum, point) => sum + point.x, 0) / count,
+    y: points.reduce((sum, point) => sum + point.y, 0) / count,
+  };
+}
+
+function lineAttrs(a: Point, b: Point) {
+  return {
+    x1: String(a.x),
+    y1: String(a.y),
+    x2: String(b.x),
+    y2: String(b.y),
+  };
+}
+
+function connectingAttrs(state: MapEditorState) {
+  const { connecting } = state;
+  if (!connecting) return { "data-active": undefined, ...hiddenLine };
+  const end = connecting.to
+    ? portPoint(state, connecting.to)
+    : { x: connecting.x, y: connecting.y };
+  return {
+    "data-active": "",
+    ...lineAttrs(portPoint(state, connecting.from), end),
+  };
 }
 
 function polygonPoints(state: MapEditorState, id: string) {
@@ -102,14 +169,7 @@ function draftPoints(state: MapEditorState) {
 }
 
 function wallAttrs(state: MapEditorState, from: string, to: string) {
-  const a = pointOf(state, from);
-  const b = pointOf(state, to);
-  return {
-    x1: String(a.x),
-    y1: String(a.y),
-    x2: String(b.x),
-    y2: String(b.y),
-  };
+  return lineAttrs(pointOf(state, from), pointOf(state, to));
 }
 
 const mapEditor = definePrimitive({
@@ -134,6 +194,7 @@ const mapEditor = definePrimitive({
       positions: positionsOf(map),
       viewport: { x: 0, y: 0, zoom: 1 },
       moving: null,
+      connecting: null,
       tool: options.tool ?? "select",
       thingKind: options.thingKind ?? "imp",
       activeSector: options.activeSector ?? null,
@@ -153,7 +214,7 @@ const mapEditor = definePrimitive({
       : {}),
     ...(options.selection ? { selection: options.selection } : {}),
   }),
-  live: ["viewport", "moving", "cursor", "drawing"],
+  live: ["viewport", "moving", "connecting", "cursor", "drawing"],
   api: (context) => {
     const { store } = context;
     const change = createChange(context);
@@ -171,13 +232,36 @@ const mapEditor = definePrimitive({
       draft: "moving",
       step: () => gridSize,
       scale: () => store.get().viewport.zoom,
-      disabled: () => store.get().tool !== "select",
+      disabled: (key) =>
+        store.get().tool !== "select" || key.startsWith(switchKeyPrefix),
       group: (key) => {
         const { selection } = store.get();
         return selection.includes(key) ? selection : [key];
       },
       set: (positions, details) =>
         change("map", applyPositions(store.get().map, positions), details),
+    });
+
+    const connect = createConnect<MapEditorState>(context, {
+      slot: "port",
+      draft: "connecting",
+      canConnect: (from, to) =>
+        from.startsWith(switchKeyPrefix) && to.startsWith(doorKeyPrefix),
+      point: (x, y) => viewport.toCanvas(x, y),
+      label: (key) => {
+        const { map } = store.get();
+        if (key.startsWith(switchKeyPrefix)) return "Switch";
+        const id = key.slice(doorKeyPrefix.length);
+        return map.sectors.find((sector) => sector.id === id)?.name ?? "Door";
+      },
+      connect: (from, to, details) =>
+        change(
+          "map",
+          updateSwitch(store.get().map, from.slice(switchKeyPrefix.length), {
+            door: to.slice(doorKeyPrefix.length),
+          }),
+          details,
+        ),
     });
 
     let lastDraft: MoveDraft | null = null;
@@ -244,11 +328,18 @@ const mapEditor = definePrimitive({
 
     const deleteSelection = () => {
       const { map, selection, activeSector } = store.get();
-      const things = selection
-        .filter((key) => key.startsWith(thingKeyPrefix))
-        .map((key) => key.slice(thingKeyPrefix.length));
-      if (things.length > 0) {
-        change("map", things.reduce(removeThing, map), { reason: "delete" });
+      const idsWith = (prefix: string) =>
+        selection
+          .filter((key) => key.startsWith(prefix))
+          .map((key) => key.slice(prefix.length));
+      const things = idsWith(thingKeyPrefix);
+      const switches = idsWith(switchKeyPrefix);
+      if (things.length > 0 || switches.length > 0) {
+        change(
+          "map",
+          switches.reduce(removeSwitch, things.reduce(removeThing, map)),
+          { reason: "delete" },
+        );
         select([]);
         return true;
       }
@@ -276,6 +367,7 @@ const mapEditor = definePrimitive({
     return {
       viewport,
       move,
+      connect,
       rooms: () =>
         store.get().map.sectors.map((sector) => ({
           value: sector.id,
@@ -323,6 +415,31 @@ const mapEditor = definePrimitive({
           reason: "agent",
         });
       },
+      makeDoor(
+        room: string,
+        opensBy: DoorSettings["opensBy"] = "use",
+        closes = true,
+      ) {
+        const { id } = findRoom(room);
+        change(
+          "map",
+          setRoomDoor(store.get().map, id, {
+            ...defaultDoor,
+            opensBy,
+            closes,
+          }),
+          { reason: "agent" },
+        );
+      },
+      addDoorSwitch(room: string, door: string) {
+        const source = findRoom(room);
+        const target = findRoom(door);
+        if (!target.door) throw new Error(`${target.name} is not a door.`);
+        const added = addSwitchInRoom(store.get().map, source.id, target.id);
+        if (!added) throw new Error(`${source.name} has no free wall.`);
+        change("map", added.map, { reason: "agent" });
+        return added.id;
+      },
       placeThing(kind: ThingKind, room: string) {
         if (!thingKinds.includes(kind)) {
           throw new Error(`Unknown thing. Use: ${thingKinds.join(", ")}.`);
@@ -355,16 +472,24 @@ const mapEditor = definePrimitive({
             Math.abs(event.clientY - press.y) >
             clickSlop;
         if (moved) return;
-        const { tool, map, positions, thingKind } = store.get();
+        const { tool, map, positions, thingKind, viewport: view } = store.get();
         const handle = target.closest<HTMLElement>("[data-map-key]");
         const key = handle?.dataset.mapKey;
-        const point = key ? positions[key] : pointFromEvent(event);
+        const point = (key && positions[key]) || pointFromEvent(event);
         if (tool === "draw") {
           clickDraw(point);
         } else if (tool === "thing") {
           const placed = addThing(map, thingKind, point);
           change("map", placed.map, { reason: "place" });
           select([`${thingKeyPrefix}${placed.id}`]);
+        } else if (tool === "switch") {
+          const at = viewport.toCanvas(event.clientX, event.clientY);
+          const wall = freeWallNear(map, at, switchReach / view.zoom);
+          if (!wall) return;
+          const added = addSwitch(map, wall, at);
+          change("map", added.map, { reason: "place" });
+          select([`${switchKeyPrefix}${added.id}`]);
+          change("tool", "select", { reason: "draw" });
         } else if (!key) {
           select([], sectorAt(map, point)?.id ?? null);
         }
@@ -393,6 +518,27 @@ const mapEditor = definePrimitive({
           return;
         }
         viewport.keydown(event);
+      },
+      pressPort(event: PointerEvent, key: string, el: HTMLElement) {
+        if (store.get().tool !== "select") return;
+        if (key.startsWith(doorKeyPrefix)) {
+          select([], key.slice(doorKeyPrefix.length));
+          return;
+        }
+        select([key]);
+        connect.pointerdown(event, key, el);
+      },
+      portKeydown(event: KeyboardEvent, key: string) {
+        if (connect.keydown(event)) return;
+        if (
+          event.key.toLowerCase() === "c" &&
+          !event.ctrlKey &&
+          !event.metaKey &&
+          key.startsWith(switchKeyPrefix) &&
+          connect.start(key)
+        ) {
+          event.preventDefault();
+        }
       },
       pressHandle(event: PointerEvent, key: string, el: HTMLElement) {
         if (store.get().tool !== "select") return;
@@ -447,6 +593,9 @@ const mapEditor = definePrimitive({
       attrs: (state, { key }) => ({
         points: polygonPoints(state, key),
         "data-active": state.activeSector === key ? "" : undefined,
+        "data-door": state.map.sectors.find((sector) => sector.id === key)?.door
+          ? ""
+          : undefined,
       }),
       live: live<MapEditorState, any, { value: string }>((state, { key }) => ({
         points: polygonPoints(state, key),
@@ -495,13 +644,66 @@ const mapEditor = definePrimitive({
           api.pressHandle(event, key, el!),
       },
     }),
+    port: slot<{ value: string }>({
+      props: { value: "string" },
+      attrs: (state, { key }) => {
+        const at = portPoint(state, key);
+        return {
+          type: "button",
+          "data-map-key": key,
+          "data-selected": state.selection.includes(key) ? "" : undefined,
+          style: css({
+            position: "absolute",
+            left: `${at.x}px`,
+            top: `${at.y}px`,
+            "touch-action": "none",
+          }),
+        };
+      },
+      live: live<MapEditorState, any, { value: string }>(
+        (state, { api, key }) => {
+          const at = portPoint(state, key);
+          return {
+            style: `left:${at.x}px;top:${at.y}px`,
+            "data-connect": api.connect.role(state, key),
+          };
+        },
+      ),
+      on: {
+        keydown: (event, { api, key }) => api.portKeydown(event, key),
+        pointerdown: (event, { api, el, key }) =>
+          api.pressPort(event, key, el!),
+      },
+    }),
+    wire: slot<{ value: string; from: string; to: string }>({
+      props: { value: "string", from: "string", to: "string" },
+      attrs: (state, { props }) =>
+        lineAttrs(portPoint(state, props.from), portPoint(state, props.to)),
+      live: live<
+        MapEditorState,
+        any,
+        { value: string; from: string; to: string }
+      >((state, { props }) =>
+        lineAttrs(portPoint(state, props.from), portPoint(state, props.to)),
+      ),
+    }),
+    connecting: slot({
+      attrs: (state) => connectingAttrs(state),
+      live: live<MapEditorState, any, {}>((state) => connectingAttrs(state)),
+    }),
     fit: slot({
       attrs: () => ({ type: "button", "data-map-control": "" }),
       press: ({ api }) => api.fitMap(),
     }),
   }),
   agent: {
-    actions: ["addConnectedRoom", "setRoomHeights", "placeThing"],
+    actions: [
+      "addConnectedRoom",
+      "setRoomHeights",
+      "placeThing",
+      "makeDoor",
+      "addDoorSwitch",
+    ],
     items: (api) => api.rooms(),
   },
 });
@@ -513,6 +715,9 @@ const parts = createParts(mapEditor, {
   wall: "line",
   draft: "polyline",
   handle: "button",
+  port: "button",
+  wire: "line",
+  connecting: "line",
   fit: "button",
 });
 
@@ -522,15 +727,21 @@ const MapSector = parts.Sector;
 const MapWall = parts.Wall;
 const MapDraft = parts.Draft;
 const MapHandle = parts.Handle;
+const MapPort = parts.Port;
+const MapWire = parts.Wire;
+const MapConnecting = parts.Connecting;
 const MapFit = parts.Fit;
 
 export {
+  MapConnecting,
   MapDraft,
   MapEditor,
   MapFit,
   MapHandle,
+  MapPort,
   MapSector,
   MapWall,
+  MapWire,
   MapWorld,
   type MapTool,
 };

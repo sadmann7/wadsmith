@@ -23,6 +23,18 @@ const floorTextures = [
 
 const ceilingTextures = ["CEIL3_5", "CEIL5_1", "CEIL1_1", "TLITE6_4"] as const;
 
+const doorTextures = ["BIGDOOR2", "BIGDOOR4", "DOOR1", "DOOR3"] as const;
+
+const switchTextures = [
+  "SW1STRTN",
+  "SW1GRAY",
+  "SW1METAL",
+  "SW1STON1",
+  "SW1COMP",
+] as const;
+
+const doorTrackTexture = "DOORTRAK";
+
 const thingCatalog: Record<
   ThingKind,
   { label: string; doomType: number; color: string; monster: boolean }
@@ -66,7 +78,10 @@ const thingKinds = Object.keys(thingCatalog) as ThingKind[];
 
 export {
   ceilingTextures,
+  doorTextures,
+  doorTrackTexture,
   floorTextures,
+  switchTextures,
   thingCatalog,
   thingKinds,
   wallTextures,

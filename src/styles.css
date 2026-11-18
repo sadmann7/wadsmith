@@ -196,7 +196,8 @@ input {
 }
 
 .map[data-tool="draw"],
-.map[data-tool="thing"] {
+.map[data-tool="thing"],
+.map[data-tool="switch"] {
   cursor: crosshair;
 }
 
@@ -226,6 +227,10 @@ input {
 
 .map-sector[data-active] {
   fill: rgb(244 183 64 / 16%);
+}
+
+.map-sector[data-door] {
+  fill: rgb(96 165 250 / 22%);
 }
 
 .map-wall {
@@ -290,6 +295,55 @@ input {
 .map[data-tool="draw"] .map-thing,
 .map[data-tool="thing"] .map-thing {
   cursor: crosshair;
+}
+
+.map-wire {
+  stroke: #60a5fa;
+  stroke-width: 2;
+  stroke-dasharray: 2 5;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.map-connecting {
+  display: none;
+  stroke-dasharray: none;
+}
+
+.map-connecting[data-active] {
+  display: inline;
+}
+
+.map-port {
+  display: block;
+  padding: 0;
+  border: 2px solid #0d0e10;
+  transform: translate(-50%, -50%) scale(calc(1 / var(--canvas-zoom, 1)));
+}
+
+.map-switch {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: #4ade80;
+  cursor: crosshair;
+}
+
+.map-door {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #60a5fa;
+}
+
+.map-port[data-selected],
+.map-port[data-connect="source"],
+.map-port[data-connect="target"] {
+  box-shadow: 0 0 0 2px var(--select);
+}
+
+.map-port[data-connect="candidate"] {
+  box-shadow: 0 0 0 2px #60a5fa;
 }
 
 .map-fit {
@@ -492,6 +546,38 @@ input {
   height: 14px;
   border-radius: 50%;
   background: var(--text);
+}
+
+.toggle {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.switch {
+  display: inline-flex;
+  width: 32px;
+  height: 18px;
+  padding: 2px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--line);
+}
+
+.switch[data-checked] {
+  background: var(--accent);
+}
+
+.switch-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text);
+}
+
+.switch[data-checked] .switch-thumb {
+  transform: translateX(14px);
 }
 
 .thing-name {

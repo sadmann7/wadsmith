@@ -3,11 +3,30 @@ import {
   sectorEdges,
   sectorPolygon,
   signedArea,
+  wallKey,
+  wallOwners,
 } from "./geometry";
-import type { GameMap, Point, Sector, Thing, ThingKind } from "./types";
+import type {
+  DoorSettings,
+  GameMap,
+  MapSwitch,
+  Point,
+  Sector,
+  Thing,
+  ThingKind,
+} from "./types";
 
 const gridSize = 8;
 const thingKeyPrefix = "thing:";
+const switchKeyPrefix = "switch:";
+const doorKeyPrefix = "door:";
+const switchWidth = 64;
+
+const defaultDoor: DoorSettings = {
+  opensBy: "use",
+  closes: true,
+  texture: "BIGDOOR2",
+};
 
 function snap(value: number) {
   return Math.round(value / gridSize) * gridSize;
@@ -113,7 +132,169 @@ function removeSector(map: GameMap, id: string): GameMap {
     vertices: Object.fromEntries(
       Object.entries(map.vertices).filter(([vertex]) => used.has(vertex)),
     ),
+    switches: map.switches
+      .filter((item) => item.sector !== id)
+      .map((item) => (item.door === id ? { ...item, door: null } : item)),
   };
+}
+
+function setRoomDoor(
+  map: GameMap,
+  id: string,
+  door: DoorSettings | undefined,
+): GameMap {
+  const updated = updateSector(map, id, { door });
+  if (door) return updated;
+  return {
+    ...updated,
+    switches: map.switches.map((item) =>
+      item.door === id ? { ...item, door: null } : item,
+    ),
+  };
+}
+
+function updateSwitch(
+  map: GameMap,
+  id: string,
+  patch: Partial<Omit<MapSwitch, "id">>,
+): GameMap {
+  return {
+    ...map,
+    switches: map.switches.map((item) =>
+      item.id === id ? { ...item, ...patch } : item,
+    ),
+  };
+}
+
+function removeSwitch(map: GameMap, id: string): GameMap {
+  return {
+    ...map,
+    switches: map.switches.filter((item) => item.id !== id),
+  };
+}
+
+type FreeWall = { sector: string; from: string; to: string };
+
+function freeWalls(map: GameMap): FreeWall[] {
+  const owners = wallOwners(map);
+  const taken = new Set(
+    map.switches.map((item) => wallKey(item.from, item.to)),
+  );
+  return map.sectors
+    .filter((sector) => !sector.door)
+    .flatMap((sector) =>
+      sectorEdges(sector)
+        .filter(({ from, to }) => {
+          const key = wallKey(from, to);
+          return owners.get(key)?.length === 1 && !taken.has(key);
+        })
+        .map(({ from, to }) => ({ sector: sector.id, from, to })),
+    );
+}
+
+function distanceToWall(map: GameMap, wall: FreeWall, point: Point) {
+  const a = map.vertices[wall.from];
+  const b = map.vertices[wall.to];
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const t = Math.max(
+    0,
+    Math.min(
+      1,
+      ((point.x - a.x) * dx + (point.y - a.y) * dy) / (dx * dx + dy * dy || 1),
+    ),
+  );
+  return Math.hypot(point.x - (a.x + dx * t), point.y - (a.y + dy * t));
+}
+
+function freeWallNear(map: GameMap, point: Point, reach: number) {
+  let best: FreeWall | null = null;
+  let bestDistance = reach;
+  for (const wall of freeWalls(map)) {
+    const distance = distanceToWall(map, wall, point);
+    if (distance <= bestDistance) {
+      best = wall;
+      bestDistance = distance;
+    }
+  }
+  return best;
+}
+
+// Switch art is one tile wide, so a long wall gets a short section cut out of
+// it for the switch instead of repeating the art along its whole length.
+function addSwitch(
+  map: GameMap,
+  wall: FreeWall,
+  point: Point,
+  door: string | null = null,
+): { map: GameMap; id: string } {
+  const a = map.vertices[wall.from];
+  const b = map.vertices[wall.to];
+  const length = Math.hypot(b.x - a.x, b.y - a.y);
+  const id = nextId(
+    "switch-",
+    map.switches.map((item) => item.id),
+  );
+  const item: MapSwitch = {
+    id,
+    door,
+    sector: wall.sector,
+    from: wall.from,
+    to: wall.to,
+    texture: "SW1STRTN",
+  };
+  if (length < switchWidth + gridSize * 2) {
+    return { id, map: { ...map, switches: [...map.switches, item] } };
+  }
+
+  const unit = { x: (b.x - a.x) / length, y: (b.y - a.y) / length };
+  const along = Math.max(
+    switchWidth / 2 + gridSize,
+    Math.min(
+      length - switchWidth / 2 - gridSize,
+      (point.x - a.x) * unit.x + (point.y - a.y) * unit.y,
+    ),
+  );
+  const cornerAt = (distance: number) =>
+    snapPoint({ x: a.x + unit.x * distance, y: a.y + unit.y * distance });
+  const vertices = { ...map.vertices };
+  const first = nextId("v", Object.keys(vertices));
+  vertices[first] = cornerAt(along - switchWidth / 2);
+  const second = nextId("v", Object.keys(vertices));
+  vertices[second] = cornerAt(along + switchWidth / 2);
+
+  return {
+    id,
+    map: {
+      ...map,
+      vertices,
+      sectors: map.sectors.map((sector) => {
+        if (sector.id !== wall.sector) return sector;
+        const loop = sector.vertices.flatMap((vertex, index) => {
+          const next = sector.vertices[(index + 1) % sector.vertices.length];
+          return vertex === wall.from && next === wall.to
+            ? [vertex, first, second]
+            : [vertex];
+        });
+        return { ...sector, vertices: loop };
+      }),
+      switches: [...map.switches, { ...item, from: first, to: second }],
+    },
+  };
+}
+
+function addSwitchInRoom(map: GameMap, room: string, door: string | null) {
+  const walls = freeWalls(map).filter((wall) => wall.sector === room);
+  const lengthOf = (wall: FreeWall) => {
+    const a = map.vertices[wall.from];
+    const b = map.vertices[wall.to];
+    return Math.hypot(b.x - a.x, b.y - a.y);
+  };
+  const wall = walls.toSorted((a, b) => lengthOf(b) - lengthOf(a))[0];
+  if (!wall) return null;
+  const a = map.vertices[wall.from];
+  const b = map.vertices[wall.to];
+  return addSwitch(map, wall, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, door);
 }
 
 function findVertexAt(map: GameMap, point: Point) {
@@ -196,6 +377,9 @@ function addRoomOnSide(
       taken.set([edge.from, edge.to].toSorted().join("|"), 1);
     }
   }
+  for (const item of map.switches) {
+    taken.set([item.from, item.to].toSorted().join("|"), 1);
+  }
 
   let best: { from: string; to: string; score: number } | null = null;
   for (const edge of sectorEdges(sector)) {
@@ -252,18 +436,27 @@ function roomCenter(map: GameMap, sector: Sector): Point {
 export {
   addRoom,
   addRoomOnSide,
+  addSwitch,
+  addSwitchInRoom,
   addThing,
   applyPositions,
+  defaultDoor,
+  doorKeyPrefix,
   findVertexAt,
+  freeWallNear,
   gridSize,
   positionsOf,
   removeSector,
+  removeSwitch,
   removeThing,
   roomCenter,
+  setRoomDoor,
   snap,
   snapPoint,
+  switchKeyPrefix,
   thingKeyPrefix,
   updateSector,
+  updateSwitch,
   updateThing,
   type RoomSide,
 };

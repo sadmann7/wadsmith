@@ -9,6 +9,21 @@ function sectorEdges(sector: Sector): Edge[] {
   }));
 }
 
+function wallKey(a: string, b: string) {
+  return a < b ? `${a}|${b}` : `${b}|${a}`;
+}
+
+function wallOwners(map: GameMap) {
+  const owners = new Map<string, Sector[]>();
+  for (const sector of map.sectors) {
+    for (const { from, to } of sectorEdges(sector)) {
+      const key = wallKey(from, to);
+      owners.set(key, [...(owners.get(key) ?? []), sector]);
+    }
+  }
+  return owners;
+}
+
 function sectorPolygon(map: GameMap, sector: Sector): Point[] {
   return sector.vertices.map((id) => map.vertices[id]);
 }
@@ -81,5 +96,7 @@ export {
   sectorPolygon,
   segmentsIntersect,
   signedArea,
+  wallKey,
+  wallOwners,
   type Edge,
 };

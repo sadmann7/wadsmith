@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { addRoomOnSide } from "../map/edit";
+import { addRoomOnSide, addSwitchInRoom, setRoomDoor } from "../map/edit";
 import { starterMap } from "../map/starter-map";
 import type { GameMap } from "../map/types";
 import { validateMap } from "../map/validate";
@@ -20,7 +20,17 @@ const lShape: GameMap = {
     { ...starterMap.sectors[0], vertices: ["a", "b", "c", "d", "e", "f"] },
   ],
   things: [{ id: "player-1", kind: "player", x: 64, y: 64, angle: 0 }],
+  switches: [],
 };
+
+function updateSectorCeiling(map: GameMap, id: string, ceiling: number) {
+  return {
+    ...map,
+    sectors: map.sectors.map((sector) =>
+      sector.id === id ? { ...sector, ceiling } : sector,
+    ),
+  };
+}
 
 function lump(map: GameMap, name: string) {
   const found = compileLumps(map).find((item) => item.name === name);
@@ -56,6 +66,17 @@ function expectConvexLeaves(map: GameMap) {
   return bsp;
 }
 
+function linesOf(map: GameMap) {
+  const { lines } = buildLevel(map);
+  const view = new DataView(lump(map, "LINEDEFS").buffer);
+  return lines.map((line, index) => ({
+    line,
+    flags: view.getInt16(index * 14 + 4, true),
+    special: view.getInt16(index * 14 + 6, true),
+    tag: view.getInt16(index * 14 + 8, true),
+  }));
+}
+
 describe("compileMap", () => {
   it("writes a patch WAD with every map lump in engine order", () => {
     const wad = compileMap(starterMap);
@@ -86,12 +107,12 @@ describe("compileMap", () => {
 
   it("turns shared walls into two-sided lines", () => {
     const { lines } = buildLevel(starterMap);
-    expect(lines.filter((line) => line.backSector !== null)).toHaveLength(2);
+    expect(lines.filter((line) => line.backSector !== null)).toHaveLength(3);
     const linedefs = new DataView(lump(starterMap, "LINEDEFS").buffer);
     const flags = lines.map((_, index) =>
       linedefs.getInt16(index * 14 + 4, true),
     );
-    expect(flags.filter((flag) => flag === 4)).toHaveLength(2);
+    expect(flags.filter((flag) => flag === 4)).toHaveLength(3);
   });
 
   it("gives rooms clockwise fronts in the engine's y-up space", () => {
@@ -188,6 +209,90 @@ describe("validateMap", () => {
     expect(added).not.toBeNull();
     expect(validateMap(added!.map)).toEqual([]);
     const { lines } = buildLevel(added!.map);
-    expect(lines.filter((line) => line.backSector !== null)).toHaveLength(3);
+    expect(lines.filter((line) => line.backSector !== null)).toHaveLength(4);
+  });
+
+  it("requires a wired switch for a switch door", () => {
+    const issues = validateMap({ ...starterMap, switches: [] });
+    expect(issues.map((issue) => issue.id)).toContain("door-unwired:sector-4");
+  });
+
+  it("rejects a door the player can't fit through", () => {
+    const low = updateSectorCeiling(starterMap, "sector-2", 32);
+    expect(validateMap(low).map((issue) => issue.id)).toContain(
+      "door-low:sector-4",
+    );
+  });
+
+  it("rejects a switch on a wall that became an opening", () => {
+    const item = starterMap.switches[0];
+    const issues = validateMap({
+      ...starterMap,
+      switches: [{ ...item, from: "v3", to: "v4" }],
+    });
+    expect(issues.map((issue) => issue.id)).toContain("switch-open:switch-1");
+  });
+});
+
+describe("doors and switches", () => {
+  const doorIndex = starterMap.sectors.findIndex((item) => item.door);
+  const door = starterMap.sectors[doorIndex].door!;
+
+  it("starts a door closed and tags it for its switch", () => {
+    const sectors = new DataView(lump(starterMap, "SECTORS").buffer);
+    const offset = doorIndex * 26;
+    expect(sectors.getInt16(offset + 2, true)).toBe(
+      sectors.getInt16(offset, true),
+    );
+    expect(sectors.getInt16(offset + 24, true)).toBe(doorIndex + 1);
+  });
+
+  it("keeps the door behind every line that opens onto it", () => {
+    const facing = buildLevel(starterMap).lines.filter(
+      (line) => line.frontSector === doorIndex || line.backSector === doorIndex,
+    );
+    const shared = facing.filter((line) => line.backSector !== null);
+    expect(shared).toHaveLength(2);
+    expect(shared.every((line) => line.backSector === doorIndex)).toBe(true);
+  });
+
+  it("links a switch to its door", () => {
+    const wired = linesOf(starterMap).filter((item) => item.special !== 0);
+    expect(wired).toHaveLength(1);
+    expect(wired[0].special).toBe(61);
+    expect(wired[0].tag).toBe(doorIndex + 1);
+    expect(wired[0].line.backSector).toBeNull();
+  });
+
+  it("uses the repeating special for a door that closes", () => {
+    const map = setRoomDoor(starterMap, "sector-4", { ...door, closes: true });
+    expect(linesOf(map).find((item) => item.special)?.special).toBe(63);
+  });
+
+  it("puts use specials on both faces of a use door", () => {
+    const map = setRoomDoor(starterMap, "sector-4", {
+      ...door,
+      opensBy: "use",
+      closes: true,
+    });
+    const used = linesOf({ ...map, switches: [] }).filter(
+      (item) => item.special === 1,
+    );
+    expect(used).toHaveLength(2);
+  });
+
+  it("cuts a short section out of a long wall for a switch", () => {
+    const added = addSwitchInRoom(starterMap, "sector-3", "sector-4");
+    expect(added).not.toBeNull();
+    const item = added!.map.switches.at(-1)!;
+    const a = added!.map.vertices[item.from];
+    const b = added!.map.vertices[item.to];
+    expect(Math.hypot(b.x - a.x, b.y - a.y)).toBe(64);
+    expect(validateMap(added!.map)).toEqual([]);
+  });
+
+  it("disconnects switches when a door becomes a room again", () => {
+    const map = setRoomDoor(starterMap, "sector-4", undefined);
+    expect(map.switches[0].door).toBeNull();
   });
 });

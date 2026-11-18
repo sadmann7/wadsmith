@@ -5,12 +5,16 @@ import {
   sectorPolygon,
   segmentsIntersect,
   signedArea,
+  wallKey,
+  wallOwners,
 } from "./geometry";
 import type { GameMap, Sector } from "./types";
 
 type MapIssue = { id: string; message: string; target?: string };
 
 const coordinateLimit = 32000;
+const doorClearance = 4;
+const playerHeight = 56;
 
 function edgeKey(a: string, b: string) {
   return a < b ? `${a}|${b}` : `${b}|${a}`;
@@ -40,7 +44,7 @@ function validateSector(map: GameMap, sector: Sector, issues: MapIssue[]) {
   if (Math.abs(signedArea(polygon)) < 1) {
     add("area", "has no area.");
   }
-  if (sector.ceiling <= sector.floor) {
+  if (!sector.door && sector.ceiling <= sector.floor) {
     add("height", "ceiling must be above the floor.");
   }
   const edges = sectorEdges(sector);
@@ -133,6 +137,63 @@ function validateNeighbors(map: GameMap, issues: MapIssue[]) {
   }
 }
 
+function validateDoors(map: GameMap, issues: MapIssue[]) {
+  const owners = wallOwners(map);
+  for (const sector of map.sectors) {
+    if (!sector.door) continue;
+    const add = (kind: string, message: string) =>
+      issues.push({
+        id: `${kind}:${sector.id}`,
+        message: `${sector.name}: ${message}`,
+        target: sector.id,
+      });
+    const neighbors = sectorEdges(sector).flatMap(({ from, to }) =>
+      (owners.get(wallKey(from, to)) ?? []).filter((item) => item !== sector),
+    );
+    if (neighbors.length === 0) {
+      add("door-alone", "a door must share a wall with a room.");
+      continue;
+    }
+    if (neighbors.some((neighbor) => neighbor.door)) {
+      add("door-pair", "a door can't touch another door.");
+      continue;
+    }
+    const opening =
+      Math.min(...neighbors.map((neighbor) => neighbor.ceiling)) -
+      doorClearance -
+      sector.floor;
+    if (opening < playerHeight) {
+      add("door-low", "the rooms beside it are too low for the door to open.");
+    }
+    if (
+      sector.door.opensBy === "switch" &&
+      !map.switches.some((item) => item.door === sector.id)
+    ) {
+      add("door-unwired", "connect a switch to open this door.");
+    }
+  }
+
+  for (const item of map.switches) {
+    const add = (kind: string, message: string) =>
+      issues.push({
+        id: `${kind}:${item.id}`,
+        message: `Switch ${item.id}: ${message}`,
+        target: item.id,
+      });
+    const wall = owners.get(wallKey(item.from, item.to));
+    if (!wall?.some((sector) => sector.id === item.sector)) {
+      add("switch-wall", "its wall no longer exists.");
+    } else if (wall.length > 1) {
+      add("switch-open", "it must sit on a solid wall.");
+    }
+    if (!item.door) {
+      add("switch-unwired", "connect it to a door.");
+    } else if (!map.sectors.find((sector) => sector.id === item.door)?.door) {
+      add("switch-target", "the room it opens is not a door.");
+    }
+  }
+}
+
 function validateMap(map: GameMap): MapIssue[] {
   const issues: MapIssue[] = [];
   if (map.sectors.length === 0) {
@@ -143,6 +204,7 @@ function validateMap(map: GameMap): MapIssue[] {
   }
   if (issues.length === 0) {
     validateNeighbors(map, issues);
+    validateDoors(map, issues);
   }
   for (const [id, point] of Object.entries(map.vertices)) {
     if (

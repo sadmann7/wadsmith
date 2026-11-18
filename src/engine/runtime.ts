@@ -14,6 +14,7 @@ type DoomModule = {
   _wadsmith_total_kills(): number;
   _wadsmith_player_x(): number;
   _wadsmith_player_y(): number;
+  _wadsmith_sector_ceiling(index: number): number;
 };
 
 type DoomModuleOptions = {
@@ -112,6 +113,10 @@ class DoomGame {
       pixels[index + 3] = 255;
     }
     return pixels;
+  }
+
+  sectorCeiling(index: number) {
+    return this.module._wadsmith_sector_ceiling(index);
   }
 
   status(): GameStatus {

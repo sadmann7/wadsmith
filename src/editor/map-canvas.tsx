@@ -1,16 +1,19 @@
 import type { ComponentProps } from "react";
 
 import { thingCatalog } from "../map/catalog";
-import { thingKeyPrefix } from "../map/edit";
+import { doorKeyPrefix, switchKeyPrefix, thingKeyPrefix } from "../map/edit";
 import { sectorEdges } from "../map/geometry";
 import type { GameMap } from "../map/types";
 import {
+  MapConnecting,
   MapDraft,
   MapEditor,
   MapFit,
   MapHandle,
+  MapPort,
   MapSector,
   MapWall,
+  MapWire,
   MapWorld,
 } from "./map-editor";
 
@@ -74,6 +77,20 @@ function MapCanvas({
               data-portal={wall.shared ? "" : undefined}
             />
           ))}
+          {map.switches.flatMap((item) =>
+            item.door
+              ? [
+                  <MapWire
+                    key={item.id}
+                    value={item.id}
+                    from={`${switchKeyPrefix}${item.id}`}
+                    to={`${doorKeyPrefix}${item.door}`}
+                    className="map-wire"
+                  />,
+                ]
+              : [],
+          )}
+          <MapConnecting className="map-wire map-connecting" />
           <MapDraft className="map-draft" />
         </svg>
         {Object.keys(map.vertices).map((id) => (
@@ -99,6 +116,26 @@ function MapCanvas({
             </MapHandle>
           );
         })}
+        {map.sectors
+          .filter((sector) => sector.door)
+          .map((sector) => (
+            <MapPort
+              key={sector.id}
+              value={`${doorKeyPrefix}${sector.id}`}
+              className="map-port map-door"
+              aria-label={`Door: ${sector.name}`}
+              title={sector.name}
+            />
+          ))}
+        {map.switches.map((item) => (
+          <MapPort
+            key={item.id}
+            value={`${switchKeyPrefix}${item.id}`}
+            className="map-port map-switch"
+            aria-label={`Switch ${item.id}. Drag to a door, or press C.`}
+            title="Drag to a door"
+          />
+        ))}
       </MapWorld>
       <MapFit className="button map-fit">Fit map</MapFit>
     </MapEditor>

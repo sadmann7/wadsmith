@@ -8,6 +8,7 @@
 #include "doomstat.h"
 #include "d_player.h"
 #include "p_local.h"
+#include "r_state.h"
 
 #define KEY_QUEUE_SIZE 64
 
@@ -67,6 +68,12 @@ EMSCRIPTEN_KEEPALIVE int wadsmith_player_x(void) {
 
 EMSCRIPTEN_KEEPALIVE int wadsmith_player_y(void) {
   return players[consoleplayer].mo ? players[consoleplayer].mo->y >> 16 : 0;
+}
+
+EMSCRIPTEN_KEEPALIVE int wadsmith_sector_ceiling(int index) {
+  return index >= 0 && index < numsectors
+             ? sectors[index].ceilingheight >> 16
+             : 0;
 }
 
 // The engine keeps argv for its whole life, but callMain frees it on return.

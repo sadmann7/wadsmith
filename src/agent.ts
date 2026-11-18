@@ -4,6 +4,8 @@ const mapActions = new Set([
   "addConnectedRoom",
   "setRoomHeights",
   "placeThing",
+  "makeDoor",
+  "addDoorSwitch",
 ]);
 
 const agent = createAgent({

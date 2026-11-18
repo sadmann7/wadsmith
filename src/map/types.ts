@@ -1,5 +1,11 @@
 type Point = { x: number; y: number };
 
+type DoorSettings = {
+  opensBy: "use" | "switch";
+  closes: boolean;
+  texture: string;
+};
+
 type Sector = {
   id: string;
   name: string;
@@ -10,6 +16,7 @@ type Sector = {
   floorTexture: string;
   ceilingTexture: string;
   wallTexture: string;
+  door?: DoorSettings;
 };
 
 type ThingKind =
@@ -28,10 +35,28 @@ type Thing = Point & {
   angle: number;
 };
 
+type MapSwitch = {
+  id: string;
+  sector: string;
+  from: string;
+  to: string;
+  texture: string;
+  door: string | null;
+};
+
 type GameMap = {
   vertices: Record<string, Point>;
   sectors: Sector[];
   things: Thing[];
+  switches: MapSwitch[];
 };
 
-export type { GameMap, Point, Sector, Thing, ThingKind };
+export type {
+  DoorSettings,
+  GameMap,
+  MapSwitch,
+  Point,
+  Sector,
+  Thing,
+  ThingKind,
+};

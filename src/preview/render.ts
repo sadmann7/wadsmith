@@ -1,5 +1,5 @@
-import { thingCatalog } from "../map/catalog";
-import { sectorAt, sectorEdges } from "../map/geometry";
+import { doorTrackTexture, thingCatalog } from "../map/catalog";
+import { sectorAt, sectorEdges, wallKey } from "../map/geometry";
 import type { GameMap, Point, Sector } from "../map/types";
 
 type Camera = Point & { angle: number };
@@ -31,6 +31,16 @@ const textureColors: Record<string, Rgb> = {
   CEIL5_1: [70, 72, 76],
   CEIL1_1: [100, 96, 88],
   TLITE6_4: [176, 170, 150],
+  BIGDOOR2: [120, 124, 130],
+  BIGDOOR4: [128, 110, 90],
+  DOOR1: [116, 118, 122],
+  DOOR3: [134, 126, 104],
+  DOORTRAK: [72, 74, 78],
+  SW1STRTN: [92, 176, 112],
+  SW1GRAY: [92, 176, 112],
+  SW1METAL: [92, 176, 112],
+  SW1STON1: [92, 176, 112],
+  SW1COMP: [92, 176, 112],
 };
 
 type Wall = {
@@ -38,34 +48,49 @@ type Wall = {
   b: Point;
   neighbor: Sector | null;
   key: string;
+  texture: string;
 };
-
-function keyOf(from: string, to: string) {
-  return from < to ? `${from}|${to}` : `${to}|${from}`;
-}
 
 function wallsBySector(map: GameMap) {
   const owners = new Map<string, Sector[]>();
   for (const sector of map.sectors) {
     for (const { from, to } of sectorEdges(sector)) {
-      const key = keyOf(from, to);
+      const key = wallKey(from, to);
       owners.set(key, [...(owners.get(key) ?? []), sector]);
     }
   }
+  const switches = new Map(
+    map.switches.map((item) => [wallKey(item.from, item.to), item.texture]),
+  );
   return new Map(
     map.sectors.map((sector) => [
       sector.id,
       sectorEdges(sector).map(({ from, to }): Wall => {
-        const key = keyOf(from, to);
+        const key = wallKey(from, to);
+        const neighbor =
+          owners.get(key)?.find((item) => item !== sector) ?? null;
         return {
           a: map.vertices[from],
           b: map.vertices[to],
           key,
-          neighbor: owners.get(key)?.find((item) => item !== sector) ?? null,
+          neighbor,
+          texture:
+            neighbor?.door?.texture ??
+            switches.get(key) ??
+            (sector.door ? doorTrackTexture : sector.wallTexture),
         };
       }),
     ]),
   );
+}
+
+function withClosedDoors(map: GameMap): GameMap {
+  return {
+    ...map,
+    sectors: map.sectors.map((sector) =>
+      sector.door ? { ...sector, ceiling: sector.floor } : sector,
+    ),
+  };
 }
 
 function colorOf(texture: string): Rgb {
@@ -80,9 +105,10 @@ function renderPreview(
   pixels: Uint8ClampedArray,
   width: number,
   height: number,
-  map: GameMap,
+  sourceMap: GameMap,
   camera: Camera,
 ) {
+  const map = withClosedDoors(sourceMap);
   pixels.fill(0);
   for (let index = 3; index < pixels.length; index += 4) pixels[index] = 255;
 
@@ -154,7 +180,7 @@ function renderPreview(
       flat(top, ceilingRow - 1, sector.ceiling, sector.ceilingTexture);
       flat(floorRow + 1, bottom, sector.floor, sector.floorTexture);
 
-      const wallColor = colorOf(sector.wallTexture);
+      const wallColor = colorOf(wall.texture);
       const contrast = wall.a.x === wall.b.x ? 0.84 : 1;
       const seam = along % 64 < 1.5 ? 0.82 : 1;
       const shade = brightness(sector.light, depth) * contrast * seam;

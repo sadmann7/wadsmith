@@ -1,5 +1,5 @@
-import { thingCatalog } from "../map/catalog";
-import { sectorEdges, signedArea } from "../map/geometry";
+import { doorTrackTexture, thingCatalog } from "../map/catalog";
+import { sectorEdges, signedArea, wallKey } from "../map/geometry";
 import type { GameMap, Point, Sector } from "../map/types";
 import { buildBlockmap } from "./blockmap";
 import { buildNodes, type Box, type NodeLine } from "./nodes";
@@ -7,6 +7,11 @@ import { buildNodes, type Box, type NodeLine } from "./nodes";
 const mapLumpName = "MAP01";
 const lineBlocksPlayer = 0x0001;
 const lineTwoSided = 0x0004;
+const lineLowerUnpegged = 0x0010;
+const specialDoorRaise = 1;
+const specialDoorOpen = 31;
+const specialSwitchDoorRaise = 63;
+const specialSwitchDoorOpen = 61;
 const thingOnAllSkills = 0x0007;
 const noSidedef = 0xffff;
 
@@ -48,6 +53,8 @@ function writeBox(writer: LumpWriter, box: Box) {
   writer.int16(box.top).int16(box.bottom).int16(box.left).int16(box.right);
 }
 
+type LevelLine = NodeLine & { wall: string };
+
 function buildLevel(map: GameMap) {
   const vertexIds = Object.keys(map.vertices).filter((id) =>
     map.sectors.some((sector) => sector.vertices.includes(id)),
@@ -67,18 +74,27 @@ function buildLevel(map: GameMap) {
     }
   });
 
-  const lines: NodeLine[] = [];
+  const lines: LevelLine[] = [];
   const done = new Set<string>();
   sectors.forEach((sector, index) => {
     for (const edge of sectorEdges(sector)) {
       if (done.has(`${edge.from}>${edge.to}`)) continue;
+      const reverse = owners.get(`${edge.to}>${edge.from}`);
+      // The engine opens the sector behind a used line, so doors stay on the back.
+      if (sector.door && reverse !== undefined) {
+        if (sectors[reverse].door) {
+          throw new Error(`${sector.name} touches another door.`);
+        }
+        continue;
+      }
       done.add(`${edge.from}>${edge.to}`);
       done.add(`${edge.to}>${edge.from}`);
       lines.push({
         start: vertexIndex.get(edge.from)!,
         end: vertexIndex.get(edge.to)!,
         frontSector: index,
-        backSector: owners.get(`${edge.to}>${edge.from}`) ?? null,
+        backSector: reverse ?? null,
+        wall: wallKey(edge.from, edge.to),
       });
     }
   });
@@ -104,28 +120,72 @@ function compileLumps(map: GameMap): Lump[] {
   const linedefs = new LumpWriter();
   const sidedefs = new LumpWriter();
   let sideCount = 0;
-  const writeSide = (sector: number, twoSided: boolean) => {
-    const wall = sectors[sector].wallTexture;
+  const writeSide = (
+    sector: number,
+    textures: { upper?: string; lower?: string; middle?: string },
+  ) => {
     sidedefs
       .int16(0)
       .int16(0)
-      .name(twoSided ? wall : "-")
-      .name(twoSided ? wall : "-")
-      .name(twoSided ? "-" : wall)
+      .name(textures.upper ?? "-")
+      .name(textures.lower ?? "-")
+      .name(textures.middle ?? "-")
       .int16(sector);
     sideCount += 1;
     return sideCount - 1;
   };
+  const doorTag = (id: string) =>
+    sectors.findIndex((sector) => sector.id === id) + 1;
+  const switches = new Map(
+    map.switches.map((item) => [wallKey(item.from, item.to), item]),
+  );
   for (const line of lines) {
-    const twoSided = line.backSector !== null;
-    const front = writeSide(line.frontSector, twoSided);
-    const back = twoSided ? writeSide(line.backSector!, true) : noSidedef;
+    const frontSector = sectors[line.frontSector];
+    let flags = lineBlocksPlayer;
+    let special = 0;
+    let tag = 0;
+    let front: number;
+    let back = noSidedef;
+
+    if (line.backSector !== null) {
+      const backSector = sectors[line.backSector];
+      const door = backSector.door;
+      flags = lineTwoSided;
+      if (door?.opensBy === "use") {
+        special = door.closes ? specialDoorRaise : specialDoorOpen;
+      }
+      front = writeSide(line.frontSector, {
+        upper: door?.texture ?? frontSector.wallTexture,
+        lower: frontSector.wallTexture,
+      });
+      back = writeSide(line.backSector, {
+        upper: door?.texture ?? backSector.wallTexture,
+        lower: backSector.wallTexture,
+      });
+    } else if (frontSector.door) {
+      flags |= lineLowerUnpegged;
+      front = writeSide(line.frontSector, { middle: doorTrackTexture });
+    } else {
+      const item = switches.get(line.wall);
+      const target = sectors.find((sector) => sector.id === item?.door);
+      if (item && target?.door) {
+        flags |= lineLowerUnpegged;
+        special = target.door.closes
+          ? specialSwitchDoorRaise
+          : specialSwitchDoorOpen;
+        tag = doorTag(target.id);
+      }
+      front = writeSide(line.frontSector, {
+        middle: item?.texture ?? frontSector.wallTexture,
+      });
+    }
+
     linedefs
       .int16(line.start)
       .int16(line.end)
-      .int16(twoSided ? lineTwoSided : lineBlocksPlayer)
-      .int16(0)
-      .int16(0)
+      .int16(flags)
+      .int16(special)
+      .int16(tag)
       .int16(front)
       .int16(back);
   }
@@ -166,16 +226,18 @@ function compileLumps(map: GameMap): Lump[] {
   }
 
   const sectorLump = new LumpWriter();
-  for (const sector of sectors) {
+  sectors.forEach((sector, index) => {
     sectorLump
       .int16(sector.floor)
-      .int16(sector.ceiling)
+      .int16(sector.door ? sector.floor : sector.ceiling)
       .name(sector.floorTexture)
       .name(sector.ceilingTexture)
       .int16(sector.light)
       .int16(0)
-      .int16(0);
-  }
+      .int16(
+        map.switches.some((item) => item.door === sector.id) ? index + 1 : 0,
+      );
+  });
 
   const blockmapWords = buildBlockmap(
     lines.map((line) => ({

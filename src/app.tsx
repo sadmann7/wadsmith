@@ -20,14 +20,21 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { agent } from "./agent";
-import { SectorInspector, ThingInspector } from "./editor/inspector";
+import {
+  SectorInspector,
+  SwitchInspector,
+  ThingInspector,
+} from "./editor/inspector";
 import { MapCanvas } from "./editor/map-canvas";
 import type { MapTool } from "./editor/map-editor";
 import { PlayPanel } from "./engine/play-panel";
 import { thingCatalog, thingKinds } from "./map/catalog";
 import {
+  setRoomDoor,
+  switchKeyPrefix,
   thingKeyPrefix,
   updateSector,
+  updateSwitch,
   updateThing,
   type RoomSide,
 } from "./map/edit";
@@ -42,6 +49,7 @@ const toolHints: Record<MapTool, string> = {
     "Drag corners and things. Shift-click adds to the selection. Drag empty space to pan.",
   draw: "Click corners, then click the first one or press Enter. Reuse a wall's corners to connect rooms.",
   thing: "Click inside a room to place the chosen thing.",
+  switch: "Click a solid wall to add a switch, then drag from it to a door.",
 };
 
 const roomSides: RoomSide[] = ["north", "east", "south", "west"];
@@ -90,6 +98,11 @@ function App() {
   const thing = map.things.find(
     (item) => `${thingKeyPrefix}${item.id}` === selectedThingKey,
   );
+
+  const selectedSwitch = map.switches.find((item) =>
+    selection.includes(`${switchKeyPrefix}${item.id}`),
+  );
+  const doors = map.sectors.filter((item) => item.door);
 
   const commit = (next: GameMap, group?: string) => {
     history.record(next, group ? { group } : undefined);
@@ -156,6 +169,7 @@ function App() {
             <SegmentedControlItem value="select">Select</SegmentedControlItem>
             <SegmentedControlItem value="draw">Draw room</SegmentedControlItem>
             <SegmentedControlItem value="thing">Place</SegmentedControlItem>
+            <SegmentedControlItem value="switch">Switch</SegmentedControlItem>
           </SegmentedControl>
           <Select
             value={thingKind}
@@ -269,8 +283,27 @@ function App() {
           ) : null}
 
           <section className="card">
-            <h2>{thing ? "Thing" : sector ? "Room" : "Inspector"}</h2>
-            {thing ? (
+            <h2>
+              {selectedSwitch
+                ? "Switch"
+                : thing
+                  ? "Thing"
+                  : sector?.door
+                    ? "Door"
+                    : sector
+                      ? "Room"
+                      : "Inspector"}
+            </h2>
+            {selectedSwitch ? (
+              <SwitchInspector
+                key={selectedSwitch.id}
+                item={selectedSwitch}
+                doors={doors}
+                onChange={(patch) =>
+                  commit(updateSwitch(map, selectedSwitch.id, patch))
+                }
+              />
+            ) : thing ? (
               <ThingInspector
                 key={thing.id}
                 thing={thing}
@@ -284,7 +317,9 @@ function App() {
                 sector={sector}
                 onChange={(patch) =>
                   commit(
-                    updateSector(map, sector.id, patch),
+                    "door" in patch
+                      ? setRoomDoor(map, sector.id, patch.door)
+                      : updateSector(map, sector.id, patch),
                     `sector:${sector.id}`,
                   )
                 }
@@ -320,6 +355,13 @@ function App() {
                   onClick={() => runAgent("placeThing", ["imp", sector.name])}
                 >
                   Add imp
+                </button>
+                <button
+                  type="button"
+                  className="button"
+                  onClick={() => runAgent("makeDoor", [sector.name, "use"])}
+                >
+                  Make door
                 </button>
               </div>
             ) : (
