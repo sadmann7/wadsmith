@@ -8,6 +8,8 @@ import {
   wallKey,
   wallOwners,
 } from "./geometry";
+import { keyThings } from "./catalog";
+import { describeLine, lineUsesTag } from "./lines";
 import type { GameMap, Sector } from "./types";
 
 type MapIssue = { id: string; message: string; target?: string };
@@ -147,8 +149,34 @@ function validateNeighbors(map: GameMap, issues: MapIssue[]) {
   }
 }
 
+function activeLineActions(map: GameMap) {
+  const owners = wallOwners(map);
+  return Object.entries(map.lines ?? {}).flatMap(([wall, { action }]) => {
+    const owner = owners.get(wall)?.[0];
+    if (!action || !owner) return [];
+    const line = describeLine(map, wall, owner.id);
+    return line.wiredSwitch ? [] : [{ wall, action, line }];
+  });
+}
+
+// A closed door can't be crossed, and its track walls are out of reach.
+function lineOpensDoor(
+  { action, line }: ReturnType<typeof activeLineActions>[number],
+  door: Sector,
+) {
+  if (action.kind !== "door-raise" && action.kind !== "door-open") return false;
+  const behind = line.back?.id === door.id;
+  if (action.trigger === "door") return behind;
+  return (
+    action.tag === door.tag &&
+    line.front.id !== door.id &&
+    !(action.trigger === "walk" && (behind || line.settings.blocksAll))
+  );
+}
+
 function validateDoors(map: GameMap, issues: MapIssue[]) {
   const owners = wallOwners(map);
+  const actions = activeLineActions(map);
   for (const sector of map.sectors) {
     if (!sector.door) continue;
     const add = (kind: string, message: string) =>
@@ -177,7 +205,8 @@ function validateDoors(map: GameMap, issues: MapIssue[]) {
     }
     if (
       sector.door.opensBy === "switch" &&
-      !map.switches.some((item) => item.door === sector.id)
+      !map.switches.some((item) => item.door === sector.id) &&
+      !actions.some((entry) => lineOpensDoor(entry, sector))
     ) {
       add("door-unwired", "connect a switch to open this door.");
     }
@@ -197,9 +226,39 @@ function validateDoors(map: GameMap, issues: MapIssue[]) {
       add("switch-open", "it must sit on a solid wall.");
     }
     if (!item.door) {
-      add("switch-unwired", "connect it to a door.");
+      if (!map.lines?.[wallKey(item.from, item.to)]?.action) {
+        add("switch-unwired", "connect it to a door or give it an action.");
+      }
     } else if (!map.sectors.find((sector) => sector.id === item.door)?.door) {
       add("switch-target", "the room it opens is not a door.");
+    }
+  }
+}
+
+function validateLines(map: GameMap, issues: MapIssue[]) {
+  for (const { wall, action, line } of activeLineActions(map)) {
+    const add = (kind: string, message: string) =>
+      issues.push({
+        id: `${kind}:${wall}`,
+        message: `Line ${line.number}: ${message}`,
+        target: wall,
+      });
+    if (!line.twoSided && action.trigger === "door") {
+      add("line-door", "a press-to-open door needs a sector behind the line.");
+    } else if (!line.twoSided && action.trigger === "walk") {
+      add("line-walk", "nothing can walk over a solid wall.");
+    }
+    if (
+      action.key &&
+      !map.things.some((thing) => thing.kind === keyThings[action.key!])
+    ) {
+      add("line-key", `place the ${action.key} key it needs.`);
+    }
+    if (!lineUsesTag(action)) continue;
+    if (!action.tag) {
+      add("line-target", "choose the sector this action moves.");
+    } else if (!map.sectors.some((sector) => sector.tag === action.tag)) {
+      add("line-tag", "the sector this action moves no longer has its tag.");
     }
   }
 }
@@ -215,6 +274,7 @@ function validateMap(map: GameMap): MapIssue[] {
   if (issues.length === 0) {
     validateNeighbors(map, issues);
     validateDoors(map, issues);
+    validateLines(map, issues);
   }
   for (const [id, point] of Object.entries(map.vertices)) {
     if (

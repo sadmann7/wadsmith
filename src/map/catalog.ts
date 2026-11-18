@@ -1,4 +1,4 @@
-import type { ThingKind } from "./types";
+import type { KeyColor, SectorEffect, ThingKind } from "./types";
 
 const wallTextures = [
   "STARTAN3",
@@ -34,6 +34,19 @@ const switchTextures = [
 ] as const;
 
 const doorTrackTexture = "DOORTRAK";
+
+const sectorEffects: Record<SectorEffect, { label: string; special: number }> =
+  {
+    flicker: { label: "Flicker", special: 17 },
+    blink: { label: "Random blink", special: 1 },
+    "strobe-slow": { label: "Slow strobe", special: 3 },
+    "strobe-fast": { label: "Fast strobe", special: 2 },
+    glow: { label: "Glow", special: 8 },
+    secret: { label: "Secret", special: 9 },
+    "damage-5": { label: "Damage 5%", special: 7 },
+    "damage-10": { label: "Damage 10%", special: 5 },
+    "damage-20": { label: "Damage 20%", special: 16 },
+  };
 
 const thingCatalog: Record<
   ThingKind,
@@ -72,6 +85,30 @@ const thingCatalog: Record<
     color: "#60a5fa",
     monster: false,
   },
+  "blue-key": {
+    label: "Blue key",
+    doomType: 5,
+    color: "#3b82f6",
+    monster: false,
+  },
+  "yellow-key": {
+    label: "Yellow key",
+    doomType: 6,
+    color: "#eab308",
+    monster: false,
+  },
+  "red-key": {
+    label: "Red key",
+    doomType: 13,
+    color: "#ef4444",
+    monster: false,
+  },
+};
+
+const keyThings: Record<KeyColor, ThingKind> = {
+  blue: "blue-key",
+  yellow: "yellow-key",
+  red: "red-key",
 };
 
 const thingKinds = Object.keys(thingCatalog) as ThingKind[];
@@ -81,6 +118,8 @@ export {
   doorTextures,
   doorTrackTexture,
   floorTextures,
+  keyThings,
+  sectorEffects,
   switchTextures,
   thingCatalog,
   thingKinds,

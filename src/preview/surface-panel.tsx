@@ -100,4 +100,4 @@ function SurfacePanel({
   );
 }
 
-export { SurfacePanel };
+export { SurfacePanel, TextureSwatch };

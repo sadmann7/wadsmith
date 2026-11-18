@@ -9,6 +9,8 @@ import {
 import type {
   DoorSettings,
   GameMap,
+  LineSettings,
+  LineSide,
   MapSwitch,
   Point,
   Sector,
@@ -123,19 +125,112 @@ function removeThing(map: GameMap, id: string): GameMap {
   return { ...map, things: map.things.filter((thing) => thing.id !== id) };
 }
 
+type Defined<T> = { [K in keyof T]: Exclude<T[K], undefined> };
+
+function withoutUnset<T extends object>(value: T) {
+  const entries = Object.entries(value).filter(
+    ([, item]) => item !== undefined,
+  );
+  return entries.length > 0
+    ? (Object.fromEntries(entries) as Defined<T>)
+    : undefined;
+}
+
+function setLine(map: GameMap, wall: string, line: LineSettings | undefined) {
+  return {
+    ...map,
+    lines: withoutUnset({ ...map.lines, [wall]: line && withoutUnset(line) }),
+  };
+}
+
+function updateLine(
+  map: GameMap,
+  wall: string,
+  patch: Partial<Omit<LineSettings, "sides">>,
+): GameMap {
+  return setLine(map, wall, { ...map.lines?.[wall], ...patch });
+}
+
+function updateLineSide(
+  map: GameMap,
+  wall: string,
+  sector: string,
+  patch: LineSide,
+): GameMap {
+  const line = map.lines?.[wall];
+  const side = withoutUnset({ ...line?.sides?.[sector], ...patch });
+  return setLine(map, wall, {
+    ...line,
+    sides: withoutUnset({ ...line?.sides, [sector]: side }),
+  });
+}
+
+function unusedTag(map: GameMap) {
+  const used = new Set([
+    ...map.sectors.map((sector) => sector.tag),
+    ...Object.values(map.lines ?? {}).map((line) => line.action?.tag),
+  ]);
+  let tag = 1;
+  while (used.has(tag)) tag += 1;
+  return tag;
+}
+
+function setLineTarget(
+  map: GameMap,
+  wall: string,
+  sectorId: string | null,
+): GameMap {
+  const action = map.lines?.[wall]?.action;
+  if (!action) return map;
+  const sector = map.sectors.find((item) => item.id === sectorId);
+  if (!sector) return updateLine(map, wall, { action: { ...action, tag: 0 } });
+  const tag = sector.tag || unusedTag(map);
+  return updateLine(updateSector(map, sector.id, { tag }), wall, {
+    action: { ...action, tag },
+  });
+}
+
+function setRoomWalls(map: GameMap, id: string, wallTexture: string): GameMap {
+  const painted = updateSector(map, id, {
+    wallTexture,
+    wallOverrides: undefined,
+  });
+  return Object.entries(map.lines ?? {}).reduce(
+    (next, [wall, line]) =>
+      line.sides?.[id]
+        ? updateLineSide(next, wall, id, { upper: undefined, lower: undefined })
+        : next,
+    painted,
+  );
+}
+
+function pruneLines(map: GameMap, removed: string): GameMap {
+  const owners = wallOwners(map);
+  const lines: Record<string, LineSettings | undefined> = {};
+  for (const [wall, line] of Object.entries(map.lines ?? {})) {
+    if (!owners.has(wall)) continue;
+    const sides = { ...line.sides, [removed]: undefined };
+    lines[wall] = withoutUnset({ ...line, sides: withoutUnset(sides) });
+  }
+  return { ...map, lines: withoutUnset(lines) };
+}
+
 function removeSector(map: GameMap, id: string): GameMap {
   const sectors = map.sectors.filter((sector) => sector.id !== id);
   const used = new Set(sectors.flatMap((sector) => sector.vertices));
-  return {
-    ...map,
-    sectors,
-    vertices: Object.fromEntries(
-      Object.entries(map.vertices).filter(([vertex]) => used.has(vertex)),
-    ),
-    switches: map.switches
-      .filter((item) => item.sector !== id)
-      .map((item) => (item.door === id ? { ...item, door: null } : item)),
-  };
+  return pruneLines(
+    {
+      ...map,
+      sectors,
+      vertices: Object.fromEntries(
+        Object.entries(map.vertices).filter(([vertex]) => used.has(vertex)),
+      ),
+      switches: map.switches
+        .filter((item) => item.sector !== id)
+        .map((item) => (item.door === id ? { ...item, door: null } : item)),
+    },
+    id,
+  );
 }
 
 function setRoomDoor(
@@ -284,12 +379,24 @@ function addSwitch(
   vertices[first] = cornerAt(along - switchWidth / 2);
   const second = nextId("v", Object.keys(vertices));
   vertices[second] = cornerAt(along + switchWidth / 2);
+  const key = wallKey(wall.from, wall.to);
+  const line = map.lines?.[key];
+  const remainder = line && withoutUnset({ ...line, action: undefined });
 
   return {
     id,
     map: {
       ...map,
       vertices,
+      lines: line
+        ? withoutUnset({
+            ...map.lines,
+            [key]: undefined,
+            [wallKey(wall.from, first)]: remainder,
+            [wallKey(first, second)]: line.action && { action: line.action },
+            [wallKey(second, wall.to)]: remainder,
+          })
+        : map.lines,
       sectors: map.sectors.map((sector) => {
         if (sector.id !== wall.sector) return sector;
         const loop = sector.vertices.flatMap((vertex, index) => {
@@ -317,7 +424,10 @@ function addSwitch(
 }
 
 function addSwitchInRoom(map: GameMap, room: string, door: string | null) {
-  const walls = freeWalls(map).filter((wall) => wall.sector === room);
+  const walls = freeWalls(map).filter(
+    (wall) =>
+      wall.sector === room && !map.lines?.[wallKey(wall.from, wall.to)]?.action,
+  );
   const lengthOf = (wall: FreeWall) => {
     const a = map.vertices[wall.from];
     const b = map.vertices[wall.to];
@@ -483,11 +593,15 @@ export {
   removeSwitch,
   removeThing,
   roomCenter,
+  setLineTarget,
   setRoomDoor,
+  setRoomWalls,
   snap,
   snapPoint,
   switchKeyPrefix,
   thingKeyPrefix,
+  updateLine,
+  updateLineSide,
   updateSector,
   updateSwitch,
   updateThing,

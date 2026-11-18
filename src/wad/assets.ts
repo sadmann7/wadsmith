@@ -31,6 +31,9 @@ const spriteLumps: Record<ThingKind, string> = {
   shotgun: "SHOTA0",
   shells: "SBOXA0",
   medikit: "MEDIA0",
+  "blue-key": "BKEYA0",
+  "yellow-key": "YKEYA0",
+  "red-key": "RKEYA0",
 };
 
 function createPicture(width: number, height: number): Picture {

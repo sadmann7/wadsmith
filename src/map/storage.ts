@@ -2,16 +2,29 @@ import {
   ceilingTextures,
   doorTextures,
   floorTextures,
+  sectorEffects,
   switchTextures,
   thingKinds,
   wallTextures,
 } from "./catalog";
+import {
+  isLineActionKind,
+  keyColors,
+  lineSpecial,
+  lineTriggers,
+} from "./lines";
 import type {
   DoorSettings,
   GameMap,
+  KeyColor,
+  LineAction,
+  LineSettings,
+  LineSide,
+  LineTrigger,
   MapSwitch,
   Point,
   Sector,
+  SectorEffect,
   Thing,
   ThingKind,
 } from "./types";
@@ -24,6 +37,7 @@ const backupKey = "wadsmith:map:unreadable";
 const coordinateLimit = 1_000_000;
 const maxNameLength = 80;
 const heightLimit = 32767;
+const wordLimit = 32767;
 const maxItems = 20000;
 const maxFileBytes = 5 * 1024 * 1024;
 const idPattern = /^[A-Za-z0-9_-]{1,40}$/;
@@ -74,6 +88,19 @@ function texture(value: unknown, allowed: readonly string[], label: string) {
   return value;
 }
 
+function wallId(value: string, label: string) {
+  const corners = value.split("|");
+  if (corners.length !== 2) fail(`${label} has an invalid wall.`);
+  corners.forEach((corner) => id(corner, label));
+  return value;
+}
+
+function tagNumber(value: unknown, label: string) {
+  const tag = integer(value, wordLimit, label);
+  if (tag < 0) fail(`${label} has an invalid tag.`);
+  return tag;
+}
+
 function parsePoint(value: unknown, label: string): Point {
   const point = record(value, label);
   return {
@@ -117,13 +144,17 @@ function parseSector(value: unknown, vertices: Record<string, Point>): Sector {
       : Object.fromEntries(
           Object.entries(record(sector.wallOverrides, label)).map(
             ([wall, name]) => {
-              const corners = wall.split("|");
-              if (corners.length !== 2) fail(`${label} has an invalid wall.`);
-              corners.forEach((corner) => id(corner, label));
-              return [wall, texture(name, wallTextures, label)];
+              return [wallId(wall, label), texture(name, wallTextures, label)];
             },
           ),
         );
+
+  if (
+    sector.effect !== undefined &&
+    !Object.hasOwn(sectorEffects, sector.effect as string)
+  ) {
+    fail(`${label} has an unknown effect.`);
+  }
 
   return {
     id: sectorId,
@@ -139,6 +170,85 @@ function parseSector(value: unknown, vertices: Record<string, Point>): Sector {
     ...(sector.door === undefined
       ? {}
       : { door: parseDoor(sector.door, label) }),
+    ...(sector.effect === undefined
+      ? {}
+      : { effect: sector.effect as SectorEffect }),
+    ...(sector.tag === undefined ? {} : { tag: tagNumber(sector.tag, label) }),
+  };
+}
+
+function parseLineAction(value: unknown, label: string): LineAction {
+  const action = record(value, label);
+  if (
+    !isLineActionKind(action.kind) ||
+    !lineTriggers.includes(action.trigger as LineTrigger) ||
+    typeof action.repeat !== "boolean" ||
+    (action.key !== undefined && !keyColors.includes(action.key as KeyColor))
+  ) {
+    fail(`${label} has an unknown action.`);
+  }
+  const parsed: LineAction = {
+    kind: action.kind,
+    trigger: action.trigger as LineTrigger,
+    repeat: action.repeat,
+    ...(action.key === undefined ? {} : { key: action.key as KeyColor }),
+    tag: tagNumber(action.tag, label),
+  };
+  if (lineSpecial(parsed) === null) fail(`${label} has an unknown action.`);
+  return parsed;
+}
+
+function parseLineSide(value: unknown, label: string): LineSide {
+  const side = record(value, label);
+  return {
+    ...(side.offsetX === undefined
+      ? {}
+      : { offsetX: integer(side.offsetX, wordLimit, label) }),
+    ...(side.offsetY === undefined
+      ? {}
+      : { offsetY: integer(side.offsetY, wordLimit, label) }),
+    ...(side.upper === undefined
+      ? {}
+      : { upper: texture(side.upper, wallTextures, label) }),
+    ...(side.lower === undefined
+      ? {}
+      : { lower: texture(side.lower, wallTextures, label) }),
+  };
+}
+
+function parseLine(value: unknown, sectors: Sector[]): LineSettings {
+  const label = "A line";
+  const line = record(value, label);
+  const flags = (
+    [
+      "blocksAll",
+      "blocksEnemies",
+      "upperFixed",
+      "lowerFixed",
+      "hidden",
+    ] as const
+  ).flatMap((flag) => {
+    if (line[flag] === undefined) return [];
+    if (typeof line[flag] !== "boolean") fail(`${label} is not valid.`);
+    return [[flag, line[flag]]];
+  });
+  return {
+    ...Object.fromEntries(flags),
+    ...(line.action === undefined
+      ? {}
+      : { action: parseLineAction(line.action, label) }),
+    ...(line.sides === undefined
+      ? {}
+      : {
+          sides: Object.fromEntries(
+            Object.entries(record(line.sides, label)).map(([sector, side]) => {
+              if (!sectors.some((item) => item.id === id(sector, label))) {
+                fail(`${label} points at something missing.`);
+              }
+              return [sector, parseLineSide(side, label)];
+            }),
+          ),
+        }),
   };
 }
 
@@ -212,6 +322,15 @@ function parseMap(value: unknown): GameMap {
   const switches = list(map.switches, "The switches").map((item) =>
     parseSwitch(item, vertices, sectors),
   );
+  const lines =
+    map.lines === undefined
+      ? undefined
+      : Object.fromEntries(
+          Object.entries(record(map.lines, "The lines")).map(([wall, line]) => [
+            wallId(wall, "A line"),
+            parseLine(line, sectors),
+          ]),
+        );
   uniqueIds(sectors, "Room");
   uniqueIds(things, "Thing");
   uniqueIds(switches, "Switch");
@@ -223,6 +342,7 @@ function parseMap(value: unknown): GameMap {
     sectors,
     things,
     switches,
+    ...(lines ? { lines } : {}),
   };
 }
 

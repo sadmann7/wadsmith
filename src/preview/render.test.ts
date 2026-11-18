@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { updateSector } from "../map/edit";
+import { updateLineSide, updateSector } from "../map/edit";
 import { wallKey } from "../map/geometry";
 import { starterMap } from "../map/starter-map";
 import {
@@ -11,8 +11,13 @@ import {
   moveSurfaceHeight,
   paintSurface,
 } from "../map/surfaces";
+import type { GameMap } from "../map/types";
 import { compileLumps } from "../wad/compile";
-import { createFlatAssets, readWadAssets } from "../wad/assets";
+import {
+  createFlatAssets,
+  readWadAssets,
+  type SceneAssets,
+} from "../wad/assets";
 import {
   createRenderTarget,
   pointOnPlane,
@@ -33,7 +38,56 @@ function renderStarter(map = starterMap, camera = startCamera(map)) {
   return (x: number, y: number) => target.surfaces[target.pick[y * 320 + x]];
 }
 
+const stripes = {
+  width: 64,
+  height: 64,
+  leftOffset: 0,
+  topOffset: 0,
+  pixels: Uint8Array.from({ length: 64 * 64 }, (_, index) => index >> 6),
+  opaque: new Uint8Array(64 * 64).fill(1),
+};
+const stripedAssets: SceneAssets = {
+  ...assets,
+  shades: Uint32Array.from({ length: 256 * 32 }, (_, index) => index % 256),
+  texture: () => stripes,
+};
+
+function columnAhead(vertices: string[], offsetX?: number) {
+  const room: GameMap = {
+    vertices: {
+      a: { x: 0, y: 0 },
+      b: { x: 128, y: 0 },
+      c: { x: 128, y: 96 },
+      d: { x: 0, y: 96 },
+    },
+    sectors: [{ ...starterMap.sectors[0], vertices }],
+    things: [],
+    switches: [],
+  };
+  const map = updateLineSide(room, wallKey("b", "c"), room.sectors[0].id, {
+    offsetX,
+  });
+  const target = createRenderTarget(320, 200);
+  renderScene(
+    target,
+    map,
+    { x: 64, y: 40, angle: 0 },
+    { assets: stripedAssets },
+  );
+  return target.colors[100 * 320 + 160];
+}
+
 describe("renderScene", () => {
+  it("runs wall textures from the viewer's left in either winding", () => {
+    expect(columnAhead(["a", "b", "c", "d"])).toBe(40);
+    expect(columnAhead(["d", "c", "b", "a"])).toBe(40);
+  });
+
+  it("shifts a wall by its side's offset", () => {
+    expect(columnAhead(["a", "b", "c", "d"], 8)).toBe(48);
+    expect(columnAhead(["d", "c", "b", "a"], -8)).toBe(32);
+  });
+
   it("records which surface each pixel shows", () => {
     const at = renderStarter();
     expect(at(160, 190)).toBe("floor:sector-1");
@@ -143,6 +197,18 @@ describe("surface edits", () => {
     const map = paintSurface(painted, wallSurface, "GRAY1", true);
     expect(map.sectors[0].wallTexture).toBe("GRAY1");
     expect(map.sectors[0].wallOverrides).toBeUndefined();
+  });
+
+  it("paints one part of a shared wall on one side", () => {
+    const shared = wallKey("v3", "v4");
+    const lower = `wall:sector-1:${shared}:lower`;
+    const map = paintSurface(starterMap, lower, "BRICK1");
+    expect(describeSurface(map, lower)?.texture).toBe("BRICK1");
+    expect(describeSurface(map, `wall:sector-2:${shared}:lower`)?.texture).toBe(
+      starterMap.sectors[1].wallTexture,
+    );
+    const repainted = paintSurface(map, lower, "GRAY1", true);
+    expect(repainted.lines).toBeUndefined();
   });
 
   it("paints the door from its face", () => {
