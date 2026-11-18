@@ -1,4 +1,4 @@
-const engineBase = `${import.meta.env.BASE_URL}engine/`;
+const engineBase = "/engine/";
 
 let iwad: Promise<Uint8Array> | null = null;
 

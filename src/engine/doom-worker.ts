@@ -164,7 +164,7 @@ async function start(request: Extract<DoomWorkerRequest, { type: "start" }>) {
   paused ||= request.paused;
   prepareBrowserApis();
   const { default: createDoom } = (await import(
-    /* @vite-ignore */ request.engineUrl
+    /* turbopackIgnore: true */ /* webpackIgnore: true */ request.engineUrl
   )) as { default: CreateDoom };
   stage = "start";
   const running = await startDoom({

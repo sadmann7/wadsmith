@@ -1,3 +1,5 @@
+"use client";
+
 import { createUndoStack, matchesShortcut } from "@ui-sdk/core";
 import {
   Menu,
@@ -45,16 +47,12 @@ import {
   useSyncExternalStore,
 } from "react";
 
-import { agent } from "./agent";
-import {
-  SectorInspector,
-  SwitchInspector,
-  ThingInspector,
-} from "./editor/inspector";
-import { MapCanvas } from "./editor/map-canvas";
-import type { EditMode, MapTool, MapViewStatus } from "./editor/map-editor";
-import { GameView } from "./engine/play-panel";
-import { thingCatalog, thingKinds } from "./map/catalog";
+import { agent } from "../agent";
+import { SectorInspector, SwitchInspector, ThingInspector } from "./inspector";
+import { MapCanvas } from "./map-canvas";
+import type { EditMode, MapTool, MapViewStatus } from "./map-editor";
+import { GameView } from "../engine/play-panel";
+import { thingCatalog, thingKinds } from "../map/catalog";
 import {
   setRoomDoor,
   switchKeyPrefix,
@@ -64,8 +62,8 @@ import {
   updateSwitch,
   updateThing,
   type RoomSide,
-} from "./map/edit";
-import { blankMap, starterMap } from "./map/starter-map";
+} from "../map/edit";
+import { blankMap, starterMap } from "../map/starter-map";
 import {
   loadSavedMap,
   MapFileError,
@@ -74,22 +72,22 @@ import {
   saveMap,
   serializeMap,
   watchSavedMap,
-} from "./map/storage";
-import type { GameMap, ThingKind } from "./map/types";
-import { validateMap } from "./map/validate";
-import { loadIwad } from "./engine/iwad";
-import { SceneCamera } from "./preview/scene-camera";
-import { SceneCanvas, type DraftSource } from "./preview/scene-editor";
-import { SurfacePanel } from "./preview/surface-panel";
+} from "../map/storage";
+import type { GameMap, ThingKind } from "../map/types";
+import { validateMap } from "../map/validate";
+import { loadIwad } from "../engine/iwad";
+import { SceneCamera } from "../preview/scene-camera";
+import { SceneCanvas, type DraftSource } from "../preview/scene-editor";
+import { SurfacePanel } from "../preview/surface-panel";
 import {
   describeSurface,
   paintSurface,
   parseSurface,
   surfaceKey,
-} from "./map/surfaces";
-import { wallKey, wallOwners } from "./map/geometry";
-import { createFlatAssets, readWadAssets } from "./wad/assets";
-import { compileMap } from "./wad/compile";
+} from "../map/surfaces";
+import { wallKey, wallOwners } from "../map/geometry";
+import { createFlatAssets, readWadAssets } from "../wad/assets";
+import { compileMap } from "../wad/compile";
 
 const toolHints: Record<MapTool, string> = {
   select:

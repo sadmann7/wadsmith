@@ -14,8 +14,9 @@ Default to no comment. Write one only for a constraint, an external quirk, or an
 
 ## Project
 
-Wadsmith is a Doom map editor built with UI SDK. It compiles maps to real WAD files and plays them in Chocolate Doom, built for WebAssembly from cloudflare/doom-wasm.
+Wadsmith is a Doom map editor built with Next.js, Tailwind CSS and UI SDK. It compiles maps to real WAD files and plays them in Chocolate Doom, built for WebAssembly from cloudflare/doom-wasm.
 
+- `src/app`: Next.js routes, metadata images and global styles. Read the guides in `node_modules/next/dist/docs/` before changing Next.js code. The design tokens are in `globals.css`; new UI should use Tailwind utilities.
 - `src/map`: the map model, edits and validation. No UI code.
 - `src/wad`: the WAD compiler, including the BSP and blockmap builders.
 - `src/editor`: the `map-editor` primitive and inspector.
@@ -26,3 +27,13 @@ Wadsmith is a Doom map editor built with UI SDK. It compiles maps to real WAD fi
 Editor coordinates are y-down. `toDoom` in `src/wad/compile.ts` is the only place that flips them for the engine.
 
 Run `pnpm setup:engine` once after cloning. It needs Emscripten, autoconf, automake and pkg-config, and it writes the engine and Freedoom to `public/engine`, which stays out of git.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+## This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

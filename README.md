@@ -1,6 +1,6 @@
 # Wadsmith
 
-A Doom map editor for the browser, built with [UI SDK](https://github.com/vercel-labs/ui). Draw rooms from above, walk them in a live preview, then press Play to fight in the real engine.
+A Doom map editor for the browser, built with [Next.js](https://nextjs.org), [Tailwind CSS](https://tailwindcss.com) and [UI SDK](https://github.com/vercel-labs/ui). Draw rooms from above, walk them in a live preview, then press Play to fight in the real engine.
 
 ## Setup
 
@@ -13,6 +13,10 @@ pnpm dev
 ```
 
 `setup:engine` compiles [Chocolate Doom](https://www.chocolate-doom.org) from [cloudflare/doom-wasm](https://github.com/cloudflare/doom-wasm) to WebAssembly and downloads [Freedoom](https://freedoom.github.io/) into `public/engine`.
+
+Set `NEXT_PUBLIC_SITE_URL` to the full public URL, including `https://`, when deploying outside Vercel, so social previews use the right image URLs.
+
+Maps save per browser address. The dev server now uses `localhost:3000`, so a map saved on the old `localhost:5173` address appears only with `pnpm dev -p 5173`, where you can save it to a file.
 
 ## Using it
 
