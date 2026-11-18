@@ -1,0 +1,28 @@
+# Wadsmith
+
+A Doom map editor for the browser, built with [UI SDK](https://github.com/vercel-labs/ui). Draw rooms from above, walk them in a live preview, then press Play to fight in the real engine.
+
+## Setup
+
+You need Node, pnpm and [Emscripten](https://emscripten.org).
+
+```bash
+pnpm install
+pnpm setup:engine
+pnpm dev
+```
+
+`setup:engine` compiles [doomgeneric](https://github.com/ozkl/doomgeneric) to WebAssembly and downloads [Freedoom](https://freedoom.github.io/) into `public/engine`.
+
+## Using it
+
+- **Select:** drag corners and things, click a room to edit it, and drag empty space to pan.
+- **Draw room:** click corners, then click the first corner or press Enter. Reuse another room's corners to connect the two.
+- **Place:** pick a thing and click inside a room.
+- **Play:** builds a WAD and loads it. Move with WASD, turn with the arrow keys, fire with Space and use with E.
+
+`window.agent` exposes the UI SDK agent bridge, with `addConnectedRoom`, `setRoomHeights` and `placeThing` on the Map component.
+
+## License
+
+The engine is GPL-2.0 and Freedoom is BSD-licensed. Neither is committed here. Anything that distributes the compiled engine has to meet the GPL's terms.
