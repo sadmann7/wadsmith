@@ -21,6 +21,12 @@ import {
   moveSurfaceHeight,
   parseSurface,
 } from "../map/surfaces";
+import {
+  isDragging,
+  isKeyboardMenu,
+  isSecondaryPress,
+  openMenuFromKey,
+} from "../editor/map-target";
 import type { GameMap, Point, ThingKind } from "../map/types";
 import type { SceneAssets } from "../wad/assets";
 import type { SceneCamera } from "./scene-camera";
@@ -50,6 +56,12 @@ type SceneOptions = {
   draftSource?: DraftSource;
   selected?: string | null;
   linked?: string | null;
+  onContextSurface?: (
+    surface: string | null,
+    point: Point | null,
+    keyboard: boolean,
+  ) => void;
+  contextMenuOpen?: boolean;
   placing?: ThingKind | null;
   renderWidth?: number;
   renderHeight?: number;
@@ -77,6 +89,7 @@ type SceneState = {
   height: number;
 };
 
+const touchSlop = 4;
 const moveSpeed = 260;
 const turnSpeed = 120;
 const placeDistances = [128, 96, 64, 32];
@@ -96,6 +109,8 @@ const sceneEditor = definePrimitive({
     draftSource: "value",
     selected: "value",
     linked: "value",
+    onContextSurface: "callback",
+    contextMenuOpen: "boolean",
     placing: "value",
     renderWidth: "number",
     renderHeight: "number",
@@ -134,6 +149,8 @@ const sceneEditor = definePrimitive({
     let drawFrame = 0;
     let walkFrame = 0;
     let stopDrag: (() => void) | undefined;
+    let dragging = false;
+    let touchPress: Point | null = null;
     const held = new Set<string>();
 
     const shownMap = () => {
@@ -317,6 +334,7 @@ const sceneEditor = definePrimitive({
         threshold: dragThreshold,
         cancelOnEscape: true,
         onStart: () => {
+          dragging = true;
           view.walked = true;
         },
         onMove: ({ x, y }) => {
@@ -338,6 +356,7 @@ const sceneEditor = definePrimitive({
         onEnd: (end, canceled) => {
           const { draftMap } = store.get();
           stopDrag = undefined;
+          dragging = false;
           store.set({ draftMap: null });
           if (!canceled && moved && draftMap) {
             change("map", draftMap, { reason: "thing-drag", event: end });
@@ -345,6 +364,29 @@ const sceneEditor = definePrimitive({
         },
       });
     };
+
+    const reportContext = (event: MouseEvent) => {
+      const { onContextSurface } = context.options();
+      if (dragging || isDragging(event)) {
+        onContextSurface?.(null, null, false);
+      } else if (isKeyboardMenu(event)) {
+        const { selected, linked } = store.get();
+        onContextSurface?.(selected ?? linked, null, true);
+      } else {
+        onContextSurface?.(
+          surfaceAt(event)?.key ?? null,
+          floorPointAt(event),
+          false,
+        );
+      }
+    };
+
+    context.onOptions(({ contextMenuOpen }) => {
+      if (!contextMenuOpen || dragging) return;
+      touchPress = null;
+      stopDrag?.();
+      stopDrag = undefined;
+    });
 
     const select = (key: string | null, reason: "press" | "key") => {
       change("selected", key, { reason });
@@ -446,6 +488,15 @@ const sceneEditor = definePrimitive({
         };
       },
       pointermove(event: PointerEvent) {
+        if (
+          touchPress &&
+          Math.abs(event.clientX - touchPress.x) +
+            Math.abs(event.clientY - touchPress.y) >
+            touchSlop
+        ) {
+          touchPress = null;
+          context.options().onContextSurface?.(null, null, false);
+        }
         if (stopDrag) return;
         const hovered = surfaceAt(event)?.key ?? null;
         const ghost = store.get().placing ? floorPointAt(event) : null;
@@ -461,8 +512,17 @@ const sceneEditor = definePrimitive({
       pointerleave() {
         store.set({ hovered: null, ghost: null });
       },
+      contextmenu(event: MouseEvent) {
+        reportContext(event);
+      },
       pointerdown(event: PointerEvent) {
-        if (event.button !== 0 || !canvas || !target) return;
+        touchPress = null;
+        if (event.pointerType === "touch") {
+          touchPress = { x: event.clientX, y: event.clientY };
+          reportContext(event);
+        }
+        if (event.button !== 0 || isSecondaryPress(event)) return;
+        if (!canvas || !target) return;
         canvas.focus({ preventScroll: true });
         const hit = surfaceAt(event);
         const key = hit?.key ?? null;
@@ -491,6 +551,7 @@ const sceneEditor = definePrimitive({
           threshold: dragThreshold,
           cancelOnEscape: true,
           onStart: () => {
+            dragging = true;
             store.set({
               frozenEye: owner ? owner.floor + 41 : null,
             });
@@ -504,6 +565,7 @@ const sceneEditor = definePrimitive({
           onEnd: (end, canceled) => {
             const { draftMap } = store.get();
             stopDrag = undefined;
+            dragging = false;
             store.set({ draftMap: null, frozenEye: null });
             if (!canceled && moved && draftMap) {
               change("map", draftMap, { reason: "height-drag", event: end });
@@ -512,7 +574,7 @@ const sceneEditor = definePrimitive({
         });
       },
       keydown(event: KeyboardEvent) {
-        if (stopDrag) return;
+        if (stopDrag || openMenuFromKey(event)) return;
         const { map, placing } = store.get();
         const thing = selectedThing();
         if (event.altKey && nudgeThing(event)) return;
@@ -576,6 +638,7 @@ const sceneEditor = definePrimitive({
         pointermove: (event, { api }) => api.pointermove(event),
         pointerleave: (_event, { api }) => api.pointerleave(),
         pointerdown: (event, { api }) => api.pointerdown(event),
+        contextmenu: (event, { api }) => api.contextmenu(event),
         keydown: (event, { api }) => api.keydown(event),
         keyup: (event, { api }) => api.keyup(event),
         blur: (_event, { api }) => api.blur(),

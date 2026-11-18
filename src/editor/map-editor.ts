@@ -41,7 +41,16 @@ import {
   wallNear,
   type RoomSide,
 } from "../map/edit";
-import { sectorAt } from "../map/geometry";
+import { sectorAt, wallKey } from "../map/geometry";
+import {
+  isDragging,
+  isKeyboardMenu,
+  isSecondaryPress,
+  openMenuFromKey,
+  targetForKeys,
+  wallTarget,
+  type MapTarget,
+} from "./map-target";
 import type { Camera } from "../preview/render";
 import type { SceneCamera } from "../preview/scene-camera";
 import type {
@@ -90,7 +99,11 @@ type MapEditorOptions = {
   camera?: SceneCamera;
   highlightedWall?: string | null;
   findCameraRequest?: number;
+  fitRequest?: number;
+  drawRequest?: { id: number; point: Point } | null;
   lookAtRequest?: { id: number; clientX: number; clientY: number } | null;
+  onContextTarget?: (target: MapTarget | null) => void;
+  contextMenuOpen?: boolean;
 };
 
 type MapEditorState = {
@@ -269,7 +282,11 @@ const mapEditor = definePrimitive({
     camera: "value",
     highlightedWall: "value",
     findCameraRequest: "number",
+    fitRequest: "number",
+    drawRequest: "value",
     lookAtRequest: "value",
+    onContextTarget: "callback",
+    contextMenuOpen: "boolean",
   },
   controlled: ["map", "tool", "activeSector", "selection"],
   state: (options: MapEditorOptions): MapEditorState => {
@@ -391,6 +408,10 @@ const mapEditor = definePrimitive({
     let stopCameraDrag: (() => void) | undefined;
     let findRequest = context.options().findCameraRequest ?? 0;
     let lookRequest = context.options().lookAtRequest?.id ?? 0;
+    let fitRequest = context.options().fitRequest ?? 0;
+    let drawRequest = context.options().drawRequest?.id ?? 0;
+    let touchPress: { event: PointerEvent; held: boolean } | null = null;
+    let ignoreClick = false;
 
     const findCamera = () => {
       if (!fitted) {
@@ -420,6 +441,31 @@ const mapEditor = definePrimitive({
       moveCamera(
         viewport.toCanvas(lookAtRequest.clientX, lookAtRequest.clientY),
       );
+    });
+    context.onOptions((options) => {
+      const request = options.fitRequest ?? 0;
+      if (request === fitRequest) return;
+      fitRequest = request;
+      fitMap();
+    });
+    context.onOptions(({ contextMenuOpen }) => {
+      if (!contextMenuOpen || !touchPress) return;
+      const { event } = touchPress;
+      touchPress = null;
+      ignoreClick = true;
+      event.target?.dispatchEvent(
+        new PointerEvent("pointercancel", {
+          bubbles: true,
+          pointerId: event.pointerId,
+          pointerType: "touch",
+        }),
+      );
+    });
+    context.onOptions(({ drawRequest: request }) => {
+      if (!request || request.id === drawRequest) return;
+      drawRequest = request.id;
+      store.set({ drawing: [snapPoint(request.point)], cursor: null });
+      change("tool", "draw", { reason: "draw" });
     });
     context.onDestroy(() => stopCameraDrag?.());
 
@@ -496,6 +542,82 @@ const mapEditor = definePrimitive({
       return false;
     };
 
+    const fitMap = () => {
+      const points = Object.values(store.get().positions);
+      if (points.length === 0) return;
+      viewport.fit(
+        {
+          left: Math.min(...points.map((point) => point.x)),
+          top: Math.min(...points.map((point) => point.y)),
+          right: Math.max(...points.map((point) => point.x)),
+          bottom: Math.max(...points.map((point) => point.y)),
+        },
+        { padding: 56, maxZoom: 1.25 },
+      );
+    };
+
+    const selectedTarget = (): MapTarget => {
+      const { selection, activeSector, highlightedWall, map } = store.get();
+      const picked = targetForKeys(selection, null);
+      if (picked) return picked;
+      if (highlightedWall) {
+        const item = map.switches.find(
+          (entry) => wallKey(entry.from, entry.to) === highlightedWall,
+        );
+        if (item) return { kind: "switch", id: item.id, point: null };
+        const owner = map.sectors.find((sector) => sector.id === activeSector);
+        if (owner) return wallTarget(owner.id, highlightedWall, null);
+      }
+      return activeSector
+        ? { kind: "room", sector: activeSector, point: null }
+        : { kind: "empty", point: null };
+    };
+
+    const targetAt = (event: MouseEvent): MapTarget | null => {
+      const state = store.get();
+      if (
+        state.tool === "draw" ||
+        state.moving ||
+        state.connecting ||
+        stopCameraDrag ||
+        isDragging(event)
+      ) {
+        return null;
+      }
+      const element = event.target as Element;
+      if (element.closest("[data-map-control]")) return null;
+      const key =
+        element.closest<HTMLElement>("[data-map-key]")?.dataset.mapKey;
+      const keyboard = isKeyboardMenu(event);
+      if (keyboard && (!key || key === "camera")) return selectedTarget();
+      const at = viewport.toCanvas(event.clientX, event.clientY);
+      const point = keyboard ? null : snapPoint(at);
+      if (key?.startsWith(doorKeyPrefix)) {
+        return {
+          kind: "room",
+          sector: key.slice(doorKeyPrefix.length),
+          point,
+        };
+      }
+      if (key && key !== "camera") {
+        const group = state.selection.includes(key) ? state.selection : [key];
+        return targetForKeys(group, state.positions[key] ?? point, key);
+      }
+      const wall = wallNear(state.map, at, wallReach / state.viewport.zoom);
+      if (wall) {
+        const item = state.map.switches.find(
+          (entry) => wallKey(entry.from, entry.to) === wall.wall,
+        );
+        return item
+          ? targetForKeys([`${switchKeyPrefix}${item.id}`], point)
+          : wallTarget(wall.sector, wall.wall, point);
+      }
+      const room = sectorAt(state.map, at);
+      return room
+        ? { kind: "room", sector: room.id, point }
+        : { kind: "empty", point };
+    };
+
     const findRoom = (name: string): Sector => {
       const { map } = store.get();
       const wanted = name.toLowerCase();
@@ -557,7 +679,14 @@ const mapEditor = definePrimitive({
       },
       pressCamera(event: PointerEvent, el: HTMLElement) {
         const camera = context.options().camera;
-        if (!camera || store.get().tool !== "select") return;
+        if (
+          !camera ||
+          event.button !== 0 ||
+          isSecondaryPress(event) ||
+          store.get().tool !== "select"
+        ) {
+          return;
+        }
         const start = camera.position;
         const wasWalked = camera.walked;
         stopCameraDrag = bindDrag(el, event, {
@@ -595,18 +724,13 @@ const mapEditor = definePrimitive({
           value: sector.id,
           label: sector.name,
         })),
-      fitMap() {
-        const points = Object.values(store.get().positions);
-        if (points.length === 0) return;
-        viewport.fit(
-          {
-            left: Math.min(...points.map((point) => point.x)),
-            top: Math.min(...points.map((point) => point.y)),
-            right: Math.max(...points.map((point) => point.x)),
-            bottom: Math.max(...points.map((point) => point.y)),
-          },
-          { padding: 56, maxZoom: 1.25 },
-        );
+      fitMap,
+      contextmenu(event: MouseEvent) {
+        const { tool, drawing } = store.get();
+        if (tool === "draw" && !isKeyboardMenu(event)) {
+          store.set({ drawing: drawing.slice(0, -1) });
+        }
+        context.options().onContextTarget?.(targetAt(event));
       },
       addConnectedRoom(
         room: string,
@@ -689,6 +813,13 @@ const mapEditor = definePrimitive({
       pointerdown(event: PointerEvent) {
         press = { x: event.clientX, y: event.clientY };
         root()?.focus({ preventScroll: true });
+        touchPress = null;
+        ignoreClick = false;
+        if (event.pointerType === "touch") {
+          touchPress = { event, held: true };
+          context.options().onContextTarget?.(targetAt(event));
+        }
+        if (isSecondaryPress(event)) return;
         const target = event.target as Element;
         if (target.closest("[data-map-control], [data-map-key]")) return;
         if (store.get().tool === "select") {
@@ -699,12 +830,27 @@ const mapEditor = definePrimitive({
         reportPointer?.(null);
       },
       pointermove(event: PointerEvent) {
+        if (
+          touchPress?.held &&
+          event.pointerType === "touch" &&
+          press &&
+          Math.abs(event.clientX - press.x) +
+            Math.abs(event.clientY - press.y) >
+            clickSlop
+        ) {
+          touchPress.held = false;
+          context.options().onContextTarget?.(null);
+        }
         reportPointer?.(pointFromEvent(event));
         if (store.get().tool === "draw") {
           store.set({ cursor: pointFromEvent(event) });
         }
       },
       click(event: MouseEvent) {
+        if (ignoreClick) {
+          ignoreClick = false;
+          return;
+        }
         const target = event.target as Element;
         if (target.closest("[data-map-control]")) return;
         const moved =
@@ -749,7 +895,7 @@ const mapEditor = definePrimitive({
         }
       },
       keydown(event: KeyboardEvent) {
-        if (event.defaultPrevented) return;
+        if (event.defaultPrevented || openMenuFromKey(event)) return;
         const { tool, drawing } = store.get();
         if (tool === "draw") {
           if (event.key === "Enter") finishRoom();
@@ -774,6 +920,7 @@ const mapEditor = definePrimitive({
         viewport.keydown(event);
       },
       pressPort(event: PointerEvent, key: string, el: HTMLElement) {
+        if (event.button !== 0 || isSecondaryPress(event)) return;
         if (store.get().tool !== "select") return;
         if (key.startsWith(doorKeyPrefix)) {
           select([], key.slice(doorKeyPrefix.length));
@@ -795,6 +942,7 @@ const mapEditor = definePrimitive({
         }
       },
       pressHandle(event: PointerEvent, key: string, el: HTMLElement) {
+        if (event.button !== 0 || isSecondaryPress(event)) return;
         if (store.get().tool !== "select") return;
         const { selection } = store.get();
         if (event.shiftKey) {
@@ -830,6 +978,7 @@ const mapEditor = definePrimitive({
         pointermove: (event, { api }) => api.pointermove(event),
         pointerleave: (_event, { api }) => api.pointerleave(),
         click: (event, { api }) => api.click(event),
+        contextmenu: (event, { api }) => api.contextmenu(event),
         dblclick: (event, { api }) => api.doubleClick(event),
         keydown: (event, { api }) => api.keydown(event),
       },

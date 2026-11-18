@@ -5,16 +5,31 @@ import {
   addSwitch,
   addThing,
   addSwitchInRoom,
+  changeThings,
+  connectedCorners,
+  duplicateThings,
+  faceThings,
+  freeWallAt,
   freeWallNear,
   removeSector,
+  removeThings,
   setLineTarget,
+  snapCorners,
   setRoomDoor,
   updateLine,
   updateLineSide,
   wallNear,
   updateSector,
 } from "../map/edit";
-import { wallKey } from "../map/geometry";
+import {
+  canStand,
+  targetExists,
+  targetForKeys,
+  targetForSurface,
+  viewOfTarget,
+  wallTarget,
+} from "../editor/map-target";
+import { sectorAt, wallKey } from "../map/geometry";
 import { fitLineAction, triggersFor } from "../map/lines";
 import { starterMap } from "../map/starter-map";
 import { parseMapFile, serializeMap } from "../map/storage";
@@ -636,5 +651,146 @@ describe("line editing", () => {
     expect(
       Object.values(added.map.lines ?? {}).filter((line) => line.hidden),
     ).toHaveLength(2);
+  });
+});
+
+describe("context menu edits", () => {
+  const ids = ["imp-1", "demon-1"];
+  const map: GameMap = {
+    ...starterMap,
+    things: [
+      { id: "player-1", kind: "player", x: 96, y: 160, angle: 0 },
+      { id: "imp-1", kind: "imp", x: 128, y: 64, angle: 90 },
+      { id: "demon-1", kind: "demon", x: 192, y: 64, angle: 0 },
+    ],
+  };
+
+  it("changes and turns every selected thing", () => {
+    const changed = faceThings(changeThings(map, ids, "zombieman"), ids, 180);
+    expect(changed.things.slice(1)).toMatchObject([
+      { kind: "zombieman", angle: 180 },
+      { kind: "zombieman", angle: 180 },
+    ]);
+    expect(changed.things[0].kind).toBe("player");
+  });
+
+  it("duplicates things beside themselves but never the player", () => {
+    const copies = duplicateThings(map, ["player-1", "imp-1"]);
+    expect(copies.ids).toEqual(["imp-2"]);
+    expect(copies.map.things.at(-1)).toMatchObject({
+      kind: "imp",
+      x: 144,
+      y: 80,
+      angle: 90,
+    });
+  });
+
+  it("keeps a duplicate inside the thing's room", () => {
+    const cornered: GameMap = {
+      ...map,
+      things: [
+        ...map.things,
+        { id: "imp-9", kind: "imp", x: 376, y: 304, angle: 0 },
+      ],
+    };
+    const copies = duplicateThings(cornered, ["imp-9"]);
+    const copy = copies.map.things.at(-1)!;
+    expect(sectorAt(copies.map, copy)?.id).toBe("sector-1");
+    expect(validateMap(copies.map).map((issue) => issue.id)).not.toContain(
+      `outside:${copy.id}`,
+    );
+  });
+
+  it("deletes every selected thing", () => {
+    expect(removeThings(map, ids).things.map((item) => item.id)).toEqual([
+      "player-1",
+    ]);
+  });
+
+  it("snaps only the chosen corners", () => {
+    const off = {
+      ...starterMap,
+      vertices: {
+        ...starterMap.vertices,
+        v1: { x: 3, y: 5 },
+        v2: { x: 387, y: 5 },
+      },
+    };
+    const snapped = snapCorners(off, ["v1"]);
+    expect(snapped.vertices.v1).toEqual({ x: 0, y: 8 });
+    expect(snapped.vertices.v2).toEqual({ x: 387, y: 5 });
+  });
+
+  it("selects every corner of the rooms sharing a corner", () => {
+    const corners = connectedCorners(starterMap, ["v3"]);
+    expect(corners).toEqual(expect.arrayContaining(["v1", "v6", "v13", "v14"]));
+    expect(corners).not.toContain("v9");
+  });
+
+  it("only offers a switch on a free solid wall", () => {
+    expect(freeWallAt(starterMap, wallKey("v1", "v15"))).not.toBeNull();
+    expect(freeWallAt(starterMap, wallKey("v3", "v4"))).toBeNull();
+  });
+});
+
+describe("context menu targets", () => {
+  it("uses the pressed item's type in a mixed selection", () => {
+    const keys = ["v1", "thing:imp-1", "v2"];
+    expect(targetForKeys(keys, null, "v2")).toMatchObject({
+      kind: "corners",
+      ids: ["v1", "v2"],
+      keepSelection: true,
+    });
+    expect(targetForKeys(keys, null, "thing:imp-1")).toMatchObject({
+      kind: "things",
+      ids: ["imp-1"],
+      keepSelection: true,
+    });
+  });
+
+  it("notices when undo removes a target", () => {
+    const wall = wallTarget("sector-1", wallKey("v1", "v15"), null);
+    expect(targetExists(starterMap, wall)).toBe(true);
+    expect(targetExists(removeSector(starterMap, "sector-1"), wall)).toBe(
+      false,
+    );
+    expect(
+      targetExists(starterMap, { kind: "things", ids: ["gone"], point: null }),
+    ).toBe(false);
+  });
+
+  it("maps 3D surfaces to the same targets as the map", () => {
+    expect(targetForSurface(starterMap, "floor:sector-1", null)).toMatchObject({
+      kind: "room",
+      sector: "sector-1",
+    });
+    const wall = wallKey("v1", "v15");
+    expect(
+      targetForSurface(starterMap, `wall:sector-1:${wall}:middle`, null),
+    ).toMatchObject({ kind: "wall", sector: "sector-1", wall });
+    const switched = wallKey("v15", "v16");
+    expect(
+      targetForSurface(starterMap, `wall:sector-1:${switched}:middle`, null),
+    ).toMatchObject({ kind: "switch", id: "switch-1" });
+    expect(targetForSurface(starterMap, "thing:player-1", null)).toMatchObject({
+      kind: "things",
+      ids: ["player-1"],
+    });
+  });
+
+  it("frames a wall from inside a room and refuses door rooms", () => {
+    const view = viewOfTarget(
+      starterMap,
+      wallTarget("sector-1", wallKey("v1", "v15"), null),
+    );
+    expect(view?.at).toEqual({ x: 80, y: 0 });
+    expect(view && canStand(starterMap, view.from)).toBe(true);
+    expect(
+      viewOfTarget(starterMap, {
+        kind: "room",
+        sector: "sector-4",
+        point: null,
+      }),
+    ).toBeNull();
   });
 });

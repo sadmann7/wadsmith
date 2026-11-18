@@ -51,6 +51,17 @@ class SceneCamera {
     this.position = { ...this.current, x: point.x, y: point.y };
     return true;
   }
+
+  lookAt(map: GameMap, from: Point, target: Point | null) {
+    const sector = sectorAt(map, from);
+    if (!sector || sector.door) return false;
+    const angle = target
+      ? (Math.atan2(from.y - target.y, target.x - from.x) * 180) / Math.PI
+      : this.current.angle;
+    this.walked = true;
+    this.position = { ...this.current, ...from, angle };
+    return true;
+  }
 }
 
 export { SceneCamera };

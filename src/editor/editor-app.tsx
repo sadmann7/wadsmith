@@ -2,8 +2,10 @@
 
 import { createUndoStack, matchesShortcut } from "@ui-sdk/core";
 import {
+  createMenuController,
   Menu,
   MenuContent,
+  MenuContextTrigger,
   MenuItem,
   MenuSeparator,
   MenuTrigger,
@@ -48,6 +50,7 @@ import {
 } from "react";
 
 import { agent } from "../agent";
+import { MapContextMenu } from "./context-menu";
 import {
   LineInspector,
   SectorInspector,
@@ -55,10 +58,19 @@ import {
   ThingInspector,
 } from "./inspector";
 import { MapCanvas } from "./map-canvas";
+import {
+  normalizeControlClick,
+  targetExists,
+  targetForKeys,
+  targetForSurface,
+  viewOfTarget,
+  type MapTarget,
+} from "./map-target";
 import type { EditMode, MapTool, MapViewStatus } from "./map-editor";
 import { GameView } from "../engine/play-panel";
 import { thingCatalog, thingKinds } from "../map/catalog";
 import {
+  duplicateThings,
   setLineTarget,
   setRoomDoor,
   setRoomWalls,
@@ -83,7 +95,7 @@ import {
   serializeMap,
   watchSavedMap,
 } from "../map/storage";
-import type { GameMap, ThingKind } from "../map/types";
+import type { GameMap, Point, ThingKind } from "../map/types";
 import { validateMap } from "../map/validate";
 import { loadIwad } from "../engine/iwad";
 import { SceneCamera } from "../preview/scene-camera";
@@ -224,6 +236,16 @@ function App() {
   const [initialLayout] = useState(loadLayout);
   const [layout, setLayout] = useState(initialLayout.view);
   const [findCameraRequest, setFindCameraRequest] = useState(0);
+  const [fitRequest, setFitRequest] = useState(0);
+  const [drawRequest, setDrawRequest] = useState<{
+    id: number;
+    point: Point;
+  } | null>(null);
+  const [menu] = useState(() => createMenuController());
+  const [menuTarget, setMenuTarget] = useState<MapTarget | null>(null);
+  const menuTargetRef = useRef<MapTarget | null>(null);
+  const menuOpen = useRef(false);
+  const [contextMenuOpen, setContextMenuOpen] = useState(false);
   const [showDock, setShowDock] = useState(initialLayout.dock);
   const [editMode, setEditMode] = useState<EditMode>("vertices");
   const pointerStatus = useRef<HTMLSpanElement>(null);
@@ -300,6 +322,31 @@ function App() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [history, restore]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (
+        !matchesShortcut(event, "mod+d") ||
+        isTextEntry(event.target) ||
+        document.querySelector(".game-stage")
+      ) {
+        return;
+      }
+      const ids = selection
+        .filter((key) => key.startsWith(thingKeyPrefix))
+        .map((key) => key.slice(thingKeyPrefix.length));
+      const copies = duplicateThings(map, ids);
+      if (copies.ids.length === 0) return;
+      event.preventDefault();
+      history.record(copies.map);
+      showMap(copies.map);
+      setSurface(null);
+      setActiveSector(null);
+      setSelection(copies.ids.map((id) => `${thingKeyPrefix}${id}`));
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [history, map, selection, showMap]);
 
   useEffect(() => {
     let active = true;
@@ -446,22 +493,102 @@ function App() {
     }
   };
 
+  const selectTarget = (target: MapTarget) => {
+    if (target.keepSelection) return;
+    if (target.surface) {
+      selectSurface(target.surface);
+      return;
+    }
+    setSurface(null);
+    if (target.kind === "room") {
+      setSelection([]);
+      setActiveSector(target.sector);
+      return;
+    }
+    setActiveSector(null);
+    if (target.kind === "things") {
+      setSelection(target.ids.map((id) => `${thingKeyPrefix}${id}`));
+    } else if (target.kind === "corners") {
+      setSelection(target.ids);
+    } else if (target.kind === "switch") {
+      setSelection([`${switchKeyPrefix}${target.id}`]);
+    } else {
+      setSelection([]);
+    }
+  };
+
+  const reportMenuTarget = (target: MapTarget | null) => {
+    menuTargetRef.current = target;
+    setMenuTarget(target);
+    if (!menuOpen.current) return;
+    if (target) selectTarget(target);
+    else menu.close();
+  };
+
+  const reportSceneTarget = (
+    key: string | null,
+    point: Point | null,
+    keyboard: boolean,
+  ) => {
+    const picked = key ? parseSurface(key) : null;
+    const pressed =
+      picked?.kind === "thing" ? `${thingKeyPrefix}${picked.thing}` : null;
+    const group =
+      keyboard || (pressed && selection.includes(pressed)) ? selection : [];
+    const fromSelection =
+      group.length > 0
+        ? targetForKeys(group, point, pressed ?? undefined)
+        : null;
+    reportMenuTarget(
+      fromSelection ?? (key ? targetForSurface(map, key, point) : null),
+    );
+  };
+
+  const applyMenuSelection = ({
+    keys,
+    sector: nextSector,
+  }: {
+    keys?: string[];
+    sector?: string | null;
+  }) => {
+    setSurface(null);
+    if (keys) setSelection(keys);
+    if (nextSector !== undefined) setActiveSector(nextSector);
+  };
+
+  const showInScene = (target: MapTarget) => {
+    const view = viewOfTarget(map, target);
+    if (!view) return;
+    camera.lookAt(map, view.from, view.at);
+    if (visibleLayout === "map" && (narrow || !showDock)) {
+      changeLayout(narrow ? "scene" : "split");
+    }
+  };
+
   const scene = (
-    <SceneCanvas
-      aria-label="3D view. Click a surface to select it. W, A, S and D walk, N and P step through surfaces."
-      className="screen scene"
-      map={map}
-      assets={assets}
-      camera={camera}
-      draftSource={drafts.subscribe}
-      selected={surfaceInfo ? surface : null}
-      linked={sceneInfo ? sceneSelection : null}
-      placing={tool === "thing" ? thingKind : null}
-      renderWidth={640}
-      renderHeight={400}
-      onMapChange={(next) => commit(next)}
-      onSelectedChange={selectSurface}
-    />
+    <MenuContextTrigger
+      controller={menu}
+      className="contents"
+      onContextMenuCapture={normalizeControlClick}
+    >
+      <SceneCanvas
+        aria-label="3D view. Click a surface to select it. W, A, S and D walk, N and P step through surfaces."
+        className="screen scene"
+        map={map}
+        assets={assets}
+        camera={camera}
+        draftSource={drafts.subscribe}
+        selected={surfaceInfo ? surface : null}
+        linked={sceneInfo ? sceneSelection : null}
+        placing={tool === "thing" ? thingKind : null}
+        renderWidth={640}
+        renderHeight={400}
+        onMapChange={(next) => commit(next)}
+        onSelectedChange={selectSurface}
+        onContextSurface={reportSceneTarget}
+        contextMenuOpen={contextMenuOpen}
+      />
+    </MenuContextTrigger>
   );
 
   const thingPicker = (
@@ -513,6 +640,12 @@ function App() {
       }),
     [history],
   );
+
+  useEffect(() => {
+    if (menuOpen.current && menuTarget && !targetExists(map, menuTarget)) {
+      menu.close();
+    }
+  }, [map, menu, menuTarget]);
 
   const buildProblem = () => {
     try {
@@ -892,38 +1025,50 @@ function App() {
                       )}
                     </button>
                   </div>
-                  <MapCanvas
-                    key={mapVersion}
-                    map={map}
-                    tool={tool}
-                    editMode={editMode}
-                    onWallSelect={(wallSector, wall) =>
-                      selectSurface(
-                        surfaceKey({
-                          kind: "wall",
-                          sector: wallSector,
-                          wall,
-                          part: "middle",
-                        }),
-                      )
-                    }
-                    onViewChange={updateViewStatus}
-                    thingKind={thingKind}
-                    activeSector={activeSector}
-                    selection={selection}
-                    onMapChange={(next) => commit(next)}
-                    onToolChange={setTool}
-                    onActiveSectorChange={setActiveSector}
-                    onSelectionChange={setSelection}
-                    onMapSelect={() => setSurface(null)}
-                    onDraftMapChange={(draft) => drafts.publish(draft)}
-                    camera={camera}
-                    highlightedWall={
-                      parsedSurface?.kind === "wall" ? parsedSurface.wall : null
-                    }
-                    findCameraRequest={findCameraRequest}
-                    lookAtRequest={lookAtRequest}
-                  />
+                  <MenuContextTrigger
+                    controller={menu}
+                    className="contents"
+                    onContextMenuCapture={normalizeControlClick}
+                  >
+                    <MapCanvas
+                      key={mapVersion}
+                      map={map}
+                      tool={tool}
+                      editMode={editMode}
+                      onWallSelect={(wallSector, wall) =>
+                        selectSurface(
+                          surfaceKey({
+                            kind: "wall",
+                            sector: wallSector,
+                            wall,
+                            part: "middle",
+                          }),
+                        )
+                      }
+                      onViewChange={updateViewStatus}
+                      thingKind={thingKind}
+                      activeSector={activeSector}
+                      selection={selection}
+                      onMapChange={(next) => commit(next)}
+                      onToolChange={setTool}
+                      onActiveSectorChange={setActiveSector}
+                      onSelectionChange={setSelection}
+                      onMapSelect={() => setSurface(null)}
+                      onDraftMapChange={(draft) => drafts.publish(draft)}
+                      camera={camera}
+                      highlightedWall={
+                        parsedSurface?.kind === "wall"
+                          ? parsedSurface.wall
+                          : null
+                      }
+                      findCameraRequest={findCameraRequest}
+                      fitRequest={fitRequest}
+                      drawRequest={drawRequest}
+                      lookAtRequest={lookAtRequest}
+                      onContextTarget={reportMenuTarget}
+                      contextMenuOpen={contextMenuOpen}
+                    />
+                  </MenuContextTrigger>
                   <p className="tool-hint">{toolHints[tool]}</p>
                   {visibleLayout === "map" && showDock && !narrow ? (
                     <div className="player-dock">
@@ -1203,6 +1348,37 @@ function App() {
           </div>
         </footer>
       </div>
+      <MapContextMenu
+        controller={menu}
+        map={map}
+        target={menuTarget}
+        thingKind={thingKind}
+        onOpenChange={(open, details) => {
+          const target = menuTargetRef.current;
+          if (open && !target) {
+            details.cancel();
+            return;
+          }
+          menuOpen.current = open;
+          setContextMenuOpen(open);
+          if (open && target) selectTarget(target);
+        }}
+        onCommit={(next, selected) => {
+          commit(next);
+          if (selected) applyMenuSelection(selected);
+        }}
+        onSelect={applyMenuSelection}
+        onMoveCamera={(point) => camera.moveTo(map, point)}
+        onShow={showInScene}
+        onFindCamera={findCameraOnMap}
+        onFitMap={() => setFitRequest((request) => request + 1)}
+        onDrawRoom={(point) =>
+          setDrawRequest((request) => ({
+            id: (request?.id ?? 0) + 1,
+            point,
+          }))
+        }
+      />
       {playedMap ? <GameView map={playedMap} onExit={exitGame} /> : null}
     </>
   );

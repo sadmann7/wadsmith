@@ -1,5 +1,6 @@
 import {
   pointInPolygon,
+  sectorAt,
   sectorEdges,
   sectorPolygon,
   signedArea,
@@ -215,6 +216,68 @@ function pruneLines(map: GameMap, removed: string): GameMap {
   return { ...map, lines: withoutUnset(lines) };
 }
 
+function removeThings(map: GameMap, ids: string[]) {
+  return ids.reduce(removeThing, map);
+}
+
+function changeThings(map: GameMap, ids: string[], kind: ThingKind) {
+  return ids.reduce((next, id) => updateThing(next, id, { kind }), map);
+}
+
+function faceThings(map: GameMap, ids: string[], angle: number) {
+  return ids.reduce((next, id) => updateThing(next, id, { angle }), map);
+}
+
+const copyOffsets = [
+  { x: 1, y: 1 },
+  { x: -1, y: 1 },
+  { x: 1, y: -1 },
+  { x: -1, y: -1 },
+  { x: 1, y: 0 },
+  { x: -1, y: 0 },
+  { x: 0, y: 1 },
+  { x: 0, y: -1 },
+  { x: 0, y: 0 },
+];
+
+function copySpot(map: GameMap, thing: Thing) {
+  const room = sectorAt(map, thing);
+  const spots = copyOffsets.map(({ x, y }) => ({
+    x: thing.x + x * gridSize * 2,
+    y: thing.y + y * gridSize * 2,
+  }));
+  return spots.find((spot) => sectorAt(map, spot) === room) ?? spots[0];
+}
+
+// A second player start would replace the first, so it is never copied.
+function duplicateThings(map: GameMap, ids: string[]) {
+  let next = map;
+  const copies: string[] = [];
+  for (const id of ids) {
+    const thing = map.things.find((item) => item.id === id);
+    if (!thing || thing.kind === "player") continue;
+    const added = addThing(next, thing.kind, copySpot(map, thing), thing.angle);
+    next = added.map;
+    copies.push(added.id);
+  }
+  return { map: next, ids: copies };
+}
+
+function snapCorners(map: GameMap, ids: string[]): GameMap {
+  const vertices = { ...map.vertices };
+  for (const id of ids) {
+    if (vertices[id]) vertices[id] = snapPoint(vertices[id]);
+  }
+  return { ...map, vertices };
+}
+
+function connectedCorners(map: GameMap, ids: string[]) {
+  const rooms = map.sectors.filter((sector) =>
+    sector.vertices.some((vertex) => ids.includes(vertex)),
+  );
+  return [...new Set(rooms.flatMap((sector) => sector.vertices))];
+}
+
 function removeSector(map: GameMap, id: string): GameMap {
   const sectors = map.sectors.filter((sector) => sector.id !== id);
   const used = new Set(sectors.flatMap((sector) => sector.vertices));
@@ -285,6 +348,12 @@ function freeWalls(map: GameMap): FreeWall[] {
         })
         .map(({ from, to }) => ({ sector: sector.id, from, to })),
     );
+}
+
+function freeWallAt(map: GameMap, wall: string) {
+  return (
+    freeWalls(map).find((item) => wallKey(item.from, item.to) === wall) ?? null
+  );
 }
 
 function distanceToWall(map: GameMap, wall: FreeWall, point: Point) {
@@ -583,20 +652,27 @@ export {
   addSwitchInRoom,
   addThing,
   applyPositions,
+  changeThings,
+  connectedCorners,
   defaultDoor,
   doorKeyPrefix,
+  duplicateThings,
+  faceThings,
   findVertexAt,
+  freeWallAt,
   freeWallNear,
   gridSize,
   positionsOf,
   removeSector,
   removeSwitch,
   removeThing,
+  removeThings,
   roomCenter,
   setLineTarget,
   setRoomDoor,
   setRoomWalls,
   snap,
+  snapCorners,
   snapPoint,
   switchKeyPrefix,
   thingKeyPrefix,
