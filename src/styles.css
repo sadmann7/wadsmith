@@ -182,6 +182,69 @@ input {
   min-height: 0;
 }
 
+.views,
+.views-group {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+}
+
+.views-group {
+  display: flex;
+}
+
+.view-panel {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.view-handle {
+  width: 6px;
+  background: var(--line);
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.view-handle:hover,
+.view-handle:focus-visible,
+.view-handle[data-dragging] {
+  background: var(--select);
+}
+
+.views[data-layout="map"] .view-handle,
+.views[data-layout="scene"] .view-handle,
+.views[data-layout="map"] .scene-panel,
+.views[data-layout="scene"] .map-panel {
+  display: none;
+}
+
+.views[data-layout="map"] .map-panel,
+.views[data-layout="scene"] .scene-panel {
+  flex: 1 1 100% !important;
+  width: 100% !important;
+  max-width: none !important;
+}
+
+.pane {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  outline: 2px solid transparent;
+  outline-offset: -2px;
+}
+
+.views[data-layout="split"] .pane:focus-within {
+  outline-color: var(--select);
+}
+
+.pane-actions {
+  position: absolute;
+  z-index: 3;
+  top: 12px;
+  left: 12px;
+}
+
 .map-pane {
   position: relative;
   min-width: 0;
@@ -346,10 +409,37 @@ input {
   box-shadow: 0 0 0 2px #60a5fa;
 }
 
-.map-fit {
+.map-actions {
   position: absolute;
   top: 12px;
   right: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+  max-width: calc(100% - 150px);
+}
+
+.map-camera {
+  z-index: 2;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  background: #f4b740;
+  clip-path: polygon(100% 50%, 0 8%, 24% 50%, 0 92%);
+  transform: translate(-50%, -50%) scale(calc(1 / var(--canvas-zoom, 1)))
+    rotate(var(--camera-angle, 0deg));
+  cursor: grab;
+}
+
+.map-camera:focus-visible {
+  background: #fff;
+}
+
+.map-wall[data-selected] {
+  stroke: var(--select);
+  stroke-width: 4;
 }
 
 .tool-hint {
@@ -409,27 +499,44 @@ input {
   opacity: 0.4;
 }
 
-.scene-stage {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
+.scene-pane {
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
-  gap: 8px;
-  place-items: center;
-  padding: 12px;
   background: #0d0e10;
 }
 
-.scene-stage .scene {
-  width: auto;
-  max-width: 100%;
-  height: 100%;
-  max-height: 100%;
+.scene-frame {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  container-type: size;
+}
+
+.scene-frame .scene {
+  width: min(100cqw, calc(100cqh * 8 / 5));
+  height: auto;
+  border-radius: 0;
+}
+
+.scene-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  background: var(--panel);
+}
+
+.scene-actions {
+  display: flex;
+  gap: 6px;
 }
 
 .scene-status {
-  margin-top: 6px;
+  min-width: 0;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;

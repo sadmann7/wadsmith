@@ -23,18 +23,15 @@ import {
 } from "../map/surfaces";
 import type { GameMap, Point, ThingKind } from "../map/types";
 import type { SceneAssets } from "../wad/assets";
+import type { SceneCamera } from "./scene-camera";
 import {
   cameraBasis,
   createRenderTarget,
   pointOnPlane,
   projectPoint,
   renderScene,
-  startCamera,
-  type Camera,
   type RenderTarget,
 } from "./render";
-
-type SceneCamera = { position: Camera; walked: boolean };
 
 type DraftSource = (listener: (map: GameMap | null) => void) => () => void;
 
@@ -52,6 +49,7 @@ type SceneOptions = {
   camera?: SceneCamera;
   draftSource?: DraftSource;
   selected?: string | null;
+  linked?: string | null;
   placing?: ThingKind | null;
   renderWidth?: number;
   renderHeight?: number;
@@ -69,6 +67,7 @@ type SceneState = {
   map: GameMap | null;
   assets: SceneAssets | null;
   selected: string | null;
+  linked: string | null;
   hovered: string | null;
   draftMap: GameMap | null;
   frozenEye: number | null;
@@ -96,6 +95,7 @@ const sceneEditor = definePrimitive({
     camera: "value",
     draftSource: "value",
     selected: "value",
+    linked: "value",
     placing: "value",
     renderWidth: "number",
     renderHeight: "number",
@@ -107,6 +107,7 @@ const sceneEditor = definePrimitive({
     map: options.map ?? null,
     assets: options.assets ?? null,
     selected: options.selected ?? null,
+    linked: options.linked ?? null,
     hovered: null,
     draftMap: null,
     frozenEye: null,
@@ -119,6 +120,7 @@ const sceneEditor = definePrimitive({
     ...(options.map ? { map: options.map } : {}),
     ...(options.assets ? { assets: options.assets } : {}),
     ...(options.selected !== undefined ? { selected: options.selected } : {}),
+    linked: options.linked ?? null,
     placing: options.placing ?? null,
     ...(options.placing ? {} : { ghost: null }),
   }),
@@ -144,15 +146,20 @@ const sceneEditor = definePrimitive({
     const draw = () => {
       drawFrame = 0;
       const map = shownMap();
-      const { assets, hovered, selected, frozenEye, placing, ghost } =
-        store.get();
+      const {
+        assets,
+        draftMap,
+        hovered,
+        selected,
+        linked,
+        frozenEye,
+        placing,
+        ghost,
+      } = store.get();
       const view = cameraState();
       const output = canvas?.getContext("2d");
       if (!map || !assets || !view || !target || !image || !output) return;
-      if (!view.walked || !sectorAt(map, view.position)) {
-        view.walked = false;
-        view.position = startCamera(map);
-      }
+      view.sync(map, draftMap !== null);
       renderScene(
         target,
         map,
@@ -163,7 +170,7 @@ const sceneEditor = definePrimitive({
         {
           assets,
           hovered: placing ? null : hovered,
-          selected,
+          selected: selected ?? linked,
           ghost: placing && ghost ? { ...ghost, kind: placing } : null,
         },
       );
@@ -424,12 +431,14 @@ const sceneEditor = definePrimitive({
         target = createRenderTarget(width, height);
         image = new ImageData(target.pixels, width, height);
         const stopStore = store.subscribe(scheduleDraw);
+        const stopCamera = context.options().camera?.subscribe(scheduleDraw);
         const stopDraft = context
           .options()
           .draftSource?.((draftMap) => store.set({ draftMap }));
         scheduleDraw();
         return () => {
           stopStore();
+          stopCamera?.();
           stopDraft?.();
           canvas = null;
           target = null;
@@ -578,4 +587,4 @@ const sceneEditor = definePrimitive({
 
 const { Root: SceneCanvas } = createParts(sceneEditor, { root: "canvas" });
 
-export { SceneCanvas, type DraftSource, type SceneCamera };
+export { SceneCanvas, type DraftSource };

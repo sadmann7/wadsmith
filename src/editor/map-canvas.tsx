@@ -5,11 +5,14 @@ import { doorKeyPrefix, switchKeyPrefix, thingKeyPrefix } from "../map/edit";
 import { sectorEdges } from "../map/geometry";
 import type { GameMap } from "../map/types";
 import {
+  MapCamera,
   MapConnecting,
   MapDraft,
   MapEditor,
+  MapFindCamera,
   MapFit,
   MapHandle,
+  MapLookHere,
   MapPort,
   MapSector,
   MapWall,
@@ -136,8 +139,17 @@ function MapCanvas({
             title="Drag to a door"
           />
         ))}
+        <MapCamera
+          className="map-camera"
+          aria-label="3D camera. Drag it, or use the arrow keys, to move the view."
+          title="3D camera"
+        />
       </MapWorld>
-      <MapFit className="button map-fit">Fit map</MapFit>
+      <div className="map-actions">
+        <MapLookHere className="button">Look here</MapLookHere>
+        <MapFindCamera className="button">Find camera</MapFindCamera>
+        <MapFit className="button">Fit map</MapFit>
+      </div>
     </MapEditor>
   );
 }
