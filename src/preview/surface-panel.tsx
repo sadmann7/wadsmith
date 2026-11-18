@@ -10,10 +10,12 @@ function TextureSwatch({
   name,
   picture,
   assets,
+  className = "swatch-image",
 }: {
   name: string;
   picture: Picture;
   assets: SceneAssets;
+  className?: string;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
 
@@ -23,10 +25,14 @@ function TextureSwatch({
     const image = context.createImageData(swatchSize, swatchSize);
     const colors = new Uint32Array(image.data.buffer);
     const step = Math.max(picture.width, picture.height) / swatchSize;
+    const left = (swatchSize - picture.width / step) / 2;
+    const top = (swatchSize - picture.height / step) / 2;
     for (let x = 0; x < swatchSize; x += 1) {
       for (let y = 0; y < swatchSize; y += 1) {
-        const column = Math.floor(x * step) % picture.width;
-        const row = Math.floor(y * step) % picture.height;
+        const column = Math.floor((x - left) * step);
+        const row = Math.floor((y - top) * step);
+        if (column < 0 || column >= picture.width) continue;
+        if (row < 0 || row >= picture.height) continue;
         colors[y * swatchSize + x] =
           assets.shades[picture.pixels[column * picture.height + row]];
       }
@@ -37,7 +43,7 @@ function TextureSwatch({
   return (
     <canvas
       ref={ref}
-      className="swatch-image"
+      className={className}
       width={swatchSize}
       height={swatchSize}
       aria-hidden="true"

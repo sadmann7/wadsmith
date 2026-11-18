@@ -153,36 +153,53 @@ function TextureField({
   label,
   value,
   options,
+  picture,
+  assets,
   onChange,
 }: {
   label: string;
   value: string;
   options: readonly string[];
+  picture: SceneAssets["texture"];
+  assets: SceneAssets;
   onChange: (value: string) => void;
 }) {
   return (
-    <Select
-      value={value}
-      items={[...options]}
-      onValueChange={(next) => {
-        if (next) onChange(next);
-      }}
-    >
-      <div className="field">
-        <SelectLabel className="label">{label}</SelectLabel>
-        <SelectTrigger className="select-trigger">
-          <SelectValue />
-          <span aria-hidden="true">▾</span>
-        </SelectTrigger>
-      </div>
-      <SelectContent className="select-content">
-        {options.map((option) => (
-          <SelectItem key={option} value={option} className="select-item">
-            {option}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <div className="grid grid-cols-[48px_minmax(0,1fr)] items-end gap-2.5">
+      <TextureSwatch name={value} picture={picture(value)} assets={assets} />
+      <Select
+        value={value}
+        items={[...options]}
+        onValueChange={(next) => {
+          if (next) onChange(next);
+        }}
+      >
+        <div className="field">
+          <SelectLabel className="label">{label}</SelectLabel>
+          <SelectTrigger className="select-trigger">
+            <SelectValue />
+            <span aria-hidden="true">▾</span>
+          </SelectTrigger>
+        </div>
+        <SelectContent className="select-content">
+          {options.map((option) => (
+            <SelectItem
+              key={option}
+              value={option}
+              className="select-item flex items-center gap-2"
+            >
+              <TextureSwatch
+                name={option}
+                picture={picture(option)}
+                assets={assets}
+                className="size-8 shrink-0 rounded-xs [image-rendering:pixelated]"
+              />
+              {option}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
   );
 }
 
@@ -227,25 +244,6 @@ function ChoiceField({
   );
 }
 
-function SwatchField({
-  name,
-  picture,
-  assets,
-  children,
-}: {
-  name: string;
-  picture: SceneAssets["flat"];
-  assets: SceneAssets;
-  children: ReactNode;
-}) {
-  return (
-    <div className="grid grid-cols-[48px_minmax(0,1fr)] items-end gap-2.5">
-      <TextureSwatch name={name} picture={picture(name)} assets={assets} />
-      {children}
-    </div>
-  );
-}
-
 function ToggleField({
   label,
   checked,
@@ -267,9 +265,11 @@ function ToggleField({
 
 function DoorFields({
   door,
+  assets,
   onChange,
 }: {
   door: DoorSettings;
+  assets: SceneAssets;
   onChange: (door: DoorSettings) => void;
 }) {
   return (
@@ -294,6 +294,8 @@ function DoorFields({
         label="Door texture"
         value={door.texture}
         options={doorTextures}
+        picture={assets.texture}
+        assets={assets}
         onChange={(texture) => onChange({ ...door, texture })}
       />
     </>
@@ -332,6 +334,7 @@ function SectorInspector({
         {door ? (
           <DoorFields
             door={door}
+            assets={assets}
             onChange={(next) => onChange({ door: next })}
           />
         ) : null}
@@ -362,44 +365,32 @@ function SectorInspector({
         </div>
       </InspectorSection>
       <InspectorSection title="Surfaces">
-        <SwatchField
-          name={sector.floorTexture}
+        <TextureField
           picture={assets.flat}
           assets={assets}
-        >
-          <TextureField
-            label="Floor"
-            value={sector.floorTexture}
-            options={floorTextures}
-            onChange={(floorTexture) => onChange({ floorTexture })}
-          />
-        </SwatchField>
-        <SwatchField
-          name={sector.ceilingTexture}
+          label="Floor"
+          value={sector.floorTexture}
+          options={floorTextures}
+          onChange={(floorTexture) => onChange({ floorTexture })}
+        />
+        <TextureField
           picture={assets.flat}
           assets={assets}
-        >
-          <TextureField
-            label="Ceiling"
-            value={sector.ceilingTexture}
-            options={ceilingTextures}
-            onChange={(ceilingTexture) => onChange({ ceilingTexture })}
-          />
-        </SwatchField>
-        <SwatchField
-          name={sector.wallTexture}
+          label="Ceiling"
+          value={sector.ceilingTexture}
+          options={ceilingTextures}
+          onChange={(ceilingTexture) => onChange({ ceilingTexture })}
+        />
+        <TextureField
           picture={assets.texture}
           assets={assets}
-        >
-          <TextureField
-            label="Walls"
-            value={sector.wallTexture}
-            options={wallTextures}
-            onChange={(wallTexture) =>
-              onChange({ wallTexture, wallOverrides: undefined })
-            }
-          />
-        </SwatchField>
+          label="Walls"
+          value={sector.wallTexture}
+          options={wallTextures}
+          onChange={(wallTexture) =>
+            onChange({ wallTexture, wallOverrides: undefined })
+          }
+        />
       </InspectorSection>
       <InspectorSection title="Behaviour">
         <Slider
@@ -518,25 +509,21 @@ function LineInspector({
           </SegmentedControl>
         ) : null}
         {fields.map(({ part, info }) => (
-          <SwatchField
+          <TextureField
             key={part}
-            name={info.texture!}
             picture={assets.texture}
             assets={assets}
-          >
-            <TextureField
-              label={
-                info.paints === "door"
-                  ? "Door"
-                  : info.paints === "switch"
-                    ? "Switch"
-                    : partLabels[part]
-              }
-              value={info.texture!}
-              options={info.textures}
-              onChange={(texture) => onPaint(part, texture)}
-            />
-          </SwatchField>
+            label={
+              info.paints === "door"
+                ? "Door"
+                : info.paints === "switch"
+                  ? "Switch"
+                  : partLabels[part]
+            }
+            value={info.texture!}
+            options={info.textures}
+            onChange={(texture) => onPaint(part, texture)}
+          />
         ))}
         <div className="row">
           <NumberField
@@ -715,10 +702,12 @@ function ThingInspector({
 function SwitchInspector({
   item,
   doors,
+  assets,
   onChange,
 }: {
   item: MapSwitch;
   doors: Sector[];
+  assets: SceneAssets;
   onChange: (patch: Partial<MapSwitch>) => void;
 }) {
   return (
@@ -736,6 +725,8 @@ function SwitchInspector({
         label="Switch texture"
         value={item.texture}
         options={switchTextures}
+        picture={assets.texture}
+        assets={assets}
         onChange={(texture) => onChange({ texture })}
       />
     </div>

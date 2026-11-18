@@ -1082,6 +1082,7 @@ function App() {
                     key={selectedSwitch.id}
                     item={selectedSwitch}
                     doors={doors}
+                    assets={assets}
                     onChange={(patch) =>
                       commit(updateSwitch(map, selectedSwitch.id, patch))
                     }
