@@ -14,6 +14,7 @@ type DoomModule = {
   _doom_screen(): number;
   _doom_palette(): number;
   _doom_frame_count(): number;
+  _doom_set_paused(paused: number): void;
   _wadsmith_game_state(): number;
   _wadsmith_game_tic(): number;
   _wadsmith_health(): number;
@@ -142,11 +143,10 @@ class DoomGame {
     );
   }
 
-  frame() {
+  frame(pixels: Uint8ClampedArray<ArrayBuffer> = this.pixels) {
     const { HEAPU8: memory } = this.module;
     const screen = this.module._doom_screen();
     const palette = this.module._doom_palette();
-    const { pixels } = this;
     for (let index = 0; index < screenWidth * screenHeight; index += 1) {
       const color = palette + memory[screen + index] * 4;
       const pixel = index * 4;
@@ -158,16 +158,14 @@ class DoomGame {
     return pixels;
   }
 
+  setPaused(paused: boolean) {
+    this.module._doom_set_paused(paused ? 1 : 0);
+  }
+
   setSound(volume: number, muted: boolean) {
     const level = Math.max(0, Math.min(maxVolume, Math.round(volume)));
     this.module._wadsmith_set_volume(level);
     this.module._wadsmith_set_muted(muted || level === 0 ? 1 : 0);
-  }
-
-  // Browsers can start audio suspended until the page gets a key or press.
-  resumeAudio() {
-    const context = this.module.SDL2?.audioContext;
-    if (context?.state === "suspended") void context.resume();
   }
 
   stop() {

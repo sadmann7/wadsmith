@@ -1,7 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
-  appendFileSync,
   copyFileSync,
   existsSync,
   mkdirSync,
@@ -65,26 +64,7 @@ function prepareSource() {
   }
   run("git", ["checkout", "-q", "--force", engineCommit], source);
   run("git", ["clean", "-qfdx"], source);
-  for (const patch of ["doom-wasm.patch", "wadsmith.patch"]) {
-    run("git", ["apply", join(root, "engine", patch)], source);
-  }
-
-  copyFileSync(
-    join(root, "engine", "wadsmith-exports.c"),
-    join(source, "src", "doom", "wadsmith-exports.c"),
-  );
-  appendFileSync(
-    join(source, "src", "doom", "g_game.c"),
-    '\n#include "wadsmith-exports.c"\n',
-  );
-
-  const configure = join(source, "configure.ac");
-  writeFileSync(
-    configure,
-    readFileSync(configure, "utf8")
-      .replace("-s INVOKE_RUN=1", "-s INVOKE_RUN=0")
-      .replace("-s ALLOW_MEMORY_GROWTH=0", "-s ALLOW_MEMORY_GROWTH=1"),
-  );
+  run("git", ["apply", join(root, "engine", "doom-wasm.patch")], source);
 }
 
 function fetchFreedoom() {

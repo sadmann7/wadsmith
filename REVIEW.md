@@ -13,6 +13,7 @@ Wadsmith turns an edited map into binary data for a 1990s engine that does littl
 - **Engine limits.** WAD fields are 16-bit, blockmap offsets are signed, and texture names are 8 characters. Values past those limits wrap silently.
 - **Validation gaps.** Anything `compileMap` can't represent should be reported by `validateMap` before Play is enabled.
 - **Live drag state.** Dragging must update through `live` slots without rendering React, and commit one undo step on drop.
+- **Worker boundary.** Game state, input and audio cross `postMessage`. Stopping a game must end the worker and close its audio.
 - **Agent actions.** Each action listed on `map-editor` must go through `createChange`, so it can be undone and cancelled like a person's edit.
 
 ## Skip
