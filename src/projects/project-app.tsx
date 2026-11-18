@@ -478,14 +478,14 @@ function ProjectApp() {
               if (!open) setBlockedLeave(null);
             }}
           >
-            <AlertDialogBackdrop className="fixed inset-0 z-40 bg-black/65" />
+            <AlertDialogBackdrop className="fixed inset-0 z-40 bg-scrim" />
             <AlertDialogContent
               className={`${dialogClass} w-[460px] gap-3 p-5`}
             >
               <AlertDialogTitle className={titleClass}>
                 Your latest changes aren't saved
               </AlertDialogTitle>
-              <AlertDialogDescription className="m-0 text-muted">
+              <AlertDialogDescription className="m-0 text-fg-muted">
                 Your browser couldn't store them. Download the map to keep a
                 copy before you leave.
               </AlertDialogDescription>

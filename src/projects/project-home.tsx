@@ -49,8 +49,8 @@ import {
 type Confirmation = { title: string; body: string; run: () => void };
 
 const statusStyles = {
-  ready: { icon: CircleCheck, className: "text-acid" },
-  warning: { icon: TriangleAlert, className: "text-key" },
+  ready: { icon: CircleCheck, className: "text-success" },
+  warning: { icon: TriangleAlert, className: "text-warning" },
   error: { icon: CircleX, className: "text-danger" },
 };
 
@@ -90,7 +90,7 @@ function NameDialog({
         if (!open) onClose();
       }}
     >
-      <DialogBackdrop className="fixed inset-0 z-40 bg-black/65" />
+      <DialogBackdrop className="fixed inset-0 z-40 bg-scrim" />
       <DialogContent className={`${dialogClass} w-[420px]`}>
         <form onSubmit={submit} className="grid gap-4 p-5">
           <DialogTitle className={titleClass}>{title}</DialogTitle>
@@ -135,12 +135,12 @@ function ConfirmDialog({
         if (!open) onClose();
       }}
     >
-      <AlertDialogBackdrop className="fixed inset-0 z-40 bg-black/65" />
+      <AlertDialogBackdrop className="fixed inset-0 z-40 bg-scrim" />
       <AlertDialogContent className={`${dialogClass} w-[420px] gap-3 p-5`}>
         <AlertDialogTitle className={titleClass}>
           {confirmation.title}
         </AlertDialogTitle>
-        <AlertDialogDescription className="m-0 text-muted">
+        <AlertDialogDescription className="m-0 text-fg-muted">
           {confirmation.body}
         </AlertDialogDescription>
         <div className="flex justify-end gap-2">
@@ -183,7 +183,7 @@ function MapRow({
   const name = mapName(entry);
   return (
     <tr
-      className="h-[88px] border-b border-line hover:bg-row"
+      className="h-[88px] border-b border-border hover:bg-surface-raised"
       onClick={(event) => {
         if (
           !entry.broken &&
@@ -193,24 +193,24 @@ function MapRow({
         }
       }}
     >
-      <td className="font-mono text-xs text-muted">{entry.slot}</td>
+      <td className="font-mono text-xs text-fg-muted">{entry.slot}</td>
       <td className="max-[900px]:hidden">
         <MapOutline
           map={entry.map}
-          className="h-[68px] w-[120px] bg-bg"
-          solidColor="var(--muted)"
+          className="h-[68px] w-[120px] bg-canvas"
+          solidColor="var(--color-fg-muted)"
         />
       </td>
       <td className="max-w-0 pr-4">
         <button
           type="button"
           disabled={entry.broken}
-          className="block max-w-full truncate border-0 bg-transparent p-0 text-left text-base font-semibold text-text"
+          className="block max-w-full truncate border-0 bg-transparent p-0 text-left text-base font-semibold text-fg"
           onClick={onOpen}
         >
           {name}
         </button>
-        <div className="truncate text-muted">{entry.description}</div>
+        <div className="truncate text-fg-muted">{entry.description}</div>
       </td>
       <td className="font-mono text-xs">{entry.map.sectors.length}</td>
       <td className="font-mono text-xs">{entry.map.things.length}</td>
@@ -221,7 +221,7 @@ function MapRow({
           {status.label}
         </span>
       </td>
-      <td className="whitespace-nowrap text-muted max-[900px]:hidden">
+      <td className="whitespace-nowrap text-fg-muted max-[900px]:hidden">
         {formatEdited(entry.editedAt)}
       </td>
       <td>
@@ -321,24 +321,24 @@ function ProjectHome({
   const full = freeSlots(maps).length === 0;
   const textureCount = freedoomFlats.length + freedoomWalls.length;
   return (
-    <div className="grid h-dvh grid-rows-[48px_minmax(0,1fr)] bg-bg text-text">
-      <header className="flex items-center border-b border-line bg-panel pr-3 pl-4">
-        <h1 className="m-0 text-[17px] font-bold tracking-[0.02em] text-ember">
+    <div className="grid h-dvh grid-rows-[48px_minmax(0,1fr)] bg-canvas text-fg">
+      <header className="flex items-center border-b border-border bg-surface pr-3 pl-4">
+        <h1 className="m-0 text-[17px] font-bold tracking-[0.02em] text-accent">
           WADSMITH
         </h1>
       </header>
       <div className="grid min-h-0 grid-cols-[240px_minmax(0,1fr)] max-[760px]:grid-cols-1">
         <nav
           aria-label="Projects"
-          className="flex min-h-0 flex-col justify-between gap-5 overflow-y-auto border-r border-line bg-panel px-3 py-5 max-[760px]:hidden"
+          className="flex min-h-0 flex-col justify-between gap-5 overflow-y-auto border-r border-border bg-surface px-3 py-5 max-[760px]:hidden"
         >
           <div className="grid gap-5">
             <div className="grid gap-0.5">
-              <div className="mb-1.5 flex items-center justify-between font-mono text-[11px] text-muted">
+              <div className="mb-1.5 flex items-center justify-between font-mono text-[11px] text-fg-muted">
                 PROJECTS
                 <button
                   type="button"
-                  className="border-0 bg-transparent p-0 text-muted hover:text-text"
+                  className="border-0 bg-transparent p-0 text-fg-muted hover:text-fg"
                   aria-label="New project"
                   title="New project"
                   onClick={() => setNaming("new")}
@@ -351,7 +351,7 @@ function ProjectHome({
                   key={item.id}
                   type="button"
                   aria-current={item.id === project.id ? "page" : undefined}
-                  className="flex h-8 items-center gap-2 rounded-[3px] border-0 bg-transparent px-2 text-left text-muted hover:text-text aria-[current=page]:bg-raised aria-[current=page]:text-text"
+                  className="flex h-8 items-center gap-2 rounded-[3px] border-0 bg-transparent px-2 text-left text-fg-muted hover:text-fg aria-[current=page]:bg-surface-raised aria-[current=page]:text-fg"
                   onClick={() => onSelectProject(item.id)}
                 >
                   <FolderOpen size={14} aria-hidden="true" />
@@ -360,26 +360,26 @@ function ProjectHome({
               ))}
             </div>
             <div className="grid gap-0.5">
-              <div className="mb-1.5 truncate font-mono text-[11px] text-muted uppercase">
+              <div className="mb-1.5 truncate font-mono text-[11px] text-fg-muted uppercase">
                 {project.name}
               </div>
               <button
                 type="button"
-                className="flex h-8 items-center rounded-[3px] border-0 bg-transparent px-2 text-left text-muted hover:text-text"
+                className="flex h-8 items-center rounded-[3px] border-0 bg-transparent px-2 text-left text-fg-muted hover:text-fg"
                 onClick={() => setNaming("rename")}
               >
                 Rename project
               </button>
               <button
                 type="button"
-                className="flex h-8 items-center rounded-[3px] border-0 bg-transparent px-2 text-left text-muted hover:text-text"
+                className="flex h-8 items-center rounded-[3px] border-0 bg-transparent px-2 text-left text-fg-muted hover:text-fg"
                 onClick={onExportProject}
               >
                 Export backup
               </button>
               <button
                 type="button"
-                className="flex h-8 items-center rounded-[3px] border-0 bg-transparent px-2 text-left text-muted hover:text-text"
+                className="flex h-8 items-center rounded-[3px] border-0 bg-transparent px-2 text-left text-fg-muted hover:text-fg"
                 onClick={() => projectFile.current?.click()}
               >
                 Import backup
@@ -387,7 +387,7 @@ function ProjectHome({
               <button
                 type="button"
                 disabled={projects.length === 1}
-                className="flex h-8 items-center rounded-[3px] border-0 bg-transparent px-2 text-left text-muted hover:text-danger disabled:opacity-50"
+                className="flex h-8 items-center rounded-[3px] border-0 bg-transparent px-2 text-left text-fg-muted hover:text-danger disabled:opacity-50"
                 onClick={() =>
                   setConfirmation({
                     title: `Delete ${project.name}?`,
@@ -401,11 +401,11 @@ function ProjectHome({
             </div>
           </div>
           <div className="grid gap-0.5 p-2">
-            <div className="font-mono text-[11px] text-muted">
+            <div className="font-mono text-[11px] text-fg-muted">
               BASE GAME DATA
             </div>
             <div className="font-mono text-xs">freedoom2.wad</div>
-            <div className="font-mono text-[11px] text-muted">
+            <div className="font-mono text-[11px] text-fg-muted">
               Linked, {textureCount} textures
             </div>
           </div>
@@ -416,7 +416,7 @@ function ProjectHome({
               <h2 className="m-0 truncate text-4xl font-bold">
                 {project.name}
               </h2>
-              <p className="m-0 mt-1 text-[15px] text-muted">
+              <p className="m-0 mt-1 text-[15px] text-fg-muted">
                 {maps.length} {maps.length === 1 ? "map" : "maps"} · Classic
                 Doom · {durable ? "Saved in this browser" : "This session only"}
               </p>
@@ -465,7 +465,7 @@ function ProjectHome({
           {sorted.length > 0 ? (
             <table className="w-full border-collapse text-left">
               <thead>
-                <tr className="h-8 border-b border-line font-mono text-[11px] text-muted [&>th]:font-normal">
+                <tr className="h-8 border-b border-border font-mono text-[11px] text-fg-muted [&>th]:font-normal">
                   <th className="w-16">SLOT</th>
                   <th className="w-36 max-[900px]:hidden">
                     <span className="sr-only">Preview</span>

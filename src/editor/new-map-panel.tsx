@@ -57,7 +57,7 @@ function NewMapPanel({
           <dl className="m-0 grid grid-cols-[1fr_auto] gap-x-3 gap-y-1.5">
             {defaults.map(([label, value]) => (
               <div key={label} className="contents">
-                <dt className="text-muted">{label}</dt>
+                <dt className="text-fg-muted">{label}</dt>
                 <dd className="m-0 font-mono text-xs">{value}</dd>
               </div>
             ))}
@@ -77,7 +77,7 @@ function NewMapPanel({
               <li key={step.title} className="flex gap-2">
                 <span
                   data-done={step.done ? "" : undefined}
-                  className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border border-line text-ember-foreground data-[done]:border-ember data-[done]:bg-ember"
+                  className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border border-border text-accent-fg data-[done]:border-accent data-[done]:bg-accent"
                 >
                   {step.done ? <Check size={11} aria-hidden="true" /> : null}
                 </span>
@@ -88,7 +88,7 @@ function NewMapPanel({
                     </span>
                     {step.title}
                   </div>
-                  <div className="font-mono text-[11px] text-muted">
+                  <div className="font-mono text-[11px] text-fg-muted">
                     {step.hint}
                   </div>
                 </div>
