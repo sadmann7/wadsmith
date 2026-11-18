@@ -220,6 +220,28 @@ function freeWallNear(map: GameMap, point: Point, reach: number) {
   return best;
 }
 
+// A shared wall belongs to two rooms, so the room under the pointer wins the tie.
+function wallNear(map: GameMap, point: Point, reach: number) {
+  let best: { sector: string; wall: string } | null = null;
+  let bestDistance = reach;
+  for (const sector of map.sectors) {
+    const inside = pointInPolygon(point, sectorPolygon(map, sector));
+    for (const { from, to } of sectorEdges(sector)) {
+      const distance = distanceToWall(
+        map,
+        { sector: sector.id, from, to },
+        point,
+      );
+      const isTie = Math.abs(distance - bestDistance) < 0.001;
+      if (isTie ? inside || !best : distance < bestDistance) {
+        best = { sector: sector.id, wall: wallKey(from, to) };
+        bestDistance = distance;
+      }
+    }
+  }
+  return best;
+}
+
 // Switch art is one tile wide, so a long wall gets a short section cut out of
 // it for the switch instead of repeating the art along its whole length.
 function addSwitch(
@@ -469,5 +491,6 @@ export {
   updateSector,
   updateSwitch,
   updateThing,
+  wallNear,
   type RoomSide,
 };

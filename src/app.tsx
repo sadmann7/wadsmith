@@ -24,10 +24,18 @@ import {
   ResizablePanel,
 } from "@ui-sdk/react/resizable";
 import {
-  Toolbar,
-  ToolbarButton,
-  ToolbarSeparator,
-} from "@ui-sdk/react/toolbar";
+  CircleCheck,
+  Expand,
+  MousePointer2,
+  PenLine,
+  Play,
+  Redo2,
+  Rows2,
+  ToggleRight,
+  TriangleAlert,
+  Undo2,
+  UserPlus,
+} from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -44,12 +52,13 @@ import {
   ThingInspector,
 } from "./editor/inspector";
 import { MapCanvas } from "./editor/map-canvas";
-import type { MapTool } from "./editor/map-editor";
+import type { EditMode, MapTool, MapViewStatus } from "./editor/map-editor";
 import { GameView } from "./engine/play-panel";
 import { thingCatalog, thingKinds } from "./map/catalog";
 import {
   setRoomDoor,
   switchKeyPrefix,
+  gridSize,
   thingKeyPrefix,
   updateSector,
   updateSwitch,
@@ -78,7 +87,7 @@ import {
   parseSurface,
   surfaceKey,
 } from "./map/surfaces";
-import { wallKey } from "./map/geometry";
+import { wallKey, wallOwners } from "./map/geometry";
 import { createFlatAssets, readWadAssets } from "./wad/assets";
 import { compileMap } from "./wad/compile";
 
@@ -96,8 +105,24 @@ type ViewLayout = "map" | "split" | "scene";
 type SinglePane = Exclude<ViewLayout, "split">;
 
 const layoutKey = "wadsmith:layout";
-const narrowQuery = "(max-width: 820px)";
+// Below this width, two panes can't hold the map controls and a usable 3D view.
+const narrowQuery = "(max-width: 1100px)";
 const defaultSplit = [50, 50];
+const mapSlot = "MAP01";
+
+const tools: { value: MapTool; label: string; icon: typeof PenLine }[] = [
+  { value: "select", label: "Select", icon: MousePointer2 },
+  { value: "draw", label: "Draw room", icon: PenLine },
+  { value: "thing", label: "Place", icon: UserPlus },
+  { value: "switch", label: "Switch", icon: ToggleRight },
+];
+
+const editModes: { value: EditMode; label: string; key: string }[] = [
+  { value: "vertices", label: "Vertices", key: "V" },
+  { value: "lines", label: "Lines", key: "L" },
+  { value: "sectors", label: "Sectors", key: "S" },
+  { value: "things", label: "Things", key: "T" },
+];
 
 function loadLayout() {
   try {
@@ -105,7 +130,8 @@ function loadLayout() {
     return {
       view: ["map", "split", "scene"].includes(saved?.view)
         ? (saved.view as ViewLayout)
-        : ("split" as ViewLayout),
+        : ("map" as ViewLayout),
+      dock: saved?.dock !== false,
       sizes:
         Array.isArray(saved?.sizes) &&
         saved.sizes.length === 2 &&
@@ -114,13 +140,13 @@ function loadLayout() {
           : defaultSplit,
     };
   } catch {
-    return { view: "split" as ViewLayout, sizes: defaultSplit };
+    return { view: "map" as ViewLayout, dock: true, sizes: defaultSplit };
   }
 }
 
-function saveLayout(view: ViewLayout, sizes: number[]) {
+function saveLayout(view: ViewLayout, sizes: number[], dock: boolean) {
   try {
-    localStorage.setItem(layoutKey, JSON.stringify({ view, sizes }));
+    localStorage.setItem(layoutKey, JSON.stringify({ view, sizes, dock }));
   } catch {
     return;
   }
@@ -190,6 +216,11 @@ function App() {
   const [initialLayout] = useState(loadLayout);
   const [layout, setLayout] = useState(initialLayout.view);
   const [findCameraRequest, setFindCameraRequest] = useState(0);
+  const [showDock, setShowDock] = useState(initialLayout.dock);
+  const [editMode, setEditMode] = useState<EditMode>("vertices");
+  const pointerStatus = useRef<HTMLSpanElement>(null);
+  const zoomStatus = useRef<HTMLSpanElement>(null);
+  const mapCheck = useRef<HTMLElement>(null);
   const splitSizes = useRef(initialLayout.sizes);
   const hoveredPane = useRef<SinglePane | null>(null);
   const mapPointer = useRef<{ clientX: number; clientY: number } | null>(null);
@@ -283,15 +314,18 @@ function App() {
     camera.sync(map);
   }, [camera, map]);
 
-  const changeLayout = useCallback((next: ViewLayout) => {
-    setLayout(next);
-    saveLayout(next, splitSizes.current);
-    if (next === "scene") {
-      setTool((current) =>
-        current === "draw" || current === "switch" ? "select" : current,
-      );
-    }
-  }, []);
+  const changeLayout = useCallback(
+    (next: ViewLayout) => {
+      setLayout(next);
+      saveLayout(next, splitSizes.current, showDock);
+      if (next === "scene") {
+        setTool((current) =>
+          current === "draw" || current === "switch" ? "select" : current,
+        );
+      }
+    },
+    [showDock],
+  );
 
   const togglePane = useCallback(
     (pane: SinglePane) => {
@@ -304,7 +338,7 @@ function App() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (
-        !["m", "l"].includes(event.key.toLowerCase()) ||
+        !["m", "c", "v", "l", "s", "t"].includes(event.key.toLowerCase()) ||
         event.repeat ||
         event.defaultPrevented ||
         event.ctrlKey ||
@@ -318,7 +352,18 @@ function App() {
       ) {
         return;
       }
-      if (event.key.toLowerCase() === "l") {
+      const shortcut = event.key.toLowerCase();
+      const mode = editModes.find(
+        (item) => item.key.toLowerCase() === shortcut,
+      );
+      if (mode) {
+        // These letters belong to walking while the 3D view has focus.
+        if ((event.target as Element).closest?.(".scene")) return;
+        event.preventDefault();
+        setEditMode(mode.value);
+        return;
+      }
+      if (shortcut === "c") {
         const pointer = mapPointer.current;
         if (!pointer) return;
         event.preventDefault();
@@ -405,6 +450,33 @@ function App() {
     />
   );
 
+  const thingPicker = (
+    <Select
+      value={thingKind}
+      items={thingKinds.map((value) => ({
+        value,
+        label: thingCatalog[value].label,
+      }))}
+      onValueChange={(next) => {
+        if (!next) return;
+        setThingKind(next as ThingKind);
+        setTool("thing");
+      }}
+    >
+      <SelectTrigger className="select-trigger" aria-label="Thing to place">
+        <SelectValue />
+        <span aria-hidden="true">▾</span>
+      </SelectTrigger>
+      <SelectContent className="select-content">
+        {thingKinds.map((kind) => (
+          <SelectItem key={kind} value={kind} className="select-item">
+            {thingCatalog[kind].label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+
   const sceneStatus = (
     <p className="scene-status" role="status">
       {tool === "thing"
@@ -438,6 +510,58 @@ function App() {
       return true;
     }
   };
+
+  const lineCount = useMemo(() => wallOwners(map).size, [map]);
+
+  const showMapCheck = () => {
+    mapCheck.current?.scrollIntoView({ block: "nearest" });
+    mapCheck.current?.focus();
+  };
+
+  const updateViewStatus = ({ pointer, zoom }: MapViewStatus) => {
+    if (pointerStatus.current) {
+      pointerStatus.current.textContent = pointer
+        ? `X ${pointer.x}  Y ${-pointer.y}`
+        : "X -  Y -";
+    }
+    if (zoomStatus.current) {
+      zoomStatus.current.textContent = `Zoom ${Math.round(zoom * 100)}%`;
+    }
+  };
+
+  const toggleDock = () => {
+    const next = !showDock;
+    setShowDock(next);
+    saveLayout(layout, splitSizes.current, next);
+  };
+
+  const runViewAction = (action: string) => {
+    if (action === "dock") toggleDock();
+    else if (action === "camera") findCameraOnMap();
+    else changeLayout(action as ViewLayout);
+  };
+
+  const runMapAction = (action: string) => {
+    if (action === "check") showMapCheck();
+    else if (action === "play") play();
+  };
+
+  const selectionTitle = selectedSwitch
+    ? "Switch"
+    : thing
+      ? thingCatalog[thing.kind].label
+      : surfaceInfo && !surfaceInfo.thing
+        ? surfaceInfo.label
+        : (sector?.name ?? "Nothing selected");
+  const selectionMeta = selectedSwitch
+    ? selectedSwitch.door
+      ? "Wired to a door"
+      : "Not connected"
+    : thing
+      ? `${thing.id} · X ${thing.x} Y ${-thing.y}`
+      : sector
+        ? `${sector.door ? "Door" : "Sector"} · ${sector.vertices.length} walls`
+        : "Click a room, line or thing on the map";
 
   const play = () => {
     if (canPlay && !buildProblem()) setPlayedMap(map);
@@ -501,25 +625,90 @@ function App() {
     <>
       <div className="app" inert={Boolean(playedMap)}>
         <header className="topbar">
-          <h1>Wadsmith</h1>
-          <Menu onAction={(action) => runFileAction(action as string)}>
-            <MenuTrigger className="button">File</MenuTrigger>
-            <MenuContent className="select-content">
-              <MenuItem value="new" className="select-item">
-                New map
-              </MenuItem>
-              <MenuItem value="open" className="select-item">
-                Open map…
-              </MenuItem>
-              <MenuItem value="save" className="select-item">
-                Save map file
-              </MenuItem>
-              <MenuSeparator className="menu-separator" />
-              <MenuItem value="wad" className="select-item" disabled={!canPlay}>
-                Download WAD
-              </MenuItem>
-            </MenuContent>
-          </Menu>
+          <div className="topbar-start">
+            <h1>WADSMITH</h1>
+            <Menu onAction={(action) => runFileAction(action as string)}>
+              <MenuTrigger className="menu-trigger">File</MenuTrigger>
+              <MenuContent className="select-content">
+                <MenuItem value="new" className="select-item">
+                  New map
+                </MenuItem>
+                <MenuItem value="open" className="select-item">
+                  Open map…
+                </MenuItem>
+                <MenuItem value="save" className="select-item">
+                  Save map file
+                </MenuItem>
+                <MenuSeparator className="menu-separator" />
+                <MenuItem
+                  value="wad"
+                  className="select-item"
+                  disabled={!canPlay}
+                >
+                  Download WAD
+                </MenuItem>
+              </MenuContent>
+            </Menu>
+            <Menu onAction={(action) => (action === "undo" ? undo() : redo())}>
+              <MenuTrigger className="menu-trigger">Edit</MenuTrigger>
+              <MenuContent className="select-content">
+                <MenuItem
+                  value="undo"
+                  className="select-item"
+                  disabled={!history.canUndo()}
+                >
+                  Undo
+                </MenuItem>
+                <MenuItem
+                  value="redo"
+                  className="select-item"
+                  disabled={!history.canRedo()}
+                >
+                  Redo
+                </MenuItem>
+              </MenuContent>
+            </Menu>
+            <Menu onAction={(action) => runViewAction(action as string)}>
+              <MenuTrigger className="menu-trigger">View</MenuTrigger>
+              <MenuContent className="select-content">
+                <MenuItem value="map" className="select-item">
+                  Map
+                </MenuItem>
+                <MenuItem
+                  value="split"
+                  className="select-item"
+                  disabled={narrow}
+                >
+                  Split
+                </MenuItem>
+                <MenuItem value="scene" className="select-item">
+                  3D
+                </MenuItem>
+                <MenuSeparator className="menu-separator" />
+                <MenuItem value="dock" className="select-item">
+                  {showDock ? "Hide player view" : "Show player view"}
+                </MenuItem>
+                <MenuItem value="camera" className="select-item">
+                  Find camera on map
+                </MenuItem>
+              </MenuContent>
+            </Menu>
+            <Menu onAction={(action) => runMapAction(action as string)}>
+              <MenuTrigger className="menu-trigger">Map</MenuTrigger>
+              <MenuContent className="select-content">
+                <MenuItem value="check" className="select-item">
+                  Check map
+                </MenuItem>
+                <MenuItem
+                  value="play"
+                  className="select-item"
+                  disabled={!canPlay}
+                >
+                  Playtest
+                </MenuItem>
+              </MenuContent>
+            </Menu>
+          </div>
           <input
             ref={fileInput}
             type="file"
@@ -531,91 +720,52 @@ function App() {
               event.target.value = "";
             }}
           />
-          <SegmentedControl
-            aria-label="Main view"
-            className="segments"
-            value={visibleLayout}
-            onValueChange={(next) => changeLayout(next as ViewLayout)}
-          >
-            <SegmentedControlIndicator className="segments-indicator" />
-            <SegmentedControlItem value="map">Map</SegmentedControlItem>
-            <SegmentedControlItem value="split" disabled={narrow}>
-              Split
-            </SegmentedControlItem>
-            <SegmentedControlItem value="scene">3D</SegmentedControlItem>
-          </SegmentedControl>
-          <Toolbar aria-label="Map tools" className="toolbar">
+          <div className="map-title">
+            <span>{mapSlot}</span>
+            <strong>{map.name ?? "Untitled map"}</strong>
+          </div>
+          <div className="topbar-end">
             <SegmentedControl
-              aria-label="Tool"
+              aria-label="Main view"
               className="segments"
-              value={tool}
-              onValueChange={(next) => setTool(next as MapTool)}
+              value={visibleLayout}
+              onValueChange={(next) => changeLayout(next as ViewLayout)}
             >
               <SegmentedControlIndicator className="segments-indicator" />
-              <SegmentedControlItem value="select">Select</SegmentedControlItem>
-              <SegmentedControlItem
-                value="draw"
-                disabled={visibleLayout === "scene"}
-              >
-                Draw room
+              <SegmentedControlItem value="map">Map</SegmentedControlItem>
+              <SegmentedControlItem value="split" disabled={narrow}>
+                Split
               </SegmentedControlItem>
-              <SegmentedControlItem value="thing">Place</SegmentedControlItem>
-              <SegmentedControlItem
-                value="switch"
-                disabled={visibleLayout === "scene"}
-              >
-                Switch
-              </SegmentedControlItem>
+              <SegmentedControlItem value="scene">3D</SegmentedControlItem>
             </SegmentedControl>
-            <Select
-              value={thingKind}
-              items={thingKinds.map((value) => ({
-                value,
-                label: thingCatalog[value].label,
-              }))}
-              onValueChange={(next) => {
-                if (!next) return;
-                setThingKind(next as ThingKind);
-                setTool("thing");
-              }}
-            >
-              <SelectTrigger
-                className="select-trigger"
-                aria-label="Thing to place"
-              >
-                <SelectValue />
-                <span aria-hidden="true">▾</span>
-              </SelectTrigger>
-              <SelectContent className="select-content">
-                {thingKinds.map((kind) => (
-                  <SelectItem key={kind} value={kind} className="select-item">
-                    {thingCatalog[kind].label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <ToolbarSeparator className="separator" />
-            <ToolbarButton
-              className="button"
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="Undo"
+              title="Undo"
               disabled={!history.canUndo()}
               onClick={undo}
             >
-              Undo
-            </ToolbarButton>
-            <ToolbarButton
-              className="button"
+              <Undo2 size={16} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="Redo"
+              title="Redo"
               disabled={!history.canRedo()}
               onClick={redo}
             >
-              Redo
-            </ToolbarButton>
-          </Toolbar>
-          <div className="topbar-end">
-            <span className="save-state" role="status">
-              {saved
-                ? "Saved in this browser"
-                : "Not saved: storage is unavailable"}
-            </span>
+              <Redo2 size={16} aria-hidden="true" />
+            </button>
+            <button type="button" className="button" onClick={showMapCheck}>
+              {canPlay ? (
+                <CircleCheck size={15} aria-hidden="true" />
+              ) : (
+                <TriangleAlert size={15} aria-hidden="true" />
+              )}
+              Check map
+            </button>
             <button
               ref={playButton}
               type="button"
@@ -623,22 +773,44 @@ function App() {
               disabled={!canPlay}
               onClick={play}
             >
-              Play
+              <Play size={14} aria-hidden="true" />
+              Playtest
             </button>
           </div>
         </header>
 
         <main className="workspace">
+          <SegmentedControl
+            aria-label="Tool"
+            className="tool-rail"
+            value={tool}
+            onValueChange={(next) => setTool(next as MapTool)}
+          >
+            {tools.map(({ value, label, icon: Icon }) => (
+              <SegmentedControlItem
+                key={value}
+                value={value}
+                aria-label={label}
+                title={label}
+                disabled={
+                  visibleLayout === "scene" &&
+                  (value === "draw" || value === "switch")
+                }
+              >
+                <Icon size={17} aria-hidden="true" />
+              </SegmentedControlItem>
+            ))}
+          </SegmentedControl>
           <div className="views" data-layout={visibleLayout}>
             <Resizable
               className="views-group"
               defaultLayout={initialLayout.sizes}
               onLayoutCommit={(sizes) => {
                 splitSizes.current = sizes as number[];
-                saveLayout(layout, splitSizes.current);
+                saveLayout(layout, splitSizes.current, showDock);
               }}
             >
-              <ResizablePanel className="view-panel map-panel" minSize={25}>
+              <ResizablePanel className="view-panel map-panel" minSize="340px">
                 <section
                   className="pane map-pane"
                   aria-label="Top-down map"
@@ -648,7 +820,7 @@ function App() {
                   }}
                   onPointerMove={({ clientX, clientY, target }) => {
                     mapPointer.current = (target as Element).closest(
-                      ".pane-actions, [data-map-control]",
+                      ".pane-actions, .map-overlay, .player-dock, [data-map-control]",
                     )
                       ? null
                       : { clientX, clientY };
@@ -658,22 +830,62 @@ function App() {
                     mapPointer.current = null;
                   }}
                 >
+                  <div className="map-overlay">
+                    <SegmentedControl
+                      aria-label="Edit mode"
+                      className="edit-modes"
+                      value={editMode}
+                      onValueChange={(next) => setEditMode(next as EditMode)}
+                    >
+                      {editModes.map(({ value, label, key }) => (
+                        <SegmentedControlItem key={value} value={value}>
+                          {label}
+                          <kbd>{key}</kbd>
+                        </SegmentedControlItem>
+                      ))}
+                    </SegmentedControl>
+                    {visibleLayout === "scene" ? null : thingPicker}
+                  </div>
                   <div className="pane-actions">
                     <button
                       type="button"
-                      className="button"
+                      className="icon-button"
+                      aria-label={
+                        visibleLayout === "split"
+                          ? "Maximize map"
+                          : "Split view"
+                      }
+                      title={
+                        visibleLayout === "split"
+                          ? "Maximize map"
+                          : "Split view"
+                      }
                       disabled={narrow}
                       onClick={() => togglePane("map")}
                     >
-                      {visibleLayout === "split"
-                        ? "Maximize map"
-                        : "Split view"}
+                      {visibleLayout === "split" ? (
+                        <Expand size={16} aria-hidden="true" />
+                      ) : (
+                        <Rows2 size={16} aria-hidden="true" />
+                      )}
                     </button>
                   </div>
                   <MapCanvas
                     key={mapVersion}
                     map={map}
                     tool={tool}
+                    editMode={editMode}
+                    onWallSelect={(wallSector, wall) =>
+                      selectSurface(
+                        surfaceKey({
+                          kind: "wall",
+                          sector: wallSector,
+                          wall,
+                          part: "middle",
+                        }),
+                      )
+                    }
+                    onViewChange={updateViewStatus}
                     thingKind={thingKind}
                     activeSector={activeSector}
                     selection={selection}
@@ -691,13 +903,33 @@ function App() {
                     lookAtRequest={lookAtRequest}
                   />
                   <p className="tool-hint">{toolHints[tool]}</p>
+                  {visibleLayout === "map" && showDock && !narrow ? (
+                    <div className="player-dock">
+                      <div className="player-dock-bar">
+                        <span>Player view</span>
+                        <button
+                          type="button"
+                          className="dock-button"
+                          aria-label="Open 3D view"
+                          title="Open 3D view"
+                          onClick={() => changeLayout("scene")}
+                        >
+                          <Expand size={13} aria-hidden="true" />
+                        </button>
+                      </div>
+                      <div className="scene-frame">{scene}</div>
+                    </div>
+                  ) : null}
                 </section>
               </ResizablePanel>
               <ResizableHandle
                 className="view-handle"
                 aria-label="Resize map and 3D view"
               />
-              <ResizablePanel className="view-panel scene-panel" minSize={25}>
+              <ResizablePanel
+                className="view-panel scene-panel"
+                minSize="280px"
+              >
                 <section
                   className="pane scene-pane"
                   aria-label="3D view"
@@ -715,6 +947,7 @@ function App() {
                   <div className="scene-bar">
                     {sceneStatus}
                     <div className="scene-actions">
+                      {visibleLayout === "scene" ? thingPicker : null}
                       <button
                         type="button"
                         className="button"
@@ -740,26 +973,22 @@ function App() {
           </div>
 
           <aside className="side">
+            <header className="selection-header">
+              <h2>{selectionTitle}</h2>
+              <p>{selectionMeta}</p>
+            </header>
             {fileError ? (
-              <section className="card issues" role="alert">
+              <section className="inspector-section issues" role="alert">
                 <h2>Map problem</h2>
                 <p>{fileError}</p>
               </section>
             ) : null}
 
-            {issues.length > 0 ? (
-              <section className="card issues" aria-label="Map problems">
-                <h2>Fix before playing</h2>
-                <ul>
-                  {issues.slice(0, 5).map((issue) => (
-                    <li key={issue.id}>{issue.message}</li>
-                  ))}
-                </ul>
-              </section>
-            ) : null}
-
             {surfaceInfo && !surfaceInfo.thing ? (
-              <section className="card" aria-label="Selected surface">
+              <section
+                className="inspector-section"
+                aria-label="Selected surface"
+              >
                 <h2>Surface</h2>
                 <SurfacePanel
                   key={surface}
@@ -772,7 +1001,7 @@ function App() {
               </section>
             ) : null}
 
-            <section className="card">
+            <section className="inspector-section">
               <h2>
                 {selectedSwitch
                   ? "Switch"
@@ -822,7 +1051,35 @@ function App() {
               )}
             </section>
 
-            <section className="card">
+            <section
+              ref={mapCheck}
+              className="inspector-section map-check"
+              aria-label="Map check"
+              tabIndex={-1}
+            >
+              <h2>
+                Map check
+                <span>
+                  {issues.length === 0
+                    ? "No problems"
+                    : `${issues.length} ${issues.length === 1 ? "problem" : "problems"}`}
+                </span>
+              </h2>
+              {issues.length === 0 ? (
+                <p className="muted">This map is ready to playtest.</p>
+              ) : (
+                <ul>
+                  {issues.slice(0, 8).map((issue) => (
+                    <li key={issue.id} className="check-issue">
+                      <TriangleAlert size={14} aria-hidden="true" />
+                      {issue.message}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            <section className="inspector-section">
               <h2>Agent actions</h2>
               <p className="muted">
                 These call the same bridge an AI agent uses. No model is
@@ -868,6 +1125,25 @@ function App() {
             </section>
           </aside>
         </main>
+        <footer className="status-bar">
+          <div>
+            <span>{Object.keys(map.vertices).length} vertices</span>
+            <span>{lineCount} lines</span>
+            <span>{map.sectors.length} sectors</span>
+            <span>{map.things.length} things</span>
+          </div>
+          <div>
+            <span ref={pointerStatus}>X - Y -</span>
+            <span>Grid {gridSize}</span>
+            <span>Snap on</span>
+            <span ref={zoomStatus}>Zoom 100%</span>
+            <span role="status">
+              {saved
+                ? "Saved in this browser"
+                : "Not saved: storage is unavailable"}
+            </span>
+          </div>
+        </footer>
       </div>
       {playedMap ? <GameView map={playedMap} onExit={exitGame} /> : null}
     </>

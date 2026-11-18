@@ -1,9 +1,20 @@
-import type { ComponentProps } from "react";
+import {
+  ArrowRight,
+  Box,
+  Crosshair,
+  Focus,
+  LocateFixed,
+  Maximize,
+  Plus,
+  Skull,
+  type LucideIcon,
+} from "lucide-react";
+import type { ComponentProps, CSSProperties } from "react";
 
 import { thingCatalog } from "../map/catalog";
 import { doorKeyPrefix, switchKeyPrefix, thingKeyPrefix } from "../map/edit";
 import { sectorEdges } from "../map/geometry";
-import type { GameMap } from "../map/types";
+import type { GameMap, ThingKind } from "../map/types";
 import {
   MapCamera,
   MapConnecting,
@@ -12,6 +23,7 @@ import {
   MapFindCamera,
   MapFit,
   MapHandle,
+  MapLabel,
   MapLookHere,
   MapPort,
   MapSector,
@@ -21,6 +33,17 @@ import {
 } from "./map-editor";
 
 const worldSize = 65536;
+
+const thingStyles: Record<ThingKind, { icon: LucideIcon; color: string }> = {
+  player: { icon: ArrowRight, color: "var(--key)" },
+  zombieman: { icon: Skull, color: "var(--danger)" },
+  "shotgun-guy": { icon: Skull, color: "var(--danger)" },
+  imp: { icon: Skull, color: "var(--danger)" },
+  demon: { icon: Skull, color: "var(--danger)" },
+  shotgun: { icon: Crosshair, color: "var(--acid)" },
+  shells: { icon: Box, color: "var(--acid)" },
+  medikit: { icon: Plus, color: "var(--cold)" },
+};
 
 function wallsOf(map: GameMap) {
   const walls = new Map<
@@ -96,6 +119,17 @@ function MapCanvas({
           <MapConnecting className="map-wire map-connecting" />
           <MapDraft className="map-draft" />
         </svg>
+        {map.sectors
+          .filter((sector) => !sector.door)
+          .map((sector, index) => (
+            <MapLabel key={sector.id} value={sector.id} className="map-label">
+              <strong>{sector.name}</strong>
+              <span>
+                S{String(index + 1).padStart(2, "0")} {sector.floor}/
+                {sector.ceiling}
+              </span>
+            </MapLabel>
+          ))}
         {Object.keys(map.vertices).map((id) => (
           <MapHandle
             key={id}
@@ -105,7 +139,8 @@ function MapCanvas({
           />
         ))}
         {map.things.map((thing) => {
-          const { color, label } = thingCatalog[thing.kind];
+          const { label } = thingCatalog[thing.kind];
+          const { icon: Icon, color } = thingStyles[thing.kind];
           return (
             <MapHandle
               key={thing.id}
@@ -113,9 +148,9 @@ function MapCanvas({
               className="map-thing"
               aria-label={label}
               title={label}
-              style={{ "--thing-color": color } as React.CSSProperties}
+              style={{ "--thing-color": color } as CSSProperties}
             >
-              {label[0]}
+              <Icon size={13} aria-hidden="true" />
             </MapHandle>
           );
         })}
@@ -143,12 +178,29 @@ function MapCanvas({
           className="map-camera"
           aria-label="3D camera. Drag it, or use the arrow keys, to move the view."
           title="3D camera"
-        />
+        >
+          <span className="map-camera-cone" aria-hidden="true" />
+          <span className="map-camera-arrow" aria-hidden="true" />
+        </MapCamera>
       </MapWorld>
       <div className="map-actions">
-        <MapLookHere className="button">Look here</MapLookHere>
-        <MapFindCamera className="button">Find camera</MapFindCamera>
-        <MapFit className="button">Fit map</MapFit>
+        <MapLookHere
+          className="icon-button"
+          aria-label="Look here"
+          title="Look here"
+        >
+          <Focus size={16} aria-hidden="true" />
+        </MapLookHere>
+        <MapFindCamera
+          className="icon-button"
+          aria-label="Find camera"
+          title="Find camera"
+        >
+          <LocateFixed size={16} aria-hidden="true" />
+        </MapFindCamera>
+        <MapFit className="icon-button" aria-label="Fit map" title="Fit map">
+          <Maximize size={16} aria-hidden="true" />
+        </MapFit>
       </div>
     </MapEditor>
   );
