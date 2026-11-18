@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  addNote,
   addRoomOnSide,
+  removeNote,
   setRoomDoor,
   updateLine,
   updateLineSide,
@@ -91,6 +93,15 @@ describe("map files", () => {
         }),
       ),
     ).toThrow("unknown texture");
+  });
+
+  it("keeps playtest notes", () => {
+    const map = addNote(starterMap, { x: 96.4, y: 160 }, "Too dark here");
+    expect(map.notes).toEqual([
+      { id: "note-1", x: 96, y: 160, text: "Too dark here" },
+    ]);
+    expect(parseMapFile(serializeMap(map))).toEqual(map);
+    expect(removeNote(map, "note-1").notes).toBeUndefined();
   });
 
   it("keeps thing difficulty settings", () => {

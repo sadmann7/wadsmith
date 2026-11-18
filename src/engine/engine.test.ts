@@ -261,4 +261,31 @@ describe.skipIf(!ready)("generated map in the engine", () => {
     await waitForPlay(fewer);
     expect(fewer.status().totalKills).toBe(total - 1);
   }, 40_000);
+
+  it("reports the run for the playtest HUD", async () => {
+    const map = playerAt(openMap, 96, 160, 90);
+    const withPickups = addThing(
+      addThing(map, "red-key", { x: 96, y: 128 }).map,
+      "medikit",
+      { x: 300, y: 300 },
+    ).map;
+    const secret = updateSector(withPickups, "sector-3", { effect: "secret" });
+    const game = await launch(secret);
+    await waitForPlay(game);
+    const start = game.status();
+    expect(start).toMatchObject({
+      angle: 90,
+      armor: 0,
+      ammo: 50,
+      ammoType: 0,
+      keys: 0,
+      totalItems: 0,
+      totalSecrets: 1,
+    });
+    game.key(true, doomKeys.up);
+    await play(game, 3000, () => game.status().keys !== 0);
+    game.key(false, doomKeys.up);
+    expect(game.status().keys & 4).toBe(4);
+    expect(game.status().tics).toBeGreaterThan(start.tics);
+  }, 30_000);
 });

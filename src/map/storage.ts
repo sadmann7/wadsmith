@@ -19,6 +19,7 @@ import type {
   LineSettings,
   LineSide,
   LineTrigger,
+  MapNote,
   MapSwitch,
   Point,
   Sector,
@@ -35,6 +36,7 @@ const backupKey = "wadsmith:map:unreadable";
 // Wider than the engine's range, so a map validateMap flags can still be reopened and fixed.
 const coordinateLimit = 1_000_000;
 const maxNameLength = 80;
+const maxNoteLength = 280;
 const heightLimit = 32767;
 const wordLimit = 32767;
 const thingSkills: ThingSkill[] = ["easy", "medium", "hard"];
@@ -313,6 +315,17 @@ function parseSwitch(
   };
 }
 
+function parseNote(value: unknown): MapNote {
+  const note = record(value, "A note");
+  const noteId = id(note.id, "A note");
+  if (typeof note.text !== "string") fail(`Note ${noteId} is not valid.`);
+  return {
+    id: noteId,
+    ...parsePoint(note, `Note ${noteId}`),
+    text: note.text.slice(0, maxNoteLength),
+  };
+}
+
 function uniqueIds(items: { id: string }[], label: string) {
   if (new Set(items.map((item) => item.id)).size !== items.length) {
     fail(`${label} ids must be unique.`);
@@ -345,6 +358,11 @@ function parseMap(value: unknown): GameMap {
             parseLine(line, sectors),
           ]),
         );
+  const notes =
+    map.notes === undefined
+      ? undefined
+      : list(map.notes, "The notes").map(parseNote);
+  uniqueIds(notes ?? [], "Note");
   uniqueIds(sectors, "Room");
   uniqueIds(things, "Thing");
   uniqueIds(switches, "Switch");
@@ -357,6 +375,7 @@ function parseMap(value: unknown): GameMap {
     things,
     switches,
     ...(lines ? { lines } : {}),
+    ...(notes ? { notes } : {}),
   };
 }
 

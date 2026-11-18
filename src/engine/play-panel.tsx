@@ -1,15 +1,9 @@
-import {
-  Slider,
-  SliderControl,
-  SliderIndicator,
-  SliderThumb,
-  SliderTrack,
-} from "@ui-sdk/react/slider";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 
-import type { GameMap } from "../map/types";
+import type { GameMap, Point } from "../map/types";
 import { compileMap } from "../wad/compile";
 import { startGameClient, type GameClient } from "./game-client";
+import { GameHud } from "./game-hud";
 import { loadIwad } from "./iwad";
 import {
   keysByCode,
@@ -23,6 +17,7 @@ type SoundSettings = { volume: number; muted: boolean };
 
 const soundKey = "wadsmith:sound";
 const defaultSound: SoundSettings = { volume: 8, muted: false };
+const noteMessageMs = 2000;
 
 function loadSound(): SoundSettings {
   try {
@@ -46,42 +41,62 @@ function saveSound(sound: SoundSettings) {
   }
 }
 
+type PlayerSpot = Point & { angle: number };
+
+function spotOf({ x, y }: GameStatus): Point {
+  return { x, y: 0 - y };
+}
+
 type GameSessionProps = {
   map: GameMap;
+  slot: string;
   sound: SoundSettings;
   onSoundChange: (sound: SoundSettings) => void;
   fullscreen: boolean;
   onRestart: () => void;
   onToggleFullscreen: () => void;
   onExit: () => void;
+  onAddNote: (point: Point, text: string) => void;
+  onEditSpot: (spot: PlayerSpot) => void;
 };
 
 function GameSession({
   map,
+  slot,
   sound,
   onSoundChange,
   fullscreen,
   onRestart,
   onToggleFullscreen,
   onExit,
+  onAddNote,
+  onEditSpot,
 }: GameSessionProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameRef = useRef<GameClient | null>(null);
   const held = useRef(new Set<number>());
   const soundRef = useRef(sound);
+  const noteTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const leaveGame = useEffectEvent(onExit);
   const [status, setStatus] = useState<GameStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [audioUnavailable, setAudioUnavailable] = useState(false);
+  const [showHelp, setShowHelp] = useState(true);
+  const [noteSpot, setNoteSpot] = useState<Point | null>(null);
+  const [noteSaved, setNoteSaved] = useState(false);
+  const [finished, setFinished] = useState(false);
 
   useEffect(() => {
     soundRef.current = sound;
     gameRef.current?.setSound(sound);
   }, [sound]);
 
+  useEffect(() => () => clearTimeout(noteTimer.current), []);
+
   useEffect(() => {
     let stopped = false;
     let client: GameClient | null = null;
+    let reachedLevel = false;
 
     loadIwad()
       .then((iwad) => {
@@ -99,7 +114,16 @@ function GameSession({
               0,
               0,
             ),
-          onStatus: setStatus,
+          // The WAD holds one map, so leaving it would load an unrelated level.
+          onStatus: (next) => {
+            if (next.inLevel) reachedLevel = true;
+            if (reachedLevel && !next.inLevel) {
+              client?.stop();
+              setFinished(true);
+              return;
+            }
+            setStatus(next);
+          },
           onDropouts: (count) => {
             canvas.dataset.audioDropouts = String(count);
           },
@@ -132,83 +156,101 @@ function GameSession({
     gameRef.current?.key(pressed, key);
   };
 
+  const focusGame = () => canvasRef.current?.focus();
+
+  const openNote = () => {
+    if (!status?.inLevel) return;
+    setNoteSaved(false);
+    setNoteSpot(spotOf(status));
+    gameRef.current?.setHeld(true);
+  };
+
+  const closeNote = () => {
+    setNoteSpot(null);
+    gameRef.current?.setHeld(false);
+    requestAnimationFrame(focusGame);
+  };
+
+  const editSpot = () => {
+    if (status?.inLevel) {
+      onEditSpot({ ...spotOf(status), angle: status.angle });
+    }
+  };
+
+  const onShortcut = useEffectEvent((event: KeyboardEvent) => {
+    const typing = (event.target as Element).closest?.("form");
+    if (event.code === "Escape") {
+      event.preventDefault();
+      if (noteSpot) closeNote();
+      else onExit();
+    } else if (!typing && event.code === "KeyN" && !event.repeat) {
+      event.preventDefault();
+      openNote();
+    } else if (!typing && event.code === "F2") {
+      event.preventDefault();
+      editSpot();
+    }
+  });
+
+  useEffect(() => {
+    window.addEventListener("keydown", onShortcut);
+    return () => window.removeEventListener("keydown", onShortcut);
+  }, []);
+
   return (
-    <>
-      <header
-        className="game-bar"
+    <div
+      className="game-screen"
+      onPointerDown={(event) => {
+        if (event.target !== event.currentTarget) return;
+        event.preventDefault();
+        focusGame();
+      }}
+    >
+      <div
+        className="game-frame @container"
         onPointerDown={(event) => {
+          const target = event.target as Element;
           if (
-            (event.target as Element).closest("button, [data-game-control]")
+            target === canvasRef.current ||
+            target.closest("button, form, [data-game-control]")
           ) {
             return;
           }
           event.preventDefault();
-          canvasRef.current?.focus();
+          focusGame();
         }}
       >
-        <p className="hint" aria-live="off">
-          {status
-            ? `Health ${status.health} · Kills ${status.kills}/${status.totalKills}`
-            : "Starting…"}
-        </p>
-        <p className="game-keys">
-          WASD move · ←→ turn · Space fire · E use · Shift run · Shift+Tab
-          buttons · {fullscreen ? "Esc leaves fullscreen" : "Esc menu"}
-          {audioUnavailable ? " · Sound needs HTTPS or localhost" : ""}
-        </p>
-        <div className="game-actions">
-          <button
-            type="button"
-            className="button"
-            aria-pressed={sound.muted}
-            onClick={(event) => {
-              onSoundChange({ ...sound, muted: !sound.muted });
-              // A mouse click shouldn't take the keys away from the game.
-              if (event.detail > 0) canvasRef.current?.focus();
-            }}
-          >
-            {sound.muted ? "Unmute" : "Mute"}
-          </button>
-          <Slider
-            className="slider game-volume"
-            data-game-control=""
-            value={sound.volume}
-            min={0}
-            max={maxVolume}
-            step={1}
-            onValueChange={(volume) =>
-              onSoundChange({ volume: volume as number, muted: false })
-            }
-            onPointerUp={() => canvasRef.current?.focus()}
-          >
-            <SliderControl className="slider-control">
-              <SliderTrack className="slider-track">
-                <SliderIndicator className="slider-indicator" />
-                <SliderThumb className="slider-thumb" aria-label="Volume" />
-              </SliderTrack>
-            </SliderControl>
-          </Slider>
-          <button type="button" className="button" onClick={onRestart}>
-            Restart
-          </button>
-          <button type="button" className="button" onClick={onToggleFullscreen}>
-            {fullscreen ? "Exit fullscreen" : "Fullscreen"}
-          </button>
-          <button type="button" className="button primary" onClick={onExit}>
-            Back to editor
-          </button>
-        </div>
-      </header>
-      <div
-        className="game-screen"
-        onPointerDown={(event) => {
-          if (event.target !== event.currentTarget) return;
-          event.preventDefault();
-          canvasRef.current?.focus();
-        }}
-      >
+        <GameHud
+          map={map}
+          slot={slot}
+          status={status}
+          sound={sound}
+          fullscreen={fullscreen}
+          showHelp={showHelp && !noteSpot && !noteSaved}
+          noteOpen={noteSpot !== null}
+          noteSaved={noteSaved}
+          finished={finished}
+          audioUnavailable={audioUnavailable}
+          onSoundChange={onSoundChange}
+          onRestart={onRestart}
+          onToggleFullscreen={onToggleFullscreen}
+          onExit={onExit}
+          onOpenNote={openNote}
+          onSaveNote={(text) => {
+            if (noteSpot) onAddNote(noteSpot, text);
+            closeNote();
+            setNoteSaved(true);
+            clearTimeout(noteTimer.current);
+            noteTimer.current = setTimeout(
+              () => setNoteSaved(false),
+              noteMessageMs,
+            );
+          }}
+          onEditSpot={editSpot}
+          onControlUsed={focusGame}
+        />
         {error ? (
-          <p className="notice" role="alert">
+          <p className="notice absolute inset-x-4 top-20 z-20" role="alert">
             {error}
           </p>
         ) : (
@@ -218,7 +260,7 @@ function GameSession({
             width={screenWidth}
             height={screenHeight}
             tabIndex={0}
-            aria-label="Game. Arrows or W, A, S and D move, Space fires, E uses."
+            aria-label="Game. Arrows or W, A, S and D move, Space fires, E uses, N leaves a note, F2 edits this spot, Escape returns to the editor."
             onBlur={() => {
               for (const key of held.current) setKey(false, key);
             }}
@@ -226,7 +268,7 @@ function GameSession({
             onPointerDown={(event) => {
               event.currentTarget.focus();
               gameRef.current?.resumeAudio();
-              if (event.button !== 0) return;
+              if (event.button !== 0 || noteSpot) return;
               event.currentTarget.setPointerCapture(event.pointerId);
               setKey(true, keysByCode.Space);
             }}
@@ -245,6 +287,7 @@ function GameSession({
               }
               event.preventDefault();
               event.stopPropagation();
+              setShowHelp(false);
               gameRef.current?.resumeAudio();
               setKey(true, key);
             }}
@@ -252,11 +295,23 @@ function GameSession({
           />
         )}
       </div>
-    </>
+    </div>
   );
 }
 
-function GameView({ map, onExit }: { map: GameMap; onExit: () => void }) {
+function GameView({
+  map,
+  slot,
+  onExit,
+  onAddNote,
+  onEditSpot,
+}: {
+  map: GameMap;
+  slot: string;
+  onExit: () => void;
+  onAddNote: (point: Point, text: string) => void;
+  onEditSpot: (spot: PlayerSpot) => void;
+}) {
   const stageRef = useRef<HTMLElement>(null);
   const [run, setRun] = useState(0);
   const [fullscreen, setFullscreen] = useState(false);
@@ -285,6 +340,7 @@ function GameView({ map, onExit }: { map: GameMap; onExit: () => void }) {
       <GameSession
         key={run}
         map={map}
+        slot={slot}
         sound={sound}
         onSoundChange={(next) => {
           setSound(next);
@@ -294,9 +350,11 @@ function GameView({ map, onExit }: { map: GameMap; onExit: () => void }) {
         onRestart={() => setRun((value) => value + 1)}
         onToggleFullscreen={toggleFullscreen}
         onExit={onExit}
+        onAddNote={onAddNote}
+        onEditSpot={onEditSpot}
       />
     </section>
   );
 }
 
-export { GameView };
+export { GameView, type PlayerSpot };

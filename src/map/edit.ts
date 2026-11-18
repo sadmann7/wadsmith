@@ -216,6 +216,26 @@ function pruneLines(map: GameMap, removed: string): GameMap {
   return { ...map, lines: withoutUnset(lines) };
 }
 
+function addNote(map: GameMap, point: Point, text: string): GameMap {
+  const notes = map.notes ?? [];
+  const id = nextId(
+    "note-",
+    notes.map((note) => note.id),
+  );
+  return {
+    ...map,
+    notes: [
+      ...notes,
+      { id, x: Math.round(point.x), y: Math.round(point.y), text },
+    ],
+  };
+}
+
+function removeNote(map: GameMap, id: string): GameMap {
+  const notes = map.notes?.filter((note) => note.id !== id);
+  return { ...map, notes: notes?.length ? notes : undefined };
+}
+
 function removeThings(map: GameMap, ids: string[]) {
   return ids.reduce(removeThing, map);
 }
@@ -660,6 +680,7 @@ function roomCenter(map: GameMap, sector: Sector): Point {
 }
 
 export {
+  addNote,
   addRoom,
   addRoomOnSide,
   addSwitch,
@@ -677,6 +698,7 @@ export {
   freeWallNear,
   gridSize,
   positionsOf,
+  removeNote,
   removeSector,
   removeSwitch,
   removeThing,

@@ -118,6 +118,8 @@ type MapSwitch = {
   door: string | null;
 };
 
+type MapNote = Point & { id: string; text: string };
+
 type GameMap = {
   name?: string;
   vertices: Record<string, Point>;
@@ -125,6 +127,7 @@ type GameMap = {
   things: Thing[];
   switches: MapSwitch[];
   lines?: Record<string, LineSettings>;
+  notes?: MapNote[];
 };
 
 export type {
@@ -136,6 +139,7 @@ export type {
   LineSettings,
   LineSide,
   LineTrigger,
+  MapNote,
   MapSwitch,
   Point,
   Sector,

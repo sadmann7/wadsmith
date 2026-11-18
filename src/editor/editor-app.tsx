@@ -36,6 +36,7 @@ import {
   Play,
   Redo2,
   Rows2,
+  StickyNote,
   ToggleRight,
   TriangleAlert,
   Undo2,
@@ -73,10 +74,12 @@ import {
   type MapTarget,
 } from "./map-target";
 import type { EditMode, MapTool, MapViewStatus } from "./map-editor";
-import { GameView } from "../engine/play-panel";
+import { GameView, type PlayerSpot } from "../engine/play-panel";
 import { thingCatalog, thingKinds } from "../map/catalog";
 import {
+  addNote,
   duplicateThings,
+  removeNote,
   setLineTarget,
   setRoomDoor,
   setRoomWalls,
@@ -811,6 +814,22 @@ function App() {
     if (canPlay && !buildProblem()) setPlayedMap(map);
   };
 
+  const editPlayedSpot = ({ angle, ...point }: PlayerSpot) => {
+    setPlayedMap(null);
+    camera.placeAt(map, point, angle);
+    const room = sectorAt(map, point);
+    showTarget(
+      room
+        ? { kind: "room", sector: room.id, point }
+        : { kind: "empty", point },
+    );
+    if (narrow) changeLayout("scene");
+    else if (visibleLayout === "map" && !showDock) changeLayout("split");
+    requestAnimationFrame(() =>
+      document.querySelector<HTMLElement>(".map")?.focus(),
+    );
+  };
+
   const exitGame = () => {
     setPlayedMap(null);
     requestAnimationFrame(() => playButton.current?.focus());
@@ -1357,6 +1376,51 @@ function App() {
               drawing={tool === "draw"}
             />
 
+            {map.notes?.length ? (
+              <section
+                className="inspector-section"
+                aria-label="Playtest notes"
+              >
+                <h2>
+                  Playtest notes
+                  <span>{map.notes.length}</span>
+                </h2>
+                <ul className="m-0 grid list-none gap-2 p-0">
+                  {map.notes.map((note) => (
+                    <li
+                      key={note.id}
+                      className="grid grid-cols-[14px_minmax(0,1fr)_auto_auto] gap-2"
+                    >
+                      <StickyNote
+                        size={14}
+                        className="mt-0.5 text-key"
+                        aria-hidden="true"
+                      />
+                      <span className="min-w-0 break-words">{note.text}</span>
+                      <button
+                        type="button"
+                        className="self-start border-0 bg-transparent p-0 text-muted hover:text-text"
+                        aria-label={`Show note: ${note.text}`}
+                        onClick={() =>
+                          showTarget({ kind: "empty", point: note })
+                        }
+                      >
+                        Show
+                      </button>
+                      <button
+                        type="button"
+                        className="self-start border-0 bg-transparent p-0 text-muted hover:text-danger"
+                        aria-label={`Delete note: ${note.text}`}
+                        onClick={() => commit(removeNote(map, note.id))}
+                      >
+                        Delete
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
+
             <section
               ref={mapCheck}
               className="inspector-section map-check"
@@ -1547,7 +1611,15 @@ function App() {
           onClose={() => setBuilding(false)}
         />
       ) : null}
-      {playedMap ? <GameView map={playedMap} onExit={exitGame} /> : null}
+      {playedMap ? (
+        <GameView
+          map={playedMap}
+          slot={mapSlot}
+          onExit={exitGame}
+          onAddNote={(point, text) => commit(addNote(map, point, text))}
+          onEditSpot={editPlayedSpot}
+        />
+      ) : null}
     </>
   );
 }

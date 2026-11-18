@@ -52,6 +52,14 @@ class SceneCamera {
     return true;
   }
 
+  placeAt(map: GameMap, point: Point, angle: number) {
+    const sector = sectorAt(map, point);
+    if (!sector || sector.door) return false;
+    this.walked = true;
+    this.position = { ...this.current, ...point, angle };
+    return true;
+  }
+
   lookAt(map: GameMap, from: Point, target: Point | null) {
     const sector = sectorAt(map, from);
     if (!sector || sector.door) return false;

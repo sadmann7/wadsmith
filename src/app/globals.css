@@ -610,38 +610,8 @@
     z-index: 40;
     inset: 0;
     display: grid;
-    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
     background: #000;
-  }
-
-  .game-bar {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px 16px;
-    align-items: center;
-    min-height: 48px;
-    padding: 8px 12px;
-    background: var(--panel);
-  }
-
-  .hint {
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-  }
-
-  .game-keys {
-    color: var(--muted);
-  }
-
-  .game-actions {
-    display: flex;
-    gap: 8px;
-    margin-left: auto;
-  }
-
-  .game-volume {
-    width: 96px;
-    justify-content: center;
   }
 
   .game-screen {
@@ -653,32 +623,18 @@
   }
 
   /* Doom's 320x200 image was made for 4:3 screens, so its pixels are stretched. */
+  .game-frame {
+    position: relative;
+    width: min(100cqw, calc(100cqh * 4 / 3));
+    aspect-ratio: 4 / 3;
+  }
+
   .game-canvas {
     display: block;
-    width: min(100cqw, calc(100cqh * 4 / 3));
-    height: auto;
-    aspect-ratio: 4 / 3;
+    width: 100%;
+    height: 100%;
     outline: 0;
     image-rendering: pixelated;
-  }
-
-  .game-stage:fullscreen .game-bar {
-    position: absolute;
-    z-index: 1;
-    top: 0;
-    right: 0;
-    left: 0;
-    opacity: 0;
-    transition: opacity 150ms;
-  }
-
-  .game-stage:fullscreen .game-bar:hover,
-  .game-stage:fullscreen .game-bar:focus-within {
-    opacity: 1;
-  }
-
-  .game-stage:fullscreen {
-    grid-template-rows: minmax(0, 1fr);
   }
 
   .save-state {

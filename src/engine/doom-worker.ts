@@ -41,7 +41,7 @@ type StandInProcessor = {
 const audioBuffersAhead = 3;
 const audioPumpMs = 5;
 const framePumpMs = 4;
-const statusEveryMs = 200;
+const statusEveryMs = 100;
 
 const scope = self as unknown as Worker & Record<string, unknown>;
 

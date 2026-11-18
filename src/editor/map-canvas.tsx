@@ -1,4 +1,4 @@
-import { Focus, LocateFixed, Maximize } from "lucide-react";
+import { Focus, LocateFixed, Maximize, StickyNote } from "lucide-react";
 import type { ComponentProps, CSSProperties } from "react";
 
 import { thingCatalog } from "../map/catalog";
@@ -158,6 +158,18 @@ function MapCanvas({
             aria-label={`Switch ${item.id}. Drag to a door, or press C.`}
             title="Drag to a door"
           />
+        ))}
+        {map.notes?.map((note) => (
+          <MapMarker
+            key={note.id}
+            value={note.id}
+            x={note.x}
+            y={note.y}
+            title={note.text}
+            className="pointer-events-none flex size-5 origin-center items-center justify-center rounded-[3px] bg-key text-ember-foreground [transform:translate(-50%,-50%)_scale(calc(1/var(--canvas-zoom,1)))]"
+          >
+            <StickyNote size={12} aria-hidden="true" />
+          </MapMarker>
         ))}
         {callouts.map((callout) => (
           <MapMarker

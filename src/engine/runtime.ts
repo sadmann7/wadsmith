@@ -22,6 +22,16 @@ type DoomModule = {
   _wadsmith_total_kills(): number;
   _wadsmith_player_x(): number;
   _wadsmith_player_y(): number;
+  _wadsmith_player_angle(): number;
+  _wadsmith_armor(): number;
+  _wadsmith_ammo(): number;
+  _wadsmith_ammo_type(): number;
+  _wadsmith_keys(): number;
+  _wadsmith_items(): number;
+  _wadsmith_total_items(): number;
+  _wadsmith_secrets(): number;
+  _wadsmith_total_secrets(): number;
+  _wadsmith_level_tics(): number;
   _wadsmith_sector_ceiling(index: number): number;
   _wadsmith_set_volume(volume: number): void;
   _wadsmith_set_muted(muted: number): void;
@@ -44,6 +54,16 @@ type GameStatus = {
   totalKills: number;
   x: number;
   y: number;
+  angle: number;
+  armor: number;
+  ammo: number;
+  ammoType: number;
+  keys: number;
+  items: number;
+  totalItems: number;
+  secrets: number;
+  totalSecrets: number;
+  tics: number;
 };
 
 const screenWidth = 320;
@@ -56,7 +76,7 @@ const keyUpEvent = 1;
 const engineConfig = `snd_musicdevice 3
 snd_sfxdevice 3
 snd_channels 8
-screenblocks 10
+screenblocks 11
 detaillevel 0
 show_messages 1
 `;
@@ -98,11 +118,8 @@ const keysByCode: Record<string, number> = {
   ControlRight: doomKeys.fire,
   ShiftLeft: doomKeys.run,
   ShiftRight: doomKeys.run,
-  Escape: doomKeys.escape,
   Enter: doomKeys.enter,
   Tab: doomKeys.tab,
-  KeyY: "y".charCodeAt(0),
-  KeyN: "n".charCodeAt(0),
   Digit1: "1".charCodeAt(0),
   Digit2: "2".charCodeAt(0),
   Digit3: "3".charCodeAt(0),
@@ -191,6 +208,16 @@ class DoomGame {
       totalKills: module._wadsmith_total_kills(),
       x: module._wadsmith_player_x(),
       y: module._wadsmith_player_y(),
+      angle: module._wadsmith_player_angle(),
+      armor: module._wadsmith_armor(),
+      ammo: module._wadsmith_ammo(),
+      ammoType: module._wadsmith_ammo_type(),
+      keys: module._wadsmith_keys(),
+      items: module._wadsmith_items(),
+      totalItems: module._wadsmith_total_items(),
+      secrets: module._wadsmith_secrets(),
+      totalSecrets: module._wadsmith_total_secrets(),
+      tics: module._wadsmith_level_tics(),
     };
   }
 }

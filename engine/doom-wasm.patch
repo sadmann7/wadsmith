@@ -273,10 +273,12 @@ new file mode 100644
 index 0000000..aa77cfd
 --- /dev/null
 +++ b/src/doom/wadsmith-exports.c
-@@ -0,0 +1,53 @@
+@@ -0,0 +1,99 @@
 +#include <emscripten.h>
 +#include <SDL_mixer.h>
 +
++#include "d_items.h"
++#include "doomstat.h"
 +#include "r_state.h"
 +#include "s_sound.h"
 +
@@ -305,6 +307,50 @@ index 0000000..aa77cfd
 +EMSCRIPTEN_KEEPALIVE int wadsmith_player_y(void) {
 +  return players[consoleplayer].mo ? players[consoleplayer].mo->y >> 16 : 0;
 +}
++
++EMSCRIPTEN_KEEPALIVE int wadsmith_player_angle(void) {
++  player_t *player = &players[consoleplayer];
++  return player->mo
++             ? (int)(((unsigned long long)player->mo->angle * 360) >> 32)
++             : 0;
++}
++
++EMSCRIPTEN_KEEPALIVE int wadsmith_armor(void) {
++  return players[consoleplayer].armorpoints;
++}
++
++EMSCRIPTEN_KEEPALIVE int wadsmith_ammo_type(void) {
++  return weaponinfo[players[consoleplayer].readyweapon].ammo;
++}
++
++EMSCRIPTEN_KEEPALIVE int wadsmith_ammo(void) {
++  int type = wadsmith_ammo_type();
++  return type < NUMAMMO ? players[consoleplayer].ammo[type] : 0;
++}
++
++EMSCRIPTEN_KEEPALIVE int wadsmith_keys(void) {
++  int keys = 0;
++  for (int card = 0; card < NUMCARDS; card++) {
++    if (players[consoleplayer].cards[card]) {
++      keys |= 1 << card;
++    }
++  }
++  return keys;
++}
++
++EMSCRIPTEN_KEEPALIVE int wadsmith_items(void) {
++  return players[consoleplayer].itemcount;
++}
++
++EMSCRIPTEN_KEEPALIVE int wadsmith_total_items(void) { return totalitems; }
++
++EMSCRIPTEN_KEEPALIVE int wadsmith_secrets(void) {
++  return players[consoleplayer].secretcount;
++}
++
++EMSCRIPTEN_KEEPALIVE int wadsmith_total_secrets(void) { return totalsecret; }
++
++EMSCRIPTEN_KEEPALIVE int wadsmith_level_tics(void) { return leveltime; }
 +
 +EMSCRIPTEN_KEEPALIVE int wadsmith_sector_ceiling(int index) {
 +  return index >= 0 && index < numsectors
