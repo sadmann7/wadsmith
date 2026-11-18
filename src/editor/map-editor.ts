@@ -1,10 +1,12 @@
 import {
+  bindDrag,
   createChange,
   createConnect,
   createMove,
   createViewport,
   css,
   definePrimitive,
+  dragThreshold,
   live,
   type ChangeDetails,
   type ConnectDraft,
@@ -39,6 +41,8 @@ import {
   type RoomSide,
 } from "../map/edit";
 import { sectorAt } from "../map/geometry";
+import type { Camera } from "../preview/render";
+import type { SceneCamera } from "../preview/scene-camera";
 import type {
   DoorSettings,
   GameMap,
@@ -76,6 +80,11 @@ type MapEditorOptions = {
     details: ChangeDetails<"select">,
   ) => void;
   onDraftMapChange?: (map: GameMap | null) => void;
+  onMapSelect?: () => void;
+  camera?: SceneCamera;
+  highlightedWall?: string | null;
+  findCameraRequest?: number;
+  lookAtRequest?: { id: number; clientX: number; clientY: number } | null;
 };
 
 type MapEditorState = {
@@ -90,6 +99,8 @@ type MapEditorState = {
   selection: string[];
   drawing: Point[];
   cursor: Point | null;
+  cameraPosition: Camera | null;
+  highlightedWall: string | null;
 };
 
 const emptyMap: GameMap = {
@@ -101,6 +112,7 @@ const emptyMap: GameMap = {
 const hiddenLine = { x1: "0", y1: "0", x2: "0", y2: "0" };
 const clickSlop = 4;
 const switchReach = 32;
+const cameraNudge = 16;
 const agentHeightLimit = 2048;
 const agentDepthLimit = 4096;
 
@@ -191,6 +203,31 @@ function draftPoints(state: MapEditorState) {
   return points.map((point) => `${point.x},${point.y}`).join(" ");
 }
 
+function cameraStyle(state: MapEditorState) {
+  const camera = state.cameraPosition;
+  return css({
+    position: "absolute",
+    left: `${camera?.x ?? 0}px`,
+    top: `${camera?.y ?? 0}px`,
+    "--camera-angle": `${-(camera?.angle ?? 0)}deg`,
+    visibility: camera ? undefined : "hidden",
+    "touch-action": "none",
+  });
+}
+
+function lookTarget(state: MapEditorState): Point | null {
+  const { map, activeSector, selection } = state;
+  if (selection.length > 0) {
+    const thing = map.things.find(
+      (item) => `${thingKeyPrefix}${item.id}` === selection[0],
+    );
+    const sector = thing ? sectorAt(map, thing) : null;
+    return thing && sector && !sector.door ? { x: thing.x, y: thing.y } : null;
+  }
+  const sector = map.sectors.find((item) => item.id === activeSector);
+  return sector && !sector.door ? roomCenter(map, sector) : null;
+}
+
 function wallAttrs(state: MapEditorState, from: string, to: string) {
   return lineAttrs(pointOf(state, from), pointOf(state, to));
 }
@@ -208,6 +245,11 @@ const mapEditor = definePrimitive({
     onActiveSectorChange: "callback",
     onSelectionChange: "callback",
     onDraftMapChange: "callback",
+    onMapSelect: "callback",
+    camera: "value",
+    highlightedWall: "value",
+    findCameraRequest: "number",
+    lookAtRequest: "value",
   },
   controlled: ["map", "tool", "activeSector", "selection"],
   state: (options: MapEditorOptions): MapEditorState => {
@@ -224,6 +266,8 @@ const mapEditor = definePrimitive({
       selection: options.selection ?? [],
       drawing: [],
       cursor: null,
+      cameraPosition: options.camera?.position ?? null,
+      highlightedWall: options.highlightedWall ?? null,
     };
   },
   sync: (options) => ({
@@ -236,8 +280,16 @@ const mapEditor = definePrimitive({
       ? { activeSector: options.activeSector }
       : {}),
     ...(options.selection ? { selection: options.selection } : {}),
+    highlightedWall: options.highlightedWall ?? null,
   }),
-  live: ["viewport", "moving", "connecting", "cursor", "drawing"],
+  live: [
+    "viewport",
+    "moving",
+    "connecting",
+    "cursor",
+    "drawing",
+    "cameraPosition",
+  ],
   api: (context) => {
     const { store } = context;
     const change = createChange(context);
@@ -311,10 +363,50 @@ const mapEditor = definePrimitive({
     context.onDestroy(stopWatching);
 
     let press: { x: number; y: number } | null = null;
+    let fitted = false;
+    let findAfterFit = false;
+    let stopCameraDrag: (() => void) | undefined;
+    let findRequest = context.options().findCameraRequest ?? 0;
+    let lookRequest = context.options().lookAtRequest?.id ?? 0;
+
+    const findCamera = () => {
+      if (!fitted) {
+        findAfterFit = true;
+        return;
+      }
+      const surface = root();
+      const camera = store.get().cameraPosition;
+      if (!surface || !camera) return;
+      const { zoom } = store.get().viewport;
+      viewport.setViewport({
+        x: surface.clientWidth / 2 - camera.x * zoom,
+        y: surface.clientHeight / 2 - camera.y * zoom,
+        zoom,
+      });
+    };
+
+    context.onOptions((options) => {
+      const request = options.findCameraRequest ?? 0;
+      if (request === findRequest) return;
+      findRequest = request;
+      requestAnimationFrame(findCamera);
+    });
+    context.onOptions(({ lookAtRequest }) => {
+      if (!lookAtRequest || lookAtRequest.id === lookRequest) return;
+      lookRequest = lookAtRequest.id;
+      moveCamera(
+        viewport.toCanvas(lookAtRequest.clientX, lookAtRequest.clientY),
+      );
+    });
+    context.onDestroy(() => stopCameraDrag?.());
+
+    const moveCamera = (point: Point) =>
+      context.options().camera?.moveTo(store.get().map, snapPoint(point));
 
     const select = (selection: string[], sector: string | null = null) => {
       change("selection", selection, { reason: "select" });
       change("activeSector", sector, { reason: "select" });
+      context.options().onMapSelect?.();
     };
 
     const pointFromEvent = (event: MouseEvent) => {
@@ -392,6 +484,71 @@ const mapEditor = definePrimitive({
       viewport,
       move,
       connect,
+      findCamera,
+      attach(element: HTMLElement) {
+        const stopCamera = context.options().camera?.subscribe(() =>
+          store.set({
+            cameraPosition: context.options().camera?.position ?? null,
+          }),
+        );
+        // A hidden pane has no size to fit until it is first shown.
+        const observer = new ResizeObserver(() => {
+          if (element.clientWidth === 0 || element.clientHeight === 0) return;
+          observer.disconnect();
+          this.fitMap();
+          fitted = true;
+          if (findAfterFit) findCamera();
+        });
+        observer.observe(element);
+        return () => {
+          stopCamera?.();
+          observer.disconnect();
+        };
+      },
+      lookHere() {
+        const target = lookTarget(store.get());
+        if (target) moveCamera(target);
+      },
+      doubleClick(event: MouseEvent) {
+        if (store.get().tool !== "select") return;
+        if ((event.target as Element).closest("[data-map-control]")) return;
+        moveCamera(viewport.toCanvas(event.clientX, event.clientY));
+      },
+      pressCamera(event: PointerEvent, el: HTMLElement) {
+        const camera = context.options().camera;
+        if (!camera || store.get().tool !== "select") return;
+        const start = camera.position;
+        const wasWalked = camera.walked;
+        stopCameraDrag = bindDrag(el, event, {
+          threshold: dragThreshold,
+          cancelOnEscape: true,
+          onMove: ({ x, y }) => {
+            moveCamera(viewport.toCanvas(x, y));
+          },
+          onEnd: (_end, canceled) => {
+            stopCameraDrag = undefined;
+            if (canceled) {
+              camera.position = start;
+              camera.walked = wasWalked;
+            }
+          },
+        });
+      },
+      cameraKeydown(event: KeyboardEvent) {
+        const position = store.get().cameraPosition;
+        const direction = {
+          ArrowUp: [0, -1],
+          ArrowDown: [0, 1],
+          ArrowLeft: [-1, 0],
+          ArrowRight: [1, 0],
+        }[event.key];
+        if (!position || !direction) return;
+        event.preventDefault();
+        moveCamera({
+          x: position.x + direction[0] * cameraNudge,
+          y: position.y + direction[1] * cameraNudge,
+        });
+      },
       rooms: () =>
         store.get().map.sectors.map((sector) => ({
           value: sector.id,
@@ -607,15 +764,13 @@ const mapEditor = definePrimitive({
           "touch-action": "none",
         }),
       }),
-      bind: (_el, { api }) => {
-        const frame = requestAnimationFrame(() => api.fitMap());
-        return () => cancelAnimationFrame(frame);
-      },
+      bind: (el, { api }) => api.attach(el),
       on: {
         wheel: (event, { api }) => api.viewport.wheel(event),
         pointerdown: (event, { api }) => api.pointerdown(event),
         pointermove: (event, { api }) => api.pointermove(event),
         click: (event, { api }) => api.click(event),
+        dblclick: (event, { api }) => api.doubleClick(event),
         keydown: (event, { api }) => api.keydown(event),
       },
     }),
@@ -642,7 +797,10 @@ const mapEditor = definePrimitive({
     }),
     wall: slot<{ value: string; from: string; to: string }>({
       props: { value: "string", from: "string", to: "string" },
-      attrs: (state, { props }) => wallAttrs(state, props.from, props.to),
+      attrs: (state, { key, props }) => ({
+        ...wallAttrs(state, props.from, props.to),
+        "data-selected": state.highlightedWall === key ? "" : undefined,
+      }),
       live: live<
         MapEditorState,
         any,
@@ -730,6 +888,32 @@ const mapEditor = definePrimitive({
       attrs: (state) => connectingAttrs(state),
       live: live<MapEditorState, any, {}>((state) => connectingAttrs(state)),
     }),
+    camera: slot({
+      attrs: (state) => ({
+        type: "button",
+        "data-map-key": "camera",
+        style: cameraStyle(state),
+      }),
+      live: live<MapEditorState, any, {}>((state) => ({
+        style: cameraStyle(state),
+      })),
+      on: {
+        keydown: (event, { api }) => api.cameraKeydown(event),
+        pointerdown: (event, { api, el }) => api.pressCamera(event, el!),
+      },
+    }),
+    findCamera: slot({
+      attrs: () => ({ type: "button", "data-map-control": "" }),
+      press: ({ api }) => api.findCamera(),
+    }),
+    lookHere: slot({
+      attrs: (state) => ({
+        type: "button",
+        "data-map-control": "",
+        disabled: lookTarget(state) ? undefined : "",
+      }),
+      press: ({ api }) => api.lookHere(),
+    }),
     fit: slot({
       attrs: () => ({ type: "button", "data-map-control": "" }),
       press: ({ api }) => api.fitMap(),
@@ -757,6 +941,9 @@ const parts = createParts(mapEditor, {
   port: "button",
   wire: "line",
   connecting: "line",
+  camera: "button",
+  findCamera: "button",
+  lookHere: "button",
   fit: "button",
 });
 
@@ -770,13 +957,19 @@ const MapPort = parts.Port;
 const MapWire = parts.Wire;
 const MapConnecting = parts.Connecting;
 const MapFit = parts.Fit;
+const MapCamera = parts.Camera;
+const MapFindCamera = parts.FindCamera;
+const MapLookHere = parts.LookHere;
 
 export {
+  MapCamera,
   MapConnecting,
   MapDraft,
   MapEditor,
+  MapFindCamera,
   MapFit,
   MapHandle,
+  MapLookHere,
   MapPort,
   MapSector,
   MapWall,

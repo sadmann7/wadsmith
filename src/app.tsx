@@ -19,11 +19,23 @@ import {
   SelectValue,
 } from "@ui-sdk/react/select";
 import {
+  Resizable,
+  ResizableHandle,
+  ResizablePanel,
+} from "@ui-sdk/react/resizable";
+import {
   Toolbar,
   ToolbarButton,
   ToolbarSeparator,
 } from "@ui-sdk/react/toolbar";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
 import { agent } from "./agent";
 import {
@@ -57,14 +69,16 @@ import {
 import type { GameMap, ThingKind } from "./map/types";
 import { validateMap } from "./map/validate";
 import { loadIwad } from "./engine/iwad";
-import { startCamera } from "./preview/render";
-import {
-  SceneCanvas,
-  type DraftSource,
-  type SceneCamera,
-} from "./preview/scene-editor";
+import { SceneCamera } from "./preview/scene-camera";
+import { SceneCanvas, type DraftSource } from "./preview/scene-editor";
 import { SurfacePanel } from "./preview/surface-panel";
-import { describeSurface, paintSurface, parseSurface } from "./map/surfaces";
+import {
+  describeSurface,
+  paintSurface,
+  parseSurface,
+  surfaceKey,
+} from "./map/surfaces";
+import { wallKey } from "./map/geometry";
 import { createFlatAssets, readWadAssets } from "./wad/assets";
 import { compileMap } from "./wad/compile";
 
@@ -78,7 +92,49 @@ const toolHints: Record<MapTool, string> = {
 
 const roomSides: RoomSide[] = ["north", "east", "south", "west"];
 
-type MainView = "map" | "scene";
+type ViewLayout = "map" | "split" | "scene";
+type SinglePane = Exclude<ViewLayout, "split">;
+
+const layoutKey = "wadsmith:layout";
+const narrowQuery = "(max-width: 820px)";
+const defaultSplit = [50, 50];
+
+function loadLayout() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(layoutKey) ?? "null");
+    return {
+      view: ["map", "split", "scene"].includes(saved?.view)
+        ? (saved.view as ViewLayout)
+        : ("split" as ViewLayout),
+      sizes:
+        Array.isArray(saved?.sizes) &&
+        saved.sizes.length === 2 &&
+        saved.sizes.every(Number.isFinite)
+          ? (saved.sizes as number[])
+          : defaultSplit,
+    };
+  } catch {
+    return { view: "split" as ViewLayout, sizes: defaultSplit };
+  }
+}
+
+function saveLayout(view: ViewLayout, sizes: number[]) {
+  try {
+    localStorage.setItem(layoutKey, JSON.stringify({ view, sizes }));
+  } catch {
+    return;
+  }
+}
+
+function subscribeNarrow(listener: () => void) {
+  const query = matchMedia(narrowQuery);
+  query.addEventListener("change", listener);
+  return () => query.removeEventListener("change", listener);
+}
+
+function isNarrow() {
+  return matchMedia(narrowQuery).matches;
+}
 
 function createDraftChannel() {
   const listeners = new Set<(map: GameMap | null) => void>();
@@ -131,14 +187,23 @@ function App() {
   const fileInput = useRef<HTMLInputElement>(null);
   const [agentLog, setAgentLog] = useState("");
   const [, setHistoryVersion] = useState(0);
-  const [mainView, setMainView] = useState<MainView>("map");
+  const [initialLayout] = useState(loadLayout);
+  const [layout, setLayout] = useState(initialLayout.view);
+  const [findCameraRequest, setFindCameraRequest] = useState(0);
+  const splitSizes = useRef(initialLayout.sizes);
+  const hoveredPane = useRef<SinglePane | null>(null);
+  const mapPointer = useRef<{ clientX: number; clientY: number } | null>(null);
+  const [lookAtRequest, setLookAtRequest] = useState<{
+    id: number;
+    clientX: number;
+    clientY: number;
+  } | null>(null);
+  const narrow = useSyncExternalStore(subscribeNarrow, isNarrow);
+  const visibleLayout = narrow && layout === "split" ? "map" : layout;
   const [surface, setSurface] = useState<string | null>(null);
   const [assets, setAssets] = useState(createFlatAssets);
   const [drafts] = useState(createDraftChannel);
-  const [camera, setCamera] = useState<SceneCamera>(() => ({
-    position: startCamera(initialMap),
-    walked: false,
-  }));
+  const [camera] = useState(() => new SceneCamera(initialMap));
   const [history] = useState(() =>
     createUndoStack(initialMap, { limit: 200, groupDelay: 500 }),
   );
@@ -214,6 +279,101 @@ function App() {
     [map, surface],
   );
 
+  useEffect(() => {
+    camera.sync(map);
+  }, [camera, map]);
+
+  const changeLayout = useCallback((next: ViewLayout) => {
+    setLayout(next);
+    saveLayout(next, splitSizes.current);
+    if (next === "scene") {
+      setTool((current) =>
+        current === "draw" || current === "switch" ? "select" : current,
+      );
+    }
+  }, []);
+
+  const togglePane = useCallback(
+    (pane: SinglePane) => {
+      if (narrow) return;
+      changeLayout(visibleLayout === "split" ? pane : "split");
+    },
+    [changeLayout, narrow, visibleLayout],
+  );
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (
+        !["m", "l"].includes(event.key.toLowerCase()) ||
+        event.repeat ||
+        event.defaultPrevented ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.altKey ||
+        isTextEntry(event.target) ||
+        (event.target as Element).closest?.(
+          '[role="combobox"], [role="listbox"], [role="menu"]',
+        ) ||
+        document.querySelector(".game-stage")
+      ) {
+        return;
+      }
+      if (event.key.toLowerCase() === "l") {
+        const pointer = mapPointer.current;
+        if (!pointer) return;
+        event.preventDefault();
+        setLookAtRequest((request) => ({
+          ...pointer,
+          id: (request?.id ?? 0) + 1,
+        }));
+        return;
+      }
+      const focused = (event.target as Element).closest?.<HTMLElement>(
+        "[data-pane]",
+      )?.dataset.pane as SinglePane | undefined;
+      const pane =
+        hoveredPane.current ??
+        focused ??
+        (visibleLayout === "scene" ? "scene" : "map");
+      event.preventDefault();
+      togglePane(pane);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [togglePane, visibleLayout]);
+
+  const findCameraOnMap = () => {
+    if (visibleLayout === "scene") changeLayout(narrow ? "map" : "split");
+    setFindCameraRequest((request) => request + 1);
+  };
+
+  const sceneSelection = useMemo(() => {
+    if (surfaceInfo) return surface;
+    const key = selection[0];
+    if (key?.startsWith(thingKeyPrefix)) return key;
+    if (key?.startsWith(switchKeyPrefix)) {
+      const item = map.switches.find(
+        (entry) => `${switchKeyPrefix}${entry.id}` === key,
+      );
+      return item
+        ? surfaceKey({
+            kind: "wall",
+            sector: item.sector,
+            wall: wallKey(item.from, item.to),
+            part: "middle",
+          })
+        : null;
+    }
+    return activeSector
+      ? surfaceKey({ kind: "floor", sector: activeSector })
+      : null;
+  }, [activeSector, map.switches, selection, surface, surfaceInfo]);
+  const sceneInfo = useMemo(
+    () => describeSurface(map, sceneSelection),
+    [map, sceneSelection],
+  );
+  const parsedSurface = surface ? parseSurface(surface) : null;
+
   const selectSurface = (key: string | null) => {
     setSurface(key);
     // A thing placed in this same event isn't in this render's map yet.
@@ -227,9 +387,8 @@ function App() {
     }
   };
 
-  const scene = (width: number, height: number) => (
+  const scene = (
     <SceneCanvas
-      key={width}
       aria-label="3D view. Click a surface to select it. W, A, S and D walk, N and P step through surfaces."
       className="screen scene"
       map={map}
@@ -237,9 +396,10 @@ function App() {
       camera={camera}
       draftSource={drafts.subscribe}
       selected={surfaceInfo ? surface : null}
+      linked={sceneInfo ? sceneSelection : null}
       placing={tool === "thing" ? thingKind : null}
-      renderWidth={width}
-      renderHeight={height}
+      renderWidth={640}
+      renderHeight={400}
       onMapChange={(next) => commit(next)}
       onSelectedChange={selectSurface}
     />
@@ -249,8 +409,8 @@ function App() {
     <p className="scene-status" role="status">
       {tool === "thing"
         ? `Placing ${thingCatalog[thingKind].label}. Click a floor, or press Enter to place it ahead.`
-        : surfaceInfo
-          ? `${surfaceInfo.label}${surfaceInfo.texture ? ` · ${surfaceInfo.texture}` : ""}${surfaceInfo.height !== null ? ` · height ${surfaceInfo.height}` : ""}`
+        : sceneInfo
+          ? `${sceneInfo.label}${sceneInfo.texture ? ` · ${sceneInfo.texture}` : ""}${sceneInfo.height !== null ? ` · height ${sceneInfo.height}` : ""}`
           : "Click a floor, ceiling, wall or thing."}
     </p>
   );
@@ -294,7 +454,7 @@ function App() {
     setActiveSector(null);
     setSurface(null);
     setFileError(null);
-    setCamera({ position: startCamera(next), walked: false });
+    camera.reset(next);
     setMapVersion((version) => version + 1);
   };
 
@@ -374,16 +534,14 @@ function App() {
           <SegmentedControl
             aria-label="Main view"
             className="segments"
-            value={mainView}
-            onValueChange={(next) => {
-              setMainView(next as MainView);
-              if (next === "scene" && (tool === "draw" || tool === "switch")) {
-                setTool("select");
-              }
-            }}
+            value={visibleLayout}
+            onValueChange={(next) => changeLayout(next as ViewLayout)}
           >
             <SegmentedControlIndicator className="segments-indicator" />
             <SegmentedControlItem value="map">Map</SegmentedControlItem>
+            <SegmentedControlItem value="split" disabled={narrow}>
+              Split
+            </SegmentedControlItem>
             <SegmentedControlItem value="scene">3D</SegmentedControlItem>
           </SegmentedControl>
           <Toolbar aria-label="Map tools" className="toolbar">
@@ -397,14 +555,14 @@ function App() {
               <SegmentedControlItem value="select">Select</SegmentedControlItem>
               <SegmentedControlItem
                 value="draw"
-                disabled={mainView === "scene"}
+                disabled={visibleLayout === "scene"}
               >
                 Draw room
               </SegmentedControlItem>
               <SegmentedControlItem value="thing">Place</SegmentedControlItem>
               <SegmentedControlItem
                 value="switch"
-                disabled={mainView === "scene"}
+                disabled={visibleLayout === "scene"}
               >
                 Switch
               </SegmentedControlItem>
@@ -471,34 +629,115 @@ function App() {
         </header>
 
         <main className="workspace">
-          <section className="map-pane" aria-label="Top-down map">
-            <MapCanvas
-              key={mapVersion}
-              map={map}
-              tool={tool}
-              thingKind={thingKind}
-              activeSector={activeSector}
-              selection={selection}
-              onMapChange={(next) => commit(next)}
-              onToolChange={setTool}
-              onActiveSectorChange={(next) => {
-                setSurface(null);
-                setActiveSector(next);
+          <div className="views" data-layout={visibleLayout}>
+            <Resizable
+              className="views-group"
+              defaultLayout={initialLayout.sizes}
+              onLayoutCommit={(sizes) => {
+                splitSizes.current = sizes as number[];
+                saveLayout(layout, splitSizes.current);
               }}
-              onSelectionChange={(next) => {
-                setSurface(null);
-                setSelection(next);
-              }}
-              onDraftMapChange={(draft) => drafts.publish(draft)}
-            />
-            <p className="tool-hint">{toolHints[tool]}</p>
-            {mainView === "scene" ? (
-              <div className="scene-stage">
-                {scene(640, 400)}
-                {sceneStatus}
-              </div>
-            ) : null}
-          </section>
+            >
+              <ResizablePanel className="view-panel map-panel" minSize={25}>
+                <section
+                  className="pane map-pane"
+                  aria-label="Top-down map"
+                  data-pane="map"
+                  onPointerEnter={() => {
+                    hoveredPane.current = "map";
+                  }}
+                  onPointerMove={({ clientX, clientY, target }) => {
+                    mapPointer.current = (target as Element).closest(
+                      ".pane-actions, [data-map-control]",
+                    )
+                      ? null
+                      : { clientX, clientY };
+                  }}
+                  onPointerLeave={() => {
+                    hoveredPane.current = null;
+                    mapPointer.current = null;
+                  }}
+                >
+                  <div className="pane-actions">
+                    <button
+                      type="button"
+                      className="button"
+                      disabled={narrow}
+                      onClick={() => togglePane("map")}
+                    >
+                      {visibleLayout === "split"
+                        ? "Maximize map"
+                        : "Split view"}
+                    </button>
+                  </div>
+                  <MapCanvas
+                    key={mapVersion}
+                    map={map}
+                    tool={tool}
+                    thingKind={thingKind}
+                    activeSector={activeSector}
+                    selection={selection}
+                    onMapChange={(next) => commit(next)}
+                    onToolChange={setTool}
+                    onActiveSectorChange={setActiveSector}
+                    onSelectionChange={setSelection}
+                    onMapSelect={() => setSurface(null)}
+                    onDraftMapChange={(draft) => drafts.publish(draft)}
+                    camera={camera}
+                    highlightedWall={
+                      parsedSurface?.kind === "wall" ? parsedSurface.wall : null
+                    }
+                    findCameraRequest={findCameraRequest}
+                    lookAtRequest={lookAtRequest}
+                  />
+                  <p className="tool-hint">{toolHints[tool]}</p>
+                </section>
+              </ResizablePanel>
+              <ResizableHandle
+                className="view-handle"
+                aria-label="Resize map and 3D view"
+              />
+              <ResizablePanel className="view-panel scene-panel" minSize={25}>
+                <section
+                  className="pane scene-pane"
+                  aria-label="3D view"
+                  data-pane="scene"
+                  onPointerEnter={() => {
+                    hoveredPane.current = "scene";
+                  }}
+                  onPointerLeave={() => {
+                    hoveredPane.current = null;
+                  }}
+                >
+                  <div className="scene-frame">
+                    {visibleLayout === "map" ? null : scene}
+                  </div>
+                  <div className="scene-bar">
+                    {sceneStatus}
+                    <div className="scene-actions">
+                      <button
+                        type="button"
+                        className="button"
+                        onClick={findCameraOnMap}
+                      >
+                        Find on map
+                      </button>
+                      <button
+                        type="button"
+                        className="button"
+                        disabled={narrow}
+                        onClick={() => togglePane("scene")}
+                      >
+                        {visibleLayout === "split"
+                          ? "Maximize 3D"
+                          : "Split view"}
+                      </button>
+                    </div>
+                  </div>
+                </section>
+              </ResizablePanel>
+            </Resizable>
+          </div>
 
           <aside className="side">
             {fileError ? (
@@ -507,17 +746,6 @@ function App() {
                 <p>{fileError}</p>
               </section>
             ) : null}
-
-            <section aria-label="3D preview">
-              {mainView === "map" ? (
-                <>
-                  {scene(320, 200)}
-                  {sceneStatus}
-                </>
-              ) : (
-                <p className="muted">The 3D view is open in the main area.</p>
-              )}
-            </section>
 
             {issues.length > 0 ? (
               <section className="card issues" aria-label="Map problems">
