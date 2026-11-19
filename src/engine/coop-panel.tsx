@@ -11,6 +11,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { GameMap } from "../map/types";
 import { compileMap } from "../wad/compile";
+import { peerLinks, type LinkState, type PeerLinks } from "./peer-link";
 import { GameView, type CoopSession } from "./play-panel";
 import {
   hostPeer,
@@ -22,6 +23,7 @@ import {
   type GuestRoom,
   type HostRoom,
 } from "./room";
+import { socketTransport } from "./room-socket";
 
 const dialogClass =
   "fixed top-1/2 left-1/2 z-50 flex w-[440px] max-w-[calc(100vw-32px)] -translate-1/2 flex-col rounded-[4px] border border-border-strong bg-surface outline-none";
@@ -31,6 +33,26 @@ const maxPlayers = 4;
 // Woof's DISCONNECT packet. Handing it to the host's engine for a player who
 // left drops them at once, instead of after the engine's 30-second timeout.
 const disconnectPacket = new Uint8Array([0, 8]);
+// Without a room server, as in local development, rooms reach other tabs only.
+const roomsUrl = process.env.NEXT_PUBLIC_ROOMS_URL;
+
+function openTransport(roomId: string) {
+  return roomsUrl
+    ? socketTransport(`${roomsUrl}/rooms/${roomId}`)
+    : tabTransport(roomId);
+}
+
+const guestLinkLabels: Record<LinkState, string> = {
+  connecting: "Connecting to the host…",
+  direct: "Connected directly to the host",
+  relayed: "Connected through the game server",
+};
+
+const linkLabels: Record<LinkState, string> = {
+  connecting: "Connecting…",
+  direct: "Direct",
+  relayed: "Relayed",
+};
 
 // Player N appears at the Player N start, so the starts set how many can play.
 function coopPlayers(map: GameMap) {
@@ -64,7 +86,15 @@ function playerName(peer: number, self: number) {
   return `Player ${peer}${peer === self ? " (you)" : ""}`;
 }
 
-function PlayerList({ peers, self }: { peers: number[]; self: number }) {
+function PlayerList({
+  peers,
+  self,
+  links = {},
+}: {
+  peers: number[];
+  self: number;
+  links?: Record<number, LinkState>;
+}) {
   return (
     <ul className="m-0 grid list-none gap-1 p-0" aria-label="Players">
       {peers.map((peer) => (
@@ -73,9 +103,13 @@ function PlayerList({ peers, self }: { peers: number[]; self: number }) {
           className="flex items-center justify-between rounded-[3px] border border-border px-3 py-2 text-sm"
         >
           {playerName(peer, self)}
-          {peer === hostPeer ? (
-            <span className="font-mono text-[11px] text-fg-muted">Host</span>
-          ) : null}
+          <span className="font-mono text-[11px] text-fg-muted">
+            {peer === hostPeer
+              ? "Host"
+              : links[peer]
+                ? linkLabels[links[peer]]
+                : null}
+          </span>
         </li>
       ))}
     </ul>
@@ -102,24 +136,43 @@ function CoopLobby({
   const [roomId] = useState(newRoomId);
   const [peers, setPeers] = useState([hostPeer]);
   const [copied, setCopied] = useState(false);
+  const [links, setLinks] = useState<Record<number, LinkState>>({});
+  const [lost, setLost] = useState(false);
   const roomRef = useRef<HostRoom | null>(null);
+  const linksRef = useRef<PeerLinks | null>(null);
   const relayRef = useRef(packetRelay());
   const handedOff = useRef(false);
   const link = `${location.origin}/?join=${roomId}`;
 
   useEffect(() => {
+    const direct = peerLinks({
+      signal: (to, signal) => room.signal(to, signal),
+      onPacket: relayRef.current.deliver,
+      onState: (peer, state) =>
+        setLinks((current) => ({ ...current, [peer]: state })),
+    });
     const room = hostRoom(
-      tabTransport(roomId),
+      openTransport(roomId),
       { title, maxPlayers: coopPlayers(map) },
       {
         onRoster: setPeers,
-        onLeft: (peer) => relayRef.current.deliver(peer, disconnectPacket),
+        onLeft: (peer) => {
+          direct.close(peer);
+          relayRef.current.deliver(peer, disconnectPacket);
+        },
         onPacket: relayRef.current.deliver,
+        onSignal: (from, signal) => void direct.handle(from, signal),
+        onDropped: () => {
+          if (!handedOff.current) setLost(true);
+        },
       },
     );
     roomRef.current = room;
+    linksRef.current = direct;
     return () => {
-      if (!handedOff.current) room.close();
+      if (handedOff.current) return;
+      direct.closeAll();
+      room.close();
     };
   }, [roomId, title, map]);
 
@@ -129,7 +182,8 @@ function CoopLobby({
 
   const start = () => {
     const room = roomRef.current;
-    if (!room) return;
+    const direct = linksRef.current;
+    if (!room || !direct) return;
     const wad = compileMap(map);
     const game: CoopGame = { map, wad, title, slot, par };
     handedOff.current = true;
@@ -138,7 +192,9 @@ function CoopLobby({
       session: {
         role: "host",
         wad,
-        send: room.send,
+        send: (to, data) => {
+          if (!direct.send(to, data)) room.send(to, data);
+        },
         listen: relayRef.current.listen,
         players: () => room.peers().length,
         // Guests connect to the host's engine, so they start once it runs.
@@ -148,7 +204,10 @@ function CoopLobby({
           room.start(game);
         },
       },
-      close: room.close,
+      close: () => {
+        direct.closeAll();
+        room.close();
+      },
     });
   };
 
@@ -172,8 +231,11 @@ function CoopLobby({
         </header>
         <div className="grid gap-4 p-5">
           <DialogDescription className="m-0 text-sm text-fg-muted">
-            Open this link in another tab of this browser to join. Up to{" "}
-            {coopPlayers(map)} players can play, one for each player start.
+            {roomsUrl
+              ? "Send this link to the other players."
+              : "Open this link in another tab of this browser to join."}{" "}
+            Up to {coopPlayers(map)} players can play, one for each player
+            start.
           </DialogDescription>
           <div className="flex gap-2">
             <input
@@ -192,7 +254,12 @@ function CoopLobby({
               {copied ? "Copied" : "Copy"}
             </button>
           </div>
-          <PlayerList peers={peers} self={hostPeer} />
+          <PlayerList peers={peers} self={hostPeer} links={links} />
+          {lost ? (
+            <p className="notice m-0" role="alert">
+              Lost the connection to the game server. Close this and try again.
+            </p>
+          ) : null}
         </div>
         <footer className="flex items-center justify-between gap-3 border-t border-border px-5 py-3">
           <span className="text-xs text-fg-muted" role="status">
@@ -203,7 +270,7 @@ function CoopLobby({
           <button
             type="button"
             className="button primary"
-            disabled={peers.length < 2}
+            disabled={peers.length < 2 || lost}
             onClick={start}
           >
             Start
@@ -216,7 +283,13 @@ function CoopLobby({
 
 type JoinState =
   | { step: "joining"; slow: boolean }
-  | { step: "waiting"; peer: number; title: string; peers: number[] }
+  | {
+      step: "waiting";
+      peer: number;
+      title: string;
+      peers: number[];
+      link: LinkState | null;
+    }
   | { step: "playing"; peer: number; game: CoopGame }
   | { step: "ended"; message: string };
 
@@ -228,6 +301,7 @@ function CoopJoin({ roomId }: { roomId: string }) {
     slow: false,
   });
   const roomRef = useRef<GuestRoom | null>(null);
+  const linksRef = useRef<PeerLinks | null>(null);
   const relayRef = useRef(packetRelay());
   const [session, setSession] = useState<CoopSession | null>(null);
 
@@ -242,10 +316,25 @@ function CoopJoin({ roomId }: { roomId: string }) {
         ),
       slowJoinMs,
     );
-    const room = joinRoom(tabTransport(roomId), {
+    const direct = peerLinks({
+      signal: (to, signal) => room.signal(to, signal),
+      onPacket: relayRef.current.deliver,
+      onState: (_peer, link) =>
+        setState((current) =>
+          current.step === "waiting" ? { ...current, link } : current,
+        ),
+    });
+    const room = joinRoom(openTransport(roomId), {
       onJoined: (joined, title) => {
         peer = joined;
-        setState({ step: "waiting", peer: joined, title, peers: [] });
+        setState({
+          step: "waiting",
+          peer: joined,
+          title,
+          peers: [],
+          link: null,
+        });
+        void direct.connect(hostPeer);
       },
       onRefused: (reason) => setState({ step: "ended", message: reason }),
       onRoster: (peers) =>
@@ -254,24 +343,33 @@ function CoopJoin({ roomId }: { roomId: string }) {
         ),
       onStart: (game) => setState({ step: "playing", peer, game }),
       onPacket: relayRef.current.deliver,
-      onClosed: () =>
-        setState({ step: "ended", message: "The host ended the game." }),
+      onSignal: (from, signal) => void direct.handle(from, signal),
+      onClosed: (message) => {
+        direct.closeAll();
+        setState({ step: "ended", message });
+      },
     });
     roomRef.current = room;
+    linksRef.current = direct;
     setSession({
       role: "guest",
       wad: new Uint8Array(0),
-      send: room.send,
+      send: (to, data) => {
+        if (!direct.send(to, data)) room.send(to, data);
+      },
       listen: relayRef.current.listen,
       players: () => 0,
       onServerReady: () => {},
     });
-    const leave = () => room.leave();
+    const leave = () => {
+      direct.closeAll();
+      room.leave();
+    };
     window.addEventListener("pagehide", leave);
     return () => {
       clearTimeout(slow);
       window.removeEventListener("pagehide", leave);
-      room.leave();
+      leave();
     };
   }, [roomId]);
 
@@ -292,6 +390,7 @@ function CoopJoin({ roomId }: { roomId: string }) {
         coop={playing}
         onExit={() => {
           roomRef.current?.leave();
+          linksRef.current?.closeAll();
           setState({ step: "ended", message: "You left the game." });
         }}
         onAddNote={() => {}}
@@ -308,9 +407,11 @@ function CoopJoin({ roomId }: { roomId: string }) {
         </h1>
         {state.step === "joining" ? (
           <p className="m-0 text-sm text-fg-muted" role="status">
-            {state.slow
-              ? "Still looking for the host. The host's tab has to stay open in this browser."
-              : "Joining the game…"}
+            {!state.slow
+              ? "Joining the game…"
+              : roomsUrl
+                ? "Still looking for the host. The host has to keep the co-op lobby open."
+                : "Still looking for the host. The host's tab has to stay open in this browser."}
           </p>
         ) : null}
         {state.step === "waiting" ? (
@@ -319,6 +420,11 @@ function CoopJoin({ roomId }: { roomId: string }) {
               You're Player {state.peer}. Waiting for the host to start.
             </p>
             <PlayerList peers={state.peers} self={state.peer} />
+            {state.link ? (
+              <p className="m-0 font-mono text-[11px] text-fg-muted">
+                {guestLinkLabels[state.link]}
+              </p>
+            ) : null}
           </>
         ) : null}
         {state.step === "ended" ? (

@@ -24,6 +24,7 @@ function createHub() {
       listen: (handler) => {
         member.handler = handler;
       },
+      identify: () => {},
       close: () => {
         members.delete(member);
       },
@@ -41,6 +42,7 @@ function guestEvents() {
     onRoster: vi.fn(),
     onStart: vi.fn(),
     onPacket: vi.fn(),
+    onSignal: vi.fn(),
     onClosed: vi.fn(),
   };
 }
@@ -60,7 +62,13 @@ describe("co-op room", () => {
     hostRoom(
       hub.transport(),
       { title: "Starter map", maxPlayers: 3 },
-      { onRoster, onLeft: vi.fn(), onPacket: vi.fn() },
+      {
+        onRoster,
+        onLeft: vi.fn(),
+        onPacket: vi.fn(),
+        onSignal: vi.fn(),
+        onDropped: vi.fn(),
+      },
     );
     const first = guestEvents();
     const second = guestEvents();
@@ -79,7 +87,13 @@ describe("co-op room", () => {
     const host = hostRoom(
       hub.transport(),
       { title: "Map", maxPlayers: 2 },
-      { onRoster: vi.fn(), onLeft: vi.fn(), onPacket: vi.fn() },
+      {
+        onRoster: vi.fn(),
+        onLeft: vi.fn(),
+        onPacket: vi.fn(),
+        onSignal: vi.fn(),
+        onDropped: vi.fn(),
+      },
     );
     joinRoom(hub.transport(), guestEvents());
     await settle();
@@ -97,7 +111,13 @@ describe("co-op room", () => {
     hostRoom(
       hub.transport(),
       { title: "Map", maxPlayers: 2 },
-      { onRoster, onLeft, onPacket: vi.fn() },
+      {
+        onRoster,
+        onLeft,
+        onPacket: vi.fn(),
+        onSignal: vi.fn(),
+        onDropped: vi.fn(),
+      },
     );
     const guest = joinRoom(hub.transport(), guestEvents());
     await settle();
@@ -117,7 +137,13 @@ describe("co-op room", () => {
     const host = hostRoom(
       hub.transport(),
       { title: "Map", maxPlayers: 3 },
-      { onRoster: vi.fn(), onLeft: vi.fn(), onPacket },
+      {
+        onRoster: vi.fn(),
+        onLeft: vi.fn(),
+        onPacket,
+        onSignal: vi.fn(),
+        onDropped: vi.fn(),
+      },
     );
     const first = guestEvents();
     const second = guestEvents();
@@ -138,7 +164,13 @@ describe("co-op room", () => {
     const host = hostRoom(
       hub.transport(),
       { title: "Map", maxPlayers: 2 },
-      { onRoster: vi.fn(), onLeft: vi.fn(), onPacket: vi.fn() },
+      {
+        onRoster: vi.fn(),
+        onLeft: vi.fn(),
+        onPacket: vi.fn(),
+        onSignal: vi.fn(),
+        onDropped: vi.fn(),
+      },
     );
     const guest = guestEvents();
     joinRoom(hub.transport(), guest);
@@ -154,6 +186,54 @@ describe("co-op room", () => {
     );
     host.close();
     await settle();
-    expect(guest.onClosed).toHaveBeenCalled();
+    expect(guest.onClosed).toHaveBeenCalledWith("The host ended the game.");
+  });
+
+  it("passes WebRTC setup between a guest and the host", async () => {
+    const hub = createHub();
+    const onSignal = vi.fn();
+    const host = hostRoom(
+      hub.transport(),
+      { title: "Map", maxPlayers: 2 },
+      {
+        onRoster: vi.fn(),
+        onLeft: vi.fn(),
+        onPacket: vi.fn(),
+        onSignal,
+        onDropped: vi.fn(),
+      },
+    );
+    const events = guestEvents();
+    const guest = joinRoom(hub.transport(), events);
+    await settle();
+    guest.signal(1, { description: { type: "offer", sdp: "offer" } });
+    host.signal(2, { description: { type: "answer", sdp: "answer" } });
+    await settle();
+    expect(onSignal).toHaveBeenCalledWith(2, {
+      description: { type: "offer", sdp: "offer" },
+    });
+    expect(events.onSignal).toHaveBeenCalledWith(1, {
+      description: { type: "answer", sdp: "answer" },
+    });
+  });
+
+  it("tells a guest when its connection to the room drops", async () => {
+    let deliver: (message: RoomMessage) => void = () => {};
+    const events = guestEvents();
+    joinRoom(
+      {
+        post: () => {},
+        listen: (handler) => {
+          deliver = handler;
+        },
+        identify: () => {},
+        close: () => {},
+      },
+      events,
+    );
+    deliver({ type: "dropped" });
+    expect(events.onClosed).toHaveBeenCalledWith(
+      "Lost the connection to the game.",
+    );
   });
 });
