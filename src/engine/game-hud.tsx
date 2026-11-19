@@ -20,6 +20,7 @@ import { useState, type ReactNode } from "react";
 
 import { MapOutline } from "../editor/map-outline";
 import type { GameMap } from "../map/types";
+import type { MouseMode } from "./mouse-capture";
 import { maxVolume, type GameStatus } from "./runtime";
 
 type SoundSettings = { volume: number; muted: boolean };
@@ -140,6 +141,7 @@ function GameHud({
   fullscreen,
   showHelp,
   noteOpen,
+  mouseMode,
   noteSaved,
   finished,
   audioUnavailable,
@@ -161,6 +163,7 @@ function GameHud({
   fullscreen: boolean;
   showHelp: boolean;
   noteOpen: boolean;
+  mouseMode: MouseMode;
   noteSaved: boolean;
   finished: boolean;
   audioUnavailable: boolean;
@@ -288,6 +291,11 @@ function GameHud({
             Sound needs HTTPS or localhost.
           </p>
         ) : null}
+        {mouseMode === "denied" ? (
+          <p className="px-3 pb-2 text-xs text-fg-muted">
+            This browser won't capture the mouse. Clicking fires.
+          </p>
+        ) : null}
       </aside>
       {finished && status ? (
         <section
@@ -309,9 +317,25 @@ function GameHud({
           </div>
         </section>
       ) : null}
-      {showHelp && !finished ? (
+      {mouseMode === "released" && !finished && !noteOpen ? (
+        <section
+          aria-label="Paused"
+          className="absolute top-1/2 left-1/2 grid w-[min(320px,calc(100%-32px))] -translate-1/2 gap-1 rounded-[3px] border border-border-strong bg-surface/90 p-4 text-center"
+        >
+          <h2 className="m-0 text-xl font-semibold">Paused</h2>
+          <p role="status" className="m-0 text-fg-soft">
+            Click the game to capture the mouse and carry on.
+          </p>
+          <p className="m-0 font-mono text-xs text-fg-muted">
+            {fullscreen ? "Esc leaves fullscreen" : "Esc returns to the editor"}
+          </p>
+        </section>
+      ) : null}
+      {showHelp && !finished && mouseMode !== "released" ? (
         <p className="absolute inset-x-4 bottom-24 m-0 text-center text-xs text-fg-soft">
-          WASD move · ←→ turn · Space fire · E use · Shift run · Tab automap
+          {mouseMode === "locked"
+            ? "Mouse turn · Left click fire · WASD move · E use · Shift run · Tab automap · Esc release mouse"
+            : `${mouseMode === "denied" ? "" : "Click to use the mouse · "}WASD move · ←→ turn · Space fire · E use · Shift run · Tab automap`}
         </p>
       ) : null}
       {noteSaved ? (

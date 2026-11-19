@@ -4,7 +4,7 @@ A Doom map editor for the browser, built with [Next.js](https://nextjs.org), [Ta
 
 ## Setup
 
-You need Node, pnpm, [Emscripten](https://emscripten.org), autoconf, automake and pkg-config.
+You need Node, pnpm, [Emscripten](https://emscripten.org), git, curl and unzip.
 
 ```bash
 pnpm install
@@ -12,7 +12,7 @@ pnpm setup:engine
 pnpm dev
 ```
 
-`setup:engine` compiles [Chocolate Doom](https://www.chocolate-doom.org) from [cloudflare/doom-wasm](https://github.com/cloudflare/doom-wasm) to WebAssembly and downloads [Freedoom](https://freedoom.github.io/) into `public/engine`.
+`setup:engine` compiles a pinned commit of [Woof](https://github.com/fabiangreffrath/woof) to WebAssembly with the changes in `engine/woof.patch`, and downloads a checksummed [Freedoom](https://freedoom.github.io/) release into `public/engine`.
 
 Set `NEXT_PUBLIC_SITE_URL` to the full public URL, including `https://`, when deploying outside Vercel, so social previews use the right image URLs.
 
@@ -29,7 +29,7 @@ Maps save per browser address. The dev server now uses `localhost:3000`, so a ma
 - **Views:** switch between **Map**, **Split** and **3D**. Drag the divider, or press M to maximize the view under the pointer and return to Split. In Map view, the player view stays docked in the corner.
 - **Camera:** drag the camera marker on the map, double-click the map or press C to move the 3D view, and use **Find camera** to center the map on it.
 - **3D:** click a floor, ceiling, wall, door, switch or thing to select it. Drag floors and ceilings to change height, or pick a texture in the side panel. Choose **Place** to put the chosen thing on a floor, and drag things to move them. Walk with WASD, step through surfaces with N and P, nudge heights with Page Up and Page Down, and nudge a selected thing with Alt and the arrow keys.
-- **Play:** builds a WAD and opens it full size, with sound effects, music and a volume control. Move with WASD, turn with the arrow keys, fire with Space and use with E.
+- **Play:** builds a WAD and opens it full size in vanilla Doom mode at 60 frames a second, with sound effects, music and a volume control. Click the game to capture the mouse, then move it to turn and click to fire. Move with WASD, turn with the arrow keys, fire with Space and use with E. Esc releases the mouse and pauses, and a second Esc returns to the editor.
 
 Your map saves in this browser as you edit. Use **File** to start a new map, save a map file, open one again, or download a WAD.
 
@@ -37,4 +37,4 @@ Your map saves in this browser as you edit. Use **File** to start a new map, sav
 
 ## License
 
-The engine is GPL-2.0 and Freedoom is BSD-licensed. Neither is committed here. Anything that distributes the compiled engine has to meet the GPL's terms.
+Woof is GPL-2.0 and Freedoom is BSD-licensed. Neither is committed here. `setup:engine` writes their licenses to `public/engine`, and `public/engine/licenses` holds the notices for everything else linked into the engine, including SDL3, Emscripten's runtime, musl, miniz, spng, yyjson and Nuked OPL3. Anything that distributes the compiled engine has to meet the GPL's terms, including offering the matching source: the pinned Woof commit plus `engine/woof.patch`.

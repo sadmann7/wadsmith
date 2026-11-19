@@ -16,10 +16,19 @@ import {
 import { starterMap } from "../map/starter-map";
 import type { GameMap, LineAction } from "../map/types";
 import { compileMap } from "../wad/compile";
-import { doomKeys, startDoom, type CreateDoom, type DoomGame } from "./runtime";
+import {
+  doomKeys,
+  keysByCode,
+  screenHeight,
+  screenWidth,
+  startDoom,
+  type CreateDoom,
+  type DoomGame,
+  type GameEvents,
+} from "./runtime";
 
 const engineDirectory = resolve(import.meta.dirname, "../../public/engine");
-const ready = existsSync(resolve(engineDirectory, "websockets-doom.js"));
+const ready = existsSync(resolve(engineDirectory, "woof.js"));
 
 const running: DoomGame[] = [];
 
@@ -27,19 +36,25 @@ afterEach(() => {
   for (const game of running.splice(0)) game.stop();
 });
 
-async function launch(map: GameMap) {
-  const url = pathToFileURL(
-    resolve(engineDirectory, "websockets-doom.js"),
-  ).href;
+const engineWarnings: string[] = [];
+
+async function launch(
+  map: GameMap,
+  sampleRate: number | null = null,
+  events?: GameEvents,
+) {
+  const url = pathToFileURL(resolve(engineDirectory, "woof.js")).href;
   const { default: createDoom } = (await import(/* @vite-ignore */ url)) as {
     default: CreateDoom;
   };
   const game = await startDoom({
     createDoom,
     iwad: readFileSync(resolve(engineDirectory, "freedoom2.wad")),
+    base: readFileSync(resolve(engineDirectory, "woof.pk3")),
     map: compileMap(map),
-    options: { print: () => {}, printErr: () => {} },
-    sound: false,
+    options: { print: () => {}, printErr: (line) => engineWarnings.push(line) },
+    events,
+    sampleRate,
   });
   running.push(game);
   return game;
@@ -84,6 +99,19 @@ async function pressUse(game: DoomGame) {
   game.key(true, doomKeys.use);
   await play(game, 150);
   game.key(false, doomKeys.use);
+}
+
+async function holdKey(game: DoomGame, code: string, ms = 400) {
+  const key = keysByCode[code];
+  game.key(true, key);
+  await play(game, ms);
+  game.key(false, key);
+  await play(game, 500);
+}
+
+// Fixed-point rounding can nudge the other axis by a map unit.
+function moveDirection(moved: number) {
+  return Math.abs(moved) < 8 ? 0 : Math.sign(moved);
 }
 
 describe.skipIf(!ready)("generated map in the engine", () => {
@@ -261,6 +289,241 @@ describe.skipIf(!ready)("generated map in the engine", () => {
     await waitForPlay(fewer);
     expect(fewer.status().totalKills).toBe(total - 1);
   }, 40_000);
+
+  it("turns the player with the mouse", async () => {
+    const game = await launch(openMap);
+    await waitForPlay(game);
+    const { angle, x, y } = game.status();
+    for (let step = 0; step < 20; step += 1) {
+      game.turn(40);
+      await play(game, 30);
+    }
+    await play(game, 200);
+    const status = game.status();
+    const turned = (angle - status.angle + 360) % 360;
+    expect(turned).toBeGreaterThan(90);
+    expect(turned).toBeLessThan(120);
+    expect(status.x).toBe(x);
+    expect(status.y).toBe(y);
+  }, 30_000);
+
+  it.each([60, 75, 90, 120, 144, 165, 240, 360])(
+    "paces frames and game time on a %i Hz display",
+    async (hertz) => {
+      let frames = 0;
+      const game = await launch(openMap, null, {
+        onFrame: () => {
+          frames += 1;
+        },
+      });
+      await waitForPlay(game);
+      frames = 0;
+      const startTic = game.gameTic();
+      const start = performance.now();
+      let refresh = start;
+      while (performance.now() - start < 2000) {
+        refresh += 1000 / hertz;
+        game.syncToDisplay();
+        await play(game, Math.max(0, refresh - performance.now()));
+      }
+      const seconds = (performance.now() - start) / 1000;
+      expect(frames / seconds).toBeGreaterThan(50);
+      expect(frames / seconds).toBeLessThan(62);
+      expect((game.gameTic() - startTic) / seconds).toBeGreaterThan(33);
+      expect((game.gameTic() - startTic) / seconds).toBeLessThan(37);
+    },
+    20_000,
+  );
+
+  it.each([
+    ["KeyW", 1, 0],
+    ["ArrowUp", 1, 0],
+    ["KeyS", -1, 0],
+    ["ArrowDown", -1, 0],
+    ["KeyA", 0, 1],
+    ["KeyD", 0, -1],
+  ])(
+    "moves the player with %s",
+    async (code, forward, side) => {
+      const game = await launch(playerAt(openMap, 192, 160, 0));
+      await waitForPlay(game);
+      const before = game.status();
+      await holdKey(game, code);
+      const after = game.status();
+
+      expect(moveDirection(after.x - before.x)).toBe(forward);
+      expect(moveDirection(after.y - before.y)).toBe(side);
+    },
+    20_000,
+  );
+
+  it.each([
+    ["ArrowLeft", 1],
+    ["ArrowRight", -1],
+  ])(
+    "turns the player with %s",
+    async (code, direction) => {
+      const game = await launch(openMap);
+      await waitForPlay(game);
+      await holdKey(game, code);
+      const turned = ((game.status().angle + 180) % 360) - 180;
+      expect(Math.sign(turned)).toBe(direction);
+    },
+    20_000,
+  );
+
+  it.each(["ShiftLeft", "ShiftRight"])(
+    "runs with %s",
+    async (code) => {
+      const distance = async (run: boolean) => {
+        const game = await launch(playerAt(openMap, 192, 160, 0));
+        await waitForPlay(game);
+        const { x } = game.status();
+        if (run) game.key(true, keysByCode[code]);
+        game.key(true, keysByCode.KeyW);
+        await play(game, 350);
+        const moved = game.status().x - x;
+        game.stop();
+        return moved;
+      };
+      expect(await distance(true)).toBeGreaterThan(
+        (await distance(false)) * 1.5,
+      );
+    },
+    30_000,
+  );
+
+  it.each(["Space", "ControlLeft", "ControlRight"])(
+    "fires with %s",
+    async (code) => {
+      const game = await launch(openMap);
+      await waitForPlay(game);
+      await holdKey(game, code);
+      expect(game.status().ammo).toBeLessThan(50);
+    },
+    20_000,
+  );
+
+  it("uses a door with KeyE", async () => {
+    const door = starterMap.sectors[doorIndex].door!;
+    const map = playerAt(
+      setRoomDoor(starterMap, "sector-4", { ...door, opensBy: "use" }),
+      450,
+      160,
+      0,
+    );
+    const game = await launch({ ...map, switches: [] });
+    await waitForPlay(game);
+    await holdKey(game, "KeyE", 150);
+    await play(game, 2000, () => game.sectorCeiling(doorIndex) === 92);
+    expect(game.sectorCeiling(doorIndex)).toBe(92);
+  }, 20_000);
+
+  it("opens the automap with Tab", async () => {
+    const game = await launch(openMap);
+    await waitForPlay(game);
+    const darkShare = () => {
+      const pixels = game.frame();
+      let dark = 0;
+      for (let index = 0; index < pixels.length; index += 4) {
+        if (pixels[index] + pixels[index + 1] + pixels[index + 2] < 12) {
+          dark += 1;
+        }
+      }
+      return dark / (screenWidth * screenHeight);
+    };
+    expect(darkShare()).toBeLessThan(0.5);
+    await holdKey(game, "Tab", 80);
+    expect(darkShare()).toBeGreaterThan(0.5);
+  }, 20_000);
+
+  it("selects weapons with the number keys", async () => {
+    const armed = ["shotgun", "chaingun"].reduce(
+      (map, kind, index) =>
+        addThing(map, kind as "shotgun", { x: 224 + index * 32, y: 160 }).map,
+      playerAt(openMap, 192, 160, 0),
+    );
+    const game = await launch(armed);
+    await waitForPlay(game);
+    game.key(true, keysByCode.KeyW);
+    await play(game, 900);
+    game.key(false, keysByCode.KeyW);
+    const select = async (code: string, ammoType: number) => {
+      await holdKey(game, code, 80);
+      await play(game, 2500, () => game.status().ammoType === ammoType);
+      expect(game.status().ammoType).toBe(ammoType);
+    };
+    const noAmmo = 5;
+    await select("Digit1", noAmmo);
+    await select("Digit2", 0);
+    await select("Digit3", 1);
+    await select("Digit1", noAmmo);
+    await select("Digit4", 0);
+  }, 30_000);
+
+  it("plays with classic Doom rules and rendering", async () => {
+    engineWarnings.length = 0;
+    const game = await launch(openMap);
+    await waitForPlay(game);
+    expect(engineWarnings.join("\n")).not.toContain("Unknown config key");
+    expect(game.classicMode()).toEqual({ strict: true, demoVersion: 109 });
+    for (const [name, value] of Object.entries({
+      translucency: 0,
+      fuzzmode: 0,
+      flipcorpses: 0,
+      colored_blood: 0,
+      voxels_rendering: 0,
+      invul_mode: 0,
+      extra_level_brightness: 0,
+      flashing_hom: 0,
+      weapon_recoil: 0,
+      weapon_recoilpitch: 0,
+      center_weapon: 0,
+      weapon_bobbing_pct: 4,
+      view_bobbing_pct: 4,
+      autorun: 0,
+      autostrafe50: 0,
+      freelook: 0,
+      novert: 1,
+      hud_crosshair: 0,
+      hud_secret_message: 0,
+      show_obituary_messages: 0,
+      weapon_carousel: 0,
+      pitched_sounds: 0,
+      snd_channels: 8,
+      emu_missedbackside: 0,
+    })) {
+      expect([name, game.setting(name)]).toEqual([name, value]);
+    }
+  }, 20_000);
+
+  it("keeps game time at 35 tics a second", async () => {
+    const game = await launch(openMap);
+    await waitForPlay(game);
+    const startTic = game.gameTic();
+    const start = performance.now();
+    await play(game, 2000);
+    const rate =
+      (game.gameTic() - startTic) / ((performance.now() - start) / 1000);
+    expect(rate).toBeGreaterThan(33);
+    expect(rate).toBeLessThan(37);
+  }, 30_000);
+
+  it("keeps combined sound below full scale", async () => {
+    const game = await launch(openMap, 48_000);
+    await waitForPlay(game);
+    game.setSound(15, false);
+    game.key(true, doomKeys.fire);
+    let peak = 0;
+    for (let block = 0; block < 400; block += 1) {
+      for (const channel of game.audio(512)) {
+        for (const sample of channel) peak = Math.max(peak, Math.abs(sample));
+      }
+      await play(game, 5);
+    }
+    expect(peak).toBeGreaterThan(0.05);
+    expect(peak).toBeLessThanOrEqual(1);
+  }, 30_000);
 
   it("reports the run for the playtest HUD", async () => {
     const map = playerAt(openMap, 96, 160, 90);

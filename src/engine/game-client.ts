@@ -73,6 +73,8 @@ function startGameClient(options: GameClientOptions) {
   let stopped = false;
   let sound = options.sound;
   let held = false;
+  let pendingFrame: ArrayBuffer | null = null;
+  let frameRequest = 0;
 
   const sendPause = () =>
     send({ type: "pause", paused: document.hidden || held });
@@ -87,8 +89,23 @@ function startGameClient(options: GameClientOptions) {
     if (stopped) return;
     stopped = true;
     document.removeEventListener("visibilitychange", onVisibilityChange);
+    cancelAnimationFrame(frameRequest);
     worker.terminate();
     void audio.close();
+  };
+
+  const recycle = (buffer: ArrayBuffer) =>
+    send({ type: "recycle", buffer }, [buffer]);
+
+  // A frame that arrives before the last one was shown simply replaces it.
+  const onDisplayFrame = () => {
+    frameRequest = requestAnimationFrame(onDisplayFrame);
+    send({ type: "display" });
+    if (!pendingFrame) return;
+    const buffer = pendingFrame;
+    pendingFrame = null;
+    options.onFrame(new Uint8ClampedArray(buffer));
+    recycle(buffer);
   };
 
   const fail = (message: string) => {
@@ -102,9 +119,9 @@ function startGameClient(options: GameClientOptions) {
     (event: MessageEvent<DoomWorkerResponse>) => {
       const message = event.data;
       if (message.type === "frame") {
-        options.onFrame(new Uint8ClampedArray(message.buffer));
+        if (pendingFrame) recycle(pendingFrame);
+        pendingFrame = message.buffer;
         if (message.status) options.onStatus(message.status);
-        send({ type: "recycle", buffer: message.buffer }, [message.buffer]);
       } else if (message.type === "exit") {
         stop();
         options.onExit();
@@ -154,8 +171,8 @@ function startGameClient(options: GameClientOptions) {
     send(
       {
         type: "start",
-        engineUrl: new URL(`${engineBase}websockets-doom.js`, location.href)
-          .href,
+        engineUrl: new URL(`${engineBase}woof.js`, location.href).href,
+        baseUrl: new URL(`${engineBase}woof.pk3`, location.href).href,
         iwad: options.iwad,
         map: options.map,
         sound,
@@ -167,9 +184,11 @@ function startGameClient(options: GameClientOptions) {
     );
   };
   void start();
+  frameRequest = requestAnimationFrame(onDisplayFrame);
 
   return {
     key: (pressed: boolean, key: number) => send({ type: "key", pressed, key }),
+    turn: (amount: number) => send({ type: "turn", amount }),
     setSound: (next: SoundLevel) => {
       sound = next;
       send({ type: "sound", sound: next });
