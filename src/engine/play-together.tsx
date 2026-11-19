@@ -538,6 +538,8 @@ function PlayTogether({
         listen: relayRef.current.listen,
         players: () => room.players().length,
         roster: () => room.players(),
+        announceStall: room.stall,
+        listenStall: () => {},
         // Guests connect to the host's engine, so they start once it runs.
         onServerReady: () => {
           if (announced) return;

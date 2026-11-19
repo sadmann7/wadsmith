@@ -44,6 +44,9 @@ const noteMessageMs = 2000;
 // Escape can reach the page just after it released the pointer.
 const escapeGraceMs = 300;
 const mouseFireSource = "mouse";
+// Doom's netcode holds the level while it waits for a player's moves. A short
+// hold is normal; one this long is worth naming.
+const stallMs = 1000;
 
 function loadSound(): SoundSettings {
   try {
@@ -100,6 +103,8 @@ type CoopSession = {
   listen: (receive: (from: number, data: Uint8Array) => void) => void;
   players: () => number;
   roster: () => RoomPlayer[];
+  announceStall: (peers: number[]) => void;
+  listenStall: (receive: (peers: number[]) => void) => void;
   onServerReady: () => void;
 };
 
@@ -182,6 +187,10 @@ function GameSession({
   const [finished, setFinished] = useState(false);
   const [network, setNetwork] = useState<NetworkState | null>(null);
   const [scoresOpen, setScoresOpen] = useState(false);
+  const [stall, setStall] = useState<{ peers: number[]; since: number }>({
+    peers: [],
+    since: 0,
+  });
   const [capture, updateCapture] = useReducer(
     nextMouseCapture,
     initialMouseCapture,
@@ -221,6 +230,16 @@ function GameSession({
     let launched = false;
     // Woof can show the level for a moment before its network game starts.
     let netStarted = !coop;
+    let lastTics = -1;
+    let ticsChangedAt = performance.now();
+    let stalled: number[] = [];
+    const showStall = (peers: number[]) =>
+      setStall((current) =>
+        current.peers.join() === peers.join()
+          ? current
+          : { peers, since: Date.now() },
+      );
+    coop?.listenStall(showStall);
 
     loadIwad()
       .then((iwad) => {
@@ -238,6 +257,10 @@ function GameSession({
             context.putImageData(new ImageData(pixels, width, height), 0, 0),
           // The WAD holds one map, so leaving it would load an unrelated level.
           onStatus: (next) => {
+            if (next.tics !== lastTics) {
+              lastTics = next.tics;
+              ticsChangedAt = performance.now();
+            }
             if (next.inLevel && netStarted) reachedLevel = true;
             if (reachedLevel && !next.inLevel) {
               client?.stop();
@@ -263,6 +286,17 @@ function GameSession({
                   setNetwork(state);
                   if (state.playersInGame > 1) netStarted = true;
                   if (coop.role !== "host") return;
+                  const frozen = performance.now() - ticsChangedAt > stallMs;
+                  const lagging = frozen
+                    ? state.scores
+                        .filter((score) => state.lagging & (1 << score.slot))
+                        .map((score) => score.peer)
+                    : [];
+                  if (lagging.join() !== stalled.join()) {
+                    stalled = lagging;
+                    showStall(lagging);
+                    coop.announceStall(lagging);
+                  }
                   if (!serverReady) {
                     serverReady = true;
                     coop.onServerReady();
@@ -490,6 +524,21 @@ function GameSession({
           scores={
             coop && network && scoresOpen ? scoreRows(coop, network) : null
           }
+          others={
+            coop && network
+              ? network.scores.filter((score) => score.peer !== coop.peer)
+              : []
+          }
+          stall={
+            coop && stall.peers.length > 0
+              ? {
+                  names: stall.peers.map((peer) =>
+                    peer === coop.peer ? "you" : nameOf(coop, peer),
+                  ),
+                  since: stall.since,
+                }
+              : null
+          }
           exit={gameExits[coop?.role === "guest" ? "leave" : exit]}
           canEdit={canEdit}
           noteOpen={noteSpot !== null}
@@ -614,13 +663,20 @@ function GameSession({
   );
 }
 
+function nameOf(coop: CoopSession, peer: number) {
+  return (
+    coop.roster().find((player) => player.peer === peer)?.name ??
+    `Player ${peer}`
+  );
+}
+
 function scoreRows(coop: CoopSession, network: NetworkState): ScoreRow[] {
   const roster = coop.roster();
   return network.scores.map((score) => {
     const player = roster.find((entry) => entry.peer === score.peer);
     return {
       ...score,
-      name: player?.name ?? `Player ${score.peer}`,
+      name: nameOf(coop, score.peer),
       host: score.peer === hostPeer,
       you: score.peer === coop.peer,
       ping: score.peer === hostPeer ? null : (player?.ping ?? null),

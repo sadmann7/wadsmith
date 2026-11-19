@@ -60,6 +60,7 @@ type DoomModule = {
   _wadsmith_net_player_kills(player: number): number;
   _wadsmith_net_player_items(player: number): number;
   _wadsmith_net_player_secrets(player: number): number;
+  _wadsmith_net_lagging_players(): number;
 };
 
 type DoomModuleOptions = {
@@ -370,8 +371,12 @@ class DoomGame {
           kills: module._wadsmith_net_player_kills(slot),
           items: module._wadsmith_net_player_items(slot),
           secrets: module._wadsmith_net_player_secrets(slot),
+          x: module._wadsmith_net_player_x(slot),
+          y: module._wadsmith_net_player_y(slot),
         }))
         .filter((score) => score.peer > 0),
+      // Only the host runs the server, so guests always see none.
+      lagging: module._wadsmith_net_lagging_players(),
     };
   }
 

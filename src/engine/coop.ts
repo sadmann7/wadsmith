@@ -109,6 +109,22 @@ function packetRelay() {
   };
 }
 
+// The game view may start listening after the host reported a stall.
+function stallRelay() {
+  let receive: ((peers: number[]) => void) | null = null;
+  let latest: number[] = [];
+  return {
+    deliver: (peers: number[]) => {
+      latest = peers;
+      receive?.(peers);
+    },
+    listen: (next: (peers: number[]) => void) => {
+      receive = next;
+      next(latest);
+    },
+  };
+}
+
 export {
   appVersion,
   coopPlayers,
@@ -127,4 +143,5 @@ export {
   roomsUrl,
   saveName,
   skillNames,
+  stallRelay,
 };

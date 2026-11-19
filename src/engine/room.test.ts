@@ -69,6 +69,7 @@ function guestEvents() {
     onProgress: vi.fn(),
     onGame: vi.fn(),
     onStart: vi.fn(),
+    onStall: vi.fn(),
     onPacket: vi.fn(),
     onSignal: vi.fn(),
     onClosed: vi.fn(),
@@ -186,7 +187,7 @@ describe("co-op room", () => {
     host.close();
   });
 
-  it("starts guests, routes packets and tells them when the host leaves", async () => {
+  it("starts guests, routes packets and stalls, and tells them when the host leaves", async () => {
     const { host, events, guest } = openRoom();
     const ana = guest();
     ana.room.join("Ana");
@@ -195,11 +196,13 @@ describe("co-op room", () => {
     host.send(2, new Uint8Array([9]));
     ana.room.send(1, new Uint8Array([7]));
     ana.room.signal(1, { relayOnly: true });
+    host.stall([2]);
     await settle();
     expect(ana.events.onStart).toHaveBeenCalled();
     expect(ana.events.onPacket).toHaveBeenCalledWith(1, new Uint8Array([9]));
     expect(events.onPacket).toHaveBeenCalledWith(2, new Uint8Array([7]));
     expect(events.onSignal).toHaveBeenCalledWith(2, { relayOnly: true });
+    expect(ana.events.onStall).toHaveBeenCalledWith([2]);
     host.close();
     await settle();
     expect(ana.events.onClosed).toHaveBeenCalledWith("host-left");

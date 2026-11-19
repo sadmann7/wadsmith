@@ -9,6 +9,7 @@ import {
   ArrowLeft,
   Crosshair,
   KeyRound,
+  Loader,
   Maximize,
   Minimize,
   RotateCcw,
@@ -16,7 +17,7 @@ import {
   Volume2,
   VolumeX,
 } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { MapOutline } from "../editor/map-outline";
 import { skillNames } from "./coop";
@@ -33,6 +34,8 @@ import {
 } from "./runtime";
 
 type SoundSettings = { volume: number; muted: boolean };
+
+type OtherPlayer = { peer: number; x: number; y: number };
 
 type ScoreRow = {
   peer: number;
@@ -68,7 +71,15 @@ function formatTime(tics: number) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
-function Minimap({ map, status }: { map: GameMap; status: GameStatus | null }) {
+function Minimap({
+  map,
+  status,
+  others,
+}: {
+  map: GameMap;
+  status: GameStatus | null;
+  others: OtherPlayer[];
+}) {
   const radians = ((status?.angle ?? 0) * Math.PI) / 180;
   return (
     <MapOutline
@@ -78,16 +89,31 @@ function Minimap({ map, status }: { map: GameMap; status: GameStatus | null }) {
     >
       {(extent) =>
         status ? (
-          <g transform={`translate(${status.x} ${0 - status.y})`}>
-            <line
-              x2={Math.cos(radians) * extent * 0.055}
-              y2={-Math.sin(radians) * extent * 0.055}
-              stroke="var(--color-thing-start)"
-              strokeWidth={1.5}
-              vectorEffect="non-scaling-stroke"
-            />
-            <circle r={extent * 0.025} fill="var(--color-thing-start)" />
-          </g>
+          <>
+            {others.map((other) => (
+              <circle
+                key={other.peer}
+                data-peer={other.peer}
+                cx={other.x}
+                cy={0 - other.y}
+                r={extent * 0.02}
+                fill="var(--color-fg-soft)"
+                stroke="var(--color-map-bg)"
+                strokeWidth={1.5}
+                vectorEffect="non-scaling-stroke"
+              />
+            ))}
+            <g transform={`translate(${status.x} ${0 - status.y})`}>
+              <line
+                x2={Math.cos(radians) * extent * 0.055}
+                y2={-Math.sin(radians) * extent * 0.055}
+                stroke="var(--color-thing-start)"
+                strokeWidth={1.5}
+                vectorEffect="non-scaling-stroke"
+              />
+              <circle r={extent * 0.025} fill="var(--color-thing-start)" />
+            </g>
+          </>
         ) : null
       }
     </MapOutline>
@@ -228,6 +254,38 @@ function Scoreboard({
   );
 }
 
+function StallBanner({ names, since }: { names: string[]; since: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  return (
+    <section
+      role="status"
+      aria-label="Waiting on a player"
+      className={`${panelClass} absolute top-20 left-1/2 flex w-[min(400px,calc(100%-32px))] -translate-x-1/2 items-center gap-3 border border-warning px-4 py-3`}
+    >
+      <Loader
+        size={18}
+        aria-hidden="true"
+        className="shrink-0 text-warning motion-safe:animate-spin"
+      />
+      <div className="grid min-w-0 flex-1 gap-0.5">
+        <span className="truncate text-[15px] font-semibold">
+          Waiting for {new Intl.ListFormat("en").format(names)}
+        </span>
+        <span className="text-[13px] text-fg-muted">
+          Everyone waits so the game stays in step.
+        </span>
+      </div>
+      <span className="font-mono text-xs text-warning">
+        {Math.max(0, Math.round((now - since) / 1000))} s
+      </span>
+    </section>
+  );
+}
+
 function NoteForm({ onSave }: { onSave: (text: string) => void }) {
   const [text, setText] = useState("");
   return (
@@ -269,6 +327,8 @@ function GameHud({
   skill,
   deathmatch,
   scores,
+  others,
+  stall,
   exit,
   canEdit,
   noteOpen,
@@ -299,6 +359,8 @@ function GameHud({
   skill: Skill;
   deathmatch: boolean;
   scores: ScoreRow[] | null;
+  others: OtherPlayer[];
+  stall: { names: string[]; since: number } | null;
   exit: { label: string; hint: string };
   canEdit: boolean;
   noteOpen: boolean;
@@ -353,7 +415,7 @@ function GameHud({
         aria-label="Run"
         className={`${panelClass} absolute top-5 right-5 w-[260px] overflow-hidden @max-xl:w-44`}
       >
-        <Minimap map={map} status={status} />
+        <Minimap map={map} status={status} others={others} />
         <dl className="m-0 grid gap-1.5 p-3">
           {deathmatch ? (
             <Stat
@@ -492,6 +554,9 @@ function GameHud({
             </button>
           </div>
         </section>
+      ) : null}
+      {stall && !finished ? (
+        <StallBanner names={stall.names} since={stall.since} />
       ) : null}
       {scores && inLevel && !finished ? (
         <Scoreboard

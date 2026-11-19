@@ -20,6 +20,7 @@ import {
   roomsUrl,
   saveName,
   skillNames,
+  stallRelay,
 } from "./coop";
 import { PlayerBadge, Progress, StatusCard } from "./coop-ui";
 import { peerLinks, type PeerLinks } from "./peer-link";
@@ -320,6 +321,7 @@ function CoopJoin({ code }: { code: string }) {
   useEffect(() => {
     let peer = 0;
     let roster: RoomPlayer[] = [];
+    const stalls = stallRelay();
     let game: CoopGame | null = null;
     const slow = setTimeout(
       () =>
@@ -367,6 +369,7 @@ function CoopJoin({ code }: { code: string }) {
         game = received;
         setState({ step: "waiting", peer, game: received });
       },
+      onStall: stalls.deliver,
       onStart: () => {
         if (game) setState({ step: "playing", peer, game });
       },
@@ -391,6 +394,8 @@ function CoopJoin({ code }: { code: string }) {
       listen: relayRef.current.listen,
       players: () => 0,
       roster: () => roster,
+      announceStall: () => {},
+      listenStall: stalls.listen,
       onServerReady: () => {},
     });
     const leave = () => {
