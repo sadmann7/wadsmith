@@ -116,11 +116,15 @@ describe("room server", () => {
 });
 
 describe("allowed origins", () => {
-  const allowed = "https://wadsmith.com http://localhost:*";
+  const allowed =
+    "https://wadsmith.com http://localhost:* https://wadsmith-*-team.vercel.app";
 
   it("allows listed sites and any local port", () => {
     expect(allowedOrigin("https://wadsmith.com", allowed)).toBe(true);
     expect(allowedOrigin("http://localhost:3177", allowed)).toBe(true);
+    expect(
+      allowedOrigin("https://wadsmith-a1b2c3-team.vercel.app", allowed),
+    ).toBe(true);
   });
 
   it("refuses look-alikes", () => {
@@ -129,5 +133,12 @@ describe("allowed origins", () => {
       false,
     );
     expect(allowedOrigin("http://localhost", allowed)).toBe(false);
+    expect(
+      allowedOrigin("https://wadsmith-evil.dev/x-team.vercel.app", allowed),
+    ).toBe(false);
+    expect(
+      allowedOrigin("https://wadsmith-a.evil.dev-team.vercel.app", allowed),
+    ).toBe(false);
+    expect(allowedOrigin("https://wadsmithxcom", allowed)).toBe(false);
   });
 });

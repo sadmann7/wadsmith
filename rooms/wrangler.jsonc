@@ -8,7 +8,7 @@
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
   "vars": {
-    "ALLOWED_ORIGINS": "https://wadsmith.com https://www.wadsmith.com http://localhost:*",
+    "ALLOWED_ORIGINS": "https://wadsmith.com https://www.wadsmith.com https://wadsmith-*-sadmann7s-projects.vercel.app http://localhost:*",
   },
   "observability": { "enabled": true },
 }
