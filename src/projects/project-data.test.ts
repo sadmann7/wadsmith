@@ -8,6 +8,7 @@ import {
   createMapEntry,
   createMapSaver,
   createProject,
+  episodeMaps,
   freeSlots,
   isSlotConflict,
   lastMapKey,
@@ -17,6 +18,7 @@ import {
   parseProjectBackup,
   prepareProjects,
   serializeProject,
+  slotMoves,
 } from "./project-data";
 import { createMemoryStore } from "./project-store";
 
@@ -163,6 +165,55 @@ describe("project storage", () => {
     await store.putMap(createMapEntry(project.id, "MAP01", starterMap));
     await store.deleteProject(project.id);
     expect(await store.listMaps(project.id)).toEqual([]);
+  });
+});
+
+describe("episode order", () => {
+  it("moves maps into the slots the episode already uses", () => {
+    const [a, b, c] = ["MAP01", "MAP02", "MAP05"].map((slot) =>
+      createMapEntry("p", slot, starterMap),
+    );
+    expect(slotMoves([a, b, c], [c.id, a.id, b.id])).toEqual([
+      { id: c.id, slot: "MAP01" },
+      { id: a.id, slot: "MAP02" },
+      { id: b.id, slot: "MAP05" },
+    ]);
+    expect(slotMoves([a, b, c], [a.id, b.id, c.id])).toEqual([]);
+  });
+
+  it("swaps two maps in one step", async () => {
+    const store = createMemoryStore();
+    const project = createProject("Ashfall");
+    const a = createMapEntry(project.id, "MAP01", starterMap);
+    const b = createMapEntry(project.id, "MAP02", starterMap);
+    await store.addProject(project, [a, b]);
+    await store.moveMaps(slotMoves([a, b], [b.id, a.id]));
+    expect((await store.getMap(a.id))?.slot).toBe("MAP02");
+    expect((await store.getMap(b.id))?.slot).toBe("MAP01");
+    expect(await store.countMaps(project.id)).toBe(2);
+  });
+
+  it("starts a new episode empty, with one map or with the featured maps", () => {
+    expect(episodeMaps("p", "empty")).toEqual([]);
+    expect(episodeMaps("p", "one").map((entry) => entry.slot)).toEqual([
+      "MAP01",
+    ]);
+    const featured = episodeMaps("p", "featured");
+    expect(featured.map((entry) => entry.slot)).toEqual([
+      "MAP01",
+      "MAP02",
+      "MAP03",
+      "MAP04",
+      "MAP05",
+      "MAP06",
+    ]);
+    expect(featured.every((entry) => mapStatus(entry).kind !== "error")).toBe(
+      true,
+    );
+  });
+
+  it("names a map with no exit", () => {
+    expect(mapStatus(episodeMaps("p", "one")[0]).label).toBe("No exit yet");
   });
 });
 

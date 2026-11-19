@@ -943,8 +943,8 @@ function App({
               <button
                 type="button"
                 className="border-0 bg-transparent p-0 font-[inherit] text-inherit"
-                aria-label="All projects"
-                title="All projects"
+                aria-label="All episodes"
+                title="All episodes"
                 onClick={onOpenProjects}
               >
                 WADSMITH
@@ -954,7 +954,7 @@ function App({
               <MenuTrigger className="menu-trigger">File</MenuTrigger>
               <MenuContent className="select-content">
                 <MenuItem value="projects" className="select-item">
-                  All projects
+                  All episodes
                 </MenuItem>
                 <MenuItem value="new" className="select-item">
                   New map…

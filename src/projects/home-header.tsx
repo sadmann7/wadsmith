@@ -1,7 +1,7 @@
 type HomeView = "projects" | "featured";
 
 const views: { value: HomeView; label: string }[] = [
-  { value: "projects", label: "Projects" },
+  { value: "projects", label: "Episodes" },
   { value: "featured", label: "Featured maps" },
 ];
 
