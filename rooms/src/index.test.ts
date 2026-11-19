@@ -14,6 +14,7 @@ beforeAll(async () => {
     config: resolve(import.meta.dirname, "../wrangler.jsonc"),
     ip: "127.0.0.1",
     persist: false,
+    vars: { ROOM_IDLE_SECONDS: "2", ROOM_LIFETIME_SECONDS: "4" },
     logLevel: "none",
     experimental: { disableExperimentalWarning: true },
   });
@@ -113,6 +114,49 @@ describe("room server", () => {
     await expect(connect("guard02")).rejects.toThrow();
     for (const client of full) client.socket.close();
   });
+});
+
+describe("room limits", () => {
+  const closed = (client: Client) =>
+    new Promise<{ code: number; reason: string }>((done) =>
+      client.socket.addEventListener("close", (event) =>
+        done({ code: event.code, reason: event.reason }),
+      ),
+    );
+
+  it("closes a connection that sends an oversized message", async () => {
+    const [a, b] = await Promise.all([connect("limit01"), connect("limit01")]);
+    const done = closed(a);
+    a.socket.send(new Uint8Array(32 * 1024));
+    expect((await done).code).toBe(1008);
+    await settle();
+    expect(b.received).toEqual([]);
+  });
+
+  it("closes a connection that floods the room", async () => {
+    const [a, b] = await Promise.all([connect("limit02"), connect("limit02")]);
+    const done = closed(a);
+    for (let index = 0; index < 1200; index += 1) {
+      a.socket.send(new Uint8Array([2, 1, index % 256]));
+    }
+    expect((await done).code).toBe(1008);
+    await settle();
+    expect(b.received.length).toBeLessThan(800);
+  });
+
+  it("closes a room that goes quiet", async () => {
+    const a = await connect("limit03");
+    a.socket.send('{"type":"hello"}');
+    expect((await closed(a)).reason).toBe("This room was idle.");
+  }, 10_000);
+
+  it("closes a busy room once its lifetime is up", async () => {
+    const a = await connect("limit04");
+    const timer = setInterval(() => a.socket.send('{"type":"ping"}'), 300);
+    const result = await closed(a);
+    clearInterval(timer);
+    expect(result.reason).toBe("This room has expired.");
+  }, 15_000);
 });
 
 describe("allowed origins", () => {

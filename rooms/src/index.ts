@@ -4,17 +4,23 @@
 // connection can still be announced as that player leaving.
 import { DurableObject } from "cloudflare:workers";
 
+import { ConnectionLimits } from "./limits";
 import { allowedOrigin } from "./origin";
 
 type Env = {
   ROOMS: DurableObjectNamespace<Room>;
   ALLOWED_ORIGINS: string;
+  ROOM_IDLE_SECONDS?: string;
+  ROOM_LIFETIME_SECONDS?: string;
 };
 
-type Attachment = { peer: number | null };
+type Attachment = { peer: number | null; seen: number };
 
 const hostPeer = 1;
 const maxSockets = 8;
+// A quiet connection only records that it was active this often, so traffic
+// doesn't rewrite its attachment on every message.
+const seenEveryMs = 60_000;
 const roomPath = /^\/rooms\/([a-z0-9]{6,32})$/;
 
 function identifiedPeer(message: string) {
@@ -30,23 +36,87 @@ function identifiedPeer(message: string) {
 }
 
 class Room extends DurableObject<Env> {
-  fetch() {
+  private readonly limits = new WeakMap<WebSocket, ConnectionLimits>();
+
+  private get idleMs() {
+    return Number(this.env.ROOM_IDLE_SECONDS ?? 30 * 60) * 1000;
+  }
+
+  private get lifetimeMs() {
+    return Number(this.env.ROOM_LIFETIME_SECONDS ?? 8 * 60 * 60) * 1000;
+  }
+
+  async fetch() {
     if (this.ctx.getWebSockets().length >= maxSockets) {
       return new Response("This room is full.", { status: 409 });
     }
+    const now = Date.now();
+    if ((await this.ctx.storage.get<number>("opened")) === undefined) {
+      await this.ctx.storage.put("opened", now);
+    }
+    if ((await this.ctx.storage.getAlarm()) === null) {
+      await this.ctx.storage.setAlarm(now + this.idleMs);
+    }
     const [client, server] = Object.values(new WebSocketPair());
     this.ctx.acceptWebSocket(server);
-    server.serializeAttachment({ peer: null } satisfies Attachment);
+    server.serializeAttachment({ peer: null, seen: now } satisfies Attachment);
     return new Response(null, { status: 101, webSocket: client });
   }
 
   webSocketMessage(socket: WebSocket, message: string | ArrayBuffer) {
-    const peer = typeof message === "string" ? identifiedPeer(message) : null;
-    if (peer !== null) {
-      socket.serializeAttachment({ peer } satisfies Attachment);
+    const now = Date.now();
+    let limits = this.limits.get(socket);
+    if (!limits) {
+      limits = new ConnectionLimits(now);
+      this.limits.set(socket, limits);
+    }
+    const verdict = limits.check(message, now);
+    if (verdict === "close") {
+      socket.close(1008, "Too much traffic.");
+      this.left(socket);
       return;
     }
-    this.broadcast(socket, message);
+    if (verdict === "drop") return;
+    const attachment = socket.deserializeAttachment() as Attachment;
+    const peer = typeof message === "string" ? identifiedPeer(message) : null;
+    if (
+      peer !== null ||
+      now - attachment.seen > Math.min(seenEveryMs, this.idleMs / 4)
+    ) {
+      socket.serializeAttachment({
+        peer: peer ?? attachment.peer,
+        seen: now,
+      } satisfies Attachment);
+    }
+    if (peer === null) this.broadcast(socket, message);
+  }
+
+  // Rooms close after a stretch with no traffic, and after a fixed lifetime.
+  async alarm() {
+    const sockets = this.ctx.getWebSockets();
+    const now = Date.now();
+    const opened = (await this.ctx.storage.get<number>("opened")) ?? now;
+    const seen = Math.max(
+      0,
+      ...sockets.map(
+        (socket) => (socket.deserializeAttachment() as Attachment).seen,
+      ),
+    );
+    const expired = now - opened >= this.lifetimeMs;
+    if (sockets.length > 0 && !expired && now - seen < this.idleMs) {
+      await this.ctx.storage.setAlarm(
+        Math.min(seen + this.idleMs, opened + this.lifetimeMs),
+      );
+      return;
+    }
+    for (const socket of sockets) {
+      socket.serializeAttachment({ peer: null, seen } satisfies Attachment);
+      socket.close(
+        1000,
+        expired ? "This room has expired." : "This room was idle.",
+      );
+    }
+    await this.ctx.storage.deleteAll();
   }
 
   webSocketClose(socket: WebSocket) {
@@ -58,8 +128,8 @@ class Room extends DurableObject<Env> {
   }
 
   private left(socket: WebSocket) {
-    const { peer } = socket.deserializeAttachment() as Attachment;
-    socket.serializeAttachment({ peer: null } satisfies Attachment);
+    const { peer, seen } = socket.deserializeAttachment() as Attachment;
+    socket.serializeAttachment({ peer: null, seen } satisfies Attachment);
     try {
       socket.close();
     } catch {
