@@ -58,21 +58,24 @@ jobs:
       - run: pnpm test
 
   deploy:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Fork pull requests get no secrets, so they can't deploy.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     needs: [format, lint, typecheck, test]
     runs-on: ubuntu-latest
     name: Deploy
     timeout-minutes: 20
     environment:
-      name: production
-      url: https://wadsmith.com
+      name: ${{ github.event_name == 'push' && 'production' || 'preview' }}
+      url: ${{ github.event_name == 'push' && 'https://wadsmith.com' || steps.deploy.outputs.url }}
     concurrency:
-      group: deploy-production
-      cancel-in-progress: false
+      group: deploy-${{ github.ref }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
     env:
       VERCEL_ORG_ID: team_AHDLC7i2CKyIJ7JNVzB8SA1C
       VERCEL_PROJECT_ID: prj_CALAZ9FWc3YgKfF41CathGDsGluz
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      TARGET: ${{ github.event_name == 'push' && 'production' || 'preview' }}
+      PROD_FLAG: ${{ github.event_name == 'push' && '--prod' || '' }}
     steps:
       - name: Checkout repo
         uses: actions/checkout@v7
@@ -86,8 +89,11 @@ jobs:
       # Vercel can't build the engine, so it gets a build made here.
       - name: Build
         run: |
-          pnpm dlx vercel@65.12.1 pull --yes --environment=production
-          pnpm dlx vercel@65.12.1 build --prod
+          pnpm dlx vercel@65.12.1 pull --yes --environment=$TARGET
+          pnpm dlx vercel@65.12.1 build $PROD_FLAG
 
       - name: Deploy
-        run: pnpm dlx vercel@65.12.1 deploy --prebuilt --prod --archive=tgz
+        id: deploy
+        run: |
+          pnpm dlx vercel@65.12.1 deploy --prebuilt $PROD_FLAG --archive=tgz | tee deploy.log
+          echo "url=$(tail -n 1 deploy.log)" >> "$GITHUB_OUTPUT"
