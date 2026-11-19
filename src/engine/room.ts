@@ -293,7 +293,6 @@ function hostRoom(
     },
     start: () => {
       started = true;
-      clearInterval(pings);
       transport.post({ type: "start" });
     },
     send: (to: number, data: Uint8Array) =>

@@ -528,6 +528,7 @@ function PlayTogether({
     onStart({
       session: {
         role: "host",
+        peer: hostPeer,
         mode: game.mode,
         skill: game.skill,
         wad: game.wad,
@@ -536,6 +537,7 @@ function PlayTogether({
         },
         listen: relayRef.current.listen,
         players: () => room.players().length,
+        roster: () => room.players(),
         // Guests connect to the host's engine, so they start once it runs.
         onServerReady: () => {
           if (announced) return;

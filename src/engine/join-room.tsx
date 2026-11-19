@@ -319,6 +319,7 @@ function CoopJoin({ code }: { code: string }) {
 
   useEffect(() => {
     let peer = 0;
+    let roster: RoomPlayer[] = [];
     let game: CoopGame | null = null;
     const slow = setTimeout(
       () =>
@@ -337,6 +338,7 @@ function CoopJoin({ code }: { code: string }) {
     const room = joinRoom(openTransport(code), appVersion, {
       onInfo: (next) => {
         setInfo(next);
+        roster = next.players;
         setPlayers(next.players);
         setState((current) => {
           if (current.step !== "finding") return current;
@@ -353,7 +355,10 @@ function CoopJoin({ code }: { code: string }) {
         void direct.connect(hostPeer);
       },
       onRefused: (reason) => setState({ step: "ended", reason }),
-      onRoster: setPlayers,
+      onRoster: (next) => {
+        roster = next;
+        setPlayers(next);
+      },
       onProgress: (progress) =>
         setState((current) =>
           current.step === "getting" ? { ...current, progress } : current,
@@ -376,6 +381,7 @@ function CoopJoin({ code }: { code: string }) {
     linksRef.current = direct;
     setSession({
       role: "guest",
+      peer: 0,
       mode: "coop",
       skill: "medium",
       wad: new Uint8Array(0),
@@ -384,6 +390,7 @@ function CoopJoin({ code }: { code: string }) {
       },
       listen: relayRef.current.listen,
       players: () => 0,
+      roster: () => roster,
       onServerReady: () => {},
     });
     const leave = () => {
@@ -399,13 +406,20 @@ function CoopJoin({ code }: { code: string }) {
   }, [code]);
 
   const game = state.step === "playing" ? state.game : null;
+  const peer = state.step === "playing" ? state.peer : 0;
   // A new session object would restart the game, so it only changes with it.
   const playing = useMemo(
     () =>
       session && game
-        ? { ...session, wad: game.wad, mode: game.mode, skill: game.skill }
+        ? {
+            ...session,
+            peer,
+            wad: game.wad,
+            mode: game.mode,
+            skill: game.skill,
+          }
         : null,
-    [session, game],
+    [session, game, peer],
   );
 
   const leave = () => {

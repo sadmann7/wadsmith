@@ -24,6 +24,7 @@ type GameClientOptions = {
     role: "host" | "guest";
     mode: NetworkMode;
     host: number;
+    peer: number;
     send: (to: number, data: Uint8Array) => void;
     onState: (state: NetworkState) => void;
   };
@@ -204,6 +205,7 @@ function startGameClient(options: GameClientOptions) {
                 role: network.role,
                 mode: network.mode,
                 host: network.host,
+                peer: network.peer,
                 inbox: inbox.buffer,
               }
             : null,

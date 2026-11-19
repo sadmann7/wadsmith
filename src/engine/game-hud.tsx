@@ -20,6 +20,7 @@ import { useState, type ReactNode } from "react";
 
 import { MapOutline } from "../editor/map-outline";
 import { skillNames } from "./coop";
+import { PlayerBadge } from "./coop-ui";
 import type { GameMap } from "../map/types";
 import type { MouseMode } from "./mouse-capture";
 import {
@@ -33,6 +34,19 @@ import {
 
 type SoundSettings = { volume: number; muted: boolean };
 
+type ScoreRow = {
+  peer: number;
+  name: string;
+  host: boolean;
+  you: boolean;
+  frags: number;
+  deaths: number;
+  kills: number;
+  items: number;
+  secrets: number;
+  ping: number | null;
+};
+
 const ticsPerSecond = 35;
 const ammoNames = ["Bullets", "Shells", "Cells", "Rockets"];
 const keyStyles = [
@@ -43,6 +57,7 @@ const keyStyles = [
   { label: "Yellow skull key", icon: Skull, color: "var(--color-key-yellow)" },
   { label: "Red skull key", icon: Skull, color: "var(--color-key-red)" },
 ];
+const slowPingMs = 120;
 const panelClass = "pointer-events-auto rounded-[3px] bg-surface/90";
 const buttonClass = `${panelClass} flex items-center gap-2 border-0 px-3 py-2 text-fg hover:bg-surface-raised`;
 const iconButtonClass =
@@ -111,6 +126,108 @@ function Vital({
   );
 }
 
+function Scoreboard({
+  title,
+  par,
+  status,
+  rows,
+  deathmatch,
+}: {
+  title: string;
+  par: number | null;
+  status: GameStatus | null;
+  rows: ScoreRow[];
+  deathmatch: boolean;
+}) {
+  const columns = deathmatch
+    ? (["frags", "deaths"] as const)
+    : (["kills", "items", "secrets"] as const);
+  const sorted = deathmatch
+    ? rows.toSorted((a, b) => b.frags - a.frags || a.peer - b.peer)
+    : rows.toSorted((a, b) => a.peer - b.peer);
+  const teamKills = rows.reduce((total, row) => total + row.kills, 0);
+  const teamSecrets = rows.reduce((total, row) => total + row.secrets, 0);
+  return (
+    <section
+      aria-label="Scoreboard"
+      className={`${panelClass} absolute top-1/2 left-1/2 w-[min(600px,calc(100%-32px))] -translate-1/2 border border-border-strong`}
+    >
+      <header className="flex items-end justify-between gap-4 border-b border-border px-5 py-3">
+        <div className="grid gap-0.5">
+          <h2 className="m-0 text-lg font-semibold">
+            {deathmatch ? "Deathmatch" : "Co-op"}
+          </h2>
+          <span className="font-mono text-[11px] text-fg-muted uppercase">
+            {title}
+            {status ? ` · ${formatTime(status.tics)}` : ""}
+            {par ? ` / par ${formatTime(par * ticsPerSecond)}` : ""}
+          </span>
+        </div>
+        <span className="font-mono text-xs text-fg-soft">
+          {deathmatch
+            ? `First to ${fragLimit} frags`
+            : status
+              ? `Kills ${teamKills} / ${status.totalKills} · Secrets ${teamSecrets} / ${status.totalSecrets}`
+              : ""}
+        </span>
+      </header>
+      <table className="w-full border-collapse text-left">
+        <thead>
+          <tr className="font-mono text-[11px] text-fg-muted uppercase">
+            <th className="py-2 pl-5 font-normal" colSpan={2}>
+              Player
+            </th>
+            {columns.map((column) => (
+              <th key={column} className="px-3 py-2 text-right font-normal">
+                {column}
+              </th>
+            ))}
+            <th className="py-2 pr-5 text-right font-normal">Ping</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((row) => (
+            <tr
+              key={row.peer}
+              className={`border-t border-border ${row.you ? "bg-accent/10" : ""}`}
+            >
+              <td className="w-6 py-2.5 pl-5">
+                <PlayerBadge peer={row.peer} />
+              </td>
+              <td className="py-2.5 pl-3">
+                <span className="text-[15px] font-semibold">{row.name}</span>
+                {row.host ? (
+                  <span className="ml-2 font-mono text-[10px] text-fg-muted uppercase">
+                    Host
+                  </span>
+                ) : null}
+                {row.you ? (
+                  <span className="ml-2 font-mono text-[10px] text-accent uppercase">
+                    You
+                  </span>
+                ) : null}
+              </td>
+              {columns.map((column) => (
+                <td key={column} className="px-3 py-2.5 text-right font-mono">
+                  {row[column]}
+                </td>
+              ))}
+              <td
+                className={`py-2.5 pr-5 text-right font-mono text-xs ${row.ping !== null && row.ping > slowPingMs ? "text-warning" : "text-fg-muted"}`}
+              >
+                {row.ping === null ? "—" : `${row.ping} ms`}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <footer className="border-t border-border px-5 py-2 text-xs text-fg-muted">
+        Release Tab to hide
+      </footer>
+    </section>
+  );
+}
+
 function NoteForm({ onSave }: { onSave: (text: string) => void }) {
   const [text, setText] = useState("");
   return (
@@ -151,6 +268,7 @@ function GameHud({
   coop,
   skill,
   deathmatch,
+  scores,
   exit,
   canEdit,
   noteOpen,
@@ -180,6 +298,7 @@ function GameHud({
   coop: "host" | "guest" | null;
   skill: Skill;
   deathmatch: boolean;
+  scores: ScoreRow[] | null;
   exit: { label: string; hint: string };
   canEdit: boolean;
   noteOpen: boolean;
@@ -202,6 +321,7 @@ function GameHud({
   const FullscreenIcon = fullscreen ? Minimize : Maximize;
   const SoundIcon = sound.muted ? VolumeX : Volume2;
   const ammoName = status ? ammoNames[status.ammoType] : undefined;
+  const tabHelp = coop ? "Tab scores" : "Tab automap";
   return (
     <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden text-fg">
       <div className="absolute inset-x-0 top-0 h-40 bg-linear-to-b from-void/55 to-transparent" />
@@ -373,6 +493,15 @@ function GameHud({
           </div>
         </section>
       ) : null}
+      {scores && inLevel && !finished ? (
+        <Scoreboard
+          title={title}
+          par={par}
+          status={status}
+          rows={scores}
+          deathmatch={deathmatch}
+        />
+      ) : null}
       {mouseMode === "released" && !finished && !noteOpen ? (
         <section
           aria-label={coop ? "Mouse released" : "Paused"}
@@ -390,8 +519,8 @@ function GameHud({
       {showHelp && !finished && mouseMode !== "released" ? (
         <p className="absolute inset-x-4 bottom-24 m-0 text-center text-xs text-fg-soft">
           {mouseMode === "locked"
-            ? "Mouse turn · Left click fire · WASD move · E use · Shift run · Tab automap · Esc release mouse"
-            : `${mouseMode === "denied" ? "" : "Click to use the mouse · "}WASD move · ←→ turn · Space fire · E use · Shift run · Tab automap`}
+            ? `Mouse turn · Left click fire · WASD move · E use · Shift run · ${tabHelp} · Esc release mouse`
+            : `${mouseMode === "denied" ? "" : "Click to use the mouse · "}WASD move · ←→ turn · Space fire · E use · Shift run · ${tabHelp}`}
         </p>
       ) : null}
       {noteSaved ? (
@@ -461,4 +590,4 @@ function GameHud({
   );
 }
 
-export { formatTime, GameHud };
+export { formatTime, GameHud, type ScoreRow };

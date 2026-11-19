@@ -175,10 +175,12 @@ describe("co-op room", () => {
     host.close();
   });
 
-  it("measures each guest's ping", async () => {
+  it("measures each guest's ping, also once the game starts", async () => {
     vi.useFakeTimers();
     const { host, guest } = openRoom();
     guest().room.join("Ana");
+    await vi.advanceTimersByTimeAsync(100);
+    host.start();
     await vi.advanceTimersByTimeAsync(2100);
     expect(host.players()[1].ping).toEqual(expect.any(Number));
     host.close();

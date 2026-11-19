@@ -11,7 +11,7 @@ import type { GameMap, Point } from "../map/types";
 import { compileMap } from "../wad/compile";
 import type { NetworkState } from "./doom-worker";
 import { startGameClient, type GameClient } from "./game-client";
-import { GameHud } from "./game-hud";
+import { GameHud, type ScoreRow } from "./game-hud";
 import { loadIwad } from "./iwad";
 import { HeldKeys } from "./held-keys";
 import {
@@ -33,7 +33,7 @@ import {
   type Resolution,
   type Skill,
 } from "./runtime";
-import { hostPeer } from "./room";
+import { hostPeer, type RoomPlayer } from "./room";
 
 type SoundSettings = { volume: number; muted: boolean };
 
@@ -92,12 +92,14 @@ function spotOf({ x, y }: GameStatus): Point {
 /** How a playtest takes part in a co-op game through its room. */
 type CoopSession = {
   role: "host" | "guest";
+  peer: number;
   mode: NetworkMode;
   skill: Skill;
   wad: Uint8Array;
   send: (to: number, data: Uint8Array) => void;
   listen: (receive: (from: number, data: Uint8Array) => void) => void;
   players: () => number;
+  roster: () => RoomPlayer[];
   onServerReady: () => void;
 };
 
@@ -179,6 +181,7 @@ function GameSession({
   const [noteSaved, setNoteSaved] = useState(false);
   const [finished, setFinished] = useState(false);
   const [network, setNetwork] = useState<NetworkState | null>(null);
+  const [scoresOpen, setScoresOpen] = useState(false);
   const [capture, updateCapture] = useReducer(
     nextMouseCapture,
     initialMouseCapture,
@@ -254,6 +257,7 @@ function GameSession({
                 role: coop.role,
                 mode: coop.mode,
                 host: hostPeer,
+                peer: coop.peer,
                 send: coop.send,
                 onState: (state) => {
                   setNetwork(state);
@@ -483,6 +487,9 @@ function GameSession({
           coop={coop?.role ?? null}
           skill={coop?.skill ?? skill}
           deathmatch={coop?.mode === "deathmatch"}
+          scores={
+            coop && network && scoresOpen ? scoreRows(coop, network) : null
+          }
           exit={gameExits[coop?.role === "guest" ? "leave" : exit]}
           canEdit={canEdit}
           noteOpen={noteSpot !== null}
@@ -530,7 +537,10 @@ function GameSession({
             height={height}
             tabIndex={0}
             aria-label={`Game. Click to capture the mouse, which then turns the player and fires with the left button. Arrows or W, A, S and D move, Space fires, E uses${canEdit ? ", N leaves a note, F2 edits this spot" : ""}. Escape releases the mouse, and pressing it again ${gameExits[coop?.role === "guest" ? "leave" : exit].action}.`}
-            onBlur={releaseAllKeys}
+            onBlur={() => {
+              releaseAllKeys();
+              setScoresOpen(false);
+            }}
             onContextMenu={(event) => event.preventDefault()}
             onPointerDown={(event) => {
               event.currentTarget.focus();
@@ -572,6 +582,11 @@ function GameSession({
                 releaseAllKeys();
                 return;
               }
+              if (coop && event.code === "Tab" && !event.shiftKey) {
+                event.preventDefault();
+                setScoresOpen(true);
+                return;
+              }
               const key = keysByCode[event.code];
               // Tab is Doom's automap, so Shift+Tab is the way out to the buttons.
               if (
@@ -588,12 +603,29 @@ function GameSession({
               gameRef.current?.resumeAudio();
               pressKey(event.code, key);
             }}
-            onKeyUp={(event) => releaseKey(event.code)}
+            onKeyUp={(event) => {
+              if (event.code === "Tab") setScoresOpen(false);
+              releaseKey(event.code);
+            }}
           />
         )}
       </div>
     </div>
   );
+}
+
+function scoreRows(coop: CoopSession, network: NetworkState): ScoreRow[] {
+  const roster = coop.roster();
+  return network.scores.map((score) => {
+    const player = roster.find((entry) => entry.peer === score.peer);
+    return {
+      ...score,
+      name: player?.name ?? `Player ${score.peer}`,
+      host: score.peer === hostPeer,
+      you: score.peer === coop.peer,
+      ping: score.peer === hostPeer ? null : (player?.ping ?? null),
+    };
+  });
 }
 
 function coopWaiting(coop: CoopSession, network: NetworkState | null) {
