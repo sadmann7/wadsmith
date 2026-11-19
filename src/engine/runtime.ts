@@ -16,6 +16,8 @@ type DoomModule = {
   _wadsmith_run_frame(): void;
   _wadsmith_frame_count(): number;
   _wadsmith_frame_rgba(): number;
+  _wadsmith_frame_width(): number;
+  _wadsmith_frame_height(): number;
   _wadsmith_key(pressed: number, key: number): void;
   _wadsmith_mouse_turn(amount: number): void;
   _wadsmith_set_paused(paused: number): void;
@@ -77,19 +79,23 @@ type GameStatus = {
   tics: number;
 };
 
-const screenWidth = 320;
-const screenHeight = 200;
+type Resolution = "classic" | "high";
+
+const screenSizes: Record<Resolution, { width: number; height: number }> = {
+  classic: { width: 320, height: 200 },
+  high: { width: 640, height: 400 },
+};
 const maxVolume = 15;
 const levelState = 0;
 
 // Woof's own conveniences and visual extras are switched off, so a playtest looks
 // and plays like the classic game a map is built for.
-const engineConfig = `fullscreen 0
+const engineConfig = (resolution: Resolution) => `fullscreen 0
 use_vsync 0
 uncapped 1
 fpslimit 0
 widescreen 0
-current_video_height 200
+current_video_height ${screenSizes[resolution].height}
 dynamic_resolution 0
 screenblocks 13
 screen_melt 1
@@ -215,14 +221,16 @@ class DoomGame {
   private stopped = false;
   private readonly pacer = new FramePacer();
   private timer: ReturnType<typeof setTimeout> | undefined;
-  private pixels: Uint8ClampedArray<ArrayBuffer> = new Uint8ClampedArray(
-    screenWidth * screenHeight * 4,
-  );
+  private readonly pixels: Uint8ClampedArray<ArrayBuffer>;
 
   constructor(
     private readonly module: DoomModule,
     private readonly events: GameEvents = {},
-  ) {}
+    readonly resolution: Resolution = "classic",
+  ) {
+    const { width, height } = screenSizes[resolution];
+    this.pixels = new Uint8ClampedArray(width * height * 4);
+  }
 
   run() {
     this.pacer.start(performance.now());
@@ -358,6 +366,7 @@ async function startDoom({
   options,
   events,
   sampleRate = null,
+  resolution = "classic",
 }: {
   createDoom: CreateDoom;
   iwad: Uint8Array;
@@ -366,12 +375,13 @@ async function startDoom({
   options?: DoomModuleOptions;
   events?: GameEvents;
   sampleRate?: number | null;
+  resolution?: Resolution;
 }) {
   const doomModule = await createDoom(options ?? {});
   doomModule.FS.writeFile("/freedoom2.wad", iwad);
   doomModule.FS.writeFile("/woof.pk3", base);
   doomModule.FS.writeFile("/wadsmith.wad", map);
-  doomModule.FS.writeFile("/woof.cfg", engineConfig);
+  doomModule.FS.writeFile("/woof.cfg", engineConfig(resolution));
   if (sampleRate !== null) doomModule._wadsmith_audio_init(sampleRate);
   try {
     doomModule.callMain([
@@ -397,7 +407,17 @@ async function startDoom({
           cause: error,
         });
   }
-  const game = new DoomGame(doomModule, events);
+  const { width, height } = screenSizes[resolution];
+  const drawn = [
+    doomModule._wadsmith_frame_width(),
+    doomModule._wadsmith_frame_height(),
+  ];
+  if (drawn[0] !== width || drawn[1] !== height) {
+    throw new Error(
+      `The engine draws ${drawn.join("x")} instead of ${width}x${height}.`,
+    );
+  }
+  const game = new DoomGame(doomModule, events, resolution);
   game.run();
   return game;
 }
@@ -407,10 +427,10 @@ export {
   doomKeys,
   keysByCode,
   maxVolume,
-  screenHeight,
-  screenWidth,
+  screenSizes,
   startDoom,
   type CreateDoom,
   type GameEvents,
   type GameStatus,
+  type Resolution,
 };

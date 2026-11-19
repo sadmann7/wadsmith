@@ -4,12 +4,13 @@ import type {
   SoundLevel,
 } from "./doom-worker";
 import { engineBase } from "./iwad";
-import type { GameStatus } from "./runtime";
+import type { GameStatus, Resolution } from "./runtime";
 
 type GameClientOptions = {
   iwad: Uint8Array;
   map: Uint8Array;
   sound: SoundLevel;
+  resolution: Resolution;
   onFrame: (pixels: Uint8ClampedArray<ArrayBuffer>) => void;
   onStatus: (status: GameStatus) => void;
   onDropouts: (count: number) => void;
@@ -179,6 +180,7 @@ function startGameClient(options: GameClientOptions) {
         paused: document.hidden || held,
         sampleRate: audio.sampleRate,
         audioPort,
+        resolution: options.resolution,
       },
       audioPort ? [audioPort] : [],
     );

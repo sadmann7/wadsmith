@@ -1,10 +1,10 @@
 import {
   startDoom,
-  screenHeight,
-  screenWidth,
+  screenSizes,
   type CreateDoom,
   type DoomGame,
   type GameStatus,
+  type Resolution,
 } from "./runtime";
 
 type SoundLevel = { volume: number; muted: boolean };
@@ -20,6 +20,7 @@ type DoomWorkerRequest =
       paused: boolean;
       sampleRate: number;
       audioPort: MessagePort | null;
+      resolution: Resolution;
     }
   | { type: "key"; pressed: boolean; key: number }
   | { type: "turn"; amount: number }
@@ -79,8 +80,8 @@ function pumpAudio(running: DoomGame, port: MessagePort) {
 
 function sendFrame() {
   if (!game) return;
-  const buffer =
-    spareFrames.pop() ?? new ArrayBuffer(screenWidth * screenHeight * 4);
+  const { width, height } = screenSizes[game.resolution];
+  const buffer = spareFrames.pop() ?? new ArrayBuffer(width * height * 4);
   game.frame(new Uint8ClampedArray(buffer));
   const now = performance.now();
   const due = now - lastStatus >= statusEveryMs;
@@ -119,6 +120,7 @@ async function start(request: Extract<DoomWorkerRequest, { type: "start" }>) {
       onFailure: () => fail("The engine stopped."),
     },
     sampleRate: request.audioPort ? request.sampleRate : null,
+    resolution: request.resolution,
   });
   stage = "run";
   game = running;

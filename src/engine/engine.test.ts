@@ -19,12 +19,12 @@ import { compileMap } from "../wad/compile";
 import {
   doomKeys,
   keysByCode,
-  screenHeight,
-  screenWidth,
+  screenSizes,
   startDoom,
   type CreateDoom,
   type DoomGame,
   type GameEvents,
+  type Resolution,
 } from "./runtime";
 
 const engineDirectory = resolve(import.meta.dirname, "../../public/engine");
@@ -42,6 +42,7 @@ async function launch(
   map: GameMap,
   sampleRate: number | null = null,
   events?: GameEvents,
+  resolution?: Resolution,
 ) {
   const url = pathToFileURL(resolve(engineDirectory, "woof.js")).href;
   const { default: createDoom } = (await import(/* @vite-ignore */ url)) as {
@@ -55,6 +56,7 @@ async function launch(
     options: { print: () => {}, printErr: (line) => engineWarnings.push(line) },
     events,
     sampleRate,
+    resolution,
   });
   running.push(game);
   return game;
@@ -139,6 +141,21 @@ describe.skipIf(!ready)("generated map in the engine", () => {
     expect(status.x).toBeGreaterThan(520);
     expect(status.kills).toBeGreaterThan(0);
   }, 40_000);
+
+  it("draws the level at double resolution", async () => {
+    const game = await launch(openMap, null, undefined, "high");
+    await waitForPlay(game);
+    const { width, height } = screenSizes.high;
+    const pixels = game.frame();
+    expect(pixels.length).toBe(width * height * 4);
+    const colors = new Set<number>();
+    for (let index = 0; index < pixels.length; index += 4) {
+      colors.add(
+        (pixels[index] << 16) | (pixels[index + 1] << 8) | pixels[index + 2],
+      );
+    }
+    expect(colors.size).toBeGreaterThan(16);
+  }, 30_000);
 
   it("reports a map the engine refuses", async () => {
     await expect(launch({ ...openMap, things: [] })).rejects.toBeDefined();
@@ -430,7 +447,7 @@ describe.skipIf(!ready)("generated map in the engine", () => {
           dark += 1;
         }
       }
-      return dark / (screenWidth * screenHeight);
+      return dark / (pixels.length / 4);
     };
     expect(darkShare()).toBeLessThan(0.5);
     await holdKey(game, "Tab", 80);

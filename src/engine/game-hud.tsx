@@ -21,7 +21,12 @@ import { useState, type ReactNode } from "react";
 import { MapOutline } from "../editor/map-outline";
 import type { GameMap } from "../map/types";
 import type { MouseMode } from "./mouse-capture";
-import { maxVolume, type GameStatus } from "./runtime";
+import {
+  maxVolume,
+  screenSizes,
+  type GameStatus,
+  type Resolution,
+} from "./runtime";
 
 type SoundSettings = { volume: number; muted: boolean };
 
@@ -146,6 +151,8 @@ function GameHud({
   finished,
   audioUnavailable,
   onSoundChange,
+  resolution,
+  onResolutionChange,
   onRestart,
   onToggleFullscreen,
   onExit,
@@ -168,6 +175,8 @@ function GameHud({
   finished: boolean;
   audioUnavailable: boolean;
   onSoundChange: (sound: SoundSettings) => void;
+  resolution: Resolution;
+  onResolutionChange: (resolution: Resolution) => void;
   onRestart: () => void;
   onToggleFullscreen: () => void;
   onExit: () => void;
@@ -267,6 +276,18 @@ function GameHud({
               </SliderTrack>
             </SliderControl>
           </Slider>
+          <button
+            type="button"
+            className={`${iconButtonClass} text-xs font-medium aria-pressed:text-accent`}
+            aria-label="Double resolution"
+            aria-pressed={resolution === "high"}
+            title={`${screenSizes[resolution].width}×${screenSizes[resolution].height}, restarts the level`}
+            onClick={() =>
+              onResolutionChange(resolution === "high" ? "classic" : "high")
+            }
+          >
+            2×
+          </button>
           <button
             type="button"
             className={iconButtonClass}
