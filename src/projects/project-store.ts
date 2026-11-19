@@ -124,6 +124,33 @@ async function openProjectStore(): Promise<ProjectStore> {
       write(["maps"], (transaction) => {
         transaction.objectStore("maps").put(entry);
       }),
+    countMaps: (projectId) =>
+      read<number>("maps", (items) =>
+        items.index("projectId").count(projectId),
+      ),
+    // Each map passes through a slot no map can hold, since the slot index is
+    // unique and two maps may trade places.
+    moveMaps: (moves) =>
+      write(["maps"], (transaction) => {
+        const items = transaction.objectStore("maps");
+        const moved: ProjectMap[] = [];
+        let pending = moves.length;
+        for (const move of moves) {
+          const request = items.get(move.id) as IDBRequest<
+            ProjectMap | undefined
+          >;
+          request.addEventListener("success", () => {
+            if (request.result)
+              moved.push({ ...request.result, slot: move.slot });
+            pending -= 1;
+            if (pending > 0) return;
+            for (const entry of moved) {
+              items.put({ ...entry, slot: `~${entry.id}` });
+            }
+            for (const entry of moved) items.put(entry);
+          });
+        }
+      }),
     updateMap: async (id, change) => {
       let updated: ProjectMap | null = null;
       await write(["maps"], (transaction) => {
@@ -202,6 +229,17 @@ function createMemoryStore(): ProjectStore {
       entries.forEach(store);
     },
     putMap: async (entry) => store(entry),
+    countMaps: async (projectId) =>
+      [...maps.values()].filter((entry) => entry.projectId === projectId)
+        .length,
+    moveMaps: async (moves) => {
+      const moved = moves.flatMap(({ id, slot }) => {
+        const entry = maps.get(id);
+        return entry ? [{ ...entry, slot }] : [];
+      });
+      for (const entry of moved) maps.set(entry.id, { ...entry, slot: "" });
+      moved.forEach(store);
+    },
     updateMap: async (id, change) => {
       const entry = maps.get(id);
       if (!entry) return null;

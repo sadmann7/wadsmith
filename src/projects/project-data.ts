@@ -3,6 +3,7 @@ import { checkMap } from "../map/checks";
 import { blankMap, starterMap } from "../map/starter-map";
 import { loadSavedMap, MapFileError, parseMap } from "../map/storage";
 import type { GameMap } from "../map/types";
+import { featuredMaps } from "../map/featured";
 
 type Project = { id: string; name: string; createdAt: number };
 
@@ -20,6 +21,10 @@ type ProjectMap = {
 
 type MapTemplate = "blank" | "room" | "hub";
 
+type EpisodeStart = "empty" | "one" | "featured";
+
+type SlotMove = { id: string; slot: string };
+
 type ProjectStore = {
   durable: boolean;
   listProjects(): Promise<Project[]>;
@@ -28,6 +33,8 @@ type ProjectStore = {
   putProject(project: Project): Promise<void>;
   addProject(project: Project, maps: ProjectMap[]): Promise<void>;
   putMap(entry: ProjectMap): Promise<void>;
+  countMaps(projectId: string): Promise<number>;
+  moveMaps(moves: SlotMove[]): Promise<void>;
   updateMap(
     id: string,
     change: (entry: ProjectMap) => ProjectMap,
@@ -103,6 +110,9 @@ function mapStatus(entry: ProjectMap) {
   const checks = checkMap(entry.map);
   const errors = checks.filter((issue) => issue.severity === "error").length;
   const warnings = checks.length - errors;
+  if (warnings === 1 && checks[0].id === "no-exit") {
+    return { kind: "warning" as const, label: "No exit yet" };
+  }
   if (errors > 0) {
     return {
       kind: "error" as const,
@@ -140,6 +150,31 @@ function createMapEntry(
   };
 }
 
+// The episode keeps the slots it uses, and the maps take them in the new order.
+function slotMoves(maps: ProjectMap[], order: string[]): SlotMove[] {
+  const slots = bySlot(maps).map((entry) => entry.slot);
+  return order
+    .map((id, index) => ({ id, slot: slots[index] }))
+    .filter(
+      ({ id, slot }) => maps.find((entry) => entry.id === id)?.slot !== slot,
+    );
+}
+
+function episodeMaps(projectId: string, start: EpisodeStart) {
+  if (start === "empty") return [];
+  if (start === "one") {
+    return [
+      createMapEntry(projectId, mapSlots[0], mapFromTemplate("room", "Map 1")),
+    ];
+  }
+  return featuredMaps.map((featured, index) =>
+    createMapEntry(projectId, mapSlots[index], structuredClone(featured.map), {
+      description: featured.blurb,
+      par: featured.par,
+    }),
+  );
+}
+
 function isSlotConflict(error: unknown) {
   return (error as Error | null)?.name === "ConstraintError";
 }
@@ -167,7 +202,7 @@ async function prepareProjects(store: ProjectStore) {
   const projects = await store.listProjects();
   if (projects.length === 0) {
     const saved = loadSavedMap();
-    const project = { ...createProject("My project"), id: firstProjectId };
+    const project = { ...createProject("My episode"), id: firstProjectId };
     const entry = {
       ...createMapEntry(project.id, mapSlots[0], saved ?? starterMap),
       id: firstMapId,
@@ -305,21 +340,21 @@ function parseProjectBackup(text: string) {
     throw new MapFileError("The file isn't valid JSON.");
   }
   if (data?.format !== backupFormat) {
-    throw new MapFileError("This isn't a Wadsmith project.");
+    throw new MapFileError("This isn't a Wadsmith episode backup.");
   }
   if (data.version !== backupVersion || !Array.isArray(data.maps)) {
-    throw new MapFileError("This project was saved by a different version.");
+    throw new MapFileError("This episode was saved by a different version.");
   }
   const project = createProject(
     typeof data.project?.name === "string" && data.project.name.trim()
       ? data.project.name.trim().slice(0, maxNameLength)
-      : "Imported project",
+      : "Imported episode",
   );
   const used = new Set<string>();
   const maps = data.maps.map((value: Record<string, unknown>) => {
     const slot = String(value?.slot);
     if (!mapSlots.includes(slot) || used.has(slot)) {
-      throw new MapFileError("The project has an invalid map slot.");
+      throw new MapFileError("The episode has an invalid map slot.");
     }
     used.add(slot);
     const par =
@@ -358,6 +393,7 @@ export {
   createMapEntry,
   createMapSaver,
   createProject,
+  episodeMaps,
   formatPar,
   freeSlots,
   isSlotConflict,
@@ -375,9 +411,12 @@ export {
   parseStoredMap,
   prepareProjects,
   serializeProject,
+  slotMoves,
   templates,
+  type EpisodeStart,
   type MapTemplate,
   type Project,
   type ProjectMap,
   type ProjectStore,
+  type SlotMove,
 };

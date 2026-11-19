@@ -34,6 +34,7 @@ import {
   createMapEntry,
   createMapSaver,
   createProject,
+  episodeMaps,
   freeSlots,
   isSlotConflict,
   lastMapKey,
@@ -45,6 +46,8 @@ import {
   parseProjectBackup,
   prepareProjects,
   serializeProject,
+  slotMoves,
+  type EpisodeStart,
   type Project,
   type ProjectMap,
   type ProjectStore,
@@ -107,6 +110,7 @@ function problemOf(error: unknown, slot: string) {
 function ProjectApp() {
   const [store, setStore] = useState<ProjectStore | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [counts, setCounts] = useState<Record<string, number>>({});
   const [projectId, setProjectId] = useState("");
   const [maps, setMaps] = useState<ProjectMap[]>([]);
   const [session, setSession] = useState<Session | null>(null);
@@ -146,8 +150,16 @@ function ProjectApp() {
         ? id
         : nextProjects[0]?.id;
       const nextMaps = shown ? await active.listMaps(shown) : [];
+      const nextCounts = Object.fromEntries(
+        await Promise.all(
+          nextProjects.map(
+            async (item) => [item.id, await active.countMaps(item.id)] as const,
+          ),
+        ),
+      );
       if (run !== refreshRun.current) return;
       setProjects(nextProjects);
+      setCounts(nextCounts);
       setMaps(nextMaps);
       if (shown) selectProject(shown);
     },
@@ -208,7 +220,7 @@ function ProjectApp() {
         }
       })
       .catch(() => {
-        if (!cancelled) setMessage("Your projects couldn't be opened.");
+        if (!cancelled) setMessage("Your episodes couldn't be opened.");
       });
     return () => {
       cancelled = true;
@@ -284,7 +296,7 @@ function ProjectApp() {
       </p>
     ) : (
       <div className="editor-loading" role="status">
-        Loading projects…
+        Loading episodes…
       </div>
     );
   }
@@ -645,6 +657,7 @@ function ProjectApp() {
     <ProjectHome
       onNavigate={navigate}
       projects={projects}
+      counts={counts}
       project={project}
       maps={maps}
       durable={store.durable}
@@ -655,10 +668,10 @@ function ProjectApp() {
         void store.setSetting(lastProjectKey, id).catch(() => {});
         void refresh(store, id).catch(() => setMessage(saveFailure));
       }}
-      onCreateProject={(name) => {
+      onCreateProject={(name: string, start: EpisodeStart) => {
         const created = createProject(name);
         void attempt(async () => {
-          await store.putProject(created);
+          await store.addProject(created, episodeMaps(created.id, start));
           selectProject(created.id);
           await store.setSetting(lastProjectKey, created.id);
           await refresh(store, created.id);
@@ -667,7 +680,7 @@ function ProjectApp() {
       onRenameProject={(name) =>
         void attempt(async () => {
           await store.putProject({ ...project, name });
-          await refresh(store, project.id);
+          await refresh(store, projectIdRef.current);
         })
       }
       onDeleteProject={() =>
@@ -703,6 +716,12 @@ function ProjectApp() {
             ),
           );
           await refresh(store, entry.projectId);
+        })
+      }
+      onReorderMaps={(order) =>
+        void attempt(async () => {
+          await store.moveMaps(slotMoves(maps, order));
+          await refresh(store, projectIdRef.current);
         })
       }
       onDeleteMap={(entry) =>
