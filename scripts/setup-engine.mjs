@@ -62,6 +62,7 @@ const skippedSources = new Set([
 const addedSources = [
   "src/wadsmith.c",
   "src/wadsmith_audio.c",
+  "src/wadsmith_net.c",
   "src/wadsmith_unused.c",
 ];
 const oplSources = ["opl.c", "opl3.c", "opl_emu.c", "opl_queue.c"];

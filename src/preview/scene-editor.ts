@@ -15,6 +15,7 @@ import {
   snapPoint,
   updateThing,
 } from "../map/edit";
+import { thingCatalog } from "../map/catalog";
 import { sectorAt } from "../map/geometry";
 import {
   describeSurface,
@@ -255,7 +256,9 @@ const sceneEditor = definePrimitive({
       const view = cameraState();
       if (!map || !placing || !view) return;
       const angle =
-        placing === "player" ? view.position.angle : view.position.angle + 180;
+        thingCatalog[placing].category === "start"
+          ? view.position.angle
+          : view.position.angle + 180;
       const facing = (((Math.round(angle / 45) * 45) % 360) + 360) % 360;
       const added = addThing(map, placing, point, facing);
       // A new player start must not pull the camera away from the person placing it.

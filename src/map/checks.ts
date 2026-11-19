@@ -149,7 +149,8 @@ function issueText({ message, detail }: MapIssue) {
 function fixIssue(map: GameMap, { id, target }: MapIssue): GameMap | null {
   const kind = id.split(":")[0];
   if (kind === "many-players") {
-    const extras = map.things.filter((thing) => thing.kind === "player");
+    const start = id.split(":")[1] ?? "player";
+    const extras = map.things.filter((thing) => thing.kind === start);
     return removeThings(
       map,
       extras.slice(1).map((thing) => thing.id),

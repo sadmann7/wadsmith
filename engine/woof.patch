@@ -304,18 +304,27 @@ index f6c1e31..304ee75 100644
  
  void I_Yield(void)
 diff --git a/src/i_timer.c b/src/i_timer.c
-index d6776f4..d5c5915 100644
+index d6776f4..35162f3 100644
 --- a/src/i_timer.c
 +++ b/src/i_timer.c
-@@ -167,14 +167,15 @@ void I_SetFastdemoTimer(boolean on)
+@@ -18,6 +18,7 @@
+ //
+ 
+ #include <SDL3/SDL.h>
++#include <emscripten.h>
+ 
+ #include "doomdef.h"
+ #include "doomtype.h"
+@@ -167,14 +168,16 @@ void I_SetFastdemoTimer(boolean on)
  
  // Sleep for a specified number of ms
  
-+// A browser worker can't block, and the page's frame timer does the waiting.
++// Single-player games leave the waiting to the page's frame timer. A network
++// game blocks its worker until a packet arrives or the time is up.
  void I_Sleep(int ms)
  {
 -    SDL_Delay(ms);
-+    (void)ms;
++    EM_ASM({ if (Module.wadsmithNet) Module.wadsmithNet.wait($0); }, ms);
  }
  
  void I_SleepUS(uint64_t us)
@@ -1169,12 +1178,207 @@ index 0000000..7a6836a
 +    S_SetMusicVolume(volume);
 +    master_target = muted ? 0.0f : 1.0f;
 +}
+diff --git a/src/wadsmith_net.c b/src/wadsmith_net.c
+new file mode 100644
+index 0000000..d98c95f
+--- /dev/null
++++ b/src/wadsmith_net.c
+@@ -0,0 +1,189 @@
++// Woof's network module for the browser. Packets come in through memory the
++// page shares with this worker, so Woof's own loops that wait for replies keep
++// working. An address is the number the room gives each player.
++
++#include <emscripten.h>
++#include <stdint.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++
++#include "d_player.h"
++#include "doomstat.h"
++#include "doomtype.h"
++#include "m_fixed.h"
++#include "nw_client.h"
++#include "nw_defs.h"
++#include "nw_io.h"
++#include "nw_packet.h"
++#include "nw_sdl.h"
++#include "p_mobj.h"
++
++#define EXPORT EMSCRIPTEN_KEEPALIVE
++
++#define MAX_PEERS 16
++#define MAX_PACKET 16384
++
++static nw_addr_t addrs[MAX_PEERS];
++static uint32_t peers[MAX_PEERS];
++static int num_addrs;
++
++static uint8_t incoming[MAX_PACKET];
++
++static nw_addr_t *AddressOf(uint32_t peer)
++{
++    for (int i = 0; i < num_addrs; i++)
++    {
++        if (peers[i] == peer)
++        {
++            return &addrs[i];
++        }
++    }
++
++    if (peer == 0 || num_addrs == MAX_PEERS)
++    {
++        return NULL;
++    }
++
++    nw_addr_t *addr = &addrs[num_addrs];
++    peers[num_addrs] = peer;
++    addr->module = &nw_sdl_module;
++    addr->refcount = 0;
++    addr->handle = &peers[num_addrs];
++    num_addrs++;
++    return addr;
++}
++
++static boolean InitModule(void)
++{
++    return EM_ASM_INT({ return Module.wadsmithNet ? 1 : 0; });
++}
++
++static void SendPacket(nw_addr_t *addr, nw_packet_t *packet)
++{
++    EM_ASM({ Module.wadsmithNet.send($0 >>> 0, HEAPU8.slice($1, $1 + $2)); },
++           *(uint32_t *)addr->handle, packet->data, (int)packet->len);
++}
++
++// The page only writes a packet that fits, and returns -1 when none is left.
++static boolean RecvPacket(nw_addr_t **addr, nw_packet_t **packet)
++{
++    uint32_t peer;
++
++    for (;;)
++    {
++        const int length = EM_ASM_INT(
++            { return Module.wadsmithNet.receive($0, $1, $2); }, incoming,
++            MAX_PACKET, &peer);
++
++        if (length <= 0 || length > MAX_PACKET)
++        {
++            return false;
++        }
++
++        nw_addr_t *from = AddressOf(peer);
++
++        if (from == NULL)
++        {
++            continue;
++        }
++
++        nw_packet_t *result = NW_NewPacket(length);
++        memcpy(result->data, incoming, length);
++        result->len = length;
++
++        NW_ReferenceAddress(from);
++        *addr = from;
++        *packet = result;
++        return true;
++    }
++}
++
++static void AddrToString(nw_addr_t *addr, char *buffer, int buffer_len)
++{
++    snprintf(buffer, buffer_len, "player %u", *(uint32_t *)addr->handle);
++}
++
++// Addresses last for the whole session.
++static void FreeAddress(nw_addr_t *addr) {}
++
++static nw_addr_t *ResolveAddress(const char *address)
++{
++    char *end;
++    const unsigned long peer = address ? strtoul(address, &end, 10) : 0;
++
++    if (address == NULL || *end != '\0' || peer > UINT32_MAX)
++    {
++        return NULL;
++    }
++
++    return AddressOf((uint32_t)peer);
++}
++
++static void Shutdown(void) {}
++
++nw_module_t nw_sdl_module = {
++    InitModule,   InitModule,  SendPacket,     RecvPacket,
++    AddrToString, FreeAddress, ResolveAddress, Shutdown,
++};
++
++// Only the host, which controls the game, can start it for everyone.
++EXPORT int wadsmith_net_launch(void)
++{
++    if (!nw_client_connected || !nw_client_received_wait_data
++        || !nw_client_wait_data.is_controller)
++    {
++        return 0;
++    }
++
++    NW_CL_LaunchGame();
++    return 1;
++}
++
++EXPORT int wadsmith_net_connected(void)
++{
++    return nw_client_connected;
++}
++
++EXPORT int wadsmith_net_waiting_players(void)
++{
++    return nw_client_connected && nw_client_received_wait_data
++               ? nw_client_wait_data.num_players
++               : 0;
++}
++
++EXPORT int wadsmith_players_in_game(void)
++{
++    int count = 0;
++
++    for (int i = 0; i < MAXPLAYERS; i++)
++    {
++        count += playeringame[i] ? 1 : 0;
++    }
++
++    return count;
++}
++
++EXPORT int wadsmith_console_player(void)
++{
++    return consoleplayer;
++}
++
++static const mobj_t *PlayerMobj(int player)
++{
++    return player >= 0 && player < MAXPLAYERS && playeringame[player]
++               ? players[player].mo
++               : NULL;
++}
++
++EXPORT int wadsmith_net_player_x(int player)
++{
++    const mobj_t *mo = PlayerMobj(player);
++    return mo ? mo->x >> FRACBITS : 0;
++}
++
++EXPORT int wadsmith_net_player_y(int player)
++{
++    const mobj_t *mo = PlayerMobj(player);
++    return mo ? mo->y >> FRACBITS : 0;
++}
 diff --git a/src/wadsmith_unused.c b/src/wadsmith_unused.c
 new file mode 100644
-index 0000000..c2a1348
+index 0000000..5854787
 --- /dev/null
 +++ b/src/wadsmith_unused.c
-@@ -0,0 +1,138 @@
+@@ -0,0 +1,133 @@
 +// Features the browser build leaves out, kept as settings because the options
 +// menu looks them up by name when it starts.
 +
@@ -1286,30 +1490,25 @@ index 0000000..c2a1348
 +
 +void I_Endoom(byte *data) {}
 +
-+// Playtests are single player, so the network module never connects.
-+static boolean NoNetworkInit(void) { return false; }
-+static void NoNetworkSend(nw_addr_t *addr, nw_packet_t *packet) {}
-+static boolean NoNetworkReceive(nw_addr_t **addr, nw_packet_t **packet)
++// Server search is LAN and master-server discovery, which a browser can't do.
++static boolean NoQueryInit(void) { return false; }
++static void NoQuerySend(nw_addr_t *addr, nw_packet_t *packet) {}
++static boolean NoQueryReceive(nw_addr_t **addr, nw_packet_t **packet)
 +{
 +    return false;
 +}
-+static void NoNetworkName(nw_addr_t *addr, char *buffer, int length)
++static void NoQueryName(nw_addr_t *addr, char *buffer, int length)
 +{
 +    buffer[0] = '\0';
 +}
-+static void NoNetworkFree(nw_addr_t *addr) {}
-+static nw_addr_t *NoNetworkResolve(const char *address) { return NULL; }
-+static void NoNetworkShutdown(void) {}
++static void NoQueryFree(nw_addr_t *addr) {}
++static nw_addr_t *NoQueryResolve(const char *address) { return NULL; }
++static void NoQueryShutdown(void) {}
 +
-+nw_module_t nw_sdl_module = {
-+    NoNetworkInit,    NoNetworkInit, NoNetworkSend,
-+    NoNetworkReceive, NoNetworkName, NoNetworkFree,
-+    NoNetworkResolve, NoNetworkShutdown,
-+};
 +nw_module_t nw_sdl_query_module = {
-+    NoNetworkInit,    NoNetworkInit, NoNetworkSend,
-+    NoNetworkReceive, NoNetworkName, NoNetworkFree,
-+    NoNetworkResolve, NoNetworkShutdown,
++    NoQueryInit,    NoQueryInit, NoQuerySend,
++    NoQueryReceive, NoQueryName, NoQueryFree,
++    NoQueryResolve, NoQueryShutdown,
 +};
 +
 +void NW_ResetSocket(void) {}

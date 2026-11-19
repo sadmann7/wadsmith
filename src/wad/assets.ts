@@ -24,6 +24,9 @@ const flatSize = 64;
 
 const spriteLumps: Record<ThingKind, string> = {
   player: "PLAYA1",
+  "player-2": "PLAYA1",
+  "player-3": "PLAYA1",
+  "player-4": "PLAYA1",
   imp: "TROOA1",
   zombieman: "POSSA1",
   "shotgun-guy": "SPOSA1",
@@ -323,7 +326,8 @@ function createFlatAssets(): SceneAssets {
     flat: tile,
     sprite(kind) {
       const monster =
-        thingCatalog[kind].category === "enemy" || kind === "player";
+        thingCatalog[kind].category === "enemy" ||
+        thingCatalog[kind].category === "start";
       const picture = solidPicture(
         monster ? 36 : 22,
         monster ? 56 : 20,

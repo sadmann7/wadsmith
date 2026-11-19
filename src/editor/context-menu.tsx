@@ -400,7 +400,9 @@ function ThingsMenu({
       <Item
         icon={Copy}
         hint="⌘D"
-        disabled={things.every((thing) => thing.kind === "player")}
+        disabled={things.every(
+          (thing) => thingCatalog[thing.kind].category === "start",
+        )}
         onSelect={() => {
           const copies = duplicateThings(map, ids);
           onCommit(copies.map, {

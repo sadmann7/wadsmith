@@ -9,7 +9,7 @@ import {
   wallOwners,
 } from "./geometry";
 import { appearsOn } from "./balance";
-import { keyThings } from "./catalog";
+import { keyThings, thingCatalog, thingKinds } from "./catalog";
 import { describeLine, lineUsesTag } from "./lines";
 import type { GameMap, Sector, ThingSkill } from "./types";
 
@@ -304,11 +304,14 @@ function validateMap(map: GameMap): MapIssue[] {
   if (players.length === 0) {
     issues.push({ id: "no-player", message: "Place a player start." });
   }
-  if (players.length > 1) {
+  for (const kind of thingKinds) {
+    if (thingCatalog[kind].category !== "start") continue;
+    const starts = map.things.filter((thing) => thing.kind === kind);
+    if (starts.length < 2) continue;
     issues.push({
-      id: "many-players",
-      message: "Keep only one player start.",
-      target: players[1].id,
+      id: kind === "player" ? "many-players" : `many-players:${kind}`,
+      message: `Keep only one ${thingCatalog[kind].label.toLowerCase()}.`,
+      target: starts[1].id,
     });
   }
   if (issues.length === 0) {

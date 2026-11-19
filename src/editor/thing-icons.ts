@@ -28,6 +28,9 @@ import type { ThingKind } from "../map/types";
 
 const thingIcons: Record<ThingKind, { icon: LucideIcon; color: string }> = {
   player: { icon: ArrowRight, color: "var(--color-thing-start)" },
+  "player-2": { icon: ArrowRight, color: "var(--color-thing-start)" },
+  "player-3": { icon: ArrowRight, color: "var(--color-thing-start)" },
+  "player-4": { icon: ArrowRight, color: "var(--color-thing-start)" },
   imp: { icon: Flame, color: "var(--color-thing-enemy)" },
   zombieman: { icon: Shield, color: "var(--color-thing-enemy)" },
   "shotgun-guy": { icon: Droplets, color: "var(--color-thing-enemy)" },
