@@ -27,6 +27,7 @@ type Snapshot = {
   frags: number;
   gameTic: number;
   players: { x: number; y: number }[];
+  scores: { slot: number; peer: number; frags: number; kills: number }[];
 };
 
 const workers: Worker[] = [];
@@ -68,6 +69,7 @@ function createRoom(map = coopMap, mode: "coop" | "deathmatch" = "coop") {
         role,
         mode,
         host: hostPeer,
+        peer,
         inbox: inbox.buffer,
         map: compileMap(map),
         engineDirectory,
@@ -145,6 +147,12 @@ describe.skipIf(!ready)("network game through shared memory", () => {
     );
     expect(started?.[0]).toMatchObject({ playersInGame: 2, consolePlayer: 0 });
     expect(started?.[1]).toMatchObject({ playersInGame: 2, consolePlayer: 1 });
+    for (const snapshot of started!) {
+      expect(snapshot.scores.map(({ slot, peer }) => [slot, peer])).toEqual([
+        [0, hostPeer],
+        [1, guestPeer],
+      ]);
+    }
 
     const startX = started![0].players[1].x;
     guest.key(true, doomKeys.up);

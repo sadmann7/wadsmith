@@ -24,6 +24,7 @@ type Setup = {
   role: "host" | "guest";
   mode: "coop" | "deathmatch";
   host: number;
+  peer: number;
   inbox: SharedArrayBuffer;
   map: Uint8Array;
   engineDirectory: string;
@@ -49,6 +50,7 @@ const game = await startDoom({
     role: setup.role,
     mode: setup.mode,
     host: setup.host,
+    peer: setup.peer,
     inbox: new NetInbox(setup.inbox),
     send: (to, data) => port.postMessage({ type: "send", to, data }),
   },

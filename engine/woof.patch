@@ -1201,10 +1201,10 @@ index 0000000..7a6836a
 +}
 diff --git a/src/wadsmith_net.c b/src/wadsmith_net.c
 new file mode 100644
-index 0000000..d98c95f
+index 0000000..82e9706
 --- /dev/null
 +++ b/src/wadsmith_net.c
-@@ -0,0 +1,189 @@
+@@ -0,0 +1,252 @@
 +// Woof's network module for the browser. Packets come in through memory the
 +// page shares with this worker, so Woof's own loops that wait for replies keep
 +// working. An address is the number the room gives each player.
@@ -1393,6 +1393,69 @@ index 0000000..d98c95f
 +{
 +    const mobj_t *mo = PlayerMobj(player);
 +    return mo ? mo->y >> FRACBITS : 0;
++}
++
++static const player_t *NetPlayer(int player)
++{
++    return player >= 0 && player < MAXPLAYERS && playeringame[player]
++               ? &players[player]
++               : NULL;
++}
++
++// Each engine joins under its room peer number as its player name, which ties
++// a game slot to a room player.
++EXPORT int wadsmith_net_player_peer(int player)
++{
++    if (NetPlayer(player) == NULL || !nw_client_received_wait_data
++        || player >= nw_client_wait_data.num_players)
++    {
++        return 0;
++    }
++
++    return atoi(nw_client_wait_data.player_names[player]);
++}
++
++EXPORT int wadsmith_net_player_frags(int player)
++{
++    const player_t *p = NetPlayer(player);
++    int frags = 0;
++
++    for (int i = 0; p && i < MAXPLAYERS; i++)
++    {
++        frags += i == player ? -p->frags[i] : p->frags[i];
++    }
++
++    return frags;
++}
++
++EXPORT int wadsmith_net_player_deaths(int player)
++{
++    int deaths = 0;
++
++    for (int i = 0; NetPlayer(player) && i < MAXPLAYERS; i++)
++    {
++        deaths += players[i].frags[player];
++    }
++
++    return deaths;
++}
++
++EXPORT int wadsmith_net_player_kills(int player)
++{
++    const player_t *p = NetPlayer(player);
++    return p ? p->killcount : 0;
++}
++
++EXPORT int wadsmith_net_player_items(int player)
++{
++    const player_t *p = NetPlayer(player);
++    return p ? p->itemcount : 0;
++}
++
++EXPORT int wadsmith_net_player_secrets(int player)
++{
++    const player_t *p = NetPlayer(player);
++    return p ? p->secretcount : 0;
 +}
 diff --git a/src/wadsmith_unused.c b/src/wadsmith_unused.c
 new file mode 100644

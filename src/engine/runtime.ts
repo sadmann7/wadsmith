@@ -54,6 +54,12 @@ type DoomModule = {
   _wadsmith_console_player(): number;
   _wadsmith_net_player_x(player: number): number;
   _wadsmith_net_player_y(player: number): number;
+  _wadsmith_net_player_peer(player: number): number;
+  _wadsmith_net_player_frags(player: number): number;
+  _wadsmith_net_player_deaths(player: number): number;
+  _wadsmith_net_player_kills(player: number): number;
+  _wadsmith_net_player_items(player: number): number;
+  _wadsmith_net_player_secrets(player: number): number;
 };
 
 type DoomModuleOptions = {
@@ -81,6 +87,7 @@ type NetworkOptions = {
   role: "host" | "guest";
   mode: NetworkMode;
   host: number;
+  peer: number;
   inbox: NetInbox;
   send: (peer: number, data: Uint8Array) => void;
 };
@@ -120,11 +127,15 @@ const screenSizes: Record<Resolution, { width: number; height: number }> = {
   high: { width: 640, height: 400 },
 };
 const maxVolume = 15;
+const netSlots = [0, 1, 2, 3];
 const levelState = 0;
 
 // Woof's own conveniences and visual extras are switched off, so a playtest looks
 // and plays like the classic game a map is built for.
-const engineConfig = (resolution: Resolution) => `fullscreen 0
+const engineConfig = (
+  resolution: Resolution,
+  peer: number | null,
+) => `fullscreen 0
 use_vsync 0
 uncapped 1
 fpslimit 0
@@ -210,7 +221,7 @@ full_sounds 0
 extra_music 0
 autosave 0
 rewind_auto 0
-`;
+${peer === null ? "" : `player_name "${peer}"\n`}`;
 
 const doomKeys = {
   right: 0xae,
@@ -350,6 +361,17 @@ class DoomGame {
       waitingPlayers: module._wadsmith_net_waiting_players(),
       playersInGame: module._wadsmith_players_in_game(),
       consolePlayer: module._wadsmith_console_player(),
+      scores: netSlots
+        .map((slot) => ({
+          slot,
+          peer: module._wadsmith_net_player_peer(slot),
+          frags: module._wadsmith_net_player_frags(slot),
+          deaths: module._wadsmith_net_player_deaths(slot),
+          kills: module._wadsmith_net_player_kills(slot),
+          items: module._wadsmith_net_player_items(slot),
+          secrets: module._wadsmith_net_player_secrets(slot),
+        }))
+        .filter((score) => score.peer > 0),
     };
   }
 
@@ -464,7 +486,10 @@ async function startDoom({
   doomModule.FS.writeFile("/freedoom2.wad", iwad);
   doomModule.FS.writeFile("/woof.pk3", base);
   doomModule.FS.writeFile("/wadsmith.wad", map);
-  doomModule.FS.writeFile("/woof.cfg", engineConfig(resolution));
+  doomModule.FS.writeFile(
+    "/woof.cfg",
+    engineConfig(resolution, network?.peer ?? null),
+  );
   if (sampleRate !== null) doomModule._wadsmith_audio_init(sampleRate);
   try {
     doomModule.callMain([

@@ -16,6 +16,7 @@ type WorkerNetwork = {
   role: "host" | "guest";
   mode: NetworkMode;
   host: number;
+  peer: number;
   inbox: SharedArrayBuffer;
 };
 
@@ -159,6 +160,7 @@ async function start(request: Extract<DoomWorkerRequest, { type: "start" }>) {
           role: request.network.role,
           mode: request.network.mode,
           host: request.network.host,
+          peer: request.network.peer,
           inbox: new NetInbox(request.network.inbox),
           send: (to, data) => post({ type: "net", to, data }, [data.buffer]),
         }
