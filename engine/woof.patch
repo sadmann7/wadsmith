@@ -1,0 +1,1315 @@
+diff --git a/src/d_iwad.c b/src/d_iwad.c
+index 1597098..441f6d7 100644
+--- a/src/d_iwad.c
++++ b/src/d_iwad.c
+@@ -95,23 +95,8 @@ static const char **iwad_dirs;
+ 
+ const char *D_DoomExeDir(void)
+ {
+-    static char *base;
+-
+-    if (base == NULL) // cache multiple requests
+-    {
+-        const char *result = SDL_GetBasePath();
+-
+-        if (result != NULL)
+-        {
+-            base = M_DirName(result);
+-        }
+-        else
+-        {
+-            base = M_DirName(myargv[0]);
+-        }
+-    }
+-
+-    return base;
++    // The worker writes every file the engine needs to its current directory.
++    return ".";
+ }
+ 
+ // [FG] get the path to the default configuration dir to use
+diff --git a/src/d_loop.c b/src/d_loop.c
+index 4a85d9d..c50f5df 100644
+--- a/src/d_loop.c
++++ b/src/d_loop.c
+@@ -1016,7 +1016,8 @@ void TryRunTics(void)
+                 return;
+             }
+ 
+-            I_Sleep(1);
++            // Nothing can block here, so the next frame tries again.
++            return;
+         }
+     }
+ 
+diff --git a/src/d_main.c b/src/d_main.c
+index 8de3359..61f7461 100644
+--- a/src/d_main.c
++++ b/src/d_main.c
+@@ -33,6 +33,8 @@
+ #include <stdlib.h>
+ #include <string.h>
+ 
++#include <emscripten.h>
++
+ #include "am_map.h"
+ #include "config.h"
+ #include "d_demoloop.h"
+@@ -230,14 +232,16 @@ gamestate_t wipegamestate = GS_DEMOSCREEN;
+ wipefx_t screen_wipe_internal = wipe_Default;
+ wipefx_t screen_wipe = wipe_None;
+ 
++static boolean wipe_running;
++static int wipestart;
++
+ void D_Display(void)
+ {
+     static boolean viewactivestate = false;
+     static boolean menuactivestate = false;
+     static gamestate_t oldgamestate = GS_NONE;
+     static boolean borderdrawcount;
+-    int wipestart;
+-    boolean done, wipe;
++    boolean wipe;
+ 
+     if (demobar && PLAYBACK_SKIP)
+     {
+@@ -414,21 +418,63 @@ void D_Display(void)
+     wipe_EndScreen(0, 0, video.width, video.height);
+ 
+     wipestart = I_GetTime() - 1;
++    wipe_running = true;
++}
+ 
+-    do
++// Runs one step of a screen wipe, which a browser can't sit in a loop for.
++static boolean D_RunWipe(void)
++{
++    if (!wipe_running)
+     {
+-        int nowtime = I_GetTime();
+-        int tics = nowtime - wipestart;
++        return false;
++    }
+ 
+-        fractionaltic = I_GetFracTime();
++    const int nowtime = I_GetTime();
++    const int tics = nowtime - wipestart;
+ 
+-        done = wipe_ScreenWipe(0, 0, video.width, video.height, tics);
+-        wipestart = nowtime;
+-        M_Drawer();       // menu is drawn even on top of wipes
+-        I_FinishUpdate(); // page flip or blit buffer
+-    } while (!done);
++    if (tics <= 0)
++    {
++        return true;
++    }
++
++    fractionaltic = I_GetFracTime();
++
++    const boolean done =
++        wipe_ScreenWipe(0, 0, video.width, video.height, tics);
++    wipestart = nowtime;
++    M_Drawer();       // menu is drawn even on top of wipes
++    I_FinishUpdate(); // page flip or blit buffer
+ 
+-    MP_AfterStartWipe();
++    if (done)
++    {
++        wipe_running = false;
++        MP_AfterStartWipe();
++        // Time spent melting must not come back as a burst of game tics.
++        D_StartGameLoop();
++    }
++
++    return true;
++}
++
++void D_RunFrame(void)
++{
++    if (D_RunWipe())
++    {
++        return;
++    }
++
++    // frame syncronous IO operations
++    I_StartFrame();
++
++    MP_StartTick();
++
++    TryRunTics(); // will run at least one tic
++
++    // Update display, next frame, with current state.
++    if (screenvisible)
++    {
++        D_Display();
++    }
+ }
+ 
+ //
+@@ -2229,21 +2275,8 @@ void D_DoomMain(void)
+ 
+     D_StartGameLoop();
+ 
+-    for (;;)
+-    {
+-        // frame syncronous IO operations
+-        I_StartFrame();
+-
+-        MP_StartTick();
+-
+-        TryRunTics(); // will run at least one tic
+-
+-        // Update display, next frame, with current state.
+-        if (screenvisible)
+-        {
+-            D_Display();
+-        }
+-    }
++    // The page's frame timer calls D_RunFrame from here on.
++    emscripten_exit_with_live_runtime();
+ }
+ 
+ void D_BindMiscVariables(void)
+diff --git a/src/d_main.h b/src/d_main.h
+index 7ccdd33..c56fc22 100644
+--- a/src/d_main.h
++++ b/src/d_main.h
+@@ -68,6 +68,8 @@ void D_StartTitle(void);
+ 
+ extern boolean advancedemo;
+ 
++void D_RunFrame(void);
++
+ #endif
+ 
+ //----------------------------------------------------------------------------
+diff --git a/src/g_game.c b/src/g_game.c
+index f65c6c5..0c14e62 100644
+--- a/src/g_game.c
++++ b/src/g_game.c
+@@ -3908,7 +3908,8 @@ static void CheckDemoParams(boolean specified_complevel)
+   }
+   else
+   {
+-    strictmode = false;
++    // A playtest always follows the rules demo recording enforces.
++    strictmode = true;
+   }
+ }
+ 
+diff --git a/src/i_exit.c b/src/i_exit.c
+index 3283091..f39ba90 100644
+--- a/src/i_exit.c
++++ b/src/i_exit.c
+@@ -18,6 +18,7 @@
+ #include <signal.h>
+ #include <stdlib.h>
+ 
++#include "wadsmith.h"
+ #include "i_exit.h"
+ #include "i_printf.h"
+ 
+@@ -72,7 +73,7 @@ void I_SafeExit(int rc)
+         }
+     }
+ 
+-    exit(rc);
++    WADSMITH_Exit(rc);
+ }
+ 
+ // Schedule a function to be called when the program receives a signal.
+diff --git a/src/i_input.c b/src/i_input.c
+index 7370a20..69ce236 100644
+--- a/src/i_input.c
++++ b/src/i_input.c
+@@ -20,6 +20,7 @@
+ #include <SDL3/SDL_joystick.h>
+ #include <string.h>
+ 
++#include "wadsmith.h"
+ #include "d_event.h"
+ #include "d_iwad.h"
+ #include "d_main.h"
+@@ -485,10 +486,8 @@ void I_InitGamepad(void)
+ {
+     UpdatePlatform();
+ 
+-    if (!I_GamepadEnabled())
+-    {
+-        return;
+-    }
++    // Workers have no gamepad API.
++    return;
+ 
+     // Enable gyro, rumble, and effects on Bluetooth PlayStation controllers
+     // and gyro on Nintendo Switch controllers.
+@@ -1010,7 +1009,8 @@ void I_ReadMouse(void)
+ {
+     static event_t ev = {.type = ev_mouse};
+ 
+-    SDL_GetRelativeMouseState(&ev.data1.f, &ev.data2.f);
++    ev.data1.f = WADSMITH_TakeMouseTurn();
++    ev.data2.f = 0.0f;
+ 
+     if (ev.data1.f || ev.data2.f)
+     {
+diff --git a/src/i_main.c b/src/i_main.c
+index 92f982a..3f70a6c 100644
+--- a/src/i_main.c
++++ b/src/i_main.c
+@@ -17,8 +17,6 @@
+ //
+ //-----------------------------------------------------------------------------
+ 
+-#include <SDL3/SDL_main.h>
+-
+ #include <locale.h>
+ #include <stdlib.h>
+ 
+diff --git a/src/i_printf.c b/src/i_printf.c
+index 2ff9e16..f88333e 100644
+--- a/src/i_printf.c
++++ b/src/i_printf.c
+@@ -39,16 +39,7 @@ int I_ConsoleStdout(void)
+ 
+     if (ret == -1)
+     {
+-#ifdef _WIN32
+-        if (_isatty(_fileno(stdout)))
+-#else
+-        if (isatty(fileno(stdout)) && isatty(fileno(stderr)))
+-#endif
+-            ret = 1;
+-        else
+-        {
+-            ret = 0;
+-        }
++        ret = 0;
+     }
+ 
+     return ret;
+diff --git a/src/i_thread.c b/src/i_thread.c
+index f6c1e31..304ee75 100644
+--- a/src/i_thread.c
++++ b/src/i_thread.c
+@@ -33,7 +33,7 @@ void I_ThreadJoin(thread_t *thread)
+ 
+ int I_ThreadGetHardwareCount(void)
+ {
+-    return SDL_GetNumLogicalCPUCores();
++    return 1;
+ }
+ 
+ void I_Yield(void)
+diff --git a/src/i_timer.c b/src/i_timer.c
+index d6776f4..d5c5915 100644
+--- a/src/i_timer.c
++++ b/src/i_timer.c
+@@ -167,14 +167,15 @@ void I_SetFastdemoTimer(boolean on)
+ 
+ // Sleep for a specified number of ms
+ 
++// A browser worker can't block, and the page's frame timer does the waiting.
+ void I_Sleep(int ms)
+ {
+-    SDL_Delay(ms);
++    (void)ms;
+ }
+ 
+ void I_SleepUS(uint64_t us)
+ {
+-    SDL_DelayPrecise(us * 1000ull);
++    (void)us;
+ }
+ 
+ void I_WaitVBL(int count)
+diff --git a/src/i_video.c b/src/i_video.c
+index 6427083..29f1949 100644
+--- a/src/i_video.c
++++ b/src/i_video.c
+@@ -31,6 +31,7 @@
+ #include <stdio.h>
+ #include <stdlib.h>
+ 
++#include "wadsmith.h"
+ #include "am_map.h"
+ #include "config.h"
+ #include "d_event.h"
+@@ -694,34 +695,6 @@ void I_StartFrame(void)
+     ;
+ }
+ 
+-static void UpdateRender(void)
+-{
+-    // When using SDL_LockTexture, the pixels made available for editing may not
+-    // contain the original texture data. We have to maintain a copy of the
+-    // video buffer in order to emulate HOM effects.
+-    void *pixels;
+-    int dst_pitch;
+-
+-    SDL_LockTexture(texture, &src_rect, &pixels, &dst_pitch);
+-
+-    int h = src_rect.h;
+-    const int src_pitch = video.height;
+-    pixel_t *dst = pixels;
+-    pixel_t *src = I_VideoBuffer;
+-
+-    while (h--)
+-    {
+-        memcpy(dst, src, src_pitch);
+-        dst += dst_pitch;
+-        src += src_pitch;
+-    }
+-
+-    SDL_UnlockTexture(texture);
+-
+-    SDL_RenderClear(renderer);
+-    SDL_RenderTextureRotated(renderer, texture, &src_frect, &dst_frect, 90.0, NULL, SDL_FLIP_VERTICAL);
+-}
+-
+ static uint64_t frametime_start, frametime_withoutpresent;
+ 
+ static void ResetResolution(int height);
+@@ -896,15 +869,13 @@ void I_FinishUpdate(void)
+ 
+     DrawDiskIcon();
+ 
+-    UpdateRender();
++    WADSMITH_FramePresented();
+ 
+     if (frametime_start)
+     {
+         frametime_withoutpresent = I_GetTimeUS() - frametime_start;
+     }
+ 
+-    SDL_RenderPresent(renderer);
+-
+     RestoreDiskBackground();
+ 
+     if (use_limiter)
+@@ -1055,6 +1026,7 @@ void I_SetPalette(palette_t pal, palette_layer_t layer)
+     }
+ 
+     SDL_SetPaletteColors(palette, colors, 0, PLAYPAL_SIZE);
++    WADSMITH_SetPalette(colors);
+ 
+     if (vga_porch_flash)
+     {
+@@ -1068,7 +1040,6 @@ void I_SetPalette(palette_t pal, palette_layer_t layer)
+ // [FG] save screenshots in PNG format
+ boolean I_WritePNGfile(char *filename)
+ {
+-    UpdateRender();
+ 
+     SDL_Surface *surface = SDL_RenderReadPixels(renderer, NULL);
+     if (surface == NULL)
+@@ -1696,6 +1667,10 @@ void I_ShutdownGraphics(void)
+ 
+ void I_InitGraphics(void)
+ {
++    // The page draws the frames, so SDL only needs a window that does nothing.
++    SDL_SetHint(SDL_HINT_VIDEO_DRIVER, "dummy");
++    SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software");
++
+     if (!SDL_Init(SDL_INIT_VIDEO))
+     {
+         I_Error("Failed to initialize video: %s", SDL_GetError());
+diff --git a/src/wadsmith.c b/src/wadsmith.c
+new file mode 100644
+index 0000000..ffd15a2
+--- /dev/null
++++ b/src/wadsmith.c
+@@ -0,0 +1,246 @@
++// The interface between Woof and Wadsmith's game worker.
++
++#include <emscripten.h>
++#include <limits.h>
++
++#include "d_event.h"
++#include "d_items.h"
++#include "d_main.h"
++#include "d_player.h"
++#include "doomstat.h"
++#include "g_game.h"
++#include "i_video.h"
++#include "m_config.h"
++#include "m_fixed.h"
++#include "p_mobj.h"
++#include "r_defs.h"
++#include "r_state.h"
++#include "v_video.h"
++#include "wadsmith.h"
++
++#define EXPORT EMSCRIPTEN_KEEPALIVE
++
++extern boolean sendpause;
++
++static uint8_t palette[256 * 3];
++static uint8_t *rgba;
++static int rgba_size;
++static int frames;
++static float mouse_turn;
++
++void WADSMITH_Exit(int code)
++{
++    EM_ASM({ throw { wadsmithExit: $0 }; }, code);
++}
++
++void WADSMITH_FramePresented(void)
++{
++    frames++;
++}
++
++void WADSMITH_SetPalette(const SDL_Color *colors)
++{
++    for (int i = 0; i < 256; i++)
++    {
++        palette[i * 3] = colors[i].r;
++        palette[i * 3 + 1] = colors[i].g;
++        palette[i * 3 + 2] = colors[i].b;
++    }
++}
++
++float WADSMITH_TakeMouseTurn(void)
++{
++    const float turn = mouse_turn;
++    mouse_turn = 0.0f;
++    return turn;
++}
++
++static player_t *Player(void)
++{
++    return &players[consoleplayer];
++}
++
++EXPORT void wadsmith_run_frame(void)
++{
++    D_RunFrame();
++}
++
++EXPORT int wadsmith_frame_count(void)
++{
++    return frames;
++}
++
++EXPORT int wadsmith_frame_width(void)
++{
++    return video.width;
++}
++
++EXPORT int wadsmith_frame_height(void)
++{
++    return video.height;
++}
++
++// Woof keeps its screen in columns, because it draws walls a column at a time.
++EXPORT const uint8_t *wadsmith_frame_rgba(void)
++{
++    const int width = video.width, height = video.height;
++    const int size = width * height * 4;
++    if (size != rgba_size)
++    {
++        rgba = realloc(rgba, size);
++        rgba_size = size;
++    }
++    const pixel_t *column = I_VideoBuffer;
++    for (int x = 0; x < width; x++, column += height)
++    {
++        uint8_t *out = rgba + x * 4;
++        for (int y = 0; y < height; y++, out += width * 4)
++        {
++            const uint8_t *color = palette + column[y] * 3;
++            out[0] = color[0];
++            out[1] = color[1];
++            out[2] = color[2];
++            out[3] = 255;
++        }
++    }
++    return rgba;
++}
++
++EXPORT void wadsmith_key(int pressed, int key)
++{
++    static event_t event;
++    event.type = pressed ? ev_keydown : ev_keyup;
++    event.data1.i = key;
++    D_PostEvent(&event);
++}
++
++EXPORT void wadsmith_mouse_turn(float amount)
++{
++    mouse_turn += amount;
++}
++
++EXPORT void wadsmith_set_paused(int on)
++{
++    if (gamestate == GS_LEVEL && !demoplayback)
++    {
++        sendpause = (on != 0) != paused;
++    }
++}
++
++EXPORT int wadsmith_setting(const char *name)
++{
++    const default_t *setting = M_LookupDefault(name);
++    return setting ? *setting->location.i : INT_MIN;
++}
++
++EXPORT int wadsmith_strict_mode(void)
++{
++    return strictmode;
++}
++
++EXPORT int wadsmith_demo_version(void)
++{
++    return demo_version;
++}
++
++EXPORT int wadsmith_game_state(void)
++{
++    return gamestate;
++}
++
++EXPORT int wadsmith_game_tic(void)
++{
++    return gametic;
++}
++
++EXPORT int wadsmith_health(void)
++{
++    return Player()->health;
++}
++
++EXPORT int wadsmith_kills(void)
++{
++    return Player()->killcount;
++}
++
++EXPORT int wadsmith_total_kills(void)
++{
++    return totalkills;
++}
++
++EXPORT int wadsmith_player_x(void)
++{
++    return Player()->mo ? Player()->mo->x >> FRACBITS : 0;
++}
++
++EXPORT int wadsmith_player_y(void)
++{
++    return Player()->mo ? Player()->mo->y >> FRACBITS : 0;
++}
++
++EXPORT int wadsmith_player_angle(void)
++{
++    const mobj_t *mo = Player()->mo;
++    return mo ? (int)(((unsigned long long)mo->angle * 360) >> 32) : 0;
++}
++
++EXPORT int wadsmith_armor(void)
++{
++    return Player()->armorpoints;
++}
++
++EXPORT int wadsmith_ammo_type(void)
++{
++    return weaponinfo[Player()->readyweapon].ammo;
++}
++
++EXPORT int wadsmith_ammo(void)
++{
++    const int type = wadsmith_ammo_type();
++    return type < NUMAMMO ? Player()->ammo[type] : 0;
++}
++
++EXPORT int wadsmith_keys(void)
++{
++    int keys = 0;
++    for (int card = 0; card < NUMCARDS; card++)
++    {
++        if (Player()->cards[card])
++        {
++            keys |= 1 << card;
++        }
++    }
++    return keys;
++}
++
++EXPORT int wadsmith_items(void)
++{
++    return Player()->itemcount;
++}
++
++EXPORT int wadsmith_total_items(void)
++{
++    return totalitems;
++}
++
++EXPORT int wadsmith_secrets(void)
++{
++    return Player()->secretcount;
++}
++
++EXPORT int wadsmith_total_secrets(void)
++{
++    return totalsecret;
++}
++
++EXPORT int wadsmith_level_tics(void)
++{
++    return leveltime;
++}
++
++EXPORT int wadsmith_sector_ceiling(int index)
++{
++    return index >= 0 && index < numsectors
++               ? sectors[index].ceilingheight >> FRACBITS
++               : 0;
++}
+diff --git a/src/wadsmith.h b/src/wadsmith.h
+new file mode 100644
+index 0000000..184fb98
+--- /dev/null
++++ b/src/wadsmith.h
+@@ -0,0 +1,11 @@
++#ifndef WADSMITH_H
++#define WADSMITH_H
++
++#include <SDL3/SDL.h>
++
++float WADSMITH_TakeMouseTurn(void);
++void WADSMITH_FramePresented(void);
++void WADSMITH_SetPalette(const SDL_Color *colors);
++void WADSMITH_Exit(int code);
++
++#endif
+diff --git a/src/wadsmith_audio.c b/src/wadsmith_audio.c
+new file mode 100644
+index 0000000..7a6836a
+--- /dev/null
++++ b/src/wadsmith_audio.c
+@@ -0,0 +1,478 @@
++// Mixes sound effects and OPL music into the stereo stream the page plays.
++
++#include <emscripten.h>
++#include <math.h>
++#include <stdlib.h>
++#include <string.h>
++
++#include "i_oalsound.h"
++#include "i_oalstream.h"
++#include "i_sound.h"
++#include "m_array.h"
++#include "midiseq.h"
++#include "mididevice.h"
++#include "opl.h"
++#include "s_sound.h"
++#include "sounds.h"
++#include "w_wad.h"
++#include "z_zone.h"
++
++#define DMXHDRSIZE 8
++#define DMXPADSIZE 16
++#define FADETIME 1000
++#define MAX_BLOCK 8192
++#define MUSIC_CHUNK 2048
++#define GAIN_RAMP_FRAMES 256
++
++typedef struct
++{
++    byte *data;
++    int frames;
++    int rate;
++} web_sfx_t;
++
++typedef struct
++{
++    const web_sfx_t *sfx;
++    double pos, step;
++    float gain, pan, left, right;
++    boolean active, paused, looping, fresh;
++} web_channel_t;
++
++static web_sfx_t *sfx_table;
++static web_channel_t channels[MAX_CHANNELS];
++static int output_rate = 48000;
++static boolean sfx_muted;
++boolean oal_use_doppler, auto_gain;
++
++// These match the level of the engine Wadsmith used before Woof at volume 8.
++#define SFX_LEVEL   0.671f
++#define MUSIC_LEVEL 0.661f
++
++#define LIMITER_CEILING 0.98f
++#define LIMITER_LOOKAHEAD_MS 2
++#define LIMITER_RELEASE_MS 100
++#define LIMITER_MAX_FRAMES 256
++
++static float out_left[MAX_BLOCK], out_right[MAX_BLOCK], out_interleaved[MAX_BLOCK * 2];
++static float master_gain, master_target = 1.0f;
++static float last_left, last_right;
++
++static void FadeInOutMono8(byte *data, int size, int freq)
++{
++    const int fadelen = freq * FADETIME / 1000000;
++    if (size < fadelen)
++    {
++        return;
++    }
++    if (data[0] != 128)
++    {
++        for (int i = 0; i < fadelen; i++)
++        {
++            data[i] = (data[i] - 128) * i / fadelen + 128;
++        }
++    }
++    if (data[size - 1] != 128)
++    {
++        for (int i = 0; i < fadelen; i++)
++        {
++            data[size - 1 - i] = (data[size - 1 - i] - 128) * i / fadelen + 128;
++        }
++    }
++}
++
++boolean I_OAL_InitSound(int snd_module)
++{
++    (void)snd_module;
++    return true;
++}
++boolean I_OAL_ReinitSound(int snd_module)
++{
++    (void)snd_module;
++    return true;
++}
++boolean I_OAL_AllowReinitSound(void) { return false; }
++void I_OAL_ShutdownSound(void) {}
++void I_OAL_ShutdownModule(void) {}
++void I_OAL_DeferUpdates(void) {}
++void I_OAL_ProcessUpdates(void) {}
++void I_OAL_SetResampler(void) {}
++void I_OAL_ResetSource2D(int channel) { (void)channel; }
++void I_OAL_ResetSource3D(int channel, boolean point_source, const sfxparams_t *params)
++{
++    (void)channel; (void)point_source; (void)params;
++}
++void I_OAL_UpdateSourceParams(int channel, const ALfloat *position, const ALfloat *velocity)
++{
++    (void)channel; (void)position; (void)velocity;
++}
++void I_OAL_UpdateListenerParams(const ALfloat *position, const ALfloat *velocity, const ALfloat *orientation)
++{
++    (void)position; (void)velocity; (void)orientation;
++}
++const char **I_OAL_GetResamplerStrings(void)
++{
++    static const char **strings;
++    if (!array_size(strings))
++    {
++        array_push(strings, "Linear");
++    }
++    return strings;
++}
++
++boolean I_OAL_CacheSound(sfxinfo_t *sfx)
++{
++    if (sfx->cached)
++    {
++        return true;
++    }
++    const int lumpnum = I_GetSfxLumpNum(sfx);
++    if (lumpnum < 0)
++    {
++        return false;
++    }
++    byte *lump = W_CacheLumpNum(lumpnum, PU_STATIC);
++    const int len = W_LumpLength(lumpnum);
++    boolean ok = false;
++    if (len > DMXHDRSIZE && lump[0] == 0x03 && lump[1] == 0x00)
++    {
++        const int freq = (lump[3] << 8) | lump[2];
++        int size = (lump[7] << 24) | (lump[6] << 16) | (lump[5] << 8) | lump[4];
++        if (size <= len - DMXHDRSIZE && size > DMXPADSIZE * 2 && freq > 0)
++        {
++            size -= DMXPADSIZE * 2;
++            web_sfx_t entry = {malloc(size), size, freq};
++            memcpy(entry.data, lump + DMXHDRSIZE + DMXPADSIZE, size);
++            if (!sfx->looping)
++            {
++                FadeInOutMono8(entry.data, size, freq);
++            }
++            array_push(sfx_table, entry);
++            sfx->buffer = array_size(sfx_table);
++            sfx->cached = true;
++            if (sfx->flags & SFX_Ambient)
++            {
++                sfx->length = (float)size / freq;
++            }
++            ok = true;
++        }
++    }
++    Z_Free(lump);
++    if (!ok)
++    {
++        sfx->lumpnum = -2;
++    }
++    return ok;
++}
++
++float I_OAL_GetOffset(int channel)
++{
++    const web_channel_t *c = &channels[channel];
++    return c->active && c->sfx ? (float)(c->pos / c->sfx->rate) : 0.0f;
++}
++
++boolean I_OAL_StartSound(int channel, sfxinfo_t *sfx, const sfxparams_t *params)
++{
++    if (!sfx->buffer)
++    {
++        return false;
++    }
++    web_channel_t *c = &channels[channel];
++    c->sfx = &sfx_table[sfx->buffer - 1];
++    c->pos = params->offset * c->sfx->rate;
++    c->step = (double)c->sfx->rate * params->pitch / output_rate;
++    c->looping = sfx->looping;
++    c->active = true;
++    c->paused = false;
++    c->fresh = true;
++    return true;
++}
++void I_OAL_StopSound(int channel) { channels[channel].active = false; channels[channel].paused = false; }
++void I_OAL_PauseSound(int channel) { if (channels[channel].active) channels[channel].paused = true; }
++void I_OAL_ResumeSound(int channel) { channels[channel].paused = false; }
++void I_OAL_MuteSound(void) { sfx_muted = true; }
++void I_OAL_UnmuteSound(void) { sfx_muted = false; }
++boolean I_OAL_SoundIsPlaying(int channel) { return channels[channel].active && !channels[channel].paused; }
++boolean I_OAL_SoundIsPaused(int channel) { return channels[channel].active && channels[channel].paused; }
++void I_OAL_SetGain(int channel, float gain) { channels[channel].gain = gain; }
++void I_OAL_SetVolume(int channel, int volume) { channels[channel].gain = volume / 127.0f; }
++void I_OAL_SetPan(int channel, int separation) { channels[channel].pan = separation / 255.0f - 0.5f; }
++
++void WADSMITH_BindUnusedVariables(void);
++void I_OAL_BindSoundVariables(void) { WADSMITH_BindUnusedVariables(); }
++
++static struct
++{
++    boolean initialized, loaded, playing, paused;
++    float gain;
++    short buffer[(MUSIC_CHUNK + 1) * 2];
++    int frames;
++    double pos;
++} music;
++
++boolean I_OAL_InitStream(void)
++{
++    music.gain = 1.0f;
++    music.initialized = true;
++    return true;
++}
++void I_OAL_ShutdownStream(void) { music.initialized = false; }
++
++static boolean Music_Init(int device) { return stream_opl_module.I_InitStream(device); }
++static void Music_Stop(void *handle) { (void)handle; music.playing = false; }
++static void Music_Unregister(void *handle)
++{
++    (void)handle;
++    if (music.loaded)
++    {
++        stream_opl_module.I_CloseStream();
++        music.loaded = false;
++    }
++}
++static void Music_Shutdown(void)
++{
++    Music_Stop(NULL);
++    Music_Unregister(NULL);
++    stream_opl_module.I_ShutdownStream();
++}
++static void Music_SetVolume(int volume) { music.gain = volume / 15.0f; }
++static void Music_Pause(void *handle) { (void)handle; music.paused = true; }
++static void Music_Resume(void *handle) { (void)handle; music.paused = false; }
++static void *Music_Register(void *data, int size)
++{
++    ALenum format;
++    ALsizei freq, frame_size;
++    if (!music.initialized || !stream_opl_module.I_OpenStream(data, size, &format, &freq, &frame_size))
++    {
++        return NULL;
++    }
++    music.loaded = true;
++    return &music;
++}
++static void Music_Play(void *handle, boolean looping)
++{
++    (void)handle;
++    stream_opl_module.I_PlayStream(looping);
++    music.frames = 0;
++    music.pos = 0.0;
++    music.playing = true;
++}
++static const char **Music_Devices(void) { return stream_opl_module.I_DeviceList(); }
++static void Music_Bind(void) { stream_opl_module.BindVariables(); }
++static const char *Music_Format(void) { return stream_opl_module.I_MusicFormat(); }
++
++music_module_t music_oal_module = {
++    Music_Init, Music_Shutdown, Music_SetVolume, Music_Pause, Music_Resume, Music_Register,
++    Music_Play, Music_Stop, Music_Unregister, Music_Devices, Music_Bind, Music_Format,
++};
++
++static boolean Native_Init(int device) { (void)device; return false; }
++static void Native_Shutdown(void) {}
++static void Native_Volume(int volume) { (void)volume; }
++static void Native_Handle(void *handle) { (void)handle; }
++static void *Native_Register(void *data, int size) { (void)data; (void)size; return NULL; }
++static void Native_Play(void *handle, boolean looping) { (void)handle; (void)looping; }
++static const char **Native_Devices(void) { return NULL; }
++static void Native_Bind(void) { MIDISeq_BindVariables(); MIDIDevice_BindVariables(); }
++static const char *Native_Format(void) { return "None"; }
++
++music_module_t music_native_module = {
++    Native_Init, Native_Shutdown, Native_Volume, Native_Handle, Native_Handle, Native_Register,
++    Native_Play, Native_Handle, Native_Handle, Native_Devices, Native_Bind, Native_Format,
++};
++
++static void MixMusic(int frames)
++{
++    if (!music.playing || music.paused)
++    {
++        return;
++    }
++    const double step = (double)OPL_SAMPLE_RATE / output_rate;
++    for (int i = 0; i < frames; i++)
++    {
++        int index = (int)music.pos;
++        while (index + 1 >= music.frames)
++        {
++            int keep = 0;
++            if (music.frames > 0)
++            {
++                music.buffer[0] = music.buffer[(music.frames - 1) * 2];
++                music.buffer[1] = music.buffer[(music.frames - 1) * 2 + 1];
++                music.pos -= music.frames - 1;
++                keep = 1;
++            }
++            const int got = stream_opl_module.I_FillStream(music.buffer + keep * 2, MUSIC_CHUNK);
++            if (got <= 0)
++            {
++                music.playing = false;
++                return;
++            }
++            music.frames = got + keep;
++            index = (int)music.pos;
++        }
++        const float f = (float)(music.pos - index);
++        const short *a = &music.buffer[index * 2];
++        out_left[i] += MUSIC_LEVEL * music.gain * (a[0] + (a[2] - a[0]) * f) / 32768.0f;
++        out_right[i] += MUSIC_LEVEL * music.gain * (a[1] + (a[3] - a[1]) * f) / 32768.0f;
++        music.pos += step;
++    }
++}
++
++static void MixChannel(web_channel_t *c, int frames)
++{
++    const float theta = (c->pan + 0.5f) * (float)M_PI_2;
++    const float left_target = SFX_LEVEL * c->gain * cosf(theta), right_target = SFX_LEVEL * c->gain * sinf(theta);
++    if (c->fresh)
++    {
++        c->left = left_target;
++        c->right = right_target;
++        c->fresh = false;
++    }
++    const float left_step = (left_target - c->left) / frames, right_step = (right_target - c->right) / frames;
++    const byte *data = c->sfx->data;
++    const int total = c->sfx->frames;
++    for (int i = 0; i < frames; i++)
++    {
++        int index = (int)c->pos;
++        if (index >= total)
++        {
++            if (!c->looping)
++            {
++                c->active = false;
++                return;
++            }
++            c->pos -= total;
++            index = (int)c->pos;
++        }
++        const int next = index + 1 < total ? index + 1 : (c->looping ? 0 : index);
++        const float f = (float)(c->pos - index);
++        const float sample = ((data[index] + (data[next] - data[index]) * f) - 128.0f) / 128.0f;
++        c->left += left_step;
++        c->right += right_step;
++        out_left[i] += sample * c->left;
++        out_right[i] += sample * c->right;
++        c->pos += c->step;
++    }
++}
++
++// A look-ahead limiter: the gain is already down by the time a peak arrives, so
++// stacked sounds get quieter instead of clipping.
++static struct
++{
++    int length;
++    float release;
++    float delay[LIMITER_MAX_FRAMES][2];
++    float wanted[LIMITER_MAX_FRAMES];
++    float smooth[LIMITER_MAX_FRAMES];
++    float held, sum;
++    int position;
++} limiter;
++
++static void ResetLimiter(void)
++{
++    int length = output_rate * LIMITER_LOOKAHEAD_MS / 1000;
++    if (length > LIMITER_MAX_FRAMES)
++    {
++        length = LIMITER_MAX_FRAMES;
++    }
++    limiter.length = length;
++    limiter.release = 1.0f / (output_rate * LIMITER_RELEASE_MS / 1000.0f);
++    limiter.held = 1.0f;
++    limiter.sum = (float)length;
++    limiter.position = 0;
++    for (int i = 0; i < length; i++)
++    {
++        limiter.wanted[i] = limiter.smooth[i] = 1.0f;
++        limiter.delay[i][0] = limiter.delay[i][1] = 0.0f;
++    }
++}
++
++static void Limit(float *left, float *right)
++{
++    const int at = limiter.position, length = limiter.length;
++    const float peak = fmaxf(fabsf(*left), fabsf(*right));
++    limiter.wanted[at] = peak > LIMITER_CEILING ? LIMITER_CEILING / peak : 1.0f;
++
++    float lowest = limiter.wanted[at];
++    for (int i = 0; i < length; i++)
++    {
++        lowest = fminf(lowest, limiter.wanted[i]);
++    }
++    limiter.held = fminf(lowest, fminf(1.0f, limiter.held + limiter.release));
++
++    limiter.sum += limiter.held - limiter.smooth[at];
++    limiter.smooth[at] = limiter.held;
++    const float gain = limiter.sum / length;
++
++    const float out_l = limiter.delay[at][0], out_r = limiter.delay[at][1];
++    limiter.delay[at][0] = *left;
++    limiter.delay[at][1] = *right;
++    limiter.position = (at + 1) % length;
++    *left = out_l * gain;
++    *right = out_r * gain;
++}
++
++EMSCRIPTEN_KEEPALIVE void wadsmith_audio_init(int rate)
++{
++    output_rate = rate;
++    ResetLimiter();
++}
++
++EMSCRIPTEN_KEEPALIVE float *wadsmith_audio_render(int frames)
++{
++    if (frames > MAX_BLOCK)
++    {
++        frames = MAX_BLOCK;
++    }
++    memset(out_left, 0, sizeof(float) * frames);
++    memset(out_right, 0, sizeof(float) * frames);
++    MixMusic(frames);
++    if (!sfx_muted)
++    {
++        for (int c = 0; c < MAX_CHANNELS; c++)
++        {
++            if (channels[c].active && !channels[c].paused)
++            {
++                MixChannel(&channels[c], frames);
++            }
++        }
++    }
++    const float jump_left = last_left - out_left[0];
++    const float jump_right = last_right - out_right[0];
++    if (fabsf(jump_left) > 0.02f || fabsf(jump_right) > 0.02f)
++    {
++        const int span = frames < 64 ? frames : 64;
++        for (int i = 0; i < span; i++)
++        {
++            const float fade = 1.0f - (float)i / span;
++            out_left[i] += jump_left * fade;
++            out_right[i] += jump_right * fade;
++        }
++    }
++    last_left = out_left[frames - 1];
++    last_right = out_right[frames - 1];
++    const float ramp = 1.0f / GAIN_RAMP_FRAMES;
++    for (int i = 0; i < frames; i++)
++    {
++        if (master_gain < master_target)
++        {
++            master_gain = fminf(master_target, master_gain + ramp);
++        }
++        else if (master_gain > master_target)
++        {
++            master_gain = fmaxf(master_target, master_gain - ramp);
++        }
++        float l = out_left[i] * master_gain, r = out_right[i] * master_gain;
++        Limit(&l, &r);
++        out_interleaved[i * 2] = l;
++        out_interleaved[i * 2 + 1] = r;
++    }
++    return out_interleaved;
++}
++
++EMSCRIPTEN_KEEPALIVE void wadsmith_set_sound(int volume, int muted)
++{
++    S_SetSfxVolume(volume);
++    S_SetMusicVolume(volume);
++    master_target = muted ? 0.0f : 1.0f;
++}
+diff --git a/src/wadsmith_unused.c b/src/wadsmith_unused.c
+new file mode 100644
+index 0000000..c2a1348
+--- /dev/null
++++ b/src/wadsmith_unused.c
+@@ -0,0 +1,138 @@
++// Features the browser build leaves out, kept as settings because the options
++// menu looks them up by name when it starts.
++
++#include <SDL3/SDL.h>
++
++#include "doomtype.h"
++#include "i_endoom.h"
++#include "i_rumble.h"
++#include "m_array.h"
++#include "m_config.h"
++#include "nw_defs.h"
++#include "nw_sdl.h"
++
++static const char *const unused_numbers[] = {
++    "fl_chorus_depth",
++    "fl_chorus_level",
++    "fl_chorus_nr",
++    "fl_chorus_speed",
++    "fl_gain",
++    "fl_note_cut",
++    "fl_polyphony",
++    "fl_reverb_damp",
++    "fl_reverb_level",
++    "fl_reverb_roomsize",
++    "fl_reverb_width",
++    "joy_rumble",
++    "midi_gain",
++    "opl_gain",
++    "snd_absorption",
++    "snd_doppler",
++    "snd_eq_high_cutoff",
++    "snd_eq_high_gain",
++    "snd_eq_low_cutoff",
++    "snd_eq_low_gain",
++    "snd_eq_mid1_center",
++    "snd_eq_mid1_gain",
++    "snd_eq_mid1_width",
++    "snd_eq_mid2_center",
++    "snd_eq_mid2_gain",
++    "snd_eq_mid2_width",
++    "snd_eq_preamp",
++    "snd_equalizer",
++    "snd_resampler",
++};
++static const char *const unused_flags[] = {
++    "auto_gain",
++    "fl_chorus",
++    "fl_interpolation",
++    "fl_reverb",
++    "snd_hrtf",
++};
++static const char *const unused_strings[] = {
++    "soundfont_dirs",
++};
++
++void WADSMITH_BindUnusedVariables(void)
++{
++    static boolean bound;
++    static int numbers[arrlen(unused_numbers)];
++    static boolean flags[arrlen(unused_flags)];
++    static const char *strings[arrlen(unused_strings)];
++
++    if (bound)
++    {
++        return;
++    }
++    bound = true;
++
++    for (int i = 0; i < arrlen(unused_numbers); i++)
++    {
++        M_BindNum(unused_numbers[i], &numbers[i], NULL, 0, -1000000, 1000000,
++                  wad_no, "");
++    }
++    for (int i = 0; i < arrlen(unused_flags); i++)
++    {
++        M_BindBool(unused_flags[i], &flags[i], NULL, false, wad_no, "");
++    }
++    for (int i = 0; i < arrlen(unused_strings); i++)
++    {
++        M_BindStr((char *)unused_strings[i], &strings[i], "", wad_no, "");
++    }
++}
++
++void I_BindEqualizerVariables(void) { WADSMITH_BindUnusedVariables(); }
++void I_OAL_EqualizerPreset(void) {}
++void I_OAL_SetEqualizer(void) {}
++boolean I_OAL_EqualizerInitialized(void) { return false; }
++boolean I_OAL_CustomEqualizer(void) { return false; }
++
++void I_ShutdownRumble(void) {}
++void I_InitRumble(void) {}
++void I_CacheRumble(struct sfxinfo_s *sfx, int format, const byte *data,
++                   int size, int rate) {}
++boolean I_RumbleEnabled(void) { return false; }
++boolean I_RumbleSupported(void) { return false; }
++void I_RumbleMenuFeedback(void) {}
++void I_UpdateRumbleEnabled(void) {}
++void I_SetRumbleSupported(SDL_Gamepad *gamepad) {}
++void I_ResetRumbleChannel(int handle) {}
++void I_ResetAllRumbleChannels(void) {}
++void I_UpdateRumble(void) {}
++void I_UpdateRumbleParams(const struct mobj_s *listener,
++                          const struct mobj_s *origin, int handle) {}
++void I_StartRumble(const struct mobj_s *listener, const struct mobj_s *origin,
++                   const struct sfxinfo_s *sfx, int handle,
++                   rumble_type_t type) {}
++void I_DisableRumble(void) {}
++void I_BindRumbleVariables(void) { WADSMITH_BindUnusedVariables(); }
++
++void I_Endoom(byte *data) {}
++
++// Playtests are single player, so the network module never connects.
++static boolean NoNetworkInit(void) { return false; }
++static void NoNetworkSend(nw_addr_t *addr, nw_packet_t *packet) {}
++static boolean NoNetworkReceive(nw_addr_t **addr, nw_packet_t **packet)
++{
++    return false;
++}
++static void NoNetworkName(nw_addr_t *addr, char *buffer, int length)
++{
++    buffer[0] = '\0';
++}
++static void NoNetworkFree(nw_addr_t *addr) {}
++static nw_addr_t *NoNetworkResolve(const char *address) { return NULL; }
++static void NoNetworkShutdown(void) {}
++
++nw_module_t nw_sdl_module = {
++    NoNetworkInit,    NoNetworkInit, NoNetworkSend,
++    NoNetworkReceive, NoNetworkName, NoNetworkFree,
++    NoNetworkResolve, NoNetworkShutdown,
++};
++nw_module_t nw_sdl_query_module = {
++    NoNetworkInit,    NoNetworkInit, NoNetworkSend,
++    NoNetworkReceive, NoNetworkName, NoNetworkFree,
++    NoNetworkResolve, NoNetworkShutdown,
++};
++
++void NW_ResetSocket(void) {}

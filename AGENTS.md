@@ -14,19 +14,19 @@ Default to no comment. Write one only for a constraint, an external quirk, or an
 
 ## Project
 
-Wadsmith is a Doom map editor built with Next.js, Tailwind CSS and UI SDK. It compiles maps to real WAD files and plays them in Chocolate Doom, built for WebAssembly from cloudflare/doom-wasm.
+Wadsmith is a Doom map editor built with Next.js, Tailwind CSS and UI SDK. It compiles maps to real WAD files and plays them in Woof, built for WebAssembly and run in its vanilla Doom compatibility mode.
 
 - `src/app`: Next.js routes, metadata images and global styles. Read the guides in `node_modules/next/dist/docs/` before changing Next.js code. The design tokens are in `globals.css`; new UI should use Tailwind utilities.
 - `src/map`: the map model, edits and validation. No UI code.
 - `src/wad`: the WAD compiler, including the BSP and blockmap builders.
 - `src/editor`: the `map-editor` primitive and inspector.
 - `src/preview`: the editable 3D view and its software renderer. It is not the game renderer.
-- `src/engine`: the game runs in `doom-worker.ts`, and `game-client.ts` connects it to the page and an AudioWorklet.
-- `engine/doom-wasm.patch`: every change to cloudflare/doom-wasm, including tablecn's browser fixes and Wadsmith's exports.
+- `src/engine`: the game runs in `doom-worker.ts`, `game-client.ts` connects it to the page and an AudioWorklet, and `mouse-capture.ts` holds the pointer lock rules.
+- `engine/woof.patch`: every change to Woof, including the browser frame loop, the audio mixer and Wadsmith's exports. To change it, edit `.cache/woof`, then run `git add -AN && git diff > ../../engine/woof.patch` there.
 
 Editor coordinates are y-down. `toDoom` in `src/wad/compile.ts` is the only place that flips them for the engine.
 
-Run `pnpm setup:engine` once after cloning. It needs Emscripten, autoconf, automake and pkg-config, and it writes the engine and Freedoom to `public/engine`, which stays out of git.
+Run `pnpm setup:engine` once after cloning, and again when `engine/` or `scripts/setup-engine.mjs` changes. It needs Emscripten, git, curl and unzip, and it writes the engine, Freedoom and their licenses to `public/engine`, which stays out of git.
 
 <!-- BEGIN:nextjs-agent-rules -->
 

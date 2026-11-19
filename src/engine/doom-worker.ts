@@ -13,6 +13,7 @@ type DoomWorkerRequest =
   | {
       type: "start";
       engineUrl: string;
+      baseUrl: string;
       iwad: Uint8Array;
       map: Uint8Array;
       sound: SoundLevel;
@@ -21,6 +22,8 @@ type DoomWorkerRequest =
       audioPort: MessagePort | null;
     }
   | { type: "key"; pressed: boolean; key: number }
+  | { type: "turn"; amount: number }
+  | { type: "display" }
   | { type: "sound"; sound: SoundLevel }
   | { type: "pause"; paused: boolean }
   | { type: "recycle"; buffer: ArrayBuffer };
@@ -30,27 +33,19 @@ type DoomWorkerResponse =
   | { type: "exit" }
   | { type: "error"; stage: "load" | "start" | "run"; message: string };
 
-type StandInProcessor = {
-  bufferSize: number;
-  channels: number;
-  onaudioprocess: ((event: { outputBuffer: unknown }) => void) | null;
-  connect: () => void;
-  disconnect: () => void;
-};
-
-const audioBuffersAhead = 3;
-const audioPumpMs = 5;
-const framePumpMs = 4;
+const audioBlockFrames = 512;
+const audioBlocksAhead = 4;
+const audioPumpMs = 4;
 const statusEveryMs = 100;
 
-const scope = self as unknown as Worker & Record<string, unknown>;
+const scope = self as unknown as Worker;
 
 let game: DoomGame | null = null;
-let processor: StandInProcessor | null = null;
-let sampleRate = 48_000;
 let stage: "load" | "start" | "run" = "load";
 let sound: SoundLevel = { volume: 8, muted: false };
 let paused = false;
+const heldKeys = new Set<number>();
+let lastStatus = 0;
 const errors: string[] = [];
 const spareFrames: ArrayBuffer[] = [];
 
@@ -63,54 +58,7 @@ function fail(fallback: string) {
   post({ type: "error", stage, message });
 }
 
-// SDL's audio driver only needs a context with a script processor. The samples
-// it writes here go to the page's AudioWorklet instead of a speaker.
-class WorkerAudioContext {
-  sampleRate = sampleRate;
-  state = "running";
-  destination = {};
-  currentTime = 0;
-
-  createScriptProcessor(bufferSize: number, _inputs: number, channels: number) {
-    processor = {
-      bufferSize,
-      channels,
-      onaudioprocess: null,
-      connect: () => {},
-      disconnect: () => {},
-    };
-    return processor;
-  }
-
-  resume() {
-    return Promise.resolve();
-  }
-
-  suspend() {
-    return Promise.resolve();
-  }
-
-  close() {
-    return Promise.resolve();
-  }
-}
-
-function prepareBrowserApis() {
-  scope.AudioContext = WorkerAudioContext;
-  // Without this, SDL waits for a gesture on a document workers don't have.
-  if (!("userActivation" in navigator)) {
-    Object.defineProperty(navigator, "userActivation", {
-      value: { hasBeenActive: true, isActive: true },
-    });
-  }
-  // Timers keep the engine and its audio steady, unlike animation frames.
-  Object.defineProperty(scope, "requestAnimationFrame", {
-    value: undefined,
-    configurable: true,
-  });
-}
-
-function pumpAudio(port: MessagePort) {
+function pumpAudio(running: DoomGame, port: MessagePort) {
   let sent = 0;
   let played = 0;
   port.addEventListener("message", (event: MessageEvent<number>) => {
@@ -118,74 +66,68 @@ function pumpAudio(port: MessagePort) {
   });
   port.start();
   setInterval(() => {
-    if (!processor?.onaudioprocess) return;
-    const { bufferSize, channels } = processor;
-    while (sent - played < bufferSize * audioBuffersAhead) {
-      const data = Array.from(
-        { length: channels },
-        () => new Float32Array(bufferSize),
-      );
-      processor.onaudioprocess({
-        outputBuffer: {
-          numberOfChannels: channels,
-          length: bufferSize,
-          sampleRate,
-          getChannelData: (channel: number) => data[channel],
-        },
-      });
+    while (sent - played < audioBlockFrames * audioBlocksAhead) {
+      const data = running.audio(audioBlockFrames);
       port.postMessage(
         data,
-        data.map((channel) => channel.buffer),
+        data.map((channel) => channel.buffer as ArrayBuffer),
       );
-      sent += bufferSize;
+      sent += audioBlockFrames;
     }
   }, audioPumpMs);
 }
 
-function pumpFrames(running: DoomGame) {
-  let lastStatus = 0;
-  setInterval(() => {
-    if (!running.hasNewFrame()) return;
-    const buffer =
-      spareFrames.pop() ?? new ArrayBuffer(screenWidth * screenHeight * 4);
-    running.frame(new Uint8ClampedArray(buffer));
-    const now = performance.now();
-    const due = now - lastStatus >= statusEveryMs;
-    if (due) lastStatus = now;
-    post({ type: "frame", buffer, status: due ? running.status() : null }, [
-      buffer,
-    ]);
-  }, framePumpMs);
+function sendFrame() {
+  if (!game) return;
+  const buffer =
+    spareFrames.pop() ?? new ArrayBuffer(screenWidth * screenHeight * 4);
+  game.frame(new Uint8ClampedArray(buffer));
+  const now = performance.now();
+  const due = now - lastStatus >= statusEveryMs;
+  if (due) lastStatus = now;
+  post({ type: "frame", buffer, status: due ? game.status() : null }, [buffer]);
+}
+
+async function fetchBytes(url: string) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`${url} is missing.`);
+  return new Uint8Array(await response.arrayBuffer());
 }
 
 async function start(request: Extract<DoomWorkerRequest, { type: "start" }>) {
-  sampleRate = request.sampleRate;
   sound = request.sound;
   paused ||= request.paused;
-  prepareBrowserApis();
-  const { default: createDoom } = (await import(
-    /* turbopackIgnore: true */ /* webpackIgnore: true */ request.engineUrl
-  )) as { default: CreateDoom };
+  const [{ default: createDoom }, base] = await Promise.all([
+    import(
+      /* turbopackIgnore: true */ /* webpackIgnore: true */ request.engineUrl
+    ) as Promise<{ default: CreateDoom }>,
+    fetchBytes(request.baseUrl),
+  ]);
   stage = "start";
   const running = await startDoom({
     createDoom,
     iwad: request.iwad,
+    base,
     map: request.map,
     options: {
       print: () => {},
       printErr: (line) => errors.push(line),
-      onExit: () => post({ type: "exit" }),
     },
-    sound: request.audioPort !== null,
+    events: {
+      onFrame: sendFrame,
+      onExit: () => post({ type: "exit" }),
+      onFailure: () => fail("The engine stopped."),
+    },
+    sampleRate: request.audioPort ? request.sampleRate : null,
   });
   stage = "run";
   game = running;
   if (paused) running.setPaused(true);
+  for (const key of heldKeys) running.key(true, key);
   if (request.audioPort) {
     running.setSound(sound.volume, sound.muted);
-    pumpAudio(request.audioPort);
+    pumpAudio(running, request.audioPort);
   }
-  pumpFrames(running);
 }
 
 scope.addEventListener("message", (event) => {
@@ -193,10 +135,16 @@ scope.addEventListener("message", (event) => {
   if (request.type === "start") {
     start(request).catch((error: Error) => fail(error.message));
   } else if (request.type === "key") {
+    if (request.pressed) heldKeys.add(request.key);
+    else heldKeys.delete(request.key);
     game?.key(request.pressed, request.key);
+  } else if (request.type === "turn") {
+    game?.turn(request.amount);
+  } else if (request.type === "display") {
+    game?.syncToDisplay();
   } else if (request.type === "sound") {
     sound = request.sound;
-    if (processor) game?.setSound(sound.volume, sound.muted);
+    game?.setSound(sound.volume, sound.muted);
   } else if (request.type === "pause") {
     paused = request.paused;
     game?.setPaused(paused);
@@ -205,7 +153,6 @@ scope.addEventListener("message", (event) => {
   }
 });
 
-// The engine traps on a fatal error inside its own main loop.
 scope.addEventListener("error", (event) => {
   event.preventDefault();
   fail("The engine stopped.");

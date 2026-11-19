@@ -1,10 +1,28 @@
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import {
+  useEffect,
+  useEffectEvent,
+  useReducer,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 
 import type { GameMap, Point } from "../map/types";
 import { compileMap } from "../wad/compile";
 import { startGameClient, type GameClient } from "./game-client";
 import { GameHud } from "./game-hud";
 import { loadIwad } from "./iwad";
+import { HeldKeys } from "./held-keys";
+import {
+  MouseFire,
+  clickFires,
+  holdsGame,
+  initialMouseCapture,
+  msSincePointerRelease,
+  nextMouseCapture,
+  notePointerReleased,
+  relockWait,
+} from "./mouse-capture";
 import {
   keysByCode,
   maxVolume,
@@ -18,6 +36,9 @@ type SoundSettings = { volume: number; muted: boolean };
 const soundKey = "wadsmith:sound";
 const defaultSound: SoundSettings = { volume: 8, muted: false };
 const noteMessageMs = 2000;
+// Escape can reach the page just after it released the pointer.
+const escapeGraceMs = 300;
+const mouseFireSource = "mouse";
 
 function loadSound(): SoundSettings {
   try {
@@ -78,7 +99,8 @@ function GameSession({
 }: GameSessionProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameRef = useRef<GameClient | null>(null);
-  const held = useRef(new Set<number>());
+  const heldKeys = useRef(new HeldKeys());
+  const mouseFire = useRef(new MouseFire());
   const soundRef = useRef(sound);
   const noteTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const leaveGame = useEffectEvent(onExit);
@@ -89,6 +111,27 @@ function GameSession({
   const [noteSpot, setNoteSpot] = useState<Point | null>(null);
   const [noteSaved, setNoteSaved] = useState(false);
   const [finished, setFinished] = useState(false);
+  const [capture, updateCapture] = useReducer(
+    nextMouseCapture,
+    initialMouseCapture,
+  );
+  const captureRef = useRef(capture);
+  const wantsLock = useRef(false);
+  const lockPending = useRef(false);
+  const expectingRelease = useRef(false);
+  const recaptureAfterNote = useRef(false);
+  const lockTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const gameHeld = noteSpot !== null || holdsGame(capture);
+  const gameHeldRef = useRef(gameHeld);
+
+  useEffect(() => {
+    captureRef.current = capture;
+  }, [capture]);
+
+  useEffect(() => {
+    gameHeldRef.current = gameHeld;
+    gameRef.current?.setHeld(gameHeld);
+  }, [gameHeld]);
 
   useEffect(() => {
     soundRef.current = sound;
@@ -136,6 +179,8 @@ function GameSession({
           onExit: leaveGame,
         });
         gameRef.current = client;
+        client.setHeld(gameHeldRef.current);
+        for (const key of heldKeys.current.keys()) client.key(true, key);
       })
       .catch((cause: Error) => {
         if (!stopped) {
@@ -152,27 +197,128 @@ function GameSession({
     };
   }, [map]);
 
-  const setKey = (pressed: boolean, key: number | undefined) => {
-    if (key === undefined) return;
-    if (pressed === held.current.has(key)) return;
-    if (pressed) held.current.add(key);
-    else held.current.delete(key);
-    gameRef.current?.key(pressed, key);
+  const pressKey = (source: string, key: number) => {
+    if (heldKeys.current.press(source, key)) gameRef.current?.key(true, key);
+  };
+
+  const releaseKey = useEffectEvent((source: string) => {
+    const key = heldKeys.current.release(source);
+    if (key !== null) gameRef.current?.key(false, key);
+  });
+
+  const releaseAllKeys = () => {
+    for (const key of heldKeys.current.releaseAll()) {
+      gameRef.current?.key(false, key);
+    }
   };
 
   const focusGame = () => canvasRef.current?.focus();
+
+  const syncFire = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    const firing = mouseFire.current.update(
+      capture,
+      event.buttons,
+      noteSpot !== null || finished,
+    );
+    if (!firing) {
+      releaseKey(mouseFireSource);
+      return;
+    }
+    if (heldKeys.current.has(mouseFireSource)) return;
+    setShowHelp(false);
+    if (document.pointerLockElement !== event.currentTarget) {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
+    pressKey(mouseFireSource, keysByCode.Space);
+  };
+
+  const releaseMouse = useEffectEvent(() => {
+    if (document.pointerLockElement !== canvasRef.current) return;
+    expectingRelease.current = true;
+    document.exitPointerLock();
+  });
+
+  const cancelCapture = useEffectEvent(() => {
+    clearTimeout(lockTimer.current);
+    lockPending.current = false;
+    wantsLock.current = false;
+    updateCapture("cancelled");
+  });
+
+  useEffect(() => {
+    const onChange = () => {
+      const canvas = canvasRef.current;
+      if (canvas && document.pointerLockElement === canvas) {
+        updateCapture("locked");
+        // A request already on its way can land after the game stopped wanting it.
+        if (!wantsLock.current) releaseMouse();
+        return;
+      }
+      const { mode } = captureRef.current;
+      if (mode !== "locked" && mode !== "capturing") return;
+      releaseKey(mouseFireSource);
+      if (expectingRelease.current) {
+        expectingRelease.current = false;
+        updateCapture("suspended");
+      } else {
+        notePointerReleased(performance.now());
+        updateCapture("lost");
+      }
+    };
+    const onError = () => updateCapture("failed");
+    document.addEventListener("pointerlockchange", onChange);
+    document.addEventListener("pointerlockerror", onError);
+    return () => {
+      document.removeEventListener("pointerlockchange", onChange);
+      document.removeEventListener("pointerlockerror", onError);
+      clearTimeout(lockTimer.current);
+      if (document.pointerLockElement) document.exitPointerLock();
+    };
+  }, []);
+
+  const requestCapture = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    updateCapture("request");
+    wantsLock.current = true;
+    const lock = () => {
+      lockPending.current = false;
+      try {
+        void Promise.resolve(canvas.requestPointerLock()).catch(() => {});
+      } catch {
+        updateCapture("failed");
+      }
+    };
+    clearTimeout(lockTimer.current);
+    const wait = relockWait(performance.now());
+    lockPending.current = wait > 0;
+    if (wait > 0) lockTimer.current = setTimeout(lock, wait);
+    else lock();
+  };
+
+  useEffect(() => {
+    if (!finished && !error) return;
+    cancelCapture();
+    releaseMouse();
+  }, [finished, error]);
 
   const openNote = () => {
     if (!status?.inLevel) return;
     setNoteSaved(false);
     setNoteSpot(spotOf(status));
-    gameRef.current?.setHeld(true);
+    const { mode } = captureRef.current;
+    recaptureAfterNote.current = mode === "locked" || mode === "capturing";
+    cancelCapture();
+    releaseMouse();
   };
 
   const closeNote = () => {
     setNoteSpot(null);
-    gameRef.current?.setHeld(false);
     requestAnimationFrame(focusGame);
+    if (recaptureAfterNote.current) {
+      recaptureAfterNote.current = false;
+      requestCapture();
+    }
   };
 
   const editSpot = () => {
@@ -186,7 +332,13 @@ function GameSession({
     if (event.code === "Escape") {
       event.preventDefault();
       if (noteSpot) closeNote();
-      else onExit();
+      else if (captureRef.current.mode === "locked") document.exitPointerLock();
+      else if (
+        !event.repeat &&
+        msSincePointerRelease(performance.now()) > escapeGraceMs
+      ) {
+        onExit();
+      }
     } else if (!typing && event.code === "KeyN" && !event.repeat) {
       event.preventDefault();
       openNote();
@@ -234,6 +386,7 @@ function GameSession({
           fullscreen={fullscreen}
           showHelp={showHelp && !noteSpot && !noteSaved}
           noteOpen={noteSpot !== null}
+          mouseMode={capture.mode}
           noteSaved={noteSaved}
           finished={finished}
           audioUnavailable={audioUnavailable}
@@ -266,23 +419,49 @@ function GameSession({
             width={screenWidth}
             height={screenHeight}
             tabIndex={0}
-            aria-label="Game. Arrows or W, A, S and D move, Space fires, E uses, N leaves a note, F2 edits this spot, Escape returns to the editor."
-            onBlur={() => {
-              for (const key of held.current) setKey(false, key);
-            }}
+            aria-label="Game. Click to capture the mouse, which then turns the player and fires with the left button. Arrows or W, A, S and D move, Space fires, E uses, N leaves a note, F2 edits this spot. Escape releases the mouse, and pressing it again returns to the editor."
+            onBlur={releaseAllKeys}
             onContextMenu={(event) => event.preventDefault()}
             onPointerDown={(event) => {
               event.currentTarget.focus();
               gameRef.current?.resumeAudio();
-              if (event.button !== 0 || noteSpot) return;
-              event.currentTarget.setPointerCapture(event.pointerId);
-              setKey(true, keysByCode.Space);
+              if (event.button === 0 && !noteSpot && !finished) {
+                if (!clickFires(capture)) {
+                  event.preventDefault();
+                  mouseFire.current.ignoreUntilReleased();
+                  requestCapture();
+                  return;
+                }
+              }
+              syncFire(event);
+              if (
+                event.button === 0 &&
+                capture.mode === "denied" &&
+                !noteSpot &&
+                !finished
+              ) {
+                requestCapture();
+              }
             }}
-            onPointerUp={(event) => {
-              if (event.button === 0) setKey(false, keysByCode.Space);
+            onPointerMove={(event) => {
+              if (capture.mode === "locked" && event.movementX) {
+                gameRef.current?.turn(event.movementX);
+              }
+              syncFire(event);
             }}
-            onLostPointerCapture={() => setKey(false, keysByCode.Space)}
+            onPointerUp={syncFire}
+            onPointerCancel={() => releaseKey(mouseFireSource)}
+            onLostPointerCapture={() => {
+              if (capture.mode !== "locked") {
+                releaseKey(mouseFireSource);
+              }
+            }}
             onKeyDown={(event) => {
+              // macOS sends no keyup for keys released while Cmd is down.
+              if (event.metaKey) {
+                releaseAllKeys();
+                return;
+              }
               const key = keysByCode[event.code];
               // Tab is Doom's automap, so Shift+Tab is the way out to the buttons.
               if (
@@ -294,10 +473,12 @@ function GameSession({
               event.preventDefault();
               event.stopPropagation();
               setShowHelp(false);
+              if (lockPending.current && !event.repeat) cancelCapture();
+              updateCapture("keyboard");
               gameRef.current?.resumeAudio();
-              setKey(true, key);
+              pressKey(event.code, key);
             }}
-            onKeyUp={(event) => setKey(false, keysByCode[event.code])}
+            onKeyUp={(event) => releaseKey(event.code)}
           />
         )}
       </div>
