@@ -1,0 +1,123 @@
+import { useMemo } from "react";
+
+import { sectorAt, wallOwners } from "../map/geometry";
+import type { GameMap, Sector } from "../map/types";
+
+type SectorKind =
+  | "floor"
+  | "raised"
+  | "lift"
+  | "door"
+  | "lava"
+  | "acid"
+  | "exit"
+  | "secret";
+
+const kindColors: Record<SectorKind, string> = {
+  floor: "var(--color-map-sector)",
+  raised: "var(--color-map-sector-raised)",
+  lift: "var(--color-map-sector-lift)",
+  door: "var(--color-map-sector-door)",
+  lava: "var(--color-map-sector-lava)",
+  acid: "var(--color-map-sector-acid)",
+  exit: "var(--color-map-sector-exit)",
+  secret: "var(--color-map-sector-secret)",
+};
+
+function sectorKinds(map: GameMap) {
+  const lines = Object.entries(map.lines ?? {});
+  const moved = new Set(
+    lines.flatMap(([, line]) =>
+      line.action && line.action.kind !== "exit" ? [line.action.tag] : [],
+    ),
+  );
+  const owners = wallOwners(map);
+  const exits = new Set(
+    lines.flatMap(([wall, line]) =>
+      line.action?.kind === "exit"
+        ? (owners.get(wall) ?? []).map((sector) => sector.id)
+        : [],
+    ),
+  );
+  const start = map.things.find((thing) => thing.kind === "player");
+  const base = (start && sectorAt(map, start)?.floor) ?? 0;
+  const kindOf = (sector: Sector): SectorKind => {
+    if (sector.door) return "door";
+    if (exits.has(sector.id)) return "exit";
+    if (sector.effect === "secret") return "secret";
+    if (sector.effect?.startsWith("damage")) {
+      return /^(LAVA|BLOOD|RROCK0[5-8])/.test(sector.floorTexture)
+        ? "lava"
+        : "acid";
+    }
+    if (sector.tag && moved.has(sector.tag)) return "lift";
+    return sector.floor > base ? "raised" : "floor";
+  };
+  return new Map(map.sectors.map((sector) => [sector.id, kindOf(sector)]));
+}
+
+// A filled plan of a map, coloured by what each room does, for map pickers.
+function MapPlan({
+  map,
+  className,
+  label,
+}: {
+  map: GameMap;
+  className?: string;
+  label?: string;
+}) {
+  const { viewBox, rooms, walls } = useMemo(() => {
+    const points = Object.values(map.vertices);
+    const xs = points.map((point) => point.x);
+    const ys = points.map((point) => point.y);
+    const left = Math.min(...xs);
+    const top = Math.min(...ys);
+    const width = Math.max(...xs) - left || 1;
+    const height = Math.max(...ys) - top || 1;
+    const pad = Math.max(width, height) * 0.06;
+    const kinds = sectorKinds(map);
+    return {
+      viewBox: `${left - pad} ${top - pad} ${width + pad * 2} ${height + pad * 2}`,
+      rooms: map.sectors.map((sector) => ({
+        id: sector.id,
+        points: sector.vertices
+          .map((id) => `${map.vertices[id].x},${map.vertices[id].y}`)
+          .join(" "),
+        color: kindColors[kinds.get(sector.id) ?? "floor"],
+      })),
+      walls: [...wallOwners(map)]
+        .filter(([, owners]) => owners.length === 1)
+        .map(([key]) => {
+          const [from, to] = key.split("|").map((id) => map.vertices[id]);
+          return { key, from, to };
+        }),
+    };
+  }, [map]);
+  return (
+    <svg
+      role={label ? "img" : undefined}
+      aria-label={label}
+      aria-hidden={label ? undefined : true}
+      className={className}
+      viewBox={viewBox}
+    >
+      {rooms.map((room) => (
+        <polygon key={room.id} points={room.points} fill={room.color} />
+      ))}
+      {walls.map(({ key, from, to }) => (
+        <line
+          key={key}
+          x1={from.x}
+          y1={from.y}
+          x2={to.x}
+          y2={to.y}
+          stroke="var(--color-map-portal)"
+          strokeWidth={1}
+          vectorEffect="non-scaling-stroke"
+        />
+      ))}
+    </svg>
+  );
+}
+
+export { MapPlan, sectorKinds };

@@ -427,10 +427,10 @@ index 6427083..29f1949 100644
          I_Error("Failed to initialize video: %s", SDL_GetError());
 diff --git a/src/wadsmith.c b/src/wadsmith.c
 new file mode 100644
-index 0000000..ffd15a2
+index 0000000..e33a932
 --- /dev/null
 +++ b/src/wadsmith.c
-@@ -0,0 +1,246 @@
+@@ -0,0 +1,253 @@
 +// The interface between Woof and Wadsmith's game worker.
 +
 +#include <emscripten.h>
@@ -675,6 +675,13 @@ index 0000000..ffd15a2
 +{
 +    return index >= 0 && index < numsectors
 +               ? sectors[index].ceilingheight >> FRACBITS
++               : 0;
++}
++
++EXPORT int wadsmith_sector_floor(int index)
++{
++    return index >= 0 && index < numsectors
++               ? sectors[index].floorheight >> FRACBITS
 +               : 0;
 +}
 diff --git a/src/wadsmith.h b/src/wadsmith.h

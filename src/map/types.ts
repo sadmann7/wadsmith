@@ -39,6 +39,7 @@ type LineActionKind =
   | "door-close"
   | "floor-lower"
   | "floor-raise"
+  | "floor-raise-next"
   | "lift"
   | "exit";
 

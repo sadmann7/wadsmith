@@ -11,7 +11,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { wadFileName } from "../editor/build-dialog";
 import { App } from "../editor/editor-app";
+import { CoopLobby, type HostedGame } from "../engine/coop-panel";
+import { GameView } from "../engine/play-panel";
 import { checkMap } from "../map/checks";
+import type { FeaturedMap } from "../map/featured";
 import {
   MapFileError,
   maxFileBytes,
@@ -46,6 +49,8 @@ import {
   type ProjectMap,
   type ProjectStore,
 } from "./project-data";
+import { FeaturedMaps } from "./featured-maps";
+import type { HomeView } from "./home-header";
 import { ProjectHome } from "./project-home";
 import { createMemoryStore, openProjectStore } from "./project-store";
 
@@ -62,7 +67,13 @@ type SaveStatus = "saving" | "saved" | "failed";
 const channelName = "wadsmith";
 const saveFailure = "Your browser couldn't save that change.";
 
+const featuredPath = "/maps";
+
 let preparing: ReturnType<typeof openPreparedStore> | null = null;
+
+function viewOfPath(): HomeView {
+  return location.pathname === featuredPath ? "featured" : "projects";
+}
 
 async function prepared(store: ProjectStore) {
   return { store, ready: await prepareProjects(store) };
@@ -104,6 +115,13 @@ function ProjectApp() {
   const [message, setMessage] = useState<string | null>(null);
   const [mapDialog, setMapDialog] = useState<"new" | "settings" | null>(null);
   const [blockedLeave, setBlockedLeave] = useState<(() => void) | null>(null);
+  const [view, setView] = useState(viewOfPath);
+  const [lobby, setLobby] = useState<FeaturedMap | null>(null);
+  const [playing, setPlaying] = useState<{
+    entry: FeaturedMap;
+    hosted: HostedGame | null;
+  } | null>(null);
+  const opensOnFeatured = useRef(view === "featured");
   const channel = useRef<BroadcastChannel | null>(null);
   const sessionRef = useRef<Session | null>(null);
   const projectIdRef = useRef("");
@@ -167,6 +185,8 @@ function ProjectApp() {
       };
       sessionRef.current = next;
       setSession(next);
+      if (location.pathname === featuredPath)
+        history.replaceState(null, "", "/");
       setDetails(detailsOf(entry));
       setSaveStatus("saved");
       selectProject(entry.projectId);
@@ -183,7 +203,9 @@ function ProjectApp() {
         setStore(opened);
         selectProject(ready.projectId);
         await refresh(opened, ready.projectId);
-        if (!cancelled && ready.entry) startSession(opened, ready.entry);
+        if (!cancelled && ready.entry && !opensOnFeatured.current) {
+          startSession(opened, ready.entry);
+        }
       })
       .catch(() => {
         if (!cancelled) setMessage("Your projects couldn't be opened.");
@@ -229,6 +251,12 @@ function ProjectApp() {
       channel.current = null;
     };
   }, [closeSession, refresh, store]);
+
+  useEffect(() => {
+    const onPop = () => setView(viewOfPath());
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
 
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => {
@@ -296,11 +324,39 @@ function ProjectApp() {
     }
   };
 
+  const navigate = (next: HomeView) => {
+    setView(next);
+    setMessage(null);
+    const path = next === "featured" ? featuredPath : "/";
+    if (location.pathname !== path) history.pushState(null, "", path);
+  };
+
+  const openCopy = (featured: FeaturedMap) =>
+    void attempt(async () => {
+      const slots = freeSlots(await store.listMaps(project.id));
+      const slot = slots.includes(featured.slot) ? featured.slot : slots[0];
+      if (!slot) {
+        setMessage("All 32 map slots are in use.");
+        return;
+      }
+      const entry = createMapEntry(
+        project.id,
+        slot,
+        structuredClone(featured.map),
+        { description: featured.blurb, par: featured.par },
+      );
+      await store.putMap(entry);
+      await openMap(entry);
+    });
+
   const createMap = async (form: MapDetails) => {
     const entry = createMapEntry(
       project.id,
       form.slot,
-      mapFromTemplate(form.template, form.name),
+      form.featured
+        ? { ...structuredClone(form.featured.map), name: form.name }
+        : mapFromTemplate(form.template, form.name),
+      { description: form.description, par: form.par },
     );
     try {
       await store.putMap(entry);
@@ -452,7 +508,12 @@ function ProjectApp() {
           saveStatus={store.durable ? saveStatus : "session"}
           onSave={onSave}
           watchExternal={watchExternal}
-          onOpenProjects={() => void whenSaved(() => void closeSession(store))}
+          onOpenProjects={() =>
+            void whenSaved(() => {
+              setView("projects");
+              void closeSession(store);
+            })
+          }
           onNewMap={() => openDialog("new")}
           onMapSettings={() => openDialog("settings")}
         />
@@ -532,8 +593,56 @@ function ProjectApp() {
     );
   }
 
+  const endPlay = () => {
+    playing?.hosted?.close();
+    setPlaying(null);
+  };
+
+  if (playing) {
+    const { entry, hosted } = playing;
+    return (
+      <GameView
+        map={entry.map}
+        title={entry.title}
+        slot={entry.slot}
+        par={entry.par}
+        coop={hosted?.session ?? null}
+        exit="maps"
+        onExit={endPlay}
+      />
+    );
+  }
+
+  if (view === "featured") {
+    return (
+      <>
+        <FeaturedMaps
+          message={message}
+          onNavigate={navigate}
+          onPlaySolo={(entry) => setPlaying({ entry, hosted: null })}
+          onPlayTogether={setLobby}
+          onOpenCopy={openCopy}
+        />
+        {lobby ? (
+          <CoopLobby
+            map={lobby.map}
+            title={lobby.title}
+            slot={lobby.slot}
+            par={lobby.par}
+            onStart={(hosted) => {
+              setPlaying({ entry: lobby, hosted });
+              setLobby(null);
+            }}
+            onClose={() => setLobby(null)}
+          />
+        ) : null}
+      </>
+    );
+  }
+
   return (
     <ProjectHome
+      onNavigate={navigate}
       projects={projects}
       project={project}
       maps={maps}

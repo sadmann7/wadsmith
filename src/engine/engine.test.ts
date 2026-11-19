@@ -13,6 +13,8 @@ import {
   updateSector,
   updateThing,
 } from "../map/edit";
+import { featuredMaps } from "../map/featured";
+import { pointInPolygon, wallKey, wallOwners } from "../map/geometry";
 import { starterMap } from "../map/starter-map";
 import { testMap } from "../map/test-map";
 import type { GameMap, LineAction } from "../map/types";
@@ -637,4 +639,108 @@ describe.skipIf(!ready)("starter map in the engine", () => {
     await play(game, 3000, () => !game.status().inLevel);
     expect(game.status().inLevel).toBe(false);
   }, 40_000);
+});
+
+// Stands the player just in front of a wall, inside the given room, facing it.
+function facingWall(map: GameMap, from: string, to: string, roomId: string) {
+  const a = map.vertices[from];
+  const b = map.vertices[to];
+  const middle = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  const length = Math.hypot(b.x - a.x, b.y - a.y);
+  const normal = { x: -(b.y - a.y) / length, y: (b.x - a.x) / length };
+  const room = map.sectors.find((sector) => sector.id === roomId)!;
+  const polygon = room.vertices.map((id) => map.vertices[id]);
+  const inward = pointInPolygon(
+    { x: middle.x + normal.x * 8, y: middle.y + normal.y * 8 },
+    polygon,
+  )
+    ? 1
+    : -1;
+  const x = Math.round(middle.x + normal.x * inward * 36);
+  const y = Math.round(middle.y + normal.y * inward * 36);
+  // Doom angles turn counter-clockwise with y up, and editor y points down.
+  const angle =
+    Math.round((Math.atan2(y - middle.y, middle.x - x) * 180) / Math.PI + 360) %
+    360;
+  return playerAt(map, x, y, angle);
+}
+
+type Press = {
+  label: string;
+  map: GameMap;
+  height: (game: DoomGame) => number;
+  done: (game: DoomGame, before: number) => boolean;
+};
+
+function pressesOf(map: GameMap): Press[] {
+  const presses: Press[] = [];
+  const owners = wallOwners(map);
+  const switchWalls = new Set(
+    map.switches.map((item) => wallKey(item.from, item.to)),
+  );
+  for (const item of map.switches) {
+    if (!item.door) continue;
+    const door = map.sectors.findIndex((sector) => sector.id === item.door);
+    presses.push({
+      label: `switch opens ${map.sectors[door].name}`,
+      map: facingWall(map, item.from, item.to, item.sector),
+      height: (game) => game.sectorCeiling(door),
+      done: (game, before) => game.sectorCeiling(door) > before + 56,
+    });
+  }
+  for (const [wall, line] of Object.entries(map.lines ?? {})) {
+    const action = line.action;
+    if (action?.trigger !== "switch") continue;
+    const [from, to] = wall.split("|");
+    const target = map.sectors.findIndex((sector) => sector.tag === action.tag);
+    const room = switchWalls.has(wall)
+      ? map.switches.find((item) => wallKey(item.from, item.to) === wall)!
+          .sector
+      : owners.get(wall)!.find((sector) => sector.tag !== action.tag)!.id;
+    const placed = facingWall(map, from, to, room);
+    if (action.kind === "exit") {
+      presses.push({
+        label: "exit switch ends the level",
+        map: placed,
+        height: () => 0,
+        done: (game) => !game.status().inLevel,
+      });
+    } else if (action.kind === "floor-raise-next") {
+      presses.push({
+        label: `switch raises ${map.sectors[target].name}`,
+        map: placed,
+        height: (game) => game.sectorFloor(target),
+        done: (game, before) => game.sectorFloor(target) > before,
+      });
+    } else if (action.kind === "floor-lower") {
+      presses.push({
+        label: `pressing lowers ${map.sectors[target].name}`,
+        map: placed,
+        height: (game) => game.sectorFloor(target),
+        done: (game, before) => game.sectorFloor(target) < before - 56,
+      });
+    }
+  }
+  return presses;
+}
+
+describe.skipIf(!ready)("featured maps in the engine", () => {
+  for (const featured of featuredMaps) {
+    const quiet: GameMap = {
+      ...featured.map,
+      things: featured.map.things.filter(
+        (thing) => thingCatalog[thing.kind].category !== "enemy",
+      ),
+    };
+    for (const press of pressesOf(quiet)) {
+      it(`${featured.title}: ${press.label}`, async () => {
+        const game = await launch(press.map);
+        await waitForPlay(game);
+        const before = press.height(game);
+        await pressUse(game);
+        await play(game, 6000, () => press.done(game, before));
+        expect(press.done(game, before)).toBe(true);
+      }, 30_000);
+    }
+  }
 });

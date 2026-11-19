@@ -46,6 +46,7 @@ import {
   type Project,
   type ProjectMap,
 } from "./project-data";
+import { HomeHeader, type HomeView } from "./home-header";
 
 type Confirmation = { title: string; body: string; run: () => void };
 
@@ -271,6 +272,7 @@ function MapRow({
 }
 
 function ProjectHome({
+  onNavigate,
   projects,
   project,
   maps,
@@ -290,6 +292,7 @@ function ProjectHome({
   onDuplicateMap,
   onDeleteMap,
 }: {
+  onNavigate: (view: HomeView) => void;
   projects: Project[];
   project: Project;
   maps: ProjectMap[];
@@ -323,11 +326,7 @@ function ProjectHome({
   const textureCount = freedoomFlats.length + freedoomWalls.length;
   return (
     <div className="grid h-dvh grid-rows-[48px_minmax(0,1fr)] bg-canvas text-fg">
-      <header className="flex items-center border-b border-border bg-surface pr-3 pl-4">
-        <h1 className="m-0 text-[17px] font-bold tracking-[0.02em] text-accent">
-          WADSMITH
-        </h1>
-      </header>
+      <HomeHeader view="projects" onNavigate={onNavigate} />
       <div className="grid min-h-0 grid-cols-[240px_minmax(0,1fr)] max-[760px]:grid-cols-1">
         <nav
           aria-label="Projects"

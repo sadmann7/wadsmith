@@ -71,6 +71,13 @@ const lineActions: Record<LineActionKind, ActionDefinition> = {
       shoot: { once: 24 },
     },
   },
+  "floor-raise-next": {
+    label: "Floor: raise to next floor",
+    triggers: {
+      switch: { once: 18, repeat: 69 },
+      walk: { once: 119, repeat: 128 },
+    },
+  },
   lift: {
     label: "Lift: lower, wait, raise",
     triggers: {
