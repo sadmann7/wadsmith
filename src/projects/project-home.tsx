@@ -1,3 +1,4 @@
+import Link from "next/link";
 import {
   AlertDialog,
   AlertDialogBackdrop,
@@ -408,6 +409,12 @@ function ProjectHome({
             <div className="font-mono text-[11px] text-fg-muted">
               Linked, {textureCount} textures
             </div>
+            <Link
+              href="/source"
+              className="mt-1 font-mono text-[11px] text-fg-muted underline-offset-4 hover:text-fg hover:underline"
+            >
+              Engine source and licences
+            </Link>
           </div>
         </nav>
         <main className="flex min-h-0 flex-col gap-6 overflow-y-auto px-8 pt-8 pb-6 max-[760px]:px-4">
