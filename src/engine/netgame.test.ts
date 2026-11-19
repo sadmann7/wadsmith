@@ -5,7 +5,7 @@ import { Worker } from "node:worker_threads";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { addThing } from "../map/edit";
-import { starterMap } from "../map/starter-map";
+import { testMap } from "../map/test-map";
 import { compileMap } from "../wad/compile";
 import { NetInbox } from "./net-inbox";
 import { doomKeys } from "./runtime";
@@ -32,7 +32,7 @@ afterEach(async () => {
   await Promise.all(workers.splice(0).map((worker) => worker.terminate()));
 });
 
-const coopMap = addThing(starterMap, "player-2", { x: 96, y: 256 }).map;
+const coopMap = addThing(testMap, "player-2", { x: 96, y: 256 }).map;
 
 // Stands in for the room: it forwards each packet to its peer after a delay.
 function createRoom() {

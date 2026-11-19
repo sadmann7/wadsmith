@@ -10,7 +10,8 @@ import {
   updateSector,
   updateThing,
 } from "./edit";
-import { blankMap, starterMap } from "./starter-map";
+import { blankMap } from "./starter-map";
+import { testMap } from "./test-map";
 import { loadSavedMap, parseMapFile, saveMap, serializeMap } from "./storage";
 import type { GameMap } from "./types";
 import { validateMap } from "./validate";
@@ -25,7 +26,7 @@ function stubStorage(initial: Record<string, string> = {}) {
 }
 
 function fileWith(change: (map: any) => void) {
-  const file = JSON.parse(serializeMap(starterMap));
+  const file = JSON.parse(serializeMap(testMap));
   change(file.map);
   return JSON.stringify(file);
 }
@@ -38,13 +39,13 @@ function fileWithAction(action: object) {
 
 describe("map files", () => {
   it("round-trips a map", () => {
-    expect(parseMapFile(serializeMap(starterMap))).toEqual(starterMap);
+    expect(parseMapFile(serializeMap(testMap))).toEqual(testMap);
   });
 
   it("keeps painted walls and door settings", () => {
     const wall = "v1|v15";
     const map: GameMap = {
-      ...setRoomDoor(starterMap, "sector-4", {
+      ...setRoomDoor(testMap, "sector-4", {
         opensBy: "use",
         closes: true,
         texture: "DOOR3",
@@ -60,7 +61,7 @@ describe("map files", () => {
     const wall = "v3|v4";
     const map = updateSector(
       updateLineSide(
-        updateLine(starterMap, wall, {
+        updateLine(testMap, wall, {
           hidden: true,
           action: {
             kind: "door-open",
@@ -81,7 +82,7 @@ describe("map files", () => {
   });
 
   it("opens any Freedoom texture and rejects unknown names", () => {
-    const map = updateSector(starterMap, "sector-1", {
+    const map = updateSector(testMap, "sector-1", {
       floorTexture: "NUKAGE1",
       wallTexture: "ASHWALL2",
     });
@@ -96,7 +97,7 @@ describe("map files", () => {
   });
 
   it("keeps playtest notes", () => {
-    const map = addNote(starterMap, { x: 96.4, y: 160 }, "Too dark here");
+    const map = addNote(testMap, { x: 96.4, y: 160 }, "Too dark here");
     expect(map.notes).toEqual([
       { id: "note-1", x: 96, y: 160, text: "Too dark here" },
     ]);
@@ -105,7 +106,7 @@ describe("map files", () => {
   });
 
   it("keeps thing difficulty settings", () => {
-    const map = updateThing(starterMap, "imp-1", {
+    const map = updateThing(testMap, "imp-1", {
       skills: ["easy", "hard"],
       ambush: true,
     });
@@ -220,7 +221,7 @@ describe("map files", () => {
   });
 
   it("rejects a prototype key as a corner id", () => {
-    const text = serializeMap(starterMap).replace('"v1":', '"__proto__":');
+    const text = serializeMap(testMap).replace('"v1":', '"__proto__":');
     expect(() => parseMapFile(text)).toThrow();
   });
 });
@@ -232,8 +233,8 @@ describe("browser storage", () => {
 
   it("restores a saved map", () => {
     stubStorage();
-    expect(saveMap(starterMap)).toBe(true);
-    expect(loadSavedMap()).toEqual(starterMap);
+    expect(saveMap(testMap)).toBe(true);
+    expect(loadSavedMap()).toEqual(testMap);
   });
 
   it("keeps a copy of a save it can't read", () => {
@@ -245,7 +246,7 @@ describe("browser storage", () => {
   it("fails quietly when storage is unavailable", () => {
     vi.stubGlobal("localStorage", undefined);
     expect(loadSavedMap()).toBeNull();
-    expect(saveMap(starterMap)).toBe(false);
+    expect(saveMap(testMap)).toBe(false);
   });
 });
 

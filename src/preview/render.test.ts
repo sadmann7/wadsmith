@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { thingKinds } from "../map/catalog";
 import { updateLineSide, updateSector } from "../map/edit";
 import { wallKey } from "../map/geometry";
-import { starterMap } from "../map/starter-map";
+import { testMap } from "../map/test-map";
 import {
   describeSurface,
   moveSurfaceHeight,
@@ -35,7 +35,7 @@ const wadPath = resolve(
   "../../public/engine/freedoom2.wad",
 );
 
-function renderStarter(map = starterMap, camera = startCamera(map)) {
+function renderStarter(map = testMap, camera = startCamera(map)) {
   const target = createRenderTarget(320, 200);
   expect(renderScene(target, map, camera, { assets })).toBe(true);
   return (x: number, y: number) => target.surfaces[target.pick[y * 320 + x]];
@@ -63,7 +63,7 @@ function columnAhead(vertices: string[], offsetX?: number) {
       c: { x: 128, y: 96 },
       d: { x: 0, y: 96 },
     },
-    sectors: [{ ...starterMap.sectors[0], vertices }],
+    sectors: [{ ...testMap.sectors[0], vertices }],
     things: [],
     switches: [],
   };
@@ -105,9 +105,9 @@ describe("renderScene", () => {
 
   it("makes things selectable", () => {
     const map = {
-      ...starterMap,
+      ...testMap,
       things: [
-        ...starterMap.things,
+        ...testMap.things,
         { id: "imp-2", kind: "imp" as const, x: 200, y: 160, angle: 0 },
       ],
     };
@@ -117,9 +117,9 @@ describe("renderScene", () => {
   it("outlines the selected surface without recoloring it", () => {
     const plain = createRenderTarget(320, 200);
     const outlined = createRenderTarget(320, 200);
-    const camera = startCamera(starterMap);
-    renderScene(plain, starterMap, camera, { assets });
-    renderScene(outlined, starterMap, camera, {
+    const camera = startCamera(testMap);
+    renderScene(plain, testMap, camera, { assets });
+    renderScene(outlined, testMap, camera, {
       assets,
       selected: "floor:sector-1",
     });
@@ -131,11 +131,11 @@ describe("renderScene", () => {
   });
 
   it("draws a placement ghost that can't be picked", () => {
-    const camera = startCamera(starterMap);
+    const camera = startCamera(testMap);
     const plain = createRenderTarget(320, 200);
     const ghosted = createRenderTarget(320, 200);
-    renderScene(plain, starterMap, camera, { assets });
-    renderScene(ghosted, starterMap, camera, {
+    renderScene(plain, testMap, camera, { assets });
+    renderScene(ghosted, testMap, camera, {
       assets,
       ghost: { kind: "imp", x: 200, y: 160 },
     });
@@ -147,29 +147,22 @@ describe("renderScene", () => {
 
   it("converts between floor points and the screen", () => {
     const target = createRenderTarget(320, 200);
-    const camera = startCamera(starterMap);
+    const camera = startCamera(testMap);
     const point = { x: 250, y: 200 };
-    const screen = projectPoint(target, starterMap, camera, point, 0)!;
-    const back = pointOnPlane(
-      target,
-      starterMap,
-      camera,
-      screen.x,
-      screen.y,
-      0,
-    )!;
+    const screen = projectPoint(target, testMap, camera, point, 0)!;
+    const back = pointOnPlane(target, testMap, camera, screen.x, screen.y, 0)!;
     expect(back.x).toBeCloseTo(point.x);
     expect(back.y).toBeCloseTo(point.y);
   });
 
   it("finds no floor above the horizon", () => {
     const target = createRenderTarget(320, 200);
-    const camera = startCamera(starterMap);
-    expect(pointOnPlane(target, starterMap, camera, 160, 20, 0)).toBeNull();
+    const camera = startCamera(testMap);
+    expect(pointOnPlane(target, testMap, camera, 160, 20, 0)).toBeNull();
   });
 
   it("moves a floor on screen when its height changes", () => {
-    const raised = updateSector(starterMap, "sector-2", { floor: 24 });
+    const raised = updateSector(testMap, "sector-2", { floor: 24 });
     const before = renderStarter();
     const after = renderStarter(raised);
     const count = (read: typeof before) =>
@@ -185,12 +178,12 @@ describe("surface edits", () => {
   const wallSurface = `wall:sector-1:${wall}:middle`;
 
   it("keeps floors below ceilings", () => {
-    const map = moveSurfaceHeight(starterMap, "floor:sector-1", 4000);
+    const map = moveSurfaceHeight(testMap, "floor:sector-1", 4000);
     expect(map.sectors[0].floor).toBe(120);
   });
 
   it("paints one wall and compiles it", () => {
-    const map = paintSurface(starterMap, wallSurface, "BRICK1");
+    const map = paintSurface(testMap, wallSurface, "BRICK1");
     expect(describeSurface(map, wallSurface)?.texture).toBe("BRICK1");
     const sidedefs = compileLumps(map).find((l) => l.name === "SIDEDEFS")!;
     const text = String.fromCharCode(...sidedefs.data);
@@ -198,7 +191,7 @@ describe("surface edits", () => {
   });
 
   it("paints every wall in a room", () => {
-    const painted = paintSurface(starterMap, wallSurface, "BRICK1");
+    const painted = paintSurface(testMap, wallSurface, "BRICK1");
     const map = paintSurface(painted, wallSurface, "GRAY1", true);
     expect(map.sectors[0].wallTexture).toBe("GRAY1");
     expect(map.sectors[0].wallOverrides).toBeUndefined();
@@ -207,10 +200,10 @@ describe("surface edits", () => {
   it("paints one part of a shared wall on one side", () => {
     const shared = wallKey("v3", "v4");
     const lower = `wall:sector-1:${shared}:lower`;
-    const map = paintSurface(starterMap, lower, "BRICK1");
+    const map = paintSurface(testMap, lower, "BRICK1");
     expect(describeSurface(map, lower)?.texture).toBe("BRICK1");
     expect(describeSurface(map, `wall:sector-2:${shared}:lower`)?.texture).toBe(
-      starterMap.sectors[1].wallTexture,
+      testMap.sectors[1].wallTexture,
     );
     const repainted = paintSurface(map, lower, "GRAY1", true);
     expect(repainted.lines).toBeUndefined();
@@ -218,14 +211,14 @@ describe("surface edits", () => {
 
   it("paints the door from its face", () => {
     const face = `wall:sector-2:${wallKey("v13", "v14")}:upper`;
-    const map = paintSurface(starterMap, face, "DOOR3");
+    const map = paintSurface(testMap, face, "DOOR3");
     expect(map.sectors[3].door?.texture).toBe("DOOR3");
   });
 
   it("paints a switch from its wall", () => {
     const face = `wall:sector-1:${wallKey("v15", "v16")}:middle`;
-    expect(describeSurface(starterMap, face)?.paints).toBe("switch");
-    const map = paintSurface(starterMap, face, "SW1GRAY");
+    expect(describeSurface(testMap, face)?.paints).toBe("switch");
+    const map = paintSurface(testMap, face, "SW1GRAY");
     expect(map.switches[0].texture).toBe("SW1GRAY");
   });
 });

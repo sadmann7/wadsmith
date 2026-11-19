@@ -4,7 +4,7 @@ import { pathToFileURL } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { thingKinds } from "../map/catalog";
+import { thingCatalog, thingKinds } from "../map/catalog";
 import {
   addThing,
   setLineTarget,
@@ -14,6 +14,7 @@ import {
   updateThing,
 } from "../map/edit";
 import { starterMap } from "../map/starter-map";
+import { testMap } from "../map/test-map";
 import type { GameMap, LineAction } from "../map/types";
 import { compileMap } from "../wad/compile";
 import {
@@ -71,11 +72,11 @@ async function play(_game: DoomGame, ms: number, until?: () => boolean) {
 }
 
 const openMap: GameMap = {
-  ...setRoomDoor(starterMap, "sector-4", undefined),
+  ...setRoomDoor(testMap, "sector-4", undefined),
   switches: [],
 };
-const doorIndex = starterMap.sectors.findIndex((sector) => sector.door);
-const doorFloor = starterMap.sectors[doorIndex].floor;
+const doorIndex = testMap.sectors.findIndex((sector) => sector.door);
+const doorFloor = testMap.sectors[doorIndex].floor;
 
 function playerAt(map: GameMap, x: number, y: number, angle: number) {
   return updateThing(map, "player-1", { x, y, angle });
@@ -83,7 +84,7 @@ function playerAt(map: GameMap, x: number, y: number, angle: number) {
 
 function withDoorAction(wall: string, trigger: LineAction["trigger"]) {
   return setLineTarget(
-    updateLine(starterMap, wall, {
+    updateLine(testMap, wall, {
       action: { kind: "door-open", trigger, repeat: false, tag: 0 },
     }),
     wall,
@@ -162,7 +163,7 @@ describe.skipIf(!ready)("generated map in the engine", () => {
   }, 30_000);
 
   it("opens a door from a connected switch", async () => {
-    const game = await launch(playerAt(starterMap, 192, 40, 90));
+    const game = await launch(playerAt(testMap, 192, 40, 90));
     await waitForPlay(game);
     expect(game.sectorCeiling(doorIndex)).toBe(doorFloor);
     await pressUse(game);
@@ -171,7 +172,7 @@ describe.skipIf(!ready)("generated map in the engine", () => {
   }, 30_000);
 
   it("ignores the use key on a switch-only door", async () => {
-    const game = await launch(playerAt(starterMap, 450, 160, 0));
+    const game = await launch(playerAt(testMap, 450, 160, 0));
     await waitForPlay(game);
     await pressUse(game);
     await play(game, 800);
@@ -179,9 +180,9 @@ describe.skipIf(!ready)("generated map in the engine", () => {
   }, 30_000);
 
   it("opens a use door and closes it again", async () => {
-    const door = starterMap.sectors[doorIndex].door!;
+    const door = testMap.sectors[doorIndex].door!;
     const map = playerAt(
-      setRoomDoor(starterMap, "sector-4", {
+      setRoomDoor(testMap, "sector-4", {
         ...door,
         opensBy: "use",
         closes: true,
@@ -205,9 +206,9 @@ describe.skipIf(!ready)("generated map in the engine", () => {
   }, 30_000);
 
   it("lets the player shoot a monster through an opened door", async () => {
-    const door = starterMap.sectors[doorIndex].door!;
+    const door = testMap.sectors[doorIndex].door!;
     const map = playerAt(
-      setRoomDoor(starterMap, "sector-4", { ...door, opensBy: "use" }),
+      setRoomDoor(testMap, "sector-4", { ...door, opensBy: "use" }),
       450,
       160,
       0,
@@ -248,7 +249,7 @@ describe.skipIf(!ready)("generated map in the engine", () => {
   it("opens a locked door only after the key is picked up", async () => {
     const wall = "v13|v14";
     const locked = playerAt(
-      updateLine(starterMap, wall, {
+      updateLine(testMap, wall, {
         action: {
           kind: "door-open",
           trigger: "door",
@@ -422,9 +423,9 @@ describe.skipIf(!ready)("generated map in the engine", () => {
   );
 
   it("uses a door with KeyE", async () => {
-    const door = starterMap.sectors[doorIndex].door!;
+    const door = testMap.sectors[doorIndex].door!;
     const map = playerAt(
-      setRoomDoor(starterMap, "sector-4", { ...door, opensBy: "use" }),
+      setRoomDoor(testMap, "sector-4", { ...door, opensBy: "use" }),
       450,
       160,
       0,
@@ -568,4 +569,72 @@ describe.skipIf(!ready)("generated map in the engine", () => {
     expect(game.status().keys & 4).toBe(4);
     expect(game.status().tics).toBeGreaterThan(start.tics);
   }, 30_000);
+});
+
+describe.skipIf(!ready)("starter map in the engine", () => {
+  const quiet: GameMap = {
+    ...starterMap,
+    things: starterMap.things.filter(
+      (thing) => thingCatalog[thing.kind].category !== "enemy",
+    ),
+  };
+  const blueDoor = starterMap.sectors.findIndex(
+    (sector) => sector.name === "Blue door",
+  );
+  const blueKey = 1;
+
+  async function walk(game: DoomGame, code: string, done: () => boolean) {
+    const key = keysByCode[code];
+    game.key(true, key);
+    await play(game, 8000, done);
+    game.key(false, key);
+  }
+
+  it("rides the lift up to the blue key", async () => {
+    const game = await launch(playerAt(quiet, 736, 80, 90));
+    await waitForPlay(game);
+    await pressUse(game);
+    await play(game, 1200);
+    await walk(game, "KeyW", () => game.status().y > 16);
+    await play(game, 4500);
+    await walk(game, "KeyD", () => (game.status().keys & blueKey) !== 0);
+    expect(game.status().keys & blueKey).toBe(blueKey);
+  }, 40_000);
+
+  it("lowers the alcove into the secret room", async () => {
+    const game = await launch(playerAt(quiet, 48, 176, 180));
+    await waitForPlay(game);
+    await pressUse(game);
+    await play(game, 3500);
+    await walk(game, "KeyW", () => game.status().armor > 0);
+    expect(game.status().armor).toBeGreaterThan(0);
+    expect(game.status().secrets).toBe(1);
+  }, 40_000);
+
+  it("opens the blue door only with the key, and ends at the exit", async () => {
+    const shut = await launch(playerAt(quiet, 920, 160, 0));
+    await waitForPlay(shut);
+    const closed = shut.sectorCeiling(blueDoor);
+    await pressUse(shut);
+    await play(shut, 1500);
+    expect(shut.sectorCeiling(blueDoor)).toBe(closed);
+    shut.stop();
+
+    const game = await launch(
+      updateThing(playerAt(quiet, 872, 160, 0), "blue-key-1", {
+        x: 904,
+        y: 160,
+      }),
+    );
+    await waitForPlay(game);
+    await walk(game, "KeyW", () => (game.status().keys & blueKey) !== 0);
+    expect(game.status().keys & blueKey).toBe(blueKey);
+    await walk(game, "KeyW", () => game.status().x > 920);
+    await pressUse(game);
+    await play(game, 2000, () => game.sectorCeiling(blueDoor) > closed + 64);
+    await walk(game, "KeyW", () => game.status().x > 1136);
+    await pressUse(game);
+    await play(game, 3000, () => !game.status().inLevel);
+    expect(game.status().inLevel).toBe(false);
+  }, 40_000);
 });
