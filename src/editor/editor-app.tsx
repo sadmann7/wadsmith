@@ -76,7 +76,7 @@ import {
   type MapTarget,
 } from "./map-target";
 import type { EditMode, MapTool, MapViewStatus } from "./map-editor";
-import { CoopLobby, coopPlayers, type HostedGame } from "../engine/coop-panel";
+import { CoopLobby, playModes, type HostedGame } from "../engine/coop-panel";
 import { GameView, type PlayerSpot } from "../engine/play-panel";
 import { thingCatalog, thingKinds } from "../map/catalog";
 import {
@@ -843,7 +843,7 @@ function App({
     if (canPlay && !buildProblem()) setPlayedMap(map);
   };
 
-  const canPlayCoop = canPlay && coopPlayers(map) > 1;
+  const canPlayCoop = canPlay && playModes(map).length > 0;
 
   const openCoop = () => {
     if (canPlayCoop && !buildProblem()) setCoopLobby(true);
@@ -1035,7 +1035,7 @@ function App({
                   className="select-item"
                   disabled={!canPlayCoop}
                 >
-                  Play co-op
+                  Play together…
                 </MenuItem>
               </MenuContent>
             </Menu>
@@ -1108,13 +1108,13 @@ function App({
               disabled={!canPlayCoop}
               title={
                 canPlay && !canPlayCoop
-                  ? "Place a Player 2 start to play co-op"
+                  ? "Place a Player 2 start, or four deathmatch starts, to play together"
                   : undefined
               }
               onClick={openCoop}
             >
               <Users size={14} aria-hidden="true" />
-              Co-op
+              Play together
             </button>
             <button
               ref={playButton}

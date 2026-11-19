@@ -76,6 +76,12 @@ const thingCatalog: Record<
     color: "#4ade80",
     category: "start",
   },
+  "deathmatch-start": {
+    label: "Deathmatch start",
+    doomType: 11,
+    color: "#4ade80",
+    category: "start",
+  },
   imp: { label: "Imp", doomType: 3001, color: "#fb923c", category: "enemy" },
   zombieman: {
     label: "Zombieman",
@@ -214,11 +220,21 @@ const keyThings: Record<KeyColor, ThingKind> = {
 
 const thingKinds = Object.keys(thingCatalog) as ThingKind[];
 
+// Vanilla Doom stops loading a deathmatch with fewer deathmatch starts than this.
+const deathmatchStarts = 4;
+
+// A map has one of each player start, but any number of deathmatch starts.
+function isPlayerStart(kind: ThingKind) {
+  return thingCatalog[kind].category === "start" && kind !== "deathmatch-start";
+}
+
 export {
   ceilingTextures,
   doorTextures,
   doorTrackTexture,
+  deathmatchStarts,
   floorTextures,
+  isPlayerStart,
   keyThings,
   sectorEffects,
   switchTextures,

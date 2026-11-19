@@ -26,6 +26,7 @@ type DoomModule = {
   _wadsmith_game_tic(): number;
   _wadsmith_health(): number;
   _wadsmith_kills(): number;
+  _wadsmith_frags(): number;
   _wadsmith_total_kills(): number;
   _wadsmith_player_x(): number;
   _wadsmith_player_y(): number;
@@ -66,9 +67,14 @@ type DoomModuleOptions = {
   };
 };
 
+type NetworkMode = "coop" | "deathmatch";
+
+const fragLimit = 10;
+
 /** How a network game reaches the other players, each numbered by the room. */
 type NetworkOptions = {
   role: "host" | "guest";
+  mode: NetworkMode;
   host: number;
   inbox: NetInbox;
   send: (peer: number, data: Uint8Array) => void;
@@ -86,6 +92,7 @@ type GameStatus = {
   inLevel: boolean;
   health: number;
   kills: number;
+  frags: number;
   totalKills: number;
   x: number;
   y: number;
@@ -382,6 +389,7 @@ class DoomGame {
       inLevel: module._wadsmith_game_state() === levelState,
       health: module._wadsmith_health(),
       kills: module._wadsmith_kills(),
+      frags: module._wadsmith_frags(),
       totalKills: module._wadsmith_total_kills(),
       x: module._wadsmith_player_x(),
       y: module._wadsmith_player_y(),
@@ -467,6 +475,15 @@ async function startDoom({
       "-config",
       "/woof.cfg",
       ...(network?.role === "host" ? ["-privateserver"] : []),
+      // The host's server settings reach every player, but each engine reads
+      // the frag limit from its own command line.
+      ...(network?.mode === "deathmatch"
+        ? [
+            ...(network.role === "host" ? ["-altdeath"] : []),
+            "-frags",
+            String(fragLimit),
+          ]
+        : []),
       ...(network?.role === "guest" ? ["-connect", String(network.host)] : []),
       ...(sampleRate === null ? ["-nosound", "-nomusic", "-nosfx"] : []),
     ]);
@@ -494,6 +511,7 @@ async function startDoom({
 
 export {
   DoomGame,
+  fragLimit,
   doomKeys,
   keysByCode,
   maxVolume,
@@ -502,6 +520,7 @@ export {
   type CreateDoom,
   type GameEvents,
   type GameStatus,
+  type NetworkMode,
   type NetworkOptions,
   type Resolution,
 };

@@ -629,6 +629,7 @@ function ProjectApp() {
             title={lobby.title}
             slot={lobby.slot}
             par={lobby.par}
+            initialMode={lobby.mode === "deathmatch" ? "deathmatch" : "coop"}
             onStart={(hosted) => {
               setPlaying({ entry: lobby, hosted });
               setLobby(null);

@@ -5,6 +5,8 @@ import { Worker } from "node:worker_threads";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { addThing } from "../map/edit";
+import { featuredMaps } from "../map/featured";
+import type { GameMap } from "../map/types";
 import { testMap } from "../map/test-map";
 import { compileMap } from "../wad/compile";
 import { NetInbox } from "./net-inbox";
@@ -22,6 +24,7 @@ type Snapshot = {
   playersInGame: number;
   consolePlayer: number;
   inLevel: boolean;
+  frags: number;
   gameTic: number;
   players: { x: number; y: number }[];
 };
@@ -33,9 +36,26 @@ afterEach(async () => {
 });
 
 const coopMap = addThing(testMap, "player-2", { x: 96, y: 256 }).map;
+const deathmatchSpots = [
+  { x: 64, y: 64 },
+  { x: 320, y: 64 },
+  { x: 640, y: 64 },
+  { x: 832, y: 320 },
+];
+const deathmatchMap: GameMap = deathmatchSpots.reduce(
+  (map, spot) => addThing(map, "deathmatch-start", spot).map,
+  testMap,
+);
+
+const deathmatchCases: [string, GameMap][] = [
+  ["the test map", deathmatchMap],
+  ...featuredMaps
+    .filter((entry) => entry.mode === "deathmatch")
+    .map((entry): [string, GameMap] => [entry.title, entry.map]),
+];
 
 // Stands in for the room: it forwards each packet to its peer after a delay.
-function createRoom() {
+function createRoom(map = coopMap, mode: "coop" | "deathmatch" = "coop") {
   const inboxes = new Map<number, NetInbox>();
   let nextId = 0;
 
@@ -46,9 +66,10 @@ function createRoom() {
       execArgv: ["--experimental-transform-types", "--no-warnings"],
       workerData: {
         role,
+        mode,
         host: hostPeer,
         inbox: inbox.buffer,
-        map: compileMap(coopMap),
+        map: compileMap(map),
         engineDirectory,
       },
     });
@@ -143,4 +164,34 @@ describe.skipIf(!ready)("network game through shared memory", () => {
     );
     expect(agreed).not.toBeNull();
   }, 60_000);
+
+  it.each(deathmatchCases)(
+    "starts a deathmatch on %s",
+    async (_name, map) => {
+      const spots = map.things.filter(
+        (thing) => thing.kind === "deathmatch-start",
+      );
+      const room = createRoom(map, "deathmatch");
+      const host = room.join(hostPeer, "host");
+      const guest = room.join(guestPeer, "guest");
+      await waitFor(host.query, (state) => state.waitingPlayers === 2, 15_000);
+      expect(await host.launch()).toBe(true);
+
+      const bothIn = async () => {
+        const [a, b] = await Promise.all([host.query(), guest.query()]);
+        return a && b ? [a, b] : null;
+      };
+      const started = await waitFor(
+        bothIn,
+        ([a, b]) => a.inLevel && b.inLevel,
+        15_000,
+      );
+      expect(started?.[0]).toMatchObject({ playersInGame: 2, frags: 0 });
+      const onSpot = ({ x, y }: { x: number; y: number }) =>
+        spots.some((spot) => spot.x === x && spot.y === -y);
+      expect(started![0].players.every(onSpot)).toBe(true);
+      expect(started![1].players).toEqual(started![0].players);
+    },
+    60_000,
+  );
 });

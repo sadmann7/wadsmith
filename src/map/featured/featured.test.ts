@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import { compileMap } from "../../wad/compile";
 import { maxDescriptionLength } from "../../projects/project-data";
+import { deathmatchStarts, doorTextures, switchTextures } from "../catalog";
 import { checkMap } from "../checks";
+import { freedoomFlats, freedoomWalls } from "../freedoom-textures";
 import { validateMap } from "../validate";
 import { buildMap, rect } from "./build-map";
 import { featuredMaps } from "./index";
@@ -83,20 +85,44 @@ describe.each(featuredMaps)("$title", ({ map, slot, players, mode }) => {
   });
 
   it("has a start for every player", () => {
+    const deathmatch = map.things.filter(
+      (thing) => thing.kind === "deathmatch-start",
+    );
     const starts = ["player", "player-2", "player-3", "player-4"];
     for (const [index, kind] of starts.entries()) {
       const placed = map.things.some((thing) => thing.kind === kind);
-      expect(placed).toBe(index < players.max);
+      expect(placed).toBe(index < (mode === "deathmatch" ? 1 : players.max));
     }
+    expect(deathmatch.length >= deathmatchStarts).toBe(mode === "deathmatch");
     expect(mode === "single").toBe(players.max === 1);
   });
 
-  it("can end the level", () => {
+  it("ends the way its mode does", () => {
     const exits = Object.values(map.lines ?? {}).filter(
       (line) => line.action?.kind === "exit",
     );
-    expect(exits).toHaveLength(1);
+    expect(exits).toHaveLength(mode === "deathmatch" ? 0 : 1);
     expect(slot).toMatch(/^MAP0\d$/);
+  });
+
+  it("uses only textures the engine has", () => {
+    const flats = new Set<string>(freedoomFlats);
+    const walls = new Set<string>([
+      ...freedoomWalls,
+      ...doorTextures,
+      ...switchTextures,
+    ]);
+    for (const sector of map.sectors) {
+      expect(flats.has(sector.floorTexture), sector.floorTexture).toBe(true);
+      expect(flats.has(sector.ceilingTexture), sector.ceilingTexture).toBe(
+        true,
+      );
+      expect(walls.has(sector.wallTexture), sector.wallTexture).toBe(true);
+      if (sector.door) expect(walls.has(sector.door.texture)).toBe(true);
+    }
+    for (const item of map.switches) {
+      expect(walls.has(item.texture), item.texture).toBe(true);
+    }
   });
 });
 

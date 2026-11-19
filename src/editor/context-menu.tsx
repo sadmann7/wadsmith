@@ -40,7 +40,7 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { thingCatalog, thingKinds } from "../map/catalog";
+import { isPlayerStart, thingCatalog, thingKinds } from "../map/catalog";
 import {
   addRoomOnSide,
   addSwitch,
@@ -400,9 +400,7 @@ function ThingsMenu({
       <Item
         icon={Copy}
         hint="⌘D"
-        disabled={things.every(
-          (thing) => thingCatalog[thing.kind].category === "start",
-        )}
+        disabled={things.every((thing) => isPlayerStart(thing.kind))}
         onSelect={() => {
           const copies = duplicateThings(map, ids);
           onCommit(copies.map, {

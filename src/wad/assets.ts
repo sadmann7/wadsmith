@@ -27,6 +27,7 @@ const spriteLumps: Record<ThingKind, string> = {
   "player-2": "PLAYA1",
   "player-3": "PLAYA1",
   "player-4": "PLAYA1",
+  "deathmatch-start": "PLAYA1",
   imp: "TROOA1",
   zombieman: "POSSA1",
   "shotgun-guy": "SPOSA1",
