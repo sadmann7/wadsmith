@@ -1,4 +1,5 @@
 import { FramePacer } from "./frame-pacer";
+import type { NetInbox } from "./net-inbox";
 
 type DoomModule = {
   FS: {
@@ -44,12 +45,32 @@ type DoomModule = {
   _wadsmith_set_sound(volume: number, muted: number): void;
   _wadsmith_strict_mode(): number;
   _wadsmith_demo_version(): number;
+  _wadsmith_net_launch(): number;
+  _wadsmith_net_connected(): number;
+  _wadsmith_net_waiting_players(): number;
+  _wadsmith_players_in_game(): number;
+  _wadsmith_console_player(): number;
+  _wadsmith_net_player_x(player: number): number;
+  _wadsmith_net_player_y(player: number): number;
 };
 
 type DoomModuleOptions = {
   print?: (message: string) => void;
   printErr?: (message: string) => void;
   locateFile?: (path: string) => string;
+  wadsmithNet?: {
+    send(peer: number, data: Uint8Array): void;
+    receive(pointer: number, capacity: number, peerPointer: number): number;
+    wait(ms: number): void;
+  };
+};
+
+/** How a network game reaches the other players, each numbered by the room. */
+type NetworkOptions = {
+  role: "host" | "guest";
+  host: number;
+  inbox: NetInbox;
+  send: (peer: number, data: Uint8Array) => void;
 };
 
 type CreateDoom = (options: DoomModuleOptions) => Promise<DoomModule>;
@@ -305,6 +326,27 @@ class DoomGame {
     this.module._wadsmith_set_sound(level, muted || level === 0 ? 1 : 0);
   }
 
+  launchNetGame() {
+    return this.module._wadsmith_net_launch() !== 0;
+  }
+
+  network() {
+    const { module } = this;
+    return {
+      connected: module._wadsmith_net_connected() !== 0,
+      waitingPlayers: module._wadsmith_net_waiting_players(),
+      playersInGame: module._wadsmith_players_in_game(),
+      consolePlayer: module._wadsmith_console_player(),
+    };
+  }
+
+  playerPosition(player: number) {
+    return {
+      x: this.module._wadsmith_net_player_x(player),
+      y: this.module._wadsmith_net_player_y(player),
+    };
+  }
+
   stop() {
     this.stopped = true;
     clearTimeout(this.timer);
@@ -367,6 +409,7 @@ async function startDoom({
   events,
   sampleRate = null,
   resolution = "classic",
+  network,
 }: {
   createDoom: CreateDoom;
   iwad: Uint8Array;
@@ -376,8 +419,28 @@ async function startDoom({
   events?: GameEvents;
   sampleRate?: number | null;
   resolution?: Resolution;
+  network?: NetworkOptions;
 }) {
-  const doomModule = await createDoom(options ?? {});
+  const doomModule = await createDoom({
+    ...options,
+    ...(network && {
+      wadsmithNet: {
+        send: network.send,
+        receive: (pointer, capacity, peerPointer) => {
+          for (;;) {
+            const packet = network.inbox.pop();
+            if (!packet) return -1;
+            if (packet.data.length > capacity) continue;
+            const heap = doomModule.HEAPU8;
+            heap.set(packet.data, pointer);
+            new DataView(heap.buffer).setUint32(peerPointer, packet.peer, true);
+            return packet.data.length;
+          }
+        },
+        wait: (ms) => network.inbox.wait(ms),
+      },
+    }),
+  });
   doomModule.FS.writeFile("/freedoom2.wad", iwad);
   doomModule.FS.writeFile("/woof.pk3", base);
   doomModule.FS.writeFile("/wadsmith.wad", map);
@@ -398,6 +461,8 @@ async function startDoom({
       "-nogui",
       "-config",
       "/woof.cfg",
+      ...(network?.role === "host" ? ["-privateserver"] : []),
+      ...(network?.role === "guest" ? ["-connect", String(network.host)] : []),
       ...(sampleRate === null ? ["-nosound", "-nomusic", "-nosfx"] : []),
     ]);
   } catch (error) {
@@ -432,5 +497,6 @@ export {
   type CreateDoom,
   type GameEvents,
   type GameStatus,
+  type NetworkOptions,
   type Resolution,
 };

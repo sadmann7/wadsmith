@@ -58,6 +58,24 @@ const thingCatalog: Record<
     color: "#4ade80",
     category: "start",
   },
+  "player-2": {
+    label: "Player 2 start",
+    doomType: 2,
+    color: "#4ade80",
+    category: "start",
+  },
+  "player-3": {
+    label: "Player 3 start",
+    doomType: 3,
+    color: "#4ade80",
+    category: "start",
+  },
+  "player-4": {
+    label: "Player 4 start",
+    doomType: 4,
+    color: "#4ade80",
+    category: "start",
+  },
   imp: { label: "Imp", doomType: 3001, color: "#fb923c", category: "enemy" },
   zombieman: {
     label: "Zombieman",

@@ -73,6 +73,9 @@ type LineSettings = {
 
 type ThingKind =
   | "player"
+  | "player-2"
+  | "player-3"
+  | "player-4"
   | "imp"
   | "zombieman"
   | "shotgun-guy"

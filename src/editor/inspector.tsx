@@ -993,7 +993,9 @@ function ThingFields({
 }) {
   const [first] = things;
   const single = things.length === 1 ? first : null;
-  const placed = things.filter((thing) => thing.kind !== "player");
+  const placed = things.filter(
+    (thing) => thingCatalog[thing.kind].category !== "start",
+  );
   const enemies = things.filter(
     (thing) => thingCatalog[thing.kind].category === "enemy",
   );
@@ -1002,7 +1004,7 @@ function ThingFields({
   );
   const toggleSkill = (skill: ThingSkill, on: boolean) =>
     onChange((thing) => {
-      if (thing.kind === "player") return {};
+      if (thingCatalog[thing.kind].category === "start") return {};
       const next = allSkills.filter((item) =>
         item === skill ? on : appearsOn(thing.skills, item),
       );
