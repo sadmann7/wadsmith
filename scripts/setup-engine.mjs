@@ -414,6 +414,74 @@ function writeLicenses() {
   );
 }
 
+// The GPL asks for the engine's source next to the engine, so the site serves
+// this archive: the pinned Woof commit, the patch, and the build scripts.
+function writeSourceArchive() {
+  const extras = join(cache, "source-extras");
+  rmSync(extras, { recursive: true, force: true });
+  mkdirSync(join(extras, "wadsmith"), { recursive: true });
+  copyFileSync(patch, join(extras, "wadsmith", "woof.patch"));
+  for (const script of ["setup-engine.mjs", "engine-files.mjs"]) {
+    copyFileSync(
+      join(root, "scripts", script),
+      join(extras, "wadsmith", script),
+    );
+  }
+  writeFileSync(
+    join(extras, "README.txt"),
+    [
+      "Source for the Doom engine that Wadsmith runs in the browser.",
+      "",
+      `woof/ is Woof ${woofVersion}, commit ${woofCommit}, from`,
+      `${woofRepository}. Woof is under the GNU GPL, version 2, in woof/COPYING.`,
+      "",
+      "wadsmith/woof.patch is every change Wadsmith makes to it. Apply it from",
+      "inside woof/ with: patch -p1 < ../wadsmith/woof.patch",
+      "",
+      "wadsmith/setup-engine.mjs builds woof.js and woof.wasm with Emscripten",
+      "7.0.0 and lists every source file and compiler flag. It expects",
+      "Wadsmith's repository layout, with the patch in engine/woof.patch.",
+      "",
+    ].join("\n"),
+  );
+  const tar = join(cache, "woof-source.tar");
+  writeFileSync(
+    tar,
+    gitIn(source, ["archive", "--format=tar", "--prefix=woof/", woofCommit], {
+      encoding: "buffer",
+      maxBuffer: 256 * 1024 * 1024,
+    }),
+  );
+  run("tar", ["-rf", tar, "-C", extras, "README.txt", "wadsmith"]);
+  writeFileSync(
+    join(staging, "woof-source.tar.gz"),
+    gzipSync(readFileSync(tar), { level: 9 }),
+  );
+  rmSync(tar);
+  rmSync(extras, { recursive: true });
+}
+
+function writeEngineInfo() {
+  writeFileSync(
+    join(staging, "engine.json"),
+    `${JSON.stringify(
+      {
+        woof: {
+          version: woofVersion,
+          commit: woofCommit,
+          repository: woofRepository,
+        },
+        freedoom: { version: freedoomVersion },
+        licenses: readdirSync(join(staging, "licenses"))
+          .filter((name) => name !== "README.txt")
+          .toSorted(),
+      },
+      null,
+      2,
+    )}\n`,
+  );
+}
+
 mkdirSync(cache, { recursive: true });
 rmSync(staging, { recursive: true, force: true });
 mkdirSync(staging, { recursive: true });
@@ -424,5 +492,7 @@ link(await compileAll());
 writeBaseFile();
 copyFileSync(join(source, "COPYING"), join(staging, "WOOF-LICENSE.txt"));
 writeLicenses();
+writeSourceArchive();
+writeEngineInfo();
 replaceDirectory(staging, output);
 console.log(`Woof and Freedoom are ready in ${output}.`);
