@@ -12,7 +12,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { wadFileName } from "../editor/build-dialog";
 import { App } from "../editor/editor-app";
 import { PlayTogether, type HostedGame } from "../engine/play-together";
-import { GameView } from "../engine/play-panel";
+import { GameView, type Level } from "../engine/play-panel";
 import { checkMap } from "../map/checks";
 import type { FeaturedMap } from "../map/featured";
 import {
@@ -121,6 +121,7 @@ function ProjectApp() {
   const [blockedLeave, setBlockedLeave] = useState<(() => void) | null>(null);
   const [view, setView] = useState(viewOfPath);
   const [lobby, setLobby] = useState<FeaturedMap | null>(null);
+  const [episodePlay, setEpisodePlay] = useState<Level[] | null>(null);
   const [playing, setPlaying] = useState<{
     entry: FeaturedMap;
     hosted: HostedGame | null;
@@ -454,19 +455,36 @@ function ProjectApp() {
     });
   };
 
-  const buildEpisode = () => {
-    const ordered = bySlot(maps);
+  const blockedSlots = (ordered: ProjectMap[], verb: string) => {
     const blocked = ordered.filter(
       (entry) =>
         entry.broken ||
         checkMap(entry.map).some((issue) => issue.severity === "error"),
     );
-    if (blocked.length > 0) {
-      setMessage(
-        `Fix ${blocked.map((entry) => entry.slot).join(", ")} before building.`,
-      );
-      return;
-    }
+    if (blocked.length === 0) return false;
+    setMessage(
+      `Fix ${blocked.map((entry) => entry.slot).join(", ")} before ${verb}.`,
+    );
+    return true;
+  };
+
+  const playEpisode = () => {
+    const ordered = bySlot(maps);
+    if (blockedSlots(ordered, "playing")) return;
+    setMessage(null);
+    setEpisodePlay(
+      ordered.map((entry) => ({
+        map: entry.map,
+        title: mapName(entry),
+        slot: entry.slot,
+        par: entry.par,
+      })),
+    );
+  };
+
+  const buildEpisode = () => {
+    const ordered = bySlot(maps);
+    if (blockedSlots(ordered, "building")) return;
     try {
       download(
         wadFileName(project.name.toLowerCase()),
@@ -610,6 +628,21 @@ function ProjectApp() {
     setPlaying(null);
   };
 
+  if (episodePlay) {
+    const [first] = episodePlay;
+    return (
+      <GameView
+        map={first.map}
+        title={first.title}
+        slot={first.slot}
+        par={first.par}
+        episode={episodePlay}
+        exit="episode"
+        onExit={() => setEpisodePlay(null)}
+      />
+    );
+  }
+
   if (playing) {
     const { entry, hosted } = playing;
     return (
@@ -696,6 +729,7 @@ function ProjectApp() {
       onImportProject={(file) => void importProject(file)}
       onImportMap={(file) => void importMap(file)}
       onBuildEpisode={buildEpisode}
+      onPlayEpisode={playEpisode}
       onOpenMap={(entry) => void openMap(entry)}
       onCreateMap={createMap}
       onUpdateMap={(entry, form) => updateMap(entry.id, form)}

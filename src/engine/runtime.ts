@@ -24,6 +24,7 @@ type DoomModule = {
   _wadsmith_set_paused(paused: number): void;
   _wadsmith_game_state(): number;
   _wadsmith_game_tic(): number;
+  _wadsmith_game_map(): number;
   _wadsmith_health(): number;
   _wadsmith_kills(): number;
   _wadsmith_frags(): number;
@@ -103,6 +104,7 @@ type GameEvents = {
 
 type GameStatus = {
   inLevel: boolean;
+  map: number;
   health: number;
   kills: number;
   frags: number;
@@ -419,6 +421,7 @@ class DoomGame {
     const { module } = this;
     return {
       inLevel: module._wadsmith_game_state() === levelState,
+      map: module._wadsmith_game_map(),
       health: module._wadsmith_health(),
       kills: module._wadsmith_kills(),
       frags: module._wadsmith_frags(),

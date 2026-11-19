@@ -8,7 +8,7 @@ import {
 } from "react";
 
 import type { GameMap, Point } from "../map/types";
-import { compileMap } from "../wad/compile";
+import { compileEpisode, compileMap } from "../wad/compile";
 import type { NetworkState } from "./doom-worker";
 import { startGameClient, type GameClient } from "./game-client";
 import { GameHud, type ScoreRow } from "./game-hud";
@@ -25,6 +25,7 @@ import {
   relockWait,
 } from "./mouse-capture";
 import {
+  doomKeys,
   keysByCode,
   maxVolume,
   screenSizes,
@@ -44,6 +45,7 @@ const noteMessageMs = 2000;
 // Escape can reach the page just after it released the pointer.
 const escapeGraceMs = 300;
 const mouseFireSource = "mouse";
+const advanceTapMs = 250;
 // Doom's netcode holds the level while it waits for a player's moves. A short
 // hold is normal; one this long is worth naming.
 const stallMs = 1000;
@@ -108,7 +110,7 @@ type CoopSession = {
   onServerReady: () => void;
 };
 
-type GameExit = "editor" | "maps" | "leave";
+type GameExit = "editor" | "maps" | "episode" | "leave";
 
 const gameExits: Record<
   GameExit,
@@ -124,6 +126,11 @@ const gameExits: Record<
     hint: "Esc returns to featured maps",
     action: "returns to featured maps",
   },
+  episode: {
+    label: "Back to episode",
+    hint: "Esc returns to the episode",
+    action: "returns to the episode",
+  },
   leave: {
     label: "Leave game",
     hint: "Esc leaves the game",
@@ -131,11 +138,15 @@ const gameExits: Record<
   },
 };
 
-type GameSessionProps = {
+type Level = {
   map: GameMap;
   title: string;
   slot: string;
   par: number | null;
+};
+
+type GameSessionProps = Level & {
+  episode: Level[] | null;
   sound: SoundSettings;
   onSoundChange: (sound: SoundSettings) => void;
   resolution: Resolution;
@@ -156,6 +167,7 @@ function GameSession({
   title,
   slot,
   par,
+  episode,
   sound,
   onSoundChange,
   resolution,
@@ -170,7 +182,7 @@ function GameSession({
   exit,
   skill,
 }: GameSessionProps) {
-  const canEdit = !coop && Boolean(onAddNote && onEditSpot);
+  const canEdit = !coop && !episode && Boolean(onAddNote && onEditSpot);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameRef = useRef<GameClient | null>(null);
   const heldKeys = useRef(new HeldKeys());
@@ -185,6 +197,10 @@ function GameSession({
   const [noteSpot, setNoteSpot] = useState<Point | null>(null);
   const [noteSaved, setNoteSaved] = useState(false);
   const [finished, setFinished] = useState(false);
+  const [levelIndex, setLevelIndex] = useState(0);
+  const [between, setBetween] = useState<GameStatus | null>(null);
+  const advanceTimer = useRef<ReturnType<typeof setInterval>>(undefined);
+  const level = episode?.[levelIndex] ?? { map, title, slot, par };
   const [network, setNetwork] = useState<NetworkState | null>(null);
   const [scoresOpen, setScoresOpen] = useState(false);
   const [stall, setStall] = useState<{ peers: number[]; since: number }>({
@@ -231,6 +247,7 @@ function GameSession({
     // Woof can show the level for a moment before its network game starts.
     let netStarted = !coop;
     let lastTics = -1;
+    let lastInLevel: GameStatus | null = null;
     let ticsChangedAt = performance.now();
     let stalled: number[] = [];
     const showStall = (peers: number[]) =>
@@ -249,23 +266,46 @@ function GameSession({
         canvas.focus();
         client = startGameClient({
           iwad,
-          map: coop?.wad ?? compileMap(map),
+          map:
+            coop?.wad ??
+            (episode
+              ? compileEpisode(
+                  episode.map((entry, index) => ({
+                    slot: `MAP${String(index + 1).padStart(2, "0")}`,
+                    map: entry.map,
+                  })),
+                )
+              : compileMap(map)),
           sound: soundRef.current,
           resolution,
           skill: coop?.skill ?? skill,
           onFrame: (pixels) =>
             context.putImageData(new ImageData(pixels, width, height), 0, 0),
-          // The WAD holds one map, so leaving it would load an unrelated level.
+          // A playtest's WAD holds one map, and an episode's ends with its last,
+          // so leaving either would load an unrelated level.
           onStatus: (next) => {
             if (next.tics !== lastTics) {
               lastTics = next.tics;
               ticsChangedAt = performance.now();
             }
-            if (next.inLevel && netStarted) reachedLevel = true;
+            if (next.inLevel && netStarted) {
+              reachedLevel = true;
+              lastInLevel = next;
+              if (episode) {
+                clearInterval(advanceTimer.current);
+                advanceTimer.current = undefined;
+                setBetween(null);
+                setLevelIndex(Math.min(next.map, episode.length) - 1);
+              }
+            }
             if (reachedLevel && !next.inLevel) {
-              client?.stop();
-              setFinished(true);
-              return;
+              if (!episode || next.map >= episode.length) {
+                client?.stop();
+                setFinished(true);
+                return;
+              }
+              // The engine clears the level's time once its tally starts.
+              if (advanceTimer.current === undefined) setBetween(lastInLevel);
             }
             setStatus(next);
           },
@@ -328,7 +368,20 @@ function GameSession({
       client?.stop();
       gameRef.current = null;
     };
-  }, [map, resolution, width, height, coop, skill]);
+  }, [map, episode, resolution, width, height, coop, skill]);
+
+  useEffect(() => () => clearInterval(advanceTimer.current), []);
+
+  // Doom's tally and story screens move on when a player presses use.
+  const nextLevel = () => {
+    setBetween(null);
+    clearInterval(advanceTimer.current);
+    advanceTimer.current = setInterval(() => {
+      gameRef.current?.key(true, doomKeys.use);
+      setTimeout(() => gameRef.current?.key(false, doomKeys.use), 60);
+    }, advanceTapMs);
+    requestAnimationFrame(focusGame);
+  };
 
   const pressKey = (source: string, key: number) => {
     if (heldKeys.current.press(source, key)) gameRef.current?.key(true, key);
@@ -430,10 +483,10 @@ function GameSession({
   };
 
   useEffect(() => {
-    if (!finished && !error) return;
+    if (!finished && !error && !between) return;
     cancelCapture();
     releaseMouse();
-  }, [finished, error]);
+  }, [finished, error, between]);
 
   const openNote = () => {
     if (!status?.inLevel || !canEdit) return;
@@ -510,10 +563,20 @@ function GameSession({
         }}
       >
         <GameHud
-          map={map}
-          title={title}
-          slot={slot}
-          par={par}
+          map={level.map}
+          title={level.title}
+          slot={level.slot}
+          par={level.par}
+          episode={episode !== null}
+          between={
+            between && episode
+              ? {
+                  tally: between,
+                  next: episode[levelIndex + 1],
+                  onNext: nextLevel,
+                }
+              : null
+          }
           status={status}
           sound={sound}
           fullscreen={fullscreen}
@@ -703,6 +766,7 @@ function GameView({
   onAddNote,
   onEditSpot,
   coop = null,
+  episode = null,
   exit = "editor",
   skill = "medium",
 }: {
@@ -714,6 +778,7 @@ function GameView({
   onAddNote?: (point: Point, text: string) => void;
   onEditSpot?: (spot: PlayerSpot) => void;
   coop?: CoopSession | null;
+  episode?: Level[] | null;
   exit?: GameExit;
   skill?: Skill;
 }) {
@@ -749,6 +814,7 @@ function GameView({
         title={title}
         slot={slot}
         par={par}
+        episode={episode}
         sound={sound}
         onSoundChange={(next) => {
           setSound(next);
@@ -773,4 +839,10 @@ function GameView({
   );
 }
 
-export { GameView, type CoopSession, type GameExit, type PlayerSpot };
+export {
+  GameView,
+  type CoopSession,
+  type GameExit,
+  type Level,
+  type PlayerSpot,
+};

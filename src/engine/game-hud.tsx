@@ -7,6 +7,7 @@ import {
 } from "@ui-sdk/react/slider";
 import {
   ArrowLeft,
+  ArrowRight,
   Crosshair,
   KeyRound,
   Loader,
@@ -20,6 +21,7 @@ import {
 import { useEffect, useState, type ReactNode } from "react";
 
 import { MapOutline } from "../editor/map-outline";
+import { MapPlan } from "../editor/map-plan";
 import { skillNames } from "./coop";
 import { PlayerBadge } from "./coop-ui";
 import type { GameMap } from "../map/types";
@@ -36,6 +38,8 @@ import {
 type SoundSettings = { volume: number; muted: boolean };
 
 type OtherPlayer = { peer: number; x: number; y: number };
+
+type NextLevel = { map: GameMap; title: string; slot: string };
 
 type ScoreRow = {
   peer: number;
@@ -254,6 +258,85 @@ function Scoreboard({
   );
 }
 
+function Tally({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid gap-1">
+      <dt className="font-mono text-[11px] text-fg-muted uppercase">{label}</dt>
+      <dd className="m-0 text-lg font-semibold">{value}</dd>
+    </div>
+  );
+}
+
+function BetweenLevels({
+  slot,
+  title,
+  status,
+  next,
+  exitLabel,
+  onExit,
+  onNext,
+}: {
+  slot: string;
+  title: string;
+  status: GameStatus | null;
+  next: NextLevel;
+  exitLabel: string;
+  onExit: () => void;
+  onNext: () => void;
+}) {
+  return (
+    <section
+      aria-label={`${slot} complete`}
+      className={`${panelClass} absolute top-1/2 left-1/2 grid w-[min(420px,calc(100%-32px))] -translate-1/2 gap-4 border border-border-strong p-6`}
+    >
+      <div className="grid gap-1">
+        <span className="font-mono text-[11px] tracking-wide text-success uppercase">
+          {slot} complete
+        </span>
+        <h2 className="m-0 text-[26px] leading-tight font-bold">{title}</h2>
+      </div>
+      {status ? (
+        <dl className="m-0 grid grid-cols-4 gap-3 border-y border-border py-3">
+          <Tally
+            label="Kills"
+            value={`${status.kills} / ${status.totalKills}`}
+          />
+          <Tally
+            label="Items"
+            value={`${status.items} / ${status.totalItems}`}
+          />
+          <Tally
+            label="Secrets"
+            value={`${status.secrets} / ${status.totalSecrets}`}
+          />
+          <Tally label="Time" value={formatTime(status.tics)} />
+        </dl>
+      ) : null}
+      <div className="flex items-center gap-3">
+        <MapPlan
+          map={next.map}
+          className="h-[48px] w-[80px] shrink-0 rounded-[2px] bg-canvas"
+        />
+        <div className="grid min-w-0 gap-0.5">
+          <span className="font-mono text-[11px] text-fg-muted uppercase">
+            Next · {next.slot}
+          </span>
+          <span className="truncate font-semibold">{next.title}</span>
+        </div>
+      </div>
+      <div className="flex justify-end gap-2">
+        <button type="button" className="button" onClick={onExit}>
+          {exitLabel}
+        </button>
+        <button type="button" className="button primary" onClick={onNext}>
+          <ArrowRight size={14} aria-hidden="true" />
+          Next map
+        </button>
+      </div>
+    </section>
+  );
+}
+
 function StallBanner({ names, since }: { names: string[]; since: number }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -329,6 +412,8 @@ function GameHud({
   scores,
   others,
   stall,
+  episode,
+  between,
   exit,
   canEdit,
   noteOpen,
@@ -361,6 +446,8 @@ function GameHud({
   scores: ScoreRow[] | null;
   others: OtherPlayer[];
   stall: { names: string[]; since: number } | null;
+  episode: boolean;
+  between: { tally: GameStatus; next: NextLevel; onNext: () => void } | null;
   exit: { label: string; hint: string };
   canEdit: boolean;
   noteOpen: boolean;
@@ -400,7 +487,13 @@ function GameHud({
           <div className="truncate text-[15px] font-semibold">{title}</div>
           <div className="font-mono text-[11px] text-fg-soft">
             {slot} · {skillNames[skill]} ·{" "}
-            {deathmatch ? "Deathmatch" : coop ? "Co-op" : "Playtest"}
+            {deathmatch
+              ? "Deathmatch"
+              : coop
+                ? "Co-op"
+                : episode
+                  ? "Episode"
+                  : "Playtest"}
           </div>
         </div>
       </div>
@@ -531,11 +624,21 @@ function GameHud({
       </aside>
       {finished && status ? (
         <section
-          aria-label={deathmatch ? "Match over" : "Level complete"}
+          aria-label={
+            deathmatch
+              ? "Match over"
+              : episode
+                ? "Episode complete"
+                : "Level complete"
+          }
           className={`${panelClass} absolute top-1/2 left-1/2 grid w-[min(320px,calc(100%-32px))] -translate-1/2 gap-3 border border-border-strong p-4`}
         >
           <h2 className="m-0 text-xl font-semibold">
-            {deathmatch ? "Match over" : "Level complete"}
+            {deathmatch
+              ? "Match over"
+              : episode
+                ? "Episode complete"
+                : "Level complete"}
           </h2>
           <p className="m-0 font-mono text-xs text-fg-muted">
             {formatTime(status.tics)} ·{" "}
@@ -554,6 +657,17 @@ function GameHud({
             </button>
           </div>
         </section>
+      ) : null}
+      {between ? (
+        <BetweenLevels
+          slot={slot}
+          title={title}
+          status={between.tally}
+          next={between.next}
+          exitLabel={exit.label}
+          onExit={onExit}
+          onNext={between.onNext}
+        />
       ) : null}
       {stall && !finished ? (
         <StallBanner names={stall.names} since={stall.since} />

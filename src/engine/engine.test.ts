@@ -18,7 +18,7 @@ import { pointInPolygon, wallKey, wallOwners } from "../map/geometry";
 import { starterMap } from "../map/starter-map";
 import { testMap } from "../map/test-map";
 import type { GameMap, LineAction } from "../map/types";
-import { compileMap } from "../wad/compile";
+import { compileEpisode, compileMap } from "../wad/compile";
 import {
   doomKeys,
   keysByCode,
@@ -42,7 +42,7 @@ afterEach(() => {
 const engineWarnings: string[] = [];
 
 async function launch(
-  map: GameMap,
+  map: GameMap | Uint8Array,
   sampleRate: number | null = null,
   events?: GameEvents,
   resolution?: Resolution,
@@ -55,7 +55,7 @@ async function launch(
     createDoom,
     iwad: readFileSync(resolve(engineDirectory, "freedoom2.wad")),
     base: readFileSync(resolve(engineDirectory, "woof.pk3")),
-    map: compileMap(map),
+    map: map instanceof Uint8Array ? map : compileMap(map),
     options: { print: () => {}, printErr: (line) => engineWarnings.push(line) },
     events,
     sampleRate,
@@ -750,4 +750,37 @@ describe.skipIf(!ready)("featured maps in the engine", () => {
       }, 30_000);
     }
   }
+});
+
+describe.skipIf(!ready)("an episode in the engine", () => {
+  it("moves on to the next map after the tally screen", async () => {
+    const [first] = featuredMaps;
+    const quiet: GameMap = {
+      ...first.map,
+      things: first.map.things.filter(
+        (thing) => thingCatalog[thing.kind].category !== "enemy",
+      ),
+    };
+    const exit = pressesOf(quiet).find((press) =>
+      press.label.startsWith("exit"),
+    )!;
+    const game = await launch(
+      compileEpisode([
+        { slot: "MAP01", map: exit.map },
+        { slot: "MAP02", map: starterMap },
+      ]),
+    );
+    await waitForPlay(game);
+    expect(game.status().map).toBe(1);
+    await pressUse(game);
+    await play(game, 6000, () => !game.status().inLevel);
+    expect(game.status()).toMatchObject({ inLevel: false, map: 1 });
+    await play(game, 8000, () => {
+      if (game.status().inLevel) return true;
+      game.key(game.gameTic() % 8 < 4, doomKeys.use);
+      return false;
+    });
+    game.key(false, doomKeys.use);
+    expect(game.status()).toMatchObject({ inLevel: true, map: 2 });
+  }, 30_000);
 });

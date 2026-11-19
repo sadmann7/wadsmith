@@ -29,6 +29,7 @@ import {
   GripVertical,
   Package,
   Pencil,
+  Play,
   Plus,
   Route,
   X,
@@ -483,6 +484,7 @@ function ProjectHome({
   onImportProject,
   onImportMap,
   onBuildEpisode,
+  onPlayEpisode,
   onOpenMap,
   onCreateMap,
   onUpdateMap,
@@ -505,6 +507,7 @@ function ProjectHome({
   onImportProject: (file: File) => void;
   onImportMap: (file: File) => void;
   onBuildEpisode: () => void;
+  onPlayEpisode: () => void;
   onOpenMap: (entry: ProjectMap) => void;
   onCreateMap: (details: MapDetails) => Promise<string | null>;
   onUpdateMap: (
@@ -687,6 +690,15 @@ function ProjectHome({
                   </MenuItem>
                 </MenuContent>
               </Menu>
+              <button
+                type="button"
+                className="button primary"
+                disabled={maps.length === 0}
+                onClick={onPlayEpisode}
+              >
+                <Play size={14} aria-hidden="true" />
+                Play episode
+              </button>
             </div>
           </div>
           {!durable ? (
