@@ -13,6 +13,7 @@
     "next-env.d.ts",
     "public/**",
     ".cache/**",
+    "**/.wrangler/**",
     "pnpm-lock.yaml",
     "**/*.md"
   ]

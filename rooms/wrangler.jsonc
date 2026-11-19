@@ -1,0 +1,14 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "wadsmith-rooms",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-01",
+  "durable_objects": {
+    "bindings": [{ "name": "ROOMS", "class_name": "Room" }],
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
+  "vars": {
+    "ALLOWED_ORIGINS": "https://wadsmith.com https://www.wadsmith.com http://localhost:*",
+  },
+  "observability": { "enabled": true },
+}

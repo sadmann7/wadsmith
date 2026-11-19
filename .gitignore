@@ -3,6 +3,7 @@ node_modules
 next-env.d.ts
 *.tsbuildinfo
 .cache
+.wrangler
 public/engine
 *.log
 .DS_Store

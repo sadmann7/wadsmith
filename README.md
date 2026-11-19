@@ -14,6 +14,8 @@ pnpm dev
 
 `setup:engine` compiles a pinned commit of [Woof](https://github.com/fabiangreffrath/woof) to WebAssembly with the changes in `engine/woof.patch`, and downloads a checksummed [Freedoom](https://freedoom.github.io/) release into `public/engine`.
 
+Co-op rooms run on a Cloudflare Worker in `rooms/`. Run it with `pnpm dev:rooms` and set `NEXT_PUBLIC_ROOMS_URL=ws://localhost:8787` to play across browsers. Without it, co-op works between tabs of one browser. Players connect directly over WebRTC when their networks allow it, and through the room otherwise.
+
 Set `NEXT_PUBLIC_SITE_URL` to the full public URL, including `https://`, when deploying outside Vercel, so social previews use the right image URLs.
 
 Maps save per browser address. The dev server now uses `localhost:3000`, so a map saved on the old `localhost:5173` address appears only with `pnpm dev -p 5173`, where you can save it to a file.
@@ -29,6 +31,7 @@ Maps save per browser address. The dev server now uses `localhost:3000`, so a ma
 - **Views:** switch between **Map**, **Split** and **3D**. Drag the divider, or press M to maximize the view under the pointer and return to Split. In Map view, the player view stays docked in the corner.
 - **Camera:** drag the camera marker on the map, double-click the map or press C to move the 3D view, and use **Find camera** to center the map on it.
 - **3D:** click a floor, ceiling, wall, door, switch or thing to select it. Drag floors and ceilings to change height, or pick a texture in the side panel. Choose **Place** to put the chosen thing on a floor, and drag things to move them. Walk with WASD, step through surfaces with N and P, nudge heights with Page Up and Page Down, and nudge a selected thing with Alt and the arrow keys.
+- **Co-op:** place a Player 2 start, and Player 3 and 4 starts for more players, then press **Co-op** and send the invite link. Guests join from the link without the map, and the host presses Start once everyone is in.
 - **Play:** builds a WAD and opens it full size in vanilla Doom mode at 60 frames a second, with sound effects, music and a volume control. Click the game to capture the mouse, then move it to turn and click to fire. Move with WASD, turn with the arrow keys, fire with Space and use with E. Esc releases the mouse and pauses, and a second Esc returns to the editor.
 
 Your map saves in this browser as you edit. Use **File** to start a new map, save a map file, open one again, or download a WAD.

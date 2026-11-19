@@ -13,6 +13,13 @@ type CoopGame = {
   par: number | null;
 };
 
+// WebRTC's offer, answer and network candidates, passed through the room.
+type PeerSignal = {
+  description?: RTCSessionDescriptionInit;
+  candidate?: RTCIceCandidateInit;
+  relayOnly?: true;
+};
+
 type RoomMessage =
   | { type: "hello"; nonce: string }
   | { type: "welcome"; nonce: string; peer: number; title: string }
@@ -20,12 +27,16 @@ type RoomMessage =
   | { type: "roster"; peers: number[] }
   | { type: "start"; game: CoopGame }
   | { type: "packet"; from: number; to: number; data: Uint8Array }
+  | { type: "signal"; from: number; to: number; signal: PeerSignal }
   | { type: "leave"; peer: number }
-  | { type: "close" };
+  | { type: "close" }
+  | { type: "dropped" };
 
+// A transport delivers "dropped" itself when it loses its connection.
 type RoomTransport = {
   post: (message: RoomMessage) => void;
   listen: (handler: (message: RoomMessage) => void) => void;
+  identify: (peer: number) => void;
   close: () => void;
 };
 
@@ -39,6 +50,7 @@ function tabTransport(roomId: string): RoomTransport {
         handler(event.data),
       );
     },
+    identify: () => {},
     close: () => channel.close(),
   };
 }
@@ -54,6 +66,8 @@ type HostRoomEvents = {
   onRoster: (peers: number[]) => void;
   onLeft: (peer: number) => void;
   onPacket: (from: number, data: Uint8Array) => void;
+  onSignal: (from: number, signal: PeerSignal) => void;
+  onDropped: () => void;
 };
 
 function hostRoom(
@@ -70,6 +84,8 @@ function hostRoom(
     transport.post({ type: "roster", peers });
     events.onRoster(peers);
   };
+
+  transport.identify(hostPeer);
 
   transport.listen((message) => {
     if (closed) return;
@@ -117,11 +133,17 @@ function hostRoom(
       events.onLeft(message.peer);
     } else if (message.type === "packet" && message.to === hostPeer) {
       events.onPacket(message.from, message.data);
+    } else if (message.type === "signal" && message.to === hostPeer) {
+      events.onSignal(message.from, message.signal);
+    } else if (message.type === "dropped") {
+      events.onDropped();
     }
   });
 
   return {
     peers: () => peers,
+    signal: (to: number, signal: PeerSignal) =>
+      transport.post({ type: "signal", from: hostPeer, to, signal }),
     start: (game: CoopGame) => {
       started = true;
       transport.post({ type: "start", game });
@@ -143,7 +165,8 @@ type GuestRoomEvents = {
   onRoster: (peers: number[]) => void;
   onStart: (game: CoopGame) => void;
   onPacket: (from: number, data: Uint8Array) => void;
-  onClosed: () => void;
+  onSignal: (from: number, signal: PeerSignal) => void;
+  onClosed: (reason: string) => void;
 };
 
 function joinRoom(transport: RoomTransport, events: GuestRoomEvents) {
@@ -162,8 +185,12 @@ function joinRoom(transport: RoomTransport, events: GuestRoomEvents) {
       clearInterval(timer);
       if (peer === null) {
         peer = message.peer;
+        transport.identify(message.peer);
         events.onJoined(message.peer, message.title);
       }
+    } else if (message.type === "dropped") {
+      leave();
+      events.onClosed("Lost the connection to the game.");
     } else if (message.type === "full" && message.nonce === nonce) {
       clearInterval(timer);
       events.onRefused(message.reason);
@@ -176,9 +203,11 @@ function joinRoom(transport: RoomTransport, events: GuestRoomEvents) {
       events.onStart(message.game);
     } else if (message.type === "packet" && message.to === peer) {
       events.onPacket(message.from, message.data);
+    } else if (message.type === "signal" && message.to === peer) {
+      events.onSignal(message.from, message.signal);
     } else if (message.type === "close") {
       leave();
-      events.onClosed();
+      events.onClosed("The host ended the game.");
     }
   });
 
@@ -194,6 +223,11 @@ function joinRoom(transport: RoomTransport, events: GuestRoomEvents) {
     send: (to: number, data: Uint8Array) => {
       if (peer !== null)
         transport.post({ type: "packet", from: peer, to, data });
+    },
+    signal: (to: number, signal: PeerSignal) => {
+      if (peer !== null) {
+        transport.post({ type: "signal", from: peer, to, signal });
+      }
     },
     leave,
   };
@@ -211,6 +245,7 @@ export {
   type CoopGame,
   type GuestRoom,
   type HostRoom,
+  type PeerSignal,
   type RoomMessage,
   type RoomTransport,
 };
