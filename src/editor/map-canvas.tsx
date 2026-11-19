@@ -126,6 +126,7 @@ function MapCanvas({
         {map.things.map((thing) => {
           const { label } = thingCatalog[thing.kind];
           const { icon: Icon, color } = thingIcons[thing.kind];
+          const startNumber = /^player-(\d)$/.exec(thing.kind)?.[1];
           return (
             <MapHandle
               key={thing.id}
@@ -135,7 +136,7 @@ function MapCanvas({
               title={label}
               style={{ "--thing-color": color } as CSSProperties}
             >
-              <Icon size={13} aria-hidden="true" />
+              {startNumber ?? <Icon size={13} aria-hidden="true" />}
             </MapHandle>
           );
         })}

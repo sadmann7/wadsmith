@@ -9,6 +9,7 @@ import {
 
 import type { GameMap, Point } from "../map/types";
 import { compileMap } from "../wad/compile";
+import type { NetworkState } from "./doom-worker";
 import { startGameClient, type GameClient } from "./game-client";
 import { GameHud } from "./game-hud";
 import { loadIwad } from "./iwad";
@@ -30,6 +31,7 @@ import {
   type GameStatus,
   type Resolution,
 } from "./runtime";
+import { hostPeer } from "./room";
 
 type SoundSettings = { volume: number; muted: boolean };
 
@@ -85,6 +87,16 @@ function spotOf({ x, y }: GameStatus): Point {
   return { x, y: 0 - y };
 }
 
+/** How a playtest takes part in a co-op game through its room. */
+type CoopSession = {
+  role: "host" | "guest";
+  wad: Uint8Array;
+  send: (to: number, data: Uint8Array) => void;
+  listen: (receive: (from: number, data: Uint8Array) => void) => void;
+  players: () => number;
+  onServerReady: () => void;
+};
+
 type GameSessionProps = {
   map: GameMap;
   title: string;
@@ -100,6 +112,7 @@ type GameSessionProps = {
   onExit: () => void;
   onAddNote: (point: Point, text: string) => void;
   onEditSpot: (spot: PlayerSpot) => void;
+  coop: CoopSession | null;
 };
 
 function GameSession({
@@ -117,6 +130,7 @@ function GameSession({
   onExit,
   onAddNote,
   onEditSpot,
+  coop,
 }: GameSessionProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameRef = useRef<GameClient | null>(null);
@@ -132,6 +146,7 @@ function GameSession({
   const [noteSpot, setNoteSpot] = useState<Point | null>(null);
   const [noteSaved, setNoteSaved] = useState(false);
   const [finished, setFinished] = useState(false);
+  const [network, setNetwork] = useState<NetworkState | null>(null);
   const [capture, updateCapture] = useReducer(
     nextMouseCapture,
     initialMouseCapture,
@@ -145,6 +160,7 @@ function GameSession({
   const gameHeld = noteSpot !== null || holdsGame(capture);
   const gameHeldRef = useRef(gameHeld);
   const { width, height } = screenSizes[resolution];
+  const coopStarted = (network?.playersInGame ?? 0) > 1 && status?.inLevel;
 
   useEffect(() => {
     captureRef.current = capture;
@@ -166,6 +182,10 @@ function GameSession({
     let stopped = false;
     let client: GameClient | null = null;
     let reachedLevel = false;
+    let serverReady = false;
+    let launched = false;
+    // Woof can show the level for a moment before its network game starts.
+    let netStarted = !coop;
 
     loadIwad()
       .then((iwad) => {
@@ -175,14 +195,14 @@ function GameSession({
         canvas.focus();
         client = startGameClient({
           iwad,
-          map: compileMap(map),
+          map: coop?.wad ?? compileMap(map),
           sound: soundRef.current,
           resolution,
           onFrame: (pixels) =>
             context.putImageData(new ImageData(pixels, width, height), 0, 0),
           // The WAD holds one map, so leaving it would load an unrelated level.
           onStatus: (next) => {
-            if (next.inLevel) reachedLevel = true;
+            if (next.inLevel && netStarted) reachedLevel = true;
             if (reachedLevel && !next.inLevel) {
               client?.stop();
               setFinished(true);
@@ -196,7 +216,29 @@ function GameSession({
           onAudioUnavailable: () => setAudioUnavailable(true),
           onError: setError,
           onExit: leaveGame,
+          network: coop
+            ? {
+                role: coop.role,
+                host: hostPeer,
+                send: coop.send,
+                onState: (state) => {
+                  setNetwork(state);
+                  if (state.playersInGame > 1) netStarted = true;
+                  if (coop.role !== "host") return;
+                  if (!serverReady) {
+                    serverReady = true;
+                    coop.onServerReady();
+                  }
+                  if (!launched && state.waitingPlayers >= coop.players()) {
+                    launched = true;
+                    client?.launch();
+                  }
+                },
+              }
+            : undefined,
         });
+        const running = client;
+        coop?.listen((from, data) => running.receive(from, data));
         gameRef.current = client;
         client.setHeld(gameHeldRef.current);
         for (const key of heldKeys.current.keys()) client.key(true, key);
@@ -214,7 +256,7 @@ function GameSession({
       client?.stop();
       gameRef.current = null;
     };
-  }, [map, resolution, width, height]);
+  }, [map, resolution, width, height, coop]);
 
   const pressKey = (source: string, key: number) => {
     if (heldKeys.current.press(source, key)) gameRef.current?.key(true, key);
@@ -322,7 +364,7 @@ function GameSession({
   }, [finished, error]);
 
   const openNote = () => {
-    if (!status?.inLevel) return;
+    if (!status?.inLevel || coop) return;
     setNoteSaved(false);
     setNoteSpot(spotOf(status));
     const { mode } = captureRef.current;
@@ -341,7 +383,7 @@ function GameSession({
   };
 
   const editSpot = () => {
-    if (status?.inLevel) {
+    if (status?.inLevel && !coop) {
       onEditSpot({ ...spotOf(status), angle: status.angle });
     }
   };
@@ -404,6 +446,7 @@ function GameSession({
           sound={sound}
           fullscreen={fullscreen}
           showHelp={showHelp && !noteSpot && !noteSaved}
+          coop={coop?.role ?? null}
           noteOpen={noteSpot !== null}
           mouseMode={capture.mode}
           noteSaved={noteSaved}
@@ -429,6 +472,14 @@ function GameSession({
           onEditSpot={editSpot}
           onControlUsed={focusGame}
         />
+        {coop && !error && !finished && !coopStarted ? (
+          <p
+            className="absolute inset-x-4 top-1/2 z-20 m-0 -translate-y-1/2 text-center font-mono text-sm text-fg-soft"
+            role="status"
+          >
+            {coopWaiting(coop, network)}
+          </p>
+        ) : null}
         {error ? (
           <p className="notice absolute inset-x-4 top-20 z-20" role="alert">
             {error}
@@ -507,6 +558,16 @@ function GameSession({
   );
 }
 
+function coopWaiting(coop: CoopSession, network: NetworkState | null) {
+  if (coop.role === "guest") {
+    return network
+      ? "Waiting for the other players…"
+      : "Connecting to the host…";
+  }
+  if (!network) return "Starting the game…";
+  return `Waiting for players · ${network.waitingPlayers} of ${coop.players()} connected`;
+}
+
 function GameView({
   map,
   title,
@@ -515,6 +576,7 @@ function GameView({
   onExit,
   onAddNote,
   onEditSpot,
+  coop = null,
 }: {
   map: GameMap;
   title: string;
@@ -523,6 +585,7 @@ function GameView({
   onExit: () => void;
   onAddNote: (point: Point, text: string) => void;
   onEditSpot: (spot: PlayerSpot) => void;
+  coop?: CoopSession | null;
 }) {
   const stageRef = useRef<HTMLElement>(null);
   const [run, setRun] = useState(0);
@@ -572,9 +635,10 @@ function GameView({
         onExit={onExit}
         onAddNote={onAddNote}
         onEditSpot={onEditSpot}
+        coop={coop}
       />
     </section>
   );
 }
 
-export { GameView, type PlayerSpot };
+export { GameView, type CoopSession, type PlayerSpot };

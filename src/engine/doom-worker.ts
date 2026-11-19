@@ -1,3 +1,4 @@
+import { NetInbox } from "./net-inbox";
 import {
   startDoom,
   screenSizes,
@@ -8,6 +9,14 @@ import {
 } from "./runtime";
 
 type SoundLevel = { volume: number; muted: boolean };
+
+type WorkerNetwork = {
+  role: "host" | "guest";
+  host: number;
+  inbox: SharedArrayBuffer;
+};
+
+type NetworkState = ReturnType<DoomGame["network"]>;
 
 type DoomWorkerRequest =
   | {
@@ -21,7 +30,9 @@ type DoomWorkerRequest =
       sampleRate: number;
       audioPort: MessagePort | null;
       resolution: Resolution;
+      network: WorkerNetwork | null;
     }
+  | { type: "launch" }
   | { type: "key"; pressed: boolean; key: number }
   | { type: "turn"; amount: number }
   | { type: "display" }
@@ -30,7 +41,13 @@ type DoomWorkerRequest =
   | { type: "recycle"; buffer: ArrayBuffer };
 
 type DoomWorkerResponse =
-  | { type: "frame"; buffer: ArrayBuffer; status: GameStatus | null }
+  | {
+      type: "frame";
+      buffer: ArrayBuffer;
+      status: GameStatus | null;
+      network: NetworkState | null;
+    }
+  | { type: "net"; to: number; data: Uint8Array }
   | { type: "exit" }
   | { type: "error"; stage: "load" | "start" | "run"; message: string };
 
@@ -45,6 +62,7 @@ let game: DoomGame | null = null;
 let stage: "load" | "start" | "run" = "load";
 let sound: SoundLevel = { volume: 8, muted: false };
 let paused = false;
+let networked = false;
 const heldKeys = new Set<number>();
 let lastStatus = 0;
 const errors: string[] = [];
@@ -86,7 +104,15 @@ function sendFrame() {
   const now = performance.now();
   const due = now - lastStatus >= statusEveryMs;
   if (due) lastStatus = now;
-  post({ type: "frame", buffer, status: due ? game.status() : null }, [buffer]);
+  post(
+    {
+      type: "frame",
+      buffer,
+      status: due ? game.status() : null,
+      network: due && networked ? game.network() : null,
+    },
+    [buffer],
+  );
 }
 
 async function fetchBytes(url: string) {
@@ -97,7 +123,9 @@ async function fetchBytes(url: string) {
 
 async function start(request: Extract<DoomWorkerRequest, { type: "start" }>) {
   sound = request.sound;
-  paused ||= request.paused;
+  networked = request.network !== null;
+  // Pausing one player's engine would stall everyone in a network game.
+  paused = !networked && (paused || request.paused);
   const [{ default: createDoom }, base] = await Promise.all([
     import(
       /* turbopackIgnore: true */ /* webpackIgnore: true */ request.engineUrl
@@ -121,6 +149,14 @@ async function start(request: Extract<DoomWorkerRequest, { type: "start" }>) {
     },
     sampleRate: request.audioPort ? request.sampleRate : null,
     resolution: request.resolution,
+    network: request.network
+      ? {
+          role: request.network.role,
+          host: request.network.host,
+          inbox: new NetInbox(request.network.inbox),
+          send: (to, data) => post({ type: "net", to, data }, [data.buffer]),
+        }
+      : undefined,
   });
   stage = "run";
   game = running;
@@ -148,8 +184,10 @@ scope.addEventListener("message", (event) => {
     sound = request.sound;
     game?.setSound(sound.volume, sound.muted);
   } else if (request.type === "pause") {
-    paused = request.paused;
+    paused = request.paused && !networked;
     game?.setPaused(paused);
+  } else if (request.type === "launch") {
+    game?.launchNetGame();
   } else {
     spareFrames.push(request.buffer);
   }
@@ -160,4 +198,10 @@ scope.addEventListener("error", (event) => {
   fail("The engine stopped.");
 });
 
-export type { DoomWorkerRequest, DoomWorkerResponse, SoundLevel };
+export type {
+  DoomWorkerRequest,
+  DoomWorkerResponse,
+  NetworkState,
+  SoundLevel,
+  WorkerNetwork,
+};

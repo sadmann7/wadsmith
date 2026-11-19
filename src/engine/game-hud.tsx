@@ -145,6 +145,7 @@ function GameHud({
   sound,
   fullscreen,
   showHelp,
+  coop,
   noteOpen,
   mouseMode,
   noteSaved,
@@ -169,6 +170,7 @@ function GameHud({
   sound: SoundSettings;
   fullscreen: boolean;
   showHelp: boolean;
+  coop: "host" | "guest" | null;
   noteOpen: boolean;
   mouseMode: MouseMode;
   noteSaved: boolean;
@@ -185,6 +187,7 @@ function GameHud({
   onEditSpot: () => void;
   onControlUsed: () => void;
 }) {
+  const exitLabel = coop === "guest" ? "Leave game" : "Back to editor";
   const inLevel = status?.inLevel ?? false;
   const FullscreenIcon = fullscreen ? Minimize : Maximize;
   const SoundIcon = sound.muted ? VolumeX : Volume2;
@@ -196,7 +199,7 @@ function GameHud({
       <div className="absolute top-5 left-5 flex items-center gap-3">
         <button type="button" className={buttonClass} onClick={onExit}>
           <ArrowLeft size={14} aria-hidden="true" />
-          Back to editor
+          {exitLabel}
           {fullscreen ? null : (
             <kbd className="font-mono text-[11px] text-fg-muted">Esc</kbd>
           )}
@@ -204,7 +207,7 @@ function GameHud({
         <div className="min-w-0 @max-xl:hidden">
           <div className="truncate text-[15px] font-semibold">{title}</div>
           <div className="font-mono text-[11px] text-fg-soft">
-            {slot} · Medium · Playtest
+            {slot} · Medium · {coop ? "Co-op" : "Playtest"}
           </div>
         </div>
       </div>
@@ -276,27 +279,31 @@ function GameHud({
               </SliderTrack>
             </SliderControl>
           </Slider>
-          <button
-            type="button"
-            className={`${iconButtonClass} text-xs font-medium aria-pressed:text-accent`}
-            aria-label="Double resolution"
-            aria-pressed={resolution === "high"}
-            title={`${screenSizes[resolution].width}×${screenSizes[resolution].height}, restarts the level`}
-            onClick={() =>
-              onResolutionChange(resolution === "high" ? "classic" : "high")
-            }
-          >
-            2×
-          </button>
-          <button
-            type="button"
-            className={iconButtonClass}
-            aria-label="Restart"
-            title="Restart"
-            onClick={onRestart}
-          >
-            <RotateCcw size={15} aria-hidden="true" />
-          </button>
+          {coop ? null : (
+            <>
+              <button
+                type="button"
+                className={`${iconButtonClass} text-xs font-medium aria-pressed:text-accent`}
+                aria-label="Double resolution"
+                aria-pressed={resolution === "high"}
+                title={`${screenSizes[resolution].width}×${screenSizes[resolution].height}, restarts the level`}
+                onClick={() =>
+                  onResolutionChange(resolution === "high" ? "classic" : "high")
+                }
+              >
+                2×
+              </button>
+              <button
+                type="button"
+                className={iconButtonClass}
+                aria-label="Restart"
+                title="Restart"
+                onClick={onRestart}
+              >
+                <RotateCcw size={15} aria-hidden="true" />
+              </button>
+            </>
+          )}
           <button
             type="button"
             className={iconButtonClass}
@@ -329,18 +336,20 @@ function GameHud({
             enemies
           </p>
           <div className="flex gap-2">
-            <button type="button" className="button" onClick={onRestart}>
-              Play again
-            </button>
+            {coop ? null : (
+              <button type="button" className="button" onClick={onRestart}>
+                Play again
+              </button>
+            )}
             <button type="button" className="button primary" onClick={onExit}>
-              Back to editor
+              {exitLabel}
             </button>
           </div>
         </section>
       ) : null}
       {mouseMode === "released" && !finished && !noteOpen ? (
         <section
-          aria-label="Paused"
+          aria-label={coop ? "Mouse released" : "Paused"}
           className="absolute top-1/2 left-1/2 grid w-[min(320px,calc(100%-32px))] -translate-1/2 gap-1 rounded-[3px] border border-border-strong bg-surface/90 p-4 text-center"
         >
           <h2 className="m-0 text-xl font-semibold">Paused</h2>
@@ -348,7 +357,11 @@ function GameHud({
             Click the game to capture the mouse and carry on.
           </p>
           <p className="m-0 font-mono text-xs text-fg-muted">
-            {fullscreen ? "Esc leaves fullscreen" : "Esc returns to the editor"}
+            {fullscreen
+              ? "Esc leaves fullscreen"
+              : coop === "guest"
+                ? "Esc leaves the game"
+                : "Esc returns to the editor"}
           </p>
         </section>
       ) : null}
@@ -400,7 +413,7 @@ function GameHud({
         ) : (
           <span />
         )}
-        <div className="flex gap-2">
+        <div className={coop ? "hidden" : "flex gap-2"}>
           <button
             type="button"
             className={buttonClass}

@@ -1,9 +1,11 @@
 import type {
   DoomWorkerRequest,
   DoomWorkerResponse,
+  NetworkState,
   SoundLevel,
 } from "./doom-worker";
 import { engineBase } from "./iwad";
+import { NetInbox } from "./net-inbox";
 import type { GameStatus, Resolution } from "./runtime";
 
 type GameClientOptions = {
@@ -17,6 +19,12 @@ type GameClientOptions = {
   onAudioUnavailable: () => void;
   onError: (message: string) => void;
   onExit: () => void;
+  network?: {
+    role: "host" | "guest";
+    host: number;
+    send: (to: number, data: Uint8Array) => void;
+    onState: (state: NetworkState) => void;
+  };
 };
 
 const audioWorklet = `
@@ -76,9 +84,12 @@ function startGameClient(options: GameClientOptions) {
   let held = false;
   let pendingFrame: ArrayBuffer | null = null;
   let frameRequest = 0;
+  const { network } = options;
+  const inbox = network ? NetInbox.create() : null;
 
-  const sendPause = () =>
-    send({ type: "pause", paused: document.hidden || held });
+  const sendPause = () => {
+    if (!network) send({ type: "pause", paused: document.hidden || held });
+  };
   const onVisibilityChange = sendPause;
   document.addEventListener("visibilitychange", onVisibilityChange);
 
@@ -123,6 +134,9 @@ function startGameClient(options: GameClientOptions) {
         if (pendingFrame) recycle(pendingFrame);
         pendingFrame = message.buffer;
         if (message.status) options.onStatus(message.status);
+        if (message.network) network?.onState(message.network);
+      } else if (message.type === "net") {
+        network?.send(message.to, message.data);
       } else if (message.type === "exit") {
         stop();
         options.onExit();
@@ -181,6 +195,10 @@ function startGameClient(options: GameClientOptions) {
         sampleRate: audio.sampleRate,
         audioPort,
         resolution: options.resolution,
+        network:
+          network && inbox
+            ? { role: network.role, host: network.host, inbox: inbox.buffer }
+            : null,
       },
       audioPort ? [audioPort] : [],
     );
@@ -203,6 +221,8 @@ function startGameClient(options: GameClientOptions) {
     resumeAudio: () => {
       if (audio.state === "suspended") void audio.resume();
     },
+    receive: (peer: number, data: Uint8Array) => inbox?.push(peer, data),
+    launch: () => send({ type: "launch" }),
     stop,
   };
 }
