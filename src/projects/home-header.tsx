@@ -1,3 +1,5 @@
+import { AppHeader } from "../editor/app-header";
+
 type HomeView = "projects" | "featured";
 
 const views: { value: HomeView; label: string }[] = [
@@ -13,11 +15,11 @@ function HomeHeader({
   onNavigate: (view: HomeView) => void;
 }) {
   return (
-    <header className="flex items-stretch gap-8 border-b border-border bg-surface pr-3 pl-4">
-      <h1 className="m-0 self-center text-[17px] font-bold tracking-[0.02em] text-accent">
-        WADSMITH
-      </h1>
-      <nav aria-label="Sections" className="flex items-stretch gap-5">
+    <AppHeader onHome={() => onNavigate("projects")}>
+      <nav
+        aria-label="Sections"
+        className="flex items-stretch gap-5 self-stretch"
+      >
         {views.map((item) => (
           <button
             key={item.value}
@@ -30,7 +32,7 @@ function HomeHeader({
           </button>
         ))}
       </nav>
-    </header>
+    </AppHeader>
   );
 }
 

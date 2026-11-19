@@ -7,7 +7,13 @@ import {
   AlertDialogDescription,
   AlertDialogTitle,
 } from "@ui-sdk/react/alert-dialog";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+} from "react";
 
 import { wadFileName } from "../editor/build-dialog";
 import { App } from "../editor/editor-app";
@@ -56,6 +62,7 @@ import {
 import { FeaturedMaps } from "./featured-maps";
 import type { HomeView } from "./home-header";
 import { ProjectHome } from "./project-home";
+import { parseRoute, pathOf, type Route } from "./routes";
 import { createMemoryStore, openProjectStore } from "./project-store";
 
 type Session = {
@@ -71,12 +78,12 @@ type SaveStatus = "saving" | "saved" | "failed";
 const channelName = "wadsmith";
 const saveFailure = "Your browser couldn't save that change.";
 
-const featuredPath = "/maps";
-
 let preparing: ReturnType<typeof openPreparedStore> | null = null;
 
 function viewOfPath(): HomeView {
-  return location.pathname === featuredPath ? "featured" : "projects";
+  return parseRoute(location.pathname).kind === "featured"
+    ? "featured"
+    : "projects";
 }
 
 async function prepared(store: ProjectStore) {
@@ -127,7 +134,8 @@ function ProjectApp() {
     entry: FeaturedMap;
     hosted: HostedGame | null;
   } | null>(null);
-  const opensOnFeatured = useRef(view === "featured");
+  const syncedPath = useRef<string | null>(null);
+  const syncedSession = useRef<string | null>(null);
   const channel = useRef<BroadcastChannel | null>(null);
   const sessionRef = useRef<Session | null>(null);
   const projectIdRef = useRef("");
@@ -199,8 +207,6 @@ function ProjectApp() {
       };
       sessionRef.current = next;
       setSession(next);
-      if (location.pathname === featuredPath)
-        history.replaceState(null, "", "/");
       setDetails(detailsOf(entry));
       setSaveStatus("saved");
       selectProject(entry.projectId);
@@ -215,9 +221,22 @@ function ProjectApp() {
       .then(async ({ store: opened, ready }) => {
         if (cancelled) return;
         setStore(opened);
-        selectProject(ready.projectId);
-        await refresh(opened, ready.projectId);
-        if (!cancelled && ready.entry && !opensOnFeatured.current) {
+        const route = parseRoute(location.pathname);
+        const wanted =
+          route.kind === "episode" || route.kind === "map"
+            ? route.id
+            : ready.projectId;
+        selectProject(wanted);
+        await refresh(opened, wanted);
+        if (cancelled) return;
+        if (route.kind === "map") {
+          const entry = (await opened.listMaps(route.id)).find(
+            (item) => item.slot === route.slot && !item.broken,
+          );
+          if (cancelled) return;
+          if (entry) startSession(opened, entry);
+          else setMessage(`${route.slot} isn't in this episode.`);
+        } else if (route.kind === "home" && ready.created && ready.entry) {
           startSession(opened, ready.entry);
         }
       })
@@ -266,11 +285,84 @@ function ProjectApp() {
     };
   }, [closeSession, refresh, store]);
 
+  const whenSaved = async (next: () => void) => {
+    const active = sessionRef.current;
+    const saved = !active || (await active.saver.flush());
+    if (sessionRef.current !== active) return;
+    if (saved) next();
+    else setBlockedLeave(() => next);
+  };
+
+  const openMap = async (entry: ProjectMap) => {
+    if (!store) return;
+    try {
+      const latest = await store.getMap(entry.id);
+      if (!latest || latest.broken) {
+        setMessage(`${entry.slot} couldn't be opened.`);
+        return;
+      }
+      await store.setSetting(lastMapKey, latest.id);
+      await store.setSetting(lastProjectKey, latest.projectId);
+      setMessage(null);
+      startSession(store, latest);
+      await refresh(store, latest.projectId);
+    } catch {
+      setMessage(saveFailure);
+    }
+  };
+
+  const applyRoute = useEffectEvent((route: Route) => {
+    if (!store) return;
+    setEpisodePlay(null);
+    void whenSaved(async () => {
+      if (route.kind === "map") {
+        const entry = (await store.listMaps(route.id)).find(
+          (item) => item.slot === route.slot,
+        );
+        if (entry) {
+          setView("projects");
+          await openMap(entry);
+          return;
+        }
+      }
+      if (sessionRef.current) await closeSession(store);
+      setView(route.kind === "featured" ? "featured" : "projects");
+      if (route.kind === "episode" || route.kind === "map") {
+        selectProject(route.id);
+        await refresh(store, route.id).catch(() => setMessage(saveFailure));
+      }
+    });
+  });
+
   useEffect(() => {
-    const onPop = () => setView(viewOfPath());
+    const onPop = () => applyRoute(parseRoute(location.pathname));
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
+
+  const wantedPath =
+    !store || !projectId
+      ? null
+      : session && details
+        ? pathOf({ kind: "map", id: session.projectId, slot: details.slot })
+        : view === "featured"
+          ? pathOf({ kind: "featured" })
+          : pathOf({ kind: "episode", id: projectId });
+
+  // A slot change keeps its history entry, since it names the same map.
+  useEffect(() => {
+    if (!wantedPath) return;
+    const sessionId = session?.id ?? null;
+    if (wantedPath !== location.pathname) {
+      const replace =
+        syncedPath.current === null ||
+        (sessionId !== null && sessionId === syncedSession.current);
+      if (replace) history.replaceState(null, "", wantedPath);
+      else history.pushState(null, "", wantedPath);
+    }
+    syncedPath.current = wantedPath;
+    syncedSession.current = sessionId;
+  }, [wantedPath, session?.id]);
 
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => {
@@ -314,36 +406,9 @@ function ProjectApp() {
     }
   };
 
-  const whenSaved = async (next: () => void) => {
-    const active = sessionRef.current;
-    const saved = !active || (await active.saver.flush());
-    if (sessionRef.current !== active) return;
-    if (saved) next();
-    else setBlockedLeave(() => next);
-  };
-
-  const openMap = async (entry: ProjectMap) => {
-    try {
-      const latest = await store.getMap(entry.id);
-      if (!latest || latest.broken) {
-        setMessage(`${entry.slot} couldn't be opened.`);
-        return;
-      }
-      await store.setSetting(lastMapKey, latest.id);
-      await store.setSetting(lastProjectKey, latest.projectId);
-      setMessage(null);
-      startSession(store, latest);
-      await refresh(store, latest.projectId);
-    } catch {
-      setMessage(saveFailure);
-    }
-  };
-
   const navigate = (next: HomeView) => {
     setView(next);
     setMessage(null);
-    const path = next === "featured" ? featuredPath : "/";
-    if (location.pathname !== path) history.pushState(null, "", path);
   };
 
   const openCopy = (featured: FeaturedMap) =>

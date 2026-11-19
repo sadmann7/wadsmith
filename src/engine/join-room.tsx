@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
+import { AppHeader } from "../editor/app-header";
 import { MapPlan } from "../editor/map-plan";
 import {
   appVersion,
@@ -448,15 +449,7 @@ function CoopJoin({ code }: { code: string }) {
 
   return (
     <div className="grid min-h-dvh grid-rows-[48px_minmax(0,1fr)] bg-canvas text-fg">
-      <header className="flex items-center border-b border-border bg-surface pl-4">
-        <button
-          type="button"
-          className="border-0 bg-transparent p-0 text-[17px] font-bold tracking-[0.02em] text-accent"
-          onClick={backHome}
-        >
-          WADSMITH
-        </button>
-      </header>
+      <AppHeader onHome={backHome} />
       <main className="grid place-items-center p-4">
         <div className="w-[min(460px,100%)]">
           {state.step === "finding" ? (

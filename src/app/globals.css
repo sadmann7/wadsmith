@@ -844,22 +844,14 @@
   }
 
   .topbar {
-    display: grid;
-    grid-template-columns:
-      minmax(max-content, 1fr) minmax(0, auto)
-      minmax(max-content, 1fr);
+    gap: 24px;
+    min-height: 48px;
     padding: 0 12px 0 16px;
   }
 
-  .topbar-start,
-  .topbar-end,
   .map-title {
     display: flex;
     align-items: center;
-  }
-
-  .topbar-start {
-    gap: 16px;
   }
 
   .topbar h1 {
@@ -881,14 +873,8 @@
     color: var(--color-fg);
   }
 
-  .topbar-end {
-    justify-self: end;
-  }
-
   .map-title {
     gap: 8px;
-    justify-content: center;
-    justify-self: stretch;
     overflow: hidden;
     min-width: 0;
     white-space: nowrap;
@@ -1389,7 +1375,6 @@
 
     .map-title {
       flex: 1 1 140px;
-      justify-content: center;
     }
 
     .topbar-end {
