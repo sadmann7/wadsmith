@@ -26,14 +26,15 @@ import {
 import {
   keysByCode,
   maxVolume,
-  screenHeight,
-  screenWidth,
+  screenSizes,
   type GameStatus,
+  type Resolution,
 } from "./runtime";
 
 type SoundSettings = { volume: number; muted: boolean };
 
 const soundKey = "wadsmith:sound";
+const resolutionKey = "wadsmith:resolution";
 const defaultSound: SoundSettings = { volume: 8, muted: false };
 const noteMessageMs = 2000;
 // Escape can reach the page just after it released the pointer.
@@ -62,6 +63,22 @@ function saveSound(sound: SoundSettings) {
   }
 }
 
+function loadResolution(): Resolution {
+  try {
+    return localStorage.getItem(resolutionKey) === "high" ? "high" : "classic";
+  } catch {
+    return "classic";
+  }
+}
+
+function saveResolution(resolution: Resolution) {
+  try {
+    localStorage.setItem(resolutionKey, resolution);
+  } catch {
+    return;
+  }
+}
+
 type PlayerSpot = Point & { angle: number };
 
 function spotOf({ x, y }: GameStatus): Point {
@@ -75,6 +92,8 @@ type GameSessionProps = {
   par: number | null;
   sound: SoundSettings;
   onSoundChange: (sound: SoundSettings) => void;
+  resolution: Resolution;
+  onResolutionChange: (resolution: Resolution) => void;
   fullscreen: boolean;
   onRestart: () => void;
   onToggleFullscreen: () => void;
@@ -90,6 +109,8 @@ function GameSession({
   par,
   sound,
   onSoundChange,
+  resolution,
+  onResolutionChange,
   fullscreen,
   onRestart,
   onToggleFullscreen,
@@ -123,6 +144,7 @@ function GameSession({
   const lockTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const gameHeld = noteSpot !== null || holdsGame(capture);
   const gameHeldRef = useRef(gameHeld);
+  const { width, height } = screenSizes[resolution];
 
   useEffect(() => {
     captureRef.current = capture;
@@ -155,12 +177,9 @@ function GameSession({
           iwad,
           map: compileMap(map),
           sound: soundRef.current,
+          resolution,
           onFrame: (pixels) =>
-            context.putImageData(
-              new ImageData(pixels, screenWidth, screenHeight),
-              0,
-              0,
-            ),
+            context.putImageData(new ImageData(pixels, width, height), 0, 0),
           // The WAD holds one map, so leaving it would load an unrelated level.
           onStatus: (next) => {
             if (next.inLevel) reachedLevel = true;
@@ -195,7 +214,7 @@ function GameSession({
       client?.stop();
       gameRef.current = null;
     };
-  }, [map]);
+  }, [map, resolution, width, height]);
 
   const pressKey = (source: string, key: number) => {
     if (heldKeys.current.press(source, key)) gameRef.current?.key(true, key);
@@ -391,6 +410,8 @@ function GameSession({
           finished={finished}
           audioUnavailable={audioUnavailable}
           onSoundChange={onSoundChange}
+          resolution={resolution}
+          onResolutionChange={onResolutionChange}
           onRestart={onRestart}
           onToggleFullscreen={onToggleFullscreen}
           onExit={onExit}
@@ -416,8 +437,8 @@ function GameSession({
           <canvas
             ref={canvasRef}
             className="game-canvas"
-            width={screenWidth}
-            height={screenHeight}
+            width={width}
+            height={height}
             tabIndex={0}
             aria-label="Game. Click to capture the mouse, which then turns the player and fires with the left button. Arrows or W, A, S and D move, Space fires, E uses, N leaves a note, F2 edits this spot. Escape releases the mouse, and pressing it again returns to the editor."
             onBlur={releaseAllKeys}
@@ -507,6 +528,7 @@ function GameView({
   const [run, setRun] = useState(0);
   const [fullscreen, setFullscreen] = useState(false);
   const [sound, setSound] = useState(loadSound);
+  const [resolution, setResolution] = useState(loadResolution);
 
   useEffect(() => {
     const update = () => setFullscreen(Boolean(document.fullscreenElement));
@@ -529,7 +551,7 @@ function GameView({
   return (
     <section ref={stageRef} className="game-stage" aria-label="Game">
       <GameSession
-        key={run}
+        key={`${run}-${resolution}`}
         map={map}
         title={title}
         slot={slot}
@@ -538,6 +560,11 @@ function GameView({
         onSoundChange={(next) => {
           setSound(next);
           saveSound(next);
+        }}
+        resolution={resolution}
+        onResolutionChange={(next) => {
+          setResolution(next);
+          saveResolution(next);
         }}
         fullscreen={fullscreen}
         onRestart={() => setRun((value) => value + 1)}
