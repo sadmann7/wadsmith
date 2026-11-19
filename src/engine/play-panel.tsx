@@ -97,6 +97,29 @@ type CoopSession = {
   onServerReady: () => void;
 };
 
+type GameExit = "editor" | "maps" | "leave";
+
+const gameExits: Record<
+  GameExit,
+  { label: string; hint: string; action: string }
+> = {
+  editor: {
+    label: "Back to editor",
+    hint: "Esc returns to the editor",
+    action: "returns to the editor",
+  },
+  maps: {
+    label: "Back to maps",
+    hint: "Esc returns to featured maps",
+    action: "returns to featured maps",
+  },
+  leave: {
+    label: "Leave game",
+    hint: "Esc leaves the game",
+    action: "leaves the game",
+  },
+};
+
 type GameSessionProps = {
   map: GameMap;
   title: string;
@@ -110,9 +133,10 @@ type GameSessionProps = {
   onRestart: () => void;
   onToggleFullscreen: () => void;
   onExit: () => void;
-  onAddNote: (point: Point, text: string) => void;
-  onEditSpot: (spot: PlayerSpot) => void;
+  onAddNote?: (point: Point, text: string) => void;
+  onEditSpot?: (spot: PlayerSpot) => void;
   coop: CoopSession | null;
+  exit: GameExit;
 };
 
 function GameSession({
@@ -131,7 +155,9 @@ function GameSession({
   onAddNote,
   onEditSpot,
   coop,
+  exit,
 }: GameSessionProps) {
+  const canEdit = !coop && Boolean(onAddNote && onEditSpot);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameRef = useRef<GameClient | null>(null);
   const heldKeys = useRef(new HeldKeys());
@@ -364,7 +390,7 @@ function GameSession({
   }, [finished, error]);
 
   const openNote = () => {
-    if (!status?.inLevel || coop) return;
+    if (!status?.inLevel || !canEdit) return;
     setNoteSaved(false);
     setNoteSpot(spotOf(status));
     const { mode } = captureRef.current;
@@ -383,8 +409,8 @@ function GameSession({
   };
 
   const editSpot = () => {
-    if (status?.inLevel && !coop) {
-      onEditSpot({ ...spotOf(status), angle: status.angle });
+    if (status?.inLevel && canEdit) {
+      onEditSpot?.({ ...spotOf(status), angle: status.angle });
     }
   };
 
@@ -447,6 +473,8 @@ function GameSession({
           fullscreen={fullscreen}
           showHelp={showHelp && !noteSpot && !noteSaved}
           coop={coop?.role ?? null}
+          exit={gameExits[coop?.role === "guest" ? "leave" : exit]}
+          canEdit={canEdit}
           noteOpen={noteSpot !== null}
           mouseMode={capture.mode}
           noteSaved={noteSaved}
@@ -460,7 +488,7 @@ function GameSession({
           onExit={onExit}
           onOpenNote={openNote}
           onSaveNote={(text) => {
-            if (noteSpot) onAddNote(noteSpot, text);
+            if (noteSpot) onAddNote?.(noteSpot, text);
             closeNote();
             setNoteSaved(true);
             clearTimeout(noteTimer.current);
@@ -491,7 +519,7 @@ function GameSession({
             width={width}
             height={height}
             tabIndex={0}
-            aria-label="Game. Click to capture the mouse, which then turns the player and fires with the left button. Arrows or W, A, S and D move, Space fires, E uses, N leaves a note, F2 edits this spot. Escape releases the mouse, and pressing it again returns to the editor."
+            aria-label={`Game. Click to capture the mouse, which then turns the player and fires with the left button. Arrows or W, A, S and D move, Space fires, E uses${canEdit ? ", N leaves a note, F2 edits this spot" : ""}. Escape releases the mouse, and pressing it again ${gameExits[coop?.role === "guest" ? "leave" : exit].action}.`}
             onBlur={releaseAllKeys}
             onContextMenu={(event) => event.preventDefault()}
             onPointerDown={(event) => {
@@ -577,15 +605,17 @@ function GameView({
   onAddNote,
   onEditSpot,
   coop = null,
+  exit = "editor",
 }: {
   map: GameMap;
   title: string;
   slot: string;
   par: number | null;
   onExit: () => void;
-  onAddNote: (point: Point, text: string) => void;
-  onEditSpot: (spot: PlayerSpot) => void;
+  onAddNote?: (point: Point, text: string) => void;
+  onEditSpot?: (spot: PlayerSpot) => void;
   coop?: CoopSession | null;
+  exit?: GameExit;
 }) {
   const stageRef = useRef<HTMLElement>(null);
   const [run, setRun] = useState(0);
@@ -636,9 +666,10 @@ function GameView({
         onAddNote={onAddNote}
         onEditSpot={onEditSpot}
         coop={coop}
+        exit={exit}
       />
     </section>
   );
 }
 
-export { GameView, type CoopSession, type PlayerSpot };
+export { GameView, type CoopSession, type GameExit, type PlayerSpot };

@@ -1,0 +1,235 @@
+import { buildMap, rect } from "./build-map";
+
+const tech = {
+  floor: 0,
+  ceiling: 144,
+  light: 176,
+  floorTexture: "FLAT1",
+  ceilingTexture: "CEIL5_1",
+  wallTexture: "TEKGREN2",
+};
+const pit = {
+  ...tech,
+  floor: -24,
+  light: 144,
+  floorTexture: "FWATER1",
+  wallTexture: "METAL",
+};
+const pumpDoor = {
+  ...tech,
+  floor: 16,
+  ceiling: 128,
+  wallTexture: "DOORTRAK",
+};
+
+// Each wing's switch opens the pump room door on the other wing's side, so a
+// pair splits up, and one player crosses back to the far door alone.
+const pumpStation = buildMap({
+  name: "Pump Station",
+  scale: 4,
+  rooms: [
+    {
+      name: "Atrium",
+      points: rect(360, 380, 140, 100),
+      ...tech,
+      ceiling: 128,
+      light: 192,
+      ceilingTexture: "TLITE6_4",
+    },
+    {
+      name: "West wing",
+      points: [
+        [60, 140],
+        [92, 140],
+        [108, 140],
+        [340, 140],
+        [340, 340],
+        [320, 340],
+        [320, 290],
+        [220, 290],
+        [220, 340],
+        [180, 340],
+        [180, 290],
+        [80, 290],
+        [80, 340],
+        [60, 340],
+      ],
+      ...tech,
+    },
+    { name: "West pit", points: rect(80, 290, 100, 50), ...pit },
+    { name: "West pit east", points: rect(220, 290, 100, 50), ...pit },
+    {
+      name: "East wing",
+      points: [
+        [520, 140],
+        [752, 140],
+        [768, 140],
+        [800, 140],
+        [800, 340],
+        [780, 340],
+        [780, 290],
+        [680, 290],
+        [680, 340],
+        [640, 340],
+        [640, 290],
+        [540, 290],
+        [540, 340],
+        [520, 340],
+      ],
+      ...tech,
+    },
+    { name: "East pit", points: rect(540, 290, 100, 50), ...pit },
+    { name: "East pit east", points: rect(680, 290, 100, 50), ...pit },
+    {
+      name: "West hall",
+      points: [
+        [180, 340],
+        [220, 340],
+        [220, 400],
+        [360, 400],
+        [360, 440],
+        [180, 440],
+      ],
+      ...tech,
+      ceiling: 112,
+      wallTexture: "METAL",
+    },
+    {
+      name: "East hall",
+      points: [
+        [640, 340],
+        [680, 340],
+        [680, 440],
+        [500, 440],
+        [500, 400],
+        [640, 400],
+      ],
+      ...tech,
+      ceiling: 112,
+      wallTexture: "METAL",
+    },
+    {
+      name: "Pump room",
+      points: rect(360, 40, 140, 140),
+      ...tech,
+      floor: 16,
+      ceiling: 176,
+      light: 160,
+      wallTexture: "METAL",
+    },
+    {
+      name: "West pump door",
+      points: rect(340, 140, 20, 40),
+      ...pumpDoor,
+      door: { opensBy: "switch", closes: false, texture: "BIGDOOR4" },
+    },
+    {
+      name: "East pump door",
+      points: rect(500, 140, 20, 40),
+      ...pumpDoor,
+      door: { opensBy: "switch", closes: false, texture: "BIGDOOR4" },
+    },
+    {
+      name: "Red door",
+      points: rect(410, 480, 40, 16),
+      ...tech,
+      ceiling: 112,
+      wallTexture: "DOORRED",
+      door: { opensBy: "use", closes: true, texture: "DOOR3" },
+    },
+    {
+      name: "Exit",
+      points: [
+        [380, 496],
+        [480, 496],
+        [480, 520],
+        [438, 520],
+        [422, 520],
+        [380, 520],
+      ],
+      ...tech,
+      ceiling: 112,
+      light: 208,
+      floorTexture: "FLAT14",
+      ceilingTexture: "TLITE6_4",
+      wallTexture: "TEKWALL4",
+    },
+  ],
+  things: [
+    { kind: "player", at: [400, 420], angle: 90 },
+    { kind: "player-2", at: [460, 420], angle: 90 },
+    { kind: "shotgun", at: [430, 440] },
+    { kind: "stimpack", at: [200, 420] },
+    { kind: "stimpack", at: [660, 420] },
+    { kind: "zombieman", at: [150, 250], angle: 0 },
+    { kind: "zombieman", at: [700, 250], angle: 180 },
+    { kind: "shotgun-guy", at: [250, 200], angle: 270 },
+    { kind: "shotgun-guy", at: [620, 200], angle: 270 },
+    { kind: "imp", at: [300, 230], angle: 180 },
+    { kind: "imp", at: [560, 230], angle: 0 },
+    { kind: "clip", at: [120, 170] },
+    { kind: "clip", at: [740, 170] },
+    { kind: "medikit", at: [280, 170] },
+    { kind: "medikit", at: [580, 170] },
+    { kind: "chaingunner", at: [430, 64], angle: 270 },
+    { kind: "demon", at: [400, 150], angle: 270 },
+    { kind: "demon", at: [460, 150], angle: 270 },
+    { kind: "red-key", at: [430, 110] },
+  ],
+  switches: [
+    {
+      room: "West wing",
+      wall: [
+        [92, 140],
+        [108, 140],
+      ],
+      texture: "SW1METAL",
+      door: "East pump door",
+    },
+    {
+      room: "East wing",
+      wall: [
+        [752, 140],
+        [768, 140],
+      ],
+      texture: "SW1METAL",
+      door: "West pump door",
+    },
+    {
+      room: "Exit",
+      wall: [
+        [438, 520],
+        [422, 520],
+      ],
+      texture: "SW1COMP",
+    },
+  ],
+  lines: [
+    {
+      wall: [
+        [410, 480],
+        [450, 480],
+      ],
+      settings: {
+        action: {
+          kind: "door-open",
+          trigger: "door",
+          repeat: false,
+          key: "red",
+          tag: 0,
+        },
+      },
+    },
+    {
+      wall: [
+        [438, 520],
+        [422, 520],
+      ],
+      settings: {
+        action: { kind: "exit", trigger: "switch", repeat: false, tag: 0 },
+      },
+    },
+  ],
+});
+
+export { pumpStation };

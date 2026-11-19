@@ -20,7 +20,7 @@ const colorUtility =
 const otherUtilities: Record<string, RegExp> = {
   bg: /^(?:transparent|linear-to-[a-z]+)$/,
   text: /^(?:xs|sm|base|lg|xl|\dxl|left|center|right|inherit|input|\[\d+px\])$/,
-  border: /^(?:[tblrxy]|collapse|box)$/,
+  border: /^(?:[tblrxy](?:-\d+)?|\d+|transparent|collapse|box)$/,
   outline: /^(?:none|transparent|offset-\d+)$/,
   from: /^$/,
 };

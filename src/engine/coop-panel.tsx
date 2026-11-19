@@ -393,8 +393,6 @@ function CoopJoin({ roomId }: { roomId: string }) {
           linksRef.current?.closeAll();
           setState({ step: "ended", message: "You left the game." });
         }}
-        onAddNote={() => {}}
-        onEditSpot={() => {}}
       />
     );
   }

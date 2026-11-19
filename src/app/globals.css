@@ -27,6 +27,12 @@
   --color-map-grid: oklch(0.219 0.007 78.2);
   --color-map-sector: oklch(0.275 0.008 75.2);
   --color-map-sector-door: oklch(0.399 0.068 81.1);
+  --color-map-sector-raised: oklch(0.33 0.014 70);
+  --color-map-sector-lift: oklch(0.34 0.045 240);
+  --color-map-sector-lava: oklch(0.33 0.09 35);
+  --color-map-sector-acid: oklch(0.34 0.08 130);
+  --color-map-sector-exit: oklch(0.28 0.04 150);
+  --color-map-sector-secret: oklch(0.27 0.03 300);
   --color-map-wall: oklch(0.811 0.023 80.7);
   --color-map-portal: oklch(0.614 0.021 75.2);
   --color-map-door: oklch(0.844 0.151 87.9);

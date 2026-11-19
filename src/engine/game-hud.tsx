@@ -146,6 +146,8 @@ function GameHud({
   fullscreen,
   showHelp,
   coop,
+  exit,
+  canEdit,
   noteOpen,
   mouseMode,
   noteSaved,
@@ -171,6 +173,8 @@ function GameHud({
   fullscreen: boolean;
   showHelp: boolean;
   coop: "host" | "guest" | null;
+  exit: { label: string; hint: string };
+  canEdit: boolean;
   noteOpen: boolean;
   mouseMode: MouseMode;
   noteSaved: boolean;
@@ -187,7 +191,6 @@ function GameHud({
   onEditSpot: () => void;
   onControlUsed: () => void;
 }) {
-  const exitLabel = coop === "guest" ? "Leave game" : "Back to editor";
   const inLevel = status?.inLevel ?? false;
   const FullscreenIcon = fullscreen ? Minimize : Maximize;
   const SoundIcon = sound.muted ? VolumeX : Volume2;
@@ -199,7 +202,7 @@ function GameHud({
       <div className="absolute top-5 left-5 flex items-center gap-3">
         <button type="button" className={buttonClass} onClick={onExit}>
           <ArrowLeft size={14} aria-hidden="true" />
-          {exitLabel}
+          {exit.label}
           {fullscreen ? null : (
             <kbd className="font-mono text-[11px] text-fg-muted">Esc</kbd>
           )}
@@ -342,7 +345,7 @@ function GameHud({
               </button>
             )}
             <button type="button" className="button primary" onClick={onExit}>
-              {exitLabel}
+              {exit.label}
             </button>
           </div>
         </section>
@@ -357,11 +360,7 @@ function GameHud({
             Click the game to capture the mouse and carry on.
           </p>
           <p className="m-0 font-mono text-xs text-fg-muted">
-            {fullscreen
-              ? "Esc leaves fullscreen"
-              : coop === "guest"
-                ? "Esc leaves the game"
-                : "Esc returns to the editor"}
+            {fullscreen ? "Esc leaves fullscreen" : exit.hint}
           </p>
         </section>
       ) : null}
@@ -413,7 +412,7 @@ function GameHud({
         ) : (
           <span />
         )}
-        <div className={coop ? "hidden" : "flex gap-2"}>
+        <div className={canEdit ? "flex gap-2" : "hidden"}>
           <button
             type="button"
             className={buttonClass}

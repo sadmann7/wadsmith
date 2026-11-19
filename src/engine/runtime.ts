@@ -40,6 +40,7 @@ type DoomModule = {
   _wadsmith_total_secrets(): number;
   _wadsmith_level_tics(): number;
   _wadsmith_sector_ceiling(index: number): number;
+  _wadsmith_sector_floor(index: number): number;
   _wadsmith_audio_init(sampleRate: number): void;
   _wadsmith_audio_render(frames: number): number;
   _wadsmith_set_sound(volume: number, muted: number): void;
@@ -365,6 +366,10 @@ class DoomGame {
 
   gameTic() {
     return this.module._wadsmith_game_tic();
+  }
+
+  sectorFloor(index: number) {
+    return this.module._wadsmith_sector_floor(index);
   }
 
   sectorCeiling(index: number) {

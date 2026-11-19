@@ -18,6 +18,8 @@ import { X } from "lucide-react";
 import { useState, type FormEvent } from "react";
 
 import { MapOutline } from "../editor/map-outline";
+import { MapPlan } from "../editor/map-plan";
+import { featuredMaps, type FeaturedMap } from "../map/featured";
 import { SelectCheck } from "../editor/select-check";
 import {
   formatPar,
@@ -37,6 +39,7 @@ type MapDetails = {
   description: string;
   par: number | null;
   template: MapTemplate;
+  featured: FeaturedMap | null;
 };
 
 const dialogClass =
@@ -61,6 +64,8 @@ function MapDialog({
   const [description, setDescription] = useState(entry?.description ?? "");
   const [par, setPar] = useState(formatPar(entry?.par ?? null));
   const [template, setTemplate] = useState<MapTemplate>("room");
+  const [source, setSource] = useState<"template" | "featured">("template");
+  const [featured, setFeatured] = useState<FeaturedMap>(featuredMaps[0]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const parValue = parsePar(par);
@@ -79,6 +84,7 @@ function MapDialog({
       description: description.trim(),
       par: parValue,
       template,
+      featured: source === "featured" ? featured : null,
     });
     setSaving(false);
     setError(problem);
@@ -167,25 +173,87 @@ function MapDialog({
               </div>
             ) : (
               <fieldset className="m-0 grid gap-1.5 border-0 p-0">
-                <legend className="label mb-1.5 p-0">Start from</legend>
-                <div className="grid grid-cols-3 gap-2.5">
-                  {templates.map((item) => (
-                    <button
-                      key={item.value}
-                      type="button"
-                      aria-pressed={template === item.value}
-                      className="grid gap-1.5 rounded-[3px] border border-border bg-transparent p-2 text-fg-muted aria-pressed:border-accent aria-pressed:bg-accent/10 aria-pressed:text-fg"
-                      onClick={() => setTemplate(item.value)}
-                    >
-                      <MapOutline
-                        map={item.map}
-                        className="h-20 w-full bg-canvas"
-                        solidColor="var(--color-fg-muted)"
-                      />
-                      {item.label}
-                    </button>
-                  ))}
+                <div className="mb-1.5 flex items-center justify-between gap-3">
+                  <legend className="label p-0">Start from</legend>
+                  <div
+                    role="group"
+                    aria-label="Start from"
+                    className="flex rounded-[3px] border border-border p-0.5"
+                  >
+                    {(
+                      [
+                        ["template", "Template"],
+                        ["featured", "Featured map"],
+                      ] as const
+                    ).map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        aria-pressed={source === value}
+                        className="rounded-[2px] border-0 bg-transparent px-2.5 py-1 text-xs text-fg-muted aria-pressed:bg-surface-raised aria-pressed:font-semibold aria-pressed:text-fg"
+                        onClick={() => {
+                          setSource(value);
+                          if (value === "featured" && !name.trim()) {
+                            setName(featured.title);
+                            setPar(formatPar(featured.par));
+                          }
+                        }}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
+                {source === "template" ? (
+                  <div className="grid grid-cols-3 gap-2.5">
+                    {templates.map((item) => (
+                      <button
+                        key={item.value}
+                        type="button"
+                        aria-pressed={template === item.value}
+                        className="grid gap-1.5 rounded-[3px] border border-border bg-transparent p-2 text-fg-muted aria-pressed:border-accent aria-pressed:bg-accent/10 aria-pressed:text-fg"
+                        onClick={() => setTemplate(item.value)}
+                      >
+                        <MapOutline
+                          map={item.map}
+                          className="h-20 w-full bg-canvas"
+                          solidColor="var(--color-fg-muted)"
+                        />
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-3 gap-2.5">
+                    {featuredMaps.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        aria-pressed={featured.id === item.id}
+                        className="grid gap-1.5 rounded-[3px] border border-border bg-transparent p-2 text-left text-fg-muted aria-pressed:border-accent aria-pressed:bg-accent/10 aria-pressed:text-fg"
+                        onClick={() => {
+                          if (!name.trim() || name === featured.title) {
+                            setName(item.title);
+                          }
+                          setPar(formatPar(item.par));
+                          setFeatured(item);
+                        }}
+                      >
+                        <MapPlan
+                          map={item.map}
+                          className="h-20 w-full bg-canvas"
+                        />
+                        {item.title}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {source === "featured" ? (
+                  <p className="m-0 mt-1 text-xs text-fg-muted">
+                    You get your own copy in this project. The featured map
+                    stays as it is.
+                  </p>
+                ) : null}
               </fieldset>
             )}
             <div className="grid grid-cols-2 gap-3">

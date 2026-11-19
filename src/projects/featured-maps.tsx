@@ -1,0 +1,227 @@
+import { Copy, Play, Users } from "lucide-react";
+import { useState } from "react";
+
+import { MapPlan } from "../editor/map-plan";
+import { thingCatalog } from "../map/catalog";
+import {
+  featuredMaps,
+  type FeaturedMap,
+  type FeaturedMode,
+} from "../map/featured";
+import { HomeHeader, type HomeView } from "./home-header";
+import { formatPar } from "./project-data";
+
+const modes: Record<FeaturedMode, { label: string; dot: string }> = {
+  single: { label: "Single player", dot: "bg-info" },
+  coop: { label: "Co-op", dot: "bg-success" },
+  deathmatch: { label: "Deathmatch", dot: "bg-danger" },
+};
+
+type Filter = FeaturedMode | "all";
+
+const countWords = [
+  "No",
+  "One",
+  "Two",
+  "Three",
+  "Four",
+  "Five",
+  "Six",
+  "Seven",
+];
+
+function playersLabel({ min, max }: FeaturedMap["players"]) {
+  const count = min === max ? `${min}` : `${min}–${max}`;
+  return `${count} ${max === 1 ? "player" : "players"}`;
+}
+
+function enemiesOf(entry: FeaturedMap) {
+  return entry.map.things.filter(
+    (thing) => thingCatalog[thing.kind].category === "enemy",
+  ).length;
+}
+
+function ModeLine({ entry }: { entry: FeaturedMap }) {
+  const mode = modes[entry.mode];
+  return (
+    <div className="flex items-center gap-1.5 font-mono text-[11px] tracking-wide text-fg-soft uppercase">
+      <span
+        className={`size-1.5 rounded-full ${mode.dot}`}
+        aria-hidden="true"
+      />
+      {mode.label} · {playersLabel(entry.players)}
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid gap-1">
+      <dt className="font-mono text-[10px] tracking-wide text-fg-muted uppercase">
+        {label}
+      </dt>
+      <dd className="m-0 text-lg font-semibold">{value}</dd>
+    </div>
+  );
+}
+
+function FeaturedMaps({
+  message,
+  onNavigate,
+  onPlaySolo,
+  onPlayTogether,
+  onOpenCopy,
+}: {
+  message: string | null;
+  onNavigate: (view: HomeView) => void;
+  onPlaySolo: (entry: FeaturedMap) => void;
+  onPlayTogether: (entry: FeaturedMap) => void;
+  onOpenCopy: (entry: FeaturedMap) => void;
+}) {
+  const [filter, setFilter] = useState<Filter>("all");
+  const [selectedId, setSelectedId] = useState(
+    () =>
+      featuredMaps.find((entry) => entry.mode === "coop")?.id ??
+      featuredMaps[0].id,
+  );
+  const shown = featuredMaps.filter(
+    (entry) => filter === "all" || entry.mode === filter,
+  );
+  const selected =
+    shown.find((entry) => entry.id === selectedId) ?? shown[0] ?? null;
+  const filters: Filter[] = [
+    "all",
+    ...(Object.keys(modes) as FeaturedMode[]).filter((mode) =>
+      featuredMaps.some((entry) => entry.mode === mode),
+    ),
+  ];
+  return (
+    <div className="grid h-dvh grid-rows-[48px_minmax(0,1fr)] bg-canvas text-fg">
+      <HomeHeader view="featured" onNavigate={onNavigate} />
+      <main className="flex min-h-0 flex-col gap-6 overflow-y-auto px-8 pt-8 pb-10 max-[760px]:px-4">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div className="min-w-0">
+            <h2 className="m-0 text-4xl font-bold">Featured maps</h2>
+            <p className="m-0 mt-1 text-[15px] text-fg-muted">
+              {countWords[featuredMaps.length] ?? featuredMaps.length} maps made
+              in Wadsmith. Play one, bring friends, or open a copy to see how
+              it&apos;s built.
+            </p>
+          </div>
+          <div
+            role="group"
+            aria-label="Show"
+            className="flex rounded-[3px] border border-border bg-surface p-0.5"
+          >
+            {filters.map((item) => (
+              <button
+                key={item}
+                type="button"
+                aria-pressed={filter === item}
+                className="rounded-[2px] border-0 bg-transparent px-3 py-1.5 text-xs text-fg-muted aria-pressed:bg-surface-raised aria-pressed:font-semibold aria-pressed:text-fg"
+                onClick={() => setFilter(item)}
+              >
+                {item === "all" ? "All" : modes[item].label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {message ? (
+          <p className="notice m-0" role="status">
+            {message}
+          </p>
+        ) : null}
+        {selected ? (
+          <section
+            aria-label={selected.title}
+            className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] rounded-[4px] border border-border bg-surface max-[900px]:grid-cols-1"
+          >
+            <MapPlan
+              map={selected.map}
+              label={`Plan of ${selected.title}`}
+              className="aspect-[16/11] w-full border-r border-border bg-canvas p-6 max-[900px]:border-r-0 max-[900px]:border-b"
+            />
+            <div className="flex flex-col gap-4 p-8 max-[760px]:p-5">
+              <ModeLine entry={selected} />
+              <h3 className="m-0 text-4xl font-bold">{selected.title}</h3>
+              <p className="m-0 text-[15px] text-fg-soft">{selected.blurb}</p>
+              <ul className="m-0 flex list-none flex-wrap gap-2 p-0">
+                {selected.tags.map((tag) => (
+                  <li
+                    key={tag}
+                    className="rounded-full bg-surface-raised px-2.5 py-1 text-xs text-fg-soft"
+                  >
+                    {tag}
+                  </li>
+                ))}
+              </ul>
+              <dl className="m-0 mt-auto flex flex-wrap gap-x-10 gap-y-3 pt-4">
+                <Stat label="Par" value={formatPar(selected.par)} />
+                <Stat label="Enemies" value={String(enemiesOf(selected))} />
+                <Stat label="Skill" value={selected.skill} />
+                <Stat label="Slot" value={selected.slot} />
+              </dl>
+              <div className="flex flex-wrap gap-2">
+                {selected.players.max > 1 ? (
+                  <button
+                    type="button"
+                    className="button primary"
+                    onClick={() => onPlayTogether(selected)}
+                  >
+                    <Users size={14} aria-hidden="true" />
+                    Play together
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className={`button ${selected.players.max > 1 ? "" : "primary"}`}
+                  onClick={() => onPlaySolo(selected)}
+                >
+                  <Play size={14} aria-hidden="true" />
+                  {selected.players.max > 1 ? "Play solo" : "Play"}
+                </button>
+                <button
+                  type="button"
+                  className="button"
+                  onClick={() => onOpenCopy(selected)}
+                >
+                  <Copy size={14} aria-hidden="true" />
+                  Open a copy
+                </button>
+              </div>
+            </div>
+          </section>
+        ) : null}
+        <ul
+          aria-label="Maps"
+          className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4 p-0"
+        >
+          {shown.map((entry) => (
+            <li key={entry.id}>
+              <button
+                type="button"
+                aria-pressed={entry.id === selected?.id}
+                className="grid w-full gap-0 overflow-hidden rounded-[4px] border border-border bg-surface p-0 text-left text-fg hover:border-border-strong aria-pressed:border-accent"
+                onClick={() => setSelectedId(entry.id)}
+              >
+                <MapPlan
+                  map={entry.map}
+                  className="aspect-[16/9] w-full bg-canvas p-4"
+                />
+                <span className="grid gap-1.5 p-3.5">
+                  <span className="text-base font-semibold">{entry.title}</span>
+                  <ModeLine entry={entry} />
+                  <span className="font-mono text-[11px] text-fg-muted">
+                    Par {formatPar(entry.par)} · {enemiesOf(entry)} enemies
+                  </span>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </main>
+    </div>
+  );
+}
+
+export { FeaturedMaps };
