@@ -49,15 +49,25 @@ function MapSwitcher({
 }) {
   const current = maps.find((entry) => entry.id === currentId);
   return (
-    <div className="map-title">
+    <nav aria-label="Breadcrumb" className="map-title min-w-0 gap-2">
       <button
         type="button"
-        className="min-w-0 truncate border-0 bg-transparent p-0 text-[13px] text-fg-muted hover:text-fg"
+        className="shrink-0 border-0 bg-transparent p-0 text-[13px] text-fg-muted hover:text-fg max-xl:hidden"
+        onClick={onEpisodeHome}
+      >
+        Episodes
+      </button>
+      <span aria-hidden="true" className="text-fg-disabled max-xl:hidden">
+        /
+      </span>
+      <button
+        type="button"
+        className="min-w-0 truncate border-0 bg-transparent p-0 text-[13px] text-fg-muted hover:text-fg max-lg:hidden"
         onClick={onEpisodeHome}
       >
         {episodeName}
       </button>
-      <span aria-hidden="true" className="text-fg-disabled">
+      <span aria-hidden="true" className="text-fg-disabled max-lg:hidden">
         /
       </span>
       <Menu
@@ -69,7 +79,7 @@ function MapSwitcher({
         }}
       >
         <MenuTrigger
-          className="flex min-w-0 items-center gap-2 rounded-[3px] border-0 bg-transparent px-2 py-1 text-fg hover:bg-surface-raised aria-expanded:bg-surface-raised"
+          className="flex min-w-[120px] items-center gap-2 rounded-[3px] border-0 bg-transparent px-2 py-1 text-fg hover:bg-surface-raised aria-expanded:bg-surface-raised"
           aria-label={`Switch map, now ${current?.slot ?? ""} ${current?.name ?? ""}`}
         >
           <span className="flex-none font-mono text-xs text-fg-muted">
@@ -127,7 +137,7 @@ function MapSwitcher({
           </MenuItem>
         </MenuContent>
       </Menu>
-    </div>
+    </nav>
   );
 }
 

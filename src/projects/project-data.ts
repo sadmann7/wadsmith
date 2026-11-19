@@ -210,7 +210,7 @@ async function prepareProjects(store: ProjectStore) {
     await store.addProject(project, [entry]);
     await store.setSetting(lastProjectKey, project.id);
     await store.setSetting(lastMapKey, entry.id);
-    return { projects: [project], projectId: project.id, entry };
+    return { projects: [project], projectId: project.id, entry, created: true };
   }
   const lastProject = await store.getSetting(lastProjectKey);
   const lastMap = await store.getSetting(lastMapKey);
@@ -220,7 +220,7 @@ async function prepareProjects(store: ProjectStore) {
     entry?.projectId ??
     projects.find((project) => project.id === lastProject)?.id ??
     projects[0].id;
-  return { projects, projectId, entry };
+  return { projects, projectId, entry, created: false };
 }
 
 function createMapSaver(

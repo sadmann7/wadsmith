@@ -106,6 +106,7 @@ import {
 } from "../map/storage";
 import type { GameMap, Point, ThingCategory, ThingKind } from "../map/types";
 import { checkMap, fixIssue, issueText } from "../map/checks";
+import { AppHeader } from "./app-header";
 import { MapSwitcher, type EpisodeEntry, type MapHealth } from "./map-switcher";
 import { validateMap } from "../map/validate";
 import { loadIwad } from "../engine/iwad";
@@ -953,19 +954,22 @@ function App({
   return (
     <>
       <div className="app" inert={Boolean(playedMap)}>
-        <header className="topbar">
-          <div className="topbar-start">
-            <h1>
-              <button
-                type="button"
-                className="border-0 bg-transparent p-0 font-[inherit] text-inherit"
-                aria-label="All episodes"
-                title="All episodes"
-                onClick={onOpenProjects}
-              >
-                WADSMITH
-              </button>
-            </h1>
+        <AppHeader onHome={onOpenProjects}>
+          <MapSwitcher
+            episodeName={episode.name}
+            maps={episode.maps.map((entry) =>
+              entry.id === episode.currentId
+                ? { ...entry, slot, name: mapName, health: liveHealth }
+                : entry,
+            )}
+            currentId={episode.currentId}
+            canAddMap={episode.canAddMap}
+            onOpenMap={episode.onOpenMap}
+            onAddMap={onNewMap}
+            onEpisodeHome={onOpenProjects}
+          />
+          <span className="separator" aria-hidden="true" />
+          <div className="flex items-center gap-4">
             <Menu onAction={(action) => runFileAction(action as string)}>
               <MenuTrigger className="menu-trigger">File</MenuTrigger>
               <MenuContent className="select-content">
@@ -1068,19 +1072,6 @@ function App({
               event.target.value = "";
             }}
           />
-          <MapSwitcher
-            episodeName={episode.name}
-            maps={episode.maps.map((entry) =>
-              entry.id === episode.currentId
-                ? { ...entry, slot, name: mapName, health: liveHealth }
-                : entry,
-            )}
-            currentId={episode.currentId}
-            canAddMap={episode.canAddMap}
-            onOpenMap={episode.onOpenMap}
-            onAddMap={onNewMap}
-            onEpisodeHome={onOpenProjects}
-          />
           <div className="topbar-end">
             <SegmentedControl
               aria-label="Main view"
@@ -1115,22 +1106,28 @@ function App({
             >
               <Redo2 size={16} aria-hidden="true" />
             </button>
-            <button type="button" className="button" onClick={showMapCheck}>
+            <button
+              type="button"
+              className="button"
+              title="Check map"
+              onClick={showMapCheck}
+            >
               {canPlay ? (
                 <CircleCheck size={15} aria-hidden="true" />
               ) : (
                 <TriangleAlert size={15} aria-hidden="true" />
               )}
-              Check map
+              <span className="max-xl:sr-only">Check map</span>
             </button>
             <button
               type="button"
               className="button"
               disabled={!canPlayCoop}
+              title="Play together"
               onClick={openCoop}
             >
               <Users size={14} aria-hidden="true" />
-              Play together
+              <span className="max-xl:sr-only">Play together</span>
             </button>
             <button
               ref={playButton}
@@ -1143,7 +1140,7 @@ function App({
               Playtest
             </button>
           </div>
-        </header>
+        </AppHeader>
 
         <main className="workspace">
           <SegmentedControl
