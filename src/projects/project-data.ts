@@ -202,11 +202,10 @@ function parseStoredMap(value: ProjectMap): ProjectMap {
 // single-map save stays in place as a backup after it is copied.
 async function prepareProjects(store: ProjectStore) {
   const listed = await store.listProjects();
+  // Browsers from before the fixed id gave the first episode a random one.
   const projects = await Promise.all(
-    listed.map(async (project) => {
-      if (project.id !== firstProjectId || !oldFirstNames.has(project.name)) {
-        return project;
-      }
+    listed.map(async (project, index) => {
+      if (index > 0 || !oldFirstNames.has(project.name)) return project;
       const renamed = { ...project, name: firstEpisodeName };
       await store.putProject(renamed);
       return renamed;

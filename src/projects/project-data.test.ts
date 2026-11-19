@@ -177,6 +177,17 @@ describe("first episode", () => {
     await store.putProject({ ...ready.projects[0], name: "My project" });
     expect((await prepareProjects(store)).projects[0].name).toBe("Episode 1");
     await store.putProject({ ...ready.projects[0], name: "Ashfall" });
+    await store.putProject({
+      id: "older",
+      name: "My project",
+      createdAt: ready.projects[0].createdAt - 1,
+    });
+    const renamed = await prepareProjects(store);
+    expect(renamed.projects.map((project) => project.name)).toEqual([
+      "Episode 1",
+      "Ashfall",
+    ]);
+    await store.deleteProject("older");
     expect((await prepareProjects(store)).projects[0].name).toBe("Ashfall");
   });
 });
