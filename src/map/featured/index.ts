@@ -1,6 +1,8 @@
 import type { GameMap } from "../types";
 import { firstLight } from "./first-light";
+import { fourCorners } from "./four-corners";
 import { furnaceRing } from "./furnace-ring";
+import { longHall } from "./long-hall";
 import { pumpStation } from "./pump-station";
 import { slagChannel } from "./slag-channel";
 
@@ -12,8 +14,8 @@ type FeaturedMap = {
   slot: string;
   mode: FeaturedMode;
   players: { min: number; max: number };
-  skill: "Easy" | "Medium" | "Hard";
-  par: number;
+  skill: "Easy" | "Medium" | "Hard" | "Any";
+  par: number | null;
   blurb: string;
   tags: string[];
   map: GameMap;
@@ -71,6 +73,32 @@ const featuredMaps: FeaturedMap[] = [
       "Two wings, two switches. Each switch opens the far door of the pump room, so a pair splits up and meets in the middle.",
     tags: ["Split switches", "Red key"],
     map: pumpStation,
+  },
+  {
+    id: "four-corners",
+    title: "Four Corners",
+    slot: "MAP05",
+    mode: "deathmatch",
+    players: { min: 2, max: 4 },
+    skill: "Any",
+    par: null,
+    blurb:
+      "A square plaza with a lift up to each corner tower. The chaingun sits in the strobing pit in the middle, in plain view of every tower.",
+    tags: ["Corner towers", "Lifts", "Strobe pit"],
+    map: fourCorners,
+  },
+  {
+    id: "long-hall",
+    title: "Long Hall",
+    slot: "MAP06",
+    mode: "deathmatch",
+    players: { min: 2, max: 2 },
+    skill: "Any",
+    par: null,
+    blurb:
+      "A one-on-one duel down a pillared hall. Alcoves give cover, and lifts at both ends lead up to the armor.",
+    tags: ["Pillars", "Lifts", "Armor up top"],
+    map: longHall,
   },
 ];
 

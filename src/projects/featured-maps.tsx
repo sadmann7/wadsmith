@@ -2,6 +2,7 @@ import { Copy, Play, Users } from "lucide-react";
 import { useState } from "react";
 
 import { MapPlan } from "../editor/map-plan";
+import { fragLimit } from "../engine/runtime";
 import { thingCatalog } from "../map/catalog";
 import {
   featuredMaps,
@@ -156,9 +157,22 @@ function FeaturedMaps({
                 ))}
               </ul>
               <dl className="m-0 mt-auto flex flex-wrap gap-x-10 gap-y-3 pt-4">
-                <Stat label="Par" value={formatPar(selected.par)} />
-                <Stat label="Enemies" value={String(enemiesOf(selected))} />
-                <Stat label="Skill" value={selected.skill} />
+                {selected.mode === "deathmatch" ? (
+                  <>
+                    <Stat
+                      label="Players"
+                      value={playersLabel(selected.players).split(" ")[0]}
+                    />
+                    <Stat label="Skill" value={selected.skill} />
+                    <Stat label="Goal" value={`${fragLimit} frags`} />
+                  </>
+                ) : (
+                  <>
+                    <Stat label="Par" value={formatPar(selected.par)} />
+                    <Stat label="Enemies" value={String(enemiesOf(selected))} />
+                    <Stat label="Skill" value={selected.skill} />
+                  </>
+                )}
                 <Stat label="Slot" value={selected.slot} />
               </dl>
               <div className="flex flex-wrap gap-2">
@@ -172,14 +186,16 @@ function FeaturedMaps({
                     Play together
                   </button>
                 ) : null}
-                <button
-                  type="button"
-                  className={`button ${selected.players.max > 1 ? "" : "primary"}`}
-                  onClick={() => onPlaySolo(selected)}
-                >
-                  <Play size={14} aria-hidden="true" />
-                  {selected.players.max > 1 ? "Play solo" : "Play"}
-                </button>
+                {selected.mode === "deathmatch" ? null : (
+                  <button
+                    type="button"
+                    className={`button ${selected.players.max > 1 ? "" : "primary"}`}
+                    onClick={() => onPlaySolo(selected)}
+                  >
+                    <Play size={14} aria-hidden="true" />
+                    {selected.players.max > 1 ? "Play solo" : "Play"}
+                  </button>
+                )}
                 <button
                   type="button"
                   className="button"
@@ -212,7 +228,9 @@ function FeaturedMaps({
                   <span className="text-base font-semibold">{entry.title}</span>
                   <ModeLine entry={entry} />
                   <span className="font-mono text-[11px] text-fg-muted">
-                    Par {formatPar(entry.par)} · {enemiesOf(entry)} enemies
+                    {entry.mode === "deathmatch"
+                      ? `First to ${fragLimit} frags`
+                      : `Par ${formatPar(entry.par)} · ${enemiesOf(entry)} enemies`}
                   </span>
                 </span>
               </button>

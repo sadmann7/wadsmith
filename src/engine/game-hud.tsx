@@ -22,6 +22,7 @@ import { MapOutline } from "../editor/map-outline";
 import type { GameMap } from "../map/types";
 import type { MouseMode } from "./mouse-capture";
 import {
+  fragLimit,
   maxVolume,
   screenSizes,
   type GameStatus,
@@ -146,6 +147,7 @@ function GameHud({
   fullscreen,
   showHelp,
   coop,
+  deathmatch,
   exit,
   canEdit,
   noteOpen,
@@ -173,6 +175,7 @@ function GameHud({
   fullscreen: boolean;
   showHelp: boolean;
   coop: "host" | "guest" | null;
+  deathmatch: boolean;
   exit: { label: string; hint: string };
   canEdit: boolean;
   noteOpen: boolean;
@@ -210,7 +213,8 @@ function GameHud({
         <div className="min-w-0 @max-xl:hidden">
           <div className="truncate text-[15px] font-semibold">{title}</div>
           <div className="font-mono text-[11px] text-fg-soft">
-            {slot} · Medium · {coop ? "Co-op" : "Playtest"}
+            {slot} · Medium ·{" "}
+            {deathmatch ? "Deathmatch" : coop ? "Co-op" : "Playtest"}
           </div>
         </div>
       </div>
@@ -227,18 +231,29 @@ function GameHud({
       >
         <Minimap map={map} status={status} />
         <dl className="m-0 grid gap-1.5 p-3">
-          <Stat
-            label="Enemies"
-            value={status ? `${status.kills} / ${status.totalKills}` : "-"}
-          />
-          <Stat
-            label="Items"
-            value={status ? `${status.items} / ${status.totalItems}` : "-"}
-          />
-          <Stat
-            label="Secrets"
-            value={status ? `${status.secrets} / ${status.totalSecrets}` : "-"}
-          />
+          {deathmatch ? (
+            <Stat
+              label="Frags"
+              value={status ? `${status.frags} / ${fragLimit}` : "-"}
+            />
+          ) : (
+            <>
+              <Stat
+                label="Enemies"
+                value={status ? `${status.kills} / ${status.totalKills}` : "-"}
+              />
+              <Stat
+                label="Items"
+                value={status ? `${status.items} / ${status.totalItems}` : "-"}
+              />
+              <Stat
+                label="Secrets"
+                value={
+                  status ? `${status.secrets} / ${status.totalSecrets}` : "-"
+                }
+              />
+            </>
+          )}
           <Stat
             label="Time"
             value={
@@ -330,13 +345,17 @@ function GameHud({
       </aside>
       {finished && status ? (
         <section
-          aria-label="Level complete"
+          aria-label={deathmatch ? "Match over" : "Level complete"}
           className={`${panelClass} absolute top-1/2 left-1/2 grid w-[min(320px,calc(100%-32px))] -translate-1/2 gap-3 border border-border-strong p-4`}
         >
-          <h2 className="m-0 text-xl font-semibold">Level complete</h2>
+          <h2 className="m-0 text-xl font-semibold">
+            {deathmatch ? "Match over" : "Level complete"}
+          </h2>
           <p className="m-0 font-mono text-xs text-fg-muted">
-            {formatTime(status.tics)} · {status.kills} / {status.totalKills}{" "}
-            enemies
+            {formatTime(status.tics)} ·{" "}
+            {deathmatch
+              ? `${status.frags} ${status.frags === 1 ? "frag" : "frags"}`
+              : `${status.kills} / ${status.totalKills} enemies`}
           </p>
           <div className="flex gap-2">
             {coop ? null : (
@@ -390,7 +409,8 @@ function GameHud({
               value={ammoName ? status.ammo : "-"}
               accent
             />
-            <div className="pb-1.5">
+            {/* Deathmatch hands every player every key. */}
+            <div className={deathmatch ? "hidden" : "pb-1.5"}>
               <div className="mb-1.5 font-mono text-[11px] text-fg-soft">
                 KEYS
               </div>

@@ -28,6 +28,7 @@ describe("room messages on the wire", () => {
       type: "start",
       game: {
         map: testMap,
+        mode: "coop",
         wad: new Uint8Array(70_000).map((_, index) => index % 251),
         title: "Starter map",
         slot: "MAP01",

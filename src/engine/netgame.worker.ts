@@ -22,6 +22,7 @@ const { NetInbox } = await import("./net-inbox");
 
 type Setup = {
   role: "host" | "guest";
+  mode: "coop" | "deathmatch";
   host: number;
   inbox: SharedArrayBuffer;
   map: Uint8Array;
@@ -46,6 +47,7 @@ const game = await startDoom({
   options: { print: () => {}, printErr: () => {} },
   network: {
     role: setup.role,
+    mode: setup.mode,
     host: setup.host,
     inbox: new NetInbox(setup.inbox),
     send: (to, data) => port.postMessage({ type: "send", to, data }),
@@ -68,6 +70,7 @@ port.on("message", (command: Command) => {
       value: {
         ...game.network(),
         inLevel: game.status().inLevel,
+        frags: game.status().frags,
         gameTic: game.gameTic(),
         players: [0, 1].map((player) => game.playerPosition(player)),
       },

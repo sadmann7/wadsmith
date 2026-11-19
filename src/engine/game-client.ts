@@ -6,7 +6,7 @@ import type {
 } from "./doom-worker";
 import { engineBase } from "./iwad";
 import { NetInbox } from "./net-inbox";
-import type { GameStatus, Resolution } from "./runtime";
+import type { GameStatus, NetworkMode, Resolution } from "./runtime";
 
 type GameClientOptions = {
   iwad: Uint8Array;
@@ -21,6 +21,7 @@ type GameClientOptions = {
   onExit: () => void;
   network?: {
     role: "host" | "guest";
+    mode: NetworkMode;
     host: number;
     send: (to: number, data: Uint8Array) => void;
     onState: (state: NetworkState) => void;
@@ -197,7 +198,12 @@ function startGameClient(options: GameClientOptions) {
         resolution: options.resolution,
         network:
           network && inbox
-            ? { role: network.role, host: network.host, inbox: inbox.buffer }
+            ? {
+                role: network.role,
+                mode: network.mode,
+                host: network.host,
+                inbox: inbox.buffer,
+              }
             : null,
       },
       audioPort ? [audioPort] : [],

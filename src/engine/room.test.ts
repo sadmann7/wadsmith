@@ -49,6 +49,7 @@ function guestEvents() {
 
 const game: CoopGame = {
   map: testMap,
+  mode: "coop",
   wad: new Uint8Array([1, 2, 3]),
   title: "Starter map",
   slot: "MAP01",

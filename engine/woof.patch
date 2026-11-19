@@ -427,10 +427,10 @@ index 6427083..29f1949 100644
          I_Error("Failed to initialize video: %s", SDL_GetError());
 diff --git a/src/wadsmith.c b/src/wadsmith.c
 new file mode 100644
-index 0000000..e33a932
+index 0000000..afe29df
 --- /dev/null
 +++ b/src/wadsmith.c
-@@ -0,0 +1,253 @@
+@@ -0,0 +1,267 @@
 +// The interface between Woof and Wadsmith's game worker.
 +
 +#include <emscripten.h>
@@ -594,6 +594,20 @@ index 0000000..e33a932
 +EXPORT int wadsmith_kills(void)
 +{
 +    return Player()->killcount;
++}
++
++// Frags as the scoreboard counts them: kills of other players, less suicides.
++EXPORT int wadsmith_frags(void)
++{
++    const player_t *player = Player();
++    int frags = 0;
++
++    for (int i = 0; i < MAXPLAYERS; i++)
++    {
++        frags += i == consoleplayer ? -player->frags[i] : player->frags[i];
++    }
++
++    return frags;
 +}
 +
 +EXPORT int wadsmith_total_kills(void)

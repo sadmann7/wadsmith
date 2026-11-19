@@ -1,4 +1,5 @@
 import type { GameMap } from "../map/types";
+import type { NetworkMode } from "./runtime";
 
 // The host numbers the players in a room, and the engine addresses them by
 // these numbers. The host is always 1, which is also its engine's server.
@@ -7,6 +8,7 @@ const helloEveryMs = 1000;
 
 type CoopGame = {
   map: GameMap;
+  mode: NetworkMode;
   wad: Uint8Array;
   title: string;
   slot: string;

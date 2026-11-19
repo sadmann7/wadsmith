@@ -29,6 +29,7 @@ import {
   maxVolume,
   screenSizes,
   type GameStatus,
+  type NetworkMode,
   type Resolution,
 } from "./runtime";
 import { hostPeer } from "./room";
@@ -90,6 +91,7 @@ function spotOf({ x, y }: GameStatus): Point {
 /** How a playtest takes part in a co-op game through its room. */
 type CoopSession = {
   role: "host" | "guest";
+  mode: NetworkMode;
   wad: Uint8Array;
   send: (to: number, data: Uint8Array) => void;
   listen: (receive: (from: number, data: Uint8Array) => void) => void;
@@ -245,6 +247,7 @@ function GameSession({
           network: coop
             ? {
                 role: coop.role,
+                mode: coop.mode,
                 host: hostPeer,
                 send: coop.send,
                 onState: (state) => {
@@ -473,6 +476,7 @@ function GameSession({
           fullscreen={fullscreen}
           showHelp={showHelp && !noteSpot && !noteSaved}
           coop={coop?.role ?? null}
+          deathmatch={coop?.mode === "deathmatch"}
           exit={gameExits[coop?.role === "guest" ? "leave" : exit]}
           canEdit={canEdit}
           noteOpen={noteSpot !== null}

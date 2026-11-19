@@ -1,4 +1,4 @@
-import { thingCatalog } from "./catalog";
+import { isPlayerStart } from "./catalog";
 import {
   pointInPolygon,
   sectorAt,
@@ -109,10 +109,9 @@ function addThing(
   angle = 0,
 ): { map: GameMap; id: string } {
   const at = snapPoint(point);
-  const things =
-    thingCatalog[kind].category === "start"
-      ? map.things.filter((thing) => thing.kind !== kind)
-      : map.things;
+  const things = isPlayerStart(kind)
+    ? map.things.filter((thing) => thing.kind !== kind)
+    : map.things;
   const id = nextId(
     `${kind}-`,
     map.things.map((thing) => thing.id),
@@ -287,7 +286,7 @@ function duplicateThings(map: GameMap, ids: string[]) {
   const copies: string[] = [];
   for (const id of ids) {
     const thing = map.things.find((item) => item.id === id);
-    if (!thing || thingCatalog[thing.kind].category === "start") continue;
+    if (!thing || isPlayerStart(thing.kind)) continue;
     const added = addThing(next, thing.kind, copySpot(map, thing), thing.angle);
     next = updateThing(added.map, added.id, {
       skills: thing.skills,

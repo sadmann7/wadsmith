@@ -940,6 +940,30 @@ describe("map check", () => {
     expect(validateMap(testMap)).toEqual([]);
   });
 
+  it("lets a map hold many deathmatch starts but asks for four", () => {
+    let map = testMap;
+    for (const [index, x] of [64, 128, 192].entries()) {
+      map = addThing(map, "deathmatch-start", { x, y: 64 + index }).map;
+    }
+    expect(
+      map.things.filter((thing) => thing.kind === "deathmatch-start"),
+    ).toHaveLength(3);
+    expect(validateMap(map)).toEqual([]);
+    expect(checkIds(map)).toContain("deathmatch-starts");
+    map = addThing(map, "deathmatch-start", { x: 256, y: 64 }).map;
+    expect(checkIds(map)).not.toContain("deathmatch-starts");
+  });
+
+  it("warns about a co-op start no player can reach", () => {
+    const map = addThing(testMap, "player-3", { x: 96, y: 256 }).map;
+    expect(
+      checkMap(map).find((issue) => issue.id === "coop-starts")?.detail,
+    ).toBe("Player 2 has none");
+    expect(
+      checkIds(addThing(map, "player-2", { x: 160, y: 256 }).map),
+    ).not.toContain("coop-starts");
+  });
+
   it("warns about unused keys and thin supplies", () => {
     const key = addThing(testMap, "yellow-key", { x: 64, y: 64 });
     const crowded = Array.from({ length: 5 }, (_, index) => ({

@@ -712,6 +712,13 @@ function pressesOf(map: GameMap): Press[] {
         height: (game) => game.sectorFloor(target),
         done: (game, before) => game.sectorFloor(target) > before,
       });
+    } else if (action.kind === "lift") {
+      presses.push({
+        label: `pressing ${wall} lowers ${map.sectors[target].name}`,
+        map: placed,
+        height: (game) => game.sectorFloor(target),
+        done: (game, before) => game.sectorFloor(target) < before - 32,
+      });
     } else if (action.kind === "floor-lower") {
       presses.push({
         label: `pressing lowers ${map.sectors[target].name}`,

@@ -1,5 +1,5 @@
 import { mapBalance } from "./balance";
-import { thingCatalog } from "./catalog";
+import { deathmatchStarts, thingCatalog } from "./catalog";
 import { removeSwitch, removeThings, updateLine, updateSector } from "./edit";
 import { fitLineAction } from "./lines";
 import type { GameMap, KeyColor } from "./types";
@@ -45,7 +45,28 @@ function mapWarnings(map: GameMap): CheckedIssue[] {
       detail: `${balance.ammo} pickups on this map`,
     });
   }
-  if (!hasExit(map)) {
+  const deathmatch = map.things.filter(
+    (thing) => thing.kind === "deathmatch-start",
+  );
+  if (deathmatch.length > 0 && deathmatch.length < deathmatchStarts) {
+    warnings.push({
+      id: "deathmatch-starts",
+      severity: "warning",
+      message: `Deathmatch needs ${deathmatchStarts} deathmatch starts`,
+      detail: `${deathmatch.length} placed`,
+      target: deathmatch[0].id,
+    });
+  }
+  const missing = coopGaps(map);
+  if (missing.length > 0) {
+    warnings.push({
+      id: "coop-starts",
+      severity: "warning",
+      message: "Co-op needs a start for each player",
+      detail: `${listPlayers(missing)} ${missing.length === 1 ? "has" : "have"} none`,
+    });
+  }
+  if (!hasExit(map) && !isArena(map)) {
     warnings.push({
       id: "no-exit",
       severity: "warning",
@@ -54,6 +75,36 @@ function mapWarnings(map: GameMap): CheckedIssue[] {
     });
   }
   return warnings;
+}
+
+// Player N only gets a start in co-op if every lower player has one too, so a
+// Player 3 start with no Player 2 start is never used.
+function coopGaps(map: GameMap) {
+  const placed = [2, 3, 4].filter((player) =>
+    map.things.some((thing) => thing.kind === `player-${player}`),
+  );
+  const highest = Math.max(1, ...placed);
+  return [2, 3, 4].filter(
+    (player) => player < highest && !placed.includes(player),
+  );
+}
+
+function listPlayers(players: number[]) {
+  const names = players.map(String);
+  return `Player${players.length > 1 ? "s" : ""} ${
+    names.length > 1
+      ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`
+      : names[0]
+  }`;
+}
+
+// A deathmatch arena ends on the frag limit, so it needs no exit.
+function isArena(map: GameMap) {
+  return (
+    map.things.filter((thing) => thing.kind === "deathmatch-start").length >=
+      deathmatchStarts &&
+    !map.things.some((thing) => thingCatalog[thing.kind].category === "enemy")
+  );
 }
 
 function hasExit(map: GameMap) {
@@ -86,7 +137,7 @@ const buildGroups: {
   {
     name: "Player start",
     passed: "1 found",
-    ids: /^(no-player|many-players|outside|in-door)(:|$)/,
+    ids: /^(no-player|many-players|outside|in-door|coop-starts|deathmatch-starts)(:|$)/,
     needsValidRooms: true,
   },
   { name: "Exit", passed: "The level can end", ids: /^no-exit(:|$)/ },

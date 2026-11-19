@@ -9,6 +9,7 @@ import {
 import { Check, Copy, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { deathmatchStarts } from "../map/catalog";
 import type { GameMap } from "../map/types";
 import { compileMap } from "../wad/compile";
 import { peerLinks, type LinkState, type PeerLinks } from "./peer-link";
@@ -24,6 +25,7 @@ import {
   type HostRoom,
 } from "./room";
 import { socketTransport } from "./room-socket";
+import { fragLimit, type NetworkMode } from "./runtime";
 
 const dialogClass =
   "fixed top-1/2 left-1/2 z-50 flex w-[440px] max-w-[calc(100vw-32px)] -translate-1/2 flex-col rounded-[4px] border border-border-strong bg-surface outline-none";
@@ -54,6 +56,16 @@ const linkLabels: Record<LinkState, string> = {
   relayed: "Relayed",
 };
 
+const modeNames: Record<NetworkMode, string> = {
+  coop: "Co-op",
+  deathmatch: "Deathmatch",
+};
+
+const modeHelp: Record<NetworkMode, string> = {
+  coop: "Work through the map together. Enemies, keys and doors are shared.",
+  deathmatch: `Every player for themselves. Items come back, and the first to ${fragLimit} frags wins.`,
+};
+
 // Player N appears at the Player N start, so the starts set how many can play.
 function coopPlayers(map: GameMap) {
   let players = 1;
@@ -64,6 +76,25 @@ function coopPlayers(map: GameMap) {
     players += 1;
   }
   return players;
+}
+
+function deathmatchReady(map: GameMap) {
+  return (
+    map.things.filter((thing) => thing.kind === "deathmatch-start").length >=
+    deathmatchStarts
+  );
+}
+
+// How many can join in each mode the map supports, best first.
+function playModes(map: GameMap) {
+  const modes: { mode: NetworkMode; players: number }[] = [];
+  if (coopPlayers(map) > 1) {
+    modes.push({ mode: "coop", players: coopPlayers(map) });
+  }
+  if (deathmatchReady(map)) {
+    modes.push({ mode: "deathmatch", players: maxPlayers });
+  }
+  return modes;
 }
 
 // Packets can arrive before the game is listening, so they wait here.
@@ -123,6 +154,7 @@ function CoopLobby({
   title,
   slot,
   par,
+  initialMode,
   onStart,
   onClose,
 }: {
@@ -130,9 +162,21 @@ function CoopLobby({
   title: string;
   slot: string;
   par: number | null;
+  initialMode?: NetworkMode;
   onStart: (game: HostedGame) => void;
   onClose: () => void;
 }) {
+  const modes = playModes(map);
+  const [mode, setMode] = useState<NetworkMode>(
+    modes.find((item) => item.mode === initialMode)?.mode ??
+      modes[0]?.mode ??
+      "coop",
+  );
+  const limit = modes.find((item) => item.mode === mode)?.players ?? 1;
+  // The room opens once, with space for the largest mode the map allows.
+  const [roomSize] = useState(() =>
+    Math.max(1, ...playModes(map).map((item) => item.players)),
+  );
   const [roomId] = useState(newRoomId);
   const [peers, setPeers] = useState([hostPeer]);
   const [copied, setCopied] = useState(false);
@@ -153,7 +197,7 @@ function CoopLobby({
     });
     const room = hostRoom(
       openTransport(roomId),
-      { title, maxPlayers: coopPlayers(map) },
+      { title, maxPlayers: roomSize },
       {
         onRoster: setPeers,
         onLeft: (peer) => {
@@ -174,7 +218,7 @@ function CoopLobby({
       direct.closeAll();
       room.close();
     };
-  }, [roomId, title, map]);
+  }, [roomId, title, map, roomSize]);
 
   const copy = () => {
     void navigator.clipboard?.writeText(link).then(() => setCopied(true));
@@ -185,12 +229,13 @@ function CoopLobby({
     const direct = linksRef.current;
     if (!room || !direct) return;
     const wad = compileMap(map);
-    const game: CoopGame = { map, wad, title, slot, par };
+    const game: CoopGame = { map, mode, wad, title, slot, par };
     handedOff.current = true;
     let announced = false;
     onStart({
       session: {
         role: "host",
+        mode,
         wad,
         send: (to, data) => {
           if (!direct.send(to, data)) room.send(to, data);
@@ -221,7 +266,7 @@ function CoopLobby({
       <DialogBackdrop className="fixed inset-0 z-40 bg-scrim" />
       <DialogContent className={dialogClass}>
         <header className="flex h-14 shrink-0 items-center justify-between border-b border-border px-5">
-          <DialogTitle className={titleClass}>Play co-op</DialogTitle>
+          <DialogTitle className={titleClass}>Play together</DialogTitle>
           <DialogClose
             aria-label="Close"
             className="border-0 bg-transparent p-1 text-fg-muted hover:text-fg"
@@ -234,9 +279,29 @@ function CoopLobby({
             {roomsUrl
               ? "Send this link to the other players."
               : "Open this link in another tab of this browser to join."}{" "}
-            Up to {coopPlayers(map)} players can play, one for each player
-            start.
+            Up to {limit} players can play
+            {mode === "coop" ? ", one for each player start" : ""}.
           </DialogDescription>
+          {modes.length > 1 ? (
+            <div
+              role="group"
+              aria-label="Mode"
+              className="flex self-start rounded-[3px] border border-border p-0.5"
+            >
+              {modes.map((item) => (
+                <button
+                  key={item.mode}
+                  type="button"
+                  aria-pressed={mode === item.mode}
+                  className="rounded-[2px] border-0 bg-transparent px-3 py-1 text-xs text-fg-muted aria-pressed:bg-surface-raised aria-pressed:font-semibold aria-pressed:text-fg"
+                  onClick={() => setMode(item.mode)}
+                >
+                  {modeNames[item.mode]}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          <p className="m-0 text-sm text-fg-soft">{modeHelp[mode]}</p>
           <div className="flex gap-2">
             <input
               className="text-input min-w-0 flex-1 font-mono text-xs"
@@ -265,12 +330,14 @@ function CoopLobby({
           <span className="text-xs text-fg-muted" role="status">
             {peers.length < 2
               ? "Waiting for someone to join…"
-              : `${peers.length} players ready`}
+              : peers.length > limit
+                ? `${modeNames[mode]} has room for ${limit} players`
+                : `${peers.length} players ready`}
           </span>
           <button
             type="button"
             className="button primary"
-            disabled={peers.length < 2 || lost}
+            disabled={peers.length < 2 || peers.length > limit || lost}
             onClick={start}
           >
             Start
@@ -353,6 +420,7 @@ function CoopJoin({ roomId }: { roomId: string }) {
     linksRef.current = direct;
     setSession({
       role: "guest",
+      mode: "coop",
       wad: new Uint8Array(0),
       send: (to, data) => {
         if (!direct.send(to, data)) room.send(to, data);
@@ -376,7 +444,8 @@ function CoopJoin({ roomId }: { roomId: string }) {
   const game = state.step === "playing" ? state.game : null;
   // A new session object would restart the game, so it only changes with it.
   const playing = useMemo(
-    () => (session && game ? { ...session, wad: game.wad } : null),
+    () =>
+      session && game ? { ...session, wad: game.wad, mode: game.mode } : null,
     [session, game],
   );
 
@@ -442,4 +511,4 @@ function CoopJoin({ roomId }: { roomId: string }) {
   );
 }
 
-export { CoopJoin, CoopLobby, coopPlayers, type HostedGame };
+export { CoopJoin, CoopLobby, coopPlayers, playModes, type HostedGame };

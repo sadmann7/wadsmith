@@ -5,6 +5,7 @@ import {
   type CreateDoom,
   type DoomGame,
   type GameStatus,
+  type NetworkMode,
   type Resolution,
 } from "./runtime";
 
@@ -12,6 +13,7 @@ type SoundLevel = { volume: number; muted: boolean };
 
 type WorkerNetwork = {
   role: "host" | "guest";
+  mode: NetworkMode;
   host: number;
   inbox: SharedArrayBuffer;
 };
@@ -152,6 +154,7 @@ async function start(request: Extract<DoomWorkerRequest, { type: "start" }>) {
     network: request.network
       ? {
           role: request.network.role,
+          mode: request.network.mode,
           host: request.network.host,
           inbox: new NetInbox(request.network.inbox),
           send: (to, data) => post({ type: "net", to, data }, [data.buffer]),

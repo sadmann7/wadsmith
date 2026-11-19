@@ -77,6 +77,7 @@ type ThingKind =
   | "player-2"
   | "player-3"
   | "player-4"
+  | "deathmatch-start"
   | "imp"
   | "zombieman"
   | "shotgun-guy"
