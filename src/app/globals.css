@@ -894,21 +894,6 @@
     white-space: nowrap;
   }
 
-  .map-title span {
-    flex: none;
-    color: var(--color-fg-muted);
-    font: 12px var(--font-mono);
-  }
-
-  .map-title strong {
-    overflow: hidden;
-    min-width: 0;
-    max-width: 240px;
-    font-size: 15px;
-    font-weight: 600;
-    text-overflow: ellipsis;
-  }
-
   .button,
   .select-trigger,
   .icon-button {

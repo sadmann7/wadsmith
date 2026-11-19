@@ -106,6 +106,7 @@ import {
 } from "../map/storage";
 import type { GameMap, Point, ThingCategory, ThingKind } from "../map/types";
 import { checkMap, fixIssue, issueText } from "../map/checks";
+import { MapSwitcher, type EpisodeEntry, type MapHealth } from "./map-switcher";
 import { validateMap } from "../map/validate";
 import { loadIwad } from "../engine/iwad";
 import { SceneCamera } from "../preview/scene-camera";
@@ -248,6 +249,13 @@ type AppProps = {
   onOpenProjects: () => void;
   onNewMap: () => void;
   onMapSettings: () => void;
+  episode: {
+    name: string;
+    maps: EpisodeEntry[];
+    currentId: string;
+    canAddMap: boolean;
+    onOpenMap: (id: string) => void;
+  };
 };
 
 const saveLabels: Record<AppProps["saveStatus"], string> = {
@@ -268,6 +276,7 @@ function App({
   onOpenProjects,
   onNewMap,
   onMapSettings,
+  episode,
 }: AppProps) {
   const [map, setMap] = useState(initialMap);
   const [tool, setTool] = useState<MapTool>("select");
@@ -328,6 +337,13 @@ function App({
   const issues = useMemo(() => validateMap(map), [map]);
   const canPlay = issues.length === 0;
   const checks = useMemo(() => checkMap(map), [map]);
+  const liveHealth: MapHealth = checks.some(
+    (issue) => issue.severity === "error",
+  )
+    ? "error"
+    : checks.length > 0
+      ? "warning"
+      : "ready";
   const warningCount = checks.length - issues.length;
   const checkSummary =
     checks.length === 0
@@ -1052,15 +1068,19 @@ function App({
               event.target.value = "";
             }}
           />
-          <button
-            type="button"
-            className="map-title border-0 bg-transparent p-0 text-inherit"
-            title="Map settings"
-            onClick={onMapSettings}
-          >
-            <span>{slot}</span>
-            <strong>{mapName}</strong>
-          </button>
+          <MapSwitcher
+            episodeName={episode.name}
+            maps={episode.maps.map((entry) =>
+              entry.id === episode.currentId
+                ? { ...entry, slot, name: mapName, health: liveHealth }
+                : entry,
+            )}
+            currentId={episode.currentId}
+            canAddMap={episode.canAddMap}
+            onOpenMap={episode.onOpenMap}
+            onAddMap={onNewMap}
+            onEpisodeHome={onOpenProjects}
+          />
           <div className="topbar-end">
             <SegmentedControl
               aria-label="Main view"

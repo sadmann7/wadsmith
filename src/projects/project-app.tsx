@@ -42,6 +42,7 @@ import {
   mapFromTemplate,
   mapName,
   mapSlots,
+  mapStatus,
   maxBackupBytes,
   parseProjectBackup,
   prepareProjects,
@@ -332,6 +333,7 @@ function ProjectApp() {
       await store.setSetting(lastProjectKey, latest.projectId);
       setMessage(null);
       startSession(store, latest);
+      await refresh(store, latest.projectId);
     } catch {
       setMessage(saveFailure);
     }
@@ -546,6 +548,21 @@ function ProjectApp() {
           }
           onNewMap={() => openDialog("new")}
           onMapSettings={() => openDialog("settings")}
+          episode={{
+            name: project.name,
+            maps: bySlot(maps).map((entry) => ({
+              id: entry.id,
+              slot: entry.slot,
+              name: mapName(entry),
+              health: mapStatus(entry).kind,
+            })),
+            currentId: session.id,
+            canAddMap: freeSlots(maps).length > 0,
+            onOpenMap: (id) => {
+              const entry = maps.find((item) => item.id === id);
+              if (entry) void whenSaved(() => void openMap(entry));
+            },
+          }}
         />
         {mapDialog === "new" ? (
           <MapDialog
