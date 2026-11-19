@@ -41,6 +41,7 @@ import {
   TriangleAlert,
   Undo2,
   UserPlus,
+  Users,
 } from "lucide-react";
 import {
   useCallback,
@@ -75,6 +76,7 @@ import {
   type MapTarget,
 } from "./map-target";
 import type { EditMode, MapTool, MapViewStatus } from "./map-editor";
+import { CoopLobby, coopPlayers, type HostedGame } from "../engine/coop-panel";
 import { GameView, type PlayerSpot } from "../engine/play-panel";
 import { thingCatalog, thingKinds } from "../map/catalog";
 import {
@@ -272,6 +274,8 @@ function App({
   const [activeSector, setActiveSector] = useState<string | null>("sector-3");
   const [selection, setSelection] = useState<string[]>([]);
   const [playedMap, setPlayedMap] = useState<GameMap | null>(null);
+  const [coopLobby, setCoopLobby] = useState(false);
+  const [coopGame, setCoopGame] = useState<HostedGame | null>(null);
   const [mapVersion, setMapVersion] = useState(0);
   const [fileError, setFileError] = useState<string | null>(null);
   const playButton = useRef<HTMLButtonElement>(null);
@@ -790,6 +794,7 @@ function App({
   const runMapAction = (action: string) => {
     if (action === "check") showMapCheck();
     else if (action === "play") play();
+    else if (action === "coop") openCoop();
   };
 
   const thingRoom = thing ? sectorAt(map, thing) : null;
@@ -838,7 +843,19 @@ function App({
     if (canPlay && !buildProblem()) setPlayedMap(map);
   };
 
+  const canPlayCoop = canPlay && coopPlayers(map) > 1;
+
+  const openCoop = () => {
+    if (canPlayCoop && !buildProblem()) setCoopLobby(true);
+  };
+
+  const endCoop = () => {
+    coopGame?.close();
+    setCoopGame(null);
+  };
+
   const editPlayedSpot = ({ angle, ...point }: PlayerSpot) => {
+    endCoop();
     setPlayedMap(null);
     camera.placeAt(map, point, angle);
     const room = sectorAt(map, point);
@@ -855,6 +872,7 @@ function App({
   };
 
   const exitGame = () => {
+    endCoop();
     setPlayedMap(null);
     requestAnimationFrame(() => playButton.current?.focus());
   };
@@ -1012,6 +1030,13 @@ function App({
                 >
                   Playtest
                 </MenuItem>
+                <MenuItem
+                  value="coop"
+                  className="select-item"
+                  disabled={!canPlayCoop}
+                >
+                  Play co-op
+                </MenuItem>
               </MenuContent>
             </Menu>
           </div>
@@ -1076,6 +1101,20 @@ function App({
                 <TriangleAlert size={15} aria-hidden="true" />
               )}
               Check map
+            </button>
+            <button
+              type="button"
+              className="button"
+              disabled={!canPlayCoop}
+              title={
+                canPlay && !canPlayCoop
+                  ? "Place a Player 2 start to play co-op"
+                  : undefined
+              }
+              onClick={openCoop}
+            >
+              <Users size={14} aria-hidden="true" />
+              Co-op
             </button>
             <button
               ref={playButton}
@@ -1661,8 +1700,23 @@ function App({
           onClose={() => setBuilding(false)}
         />
       ) : null}
+      {coopLobby ? (
+        <CoopLobby
+          map={map}
+          title={mapName}
+          slot={slot}
+          par={par}
+          onStart={(game) => {
+            setCoopLobby(false);
+            setCoopGame(game);
+            setPlayedMap(map);
+          }}
+          onClose={() => setCoopLobby(false)}
+        />
+      ) : null}
       {playedMap ? (
         <GameView
+          coop={coopGame?.session ?? null}
           map={playedMap}
           title={mapName}
           slot={slot}
