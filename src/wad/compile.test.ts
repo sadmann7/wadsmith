@@ -46,7 +46,7 @@ import { buildChecks, checkMap, fixIssue, issueText } from "../map/checks";
 import { wadFileName } from "../editor/build-dialog";
 import { freedoomFlats, freedoomWalls } from "../map/freedoom-textures";
 import { wallUse } from "../map/textures";
-import { starterMap } from "../map/starter-map";
+import { testMap } from "../map/test-map";
 import { parseMapFile, serializeMap } from "../map/storage";
 import type { GameMap, LineAction } from "../map/types";
 import { validateMap } from "../map/validate";
@@ -63,7 +63,7 @@ const lShape: GameMap = {
     f: { x: 0, y: 256 },
   },
   sectors: [
-    { ...starterMap.sectors[0], vertices: ["a", "b", "c", "d", "e", "f"] },
+    { ...testMap.sectors[0], vertices: ["a", "b", "c", "d", "e", "f"] },
   ],
   things: [{ id: "player-1", kind: "player", x: 64, y: 64, angle: 0 }],
   switches: [],
@@ -125,7 +125,7 @@ function linesOf(map: GameMap) {
 
 describe("compileMap", () => {
   it("writes a patch WAD with every map lump in engine order", () => {
-    const wad = compileMap(starterMap);
+    const wad = compileMap(testMap);
     const view = new DataView(wad.buffer);
     expect(String.fromCharCode(...wad.slice(0, 4))).toBe("PWAD");
     expect(view.getInt32(4, true)).toBe(11);
@@ -152,9 +152,9 @@ describe("compileMap", () => {
   });
 
   it("turns shared walls into two-sided lines", () => {
-    const { lines } = buildLevel(starterMap);
+    const { lines } = buildLevel(testMap);
     expect(lines.filter((line) => line.backSector !== null)).toHaveLength(3);
-    const linedefs = new DataView(lump(starterMap, "LINEDEFS").buffer);
+    const linedefs = new DataView(lump(testMap, "LINEDEFS").buffer);
     const flags = lines.map((_, index) =>
       linedefs.getInt16(index * 14 + 4, true),
     );
@@ -195,7 +195,7 @@ describe("compileMap", () => {
   });
 
   it("builds convex leaves for connected rooms", () => {
-    const bsp = expectConvexLeaves(starterMap);
+    const bsp = expectConvexLeaves(testMap);
     const children = bsp.nodes.flatMap((node) => [
       node.rightChild,
       node.leftChild,
@@ -205,7 +205,7 @@ describe("compileMap", () => {
   });
 
   it("indexes every wall in the blockmap", () => {
-    const words = new Int16Array(lump(starterMap, "BLOCKMAP").slice().buffer);
+    const words = new Int16Array(lump(testMap, "BLOCKMAP").slice().buffer);
     const cells = words[2] * words[3];
     const found = new Set<number>();
     for (let cell = 0; cell < cells; cell += 1) {
@@ -217,25 +217,25 @@ describe("compileMap", () => {
         cursor += 1;
       }
     }
-    expect(found.size).toBe(buildLevel(starterMap).lines.length);
+    expect(found.size).toBe(buildLevel(testMap).lines.length);
   });
 });
 
 describe("validateMap", () => {
   it("accepts the starter map", () => {
-    expect(validateMap(starterMap)).toEqual([]);
+    expect(validateMap(testMap)).toEqual([]);
   });
 
   it("requires a player start", () => {
-    const issues = validateMap({ ...starterMap, things: [] });
+    const issues = validateMap({ ...testMap, things: [] });
     expect(issues.map((issue) => issue.id)).toContain("no-player");
   });
 
   it("rejects things outside every room", () => {
     const issues = validateMap({
-      ...starterMap,
+      ...testMap,
       things: [
-        ...starterMap.things,
+        ...testMap.things,
         { id: "imp-2", kind: "imp", x: 5000, y: 5000, angle: 0 },
       ],
     });
@@ -243,14 +243,12 @@ describe("validateMap", () => {
   });
 
   it("rejects heights the engine can't store", () => {
-    const issues = validateMap(
-      updateSectorCeiling(starterMap, "sector-1", 40000),
-    );
+    const issues = validateMap(updateSectorCeiling(testMap, "sector-1", 40000));
     expect(issues.map((issue) => issue.id)).toContain("height-range:sector-1");
   });
 
   it("rejects a room too tall for the engine", () => {
-    const map = updateSector(starterMap, "sector-1", {
+    const map = updateSector(testMap, "sector-1", {
       floor: -16384,
       ceiling: 16384,
     });
@@ -261,14 +259,14 @@ describe("validateMap", () => {
 
   it("rejects a twisted room", () => {
     const issues = validateMap({
-      ...starterMap,
-      vertices: { ...starterMap.vertices, v1: { x: 300, y: 500 } },
+      ...testMap,
+      vertices: { ...testMap.vertices, v1: { x: 300, y: 500 } },
     });
     expect(issues.length).toBeGreaterThan(0);
   });
 
   it("keeps a room added to a free wall valid and connected", () => {
-    const added = addRoomOnSide(starterMap, "sector-1", "west", 128);
+    const added = addRoomOnSide(testMap, "sector-1", "west", 128);
     expect(added).not.toBeNull();
     expect(validateMap(added!.map)).toEqual([]);
     const { lines } = buildLevel(added!.map);
@@ -276,21 +274,21 @@ describe("validateMap", () => {
   });
 
   it("requires a wired switch for a switch door", () => {
-    const issues = validateMap({ ...starterMap, switches: [] });
+    const issues = validateMap({ ...testMap, switches: [] });
     expect(issues.map((issue) => issue.id)).toContain("door-unwired:sector-4");
   });
 
   it("rejects a door the player can't fit through", () => {
-    const low = updateSectorCeiling(starterMap, "sector-2", 32);
+    const low = updateSectorCeiling(testMap, "sector-2", 32);
     expect(validateMap(low).map((issue) => issue.id)).toContain(
       "door-low:sector-4",
     );
   });
 
   it("rejects a switch on a wall that became an opening", () => {
-    const item = starterMap.switches[0];
+    const item = testMap.switches[0];
     const issues = validateMap({
-      ...starterMap,
+      ...testMap,
       switches: [{ ...item, from: "v3", to: "v4" }],
     });
     expect(issues.map((issue) => issue.id)).toContain("switch-open:switch-1");
@@ -300,11 +298,11 @@ describe("validateMap", () => {
 describe("wallNear", () => {
   it("picks the side of a shared wall under the pointer", () => {
     const wall = "v3|v4";
-    expect(wallNear(starterMap, { x: 378, y: 160 }, 14)).toEqual({
+    expect(wallNear(testMap, { x: 378, y: 160 }, 14)).toEqual({
       sector: "sector-1",
       wall,
     });
-    expect(wallNear(starterMap, { x: 390, y: 160 }, 14)).toEqual({
+    expect(wallNear(testMap, { x: 390, y: 160 }, 14)).toEqual({
       sector: "sector-2",
       wall,
     });
@@ -336,16 +334,16 @@ describe("wallNear", () => {
   });
 
   it("ignores walls out of reach", () => {
-    expect(wallNear(starterMap, { x: 190, y: 160 }, 14)).toBeNull();
+    expect(wallNear(testMap, { x: 190, y: 160 }, 14)).toBeNull();
   });
 });
 
 describe("doors and switches", () => {
-  const doorIndex = starterMap.sectors.findIndex((item) => item.door);
-  const door = starterMap.sectors[doorIndex].door!;
+  const doorIndex = testMap.sectors.findIndex((item) => item.door);
+  const door = testMap.sectors[doorIndex].door!;
 
   it("starts a door closed and tags it for its switch", () => {
-    const sectors = new DataView(lump(starterMap, "SECTORS").buffer);
+    const sectors = new DataView(lump(testMap, "SECTORS").buffer);
     const offset = doorIndex * 26;
     expect(sectors.getInt16(offset + 2, true)).toBe(
       sectors.getInt16(offset, true),
@@ -354,7 +352,7 @@ describe("doors and switches", () => {
   });
 
   it("keeps the door behind every line that opens onto it", () => {
-    const facing = buildLevel(starterMap).lines.filter(
+    const facing = buildLevel(testMap).lines.filter(
       (line) => line.frontSector === doorIndex || line.backSector === doorIndex,
     );
     const shared = facing.filter((line) => line.backSector !== null);
@@ -363,7 +361,7 @@ describe("doors and switches", () => {
   });
 
   it("links a switch to its door", () => {
-    const wired = linesOf(starterMap).filter((item) => item.special !== 0);
+    const wired = linesOf(testMap).filter((item) => item.special !== 0);
     expect(wired).toHaveLength(1);
     expect(wired[0].special).toBe(61);
     expect(wired[0].tag).toBe(doorIndex + 1);
@@ -371,12 +369,12 @@ describe("doors and switches", () => {
   });
 
   it("uses the repeating special for a door that closes", () => {
-    const map = setRoomDoor(starterMap, "sector-4", { ...door, closes: true });
+    const map = setRoomDoor(testMap, "sector-4", { ...door, closes: true });
     expect(linesOf(map).find((item) => item.special)?.special).toBe(63);
   });
 
   it("puts use specials on both faces of a use door", () => {
-    const map = setRoomDoor(starterMap, "sector-4", {
+    const map = setRoomDoor(testMap, "sector-4", {
       ...door,
       opensBy: "use",
       closes: true,
@@ -388,7 +386,7 @@ describe("doors and switches", () => {
   });
 
   it("cuts a short section out of a long wall for a switch", () => {
-    const added = addSwitchInRoom(starterMap, "sector-3", "sector-4");
+    const added = addSwitchInRoom(testMap, "sector-3", "sector-4");
     expect(added).not.toBeNull();
     const item = added!.map.switches.at(-1)!;
     const a = added!.map.vertices[item.from];
@@ -398,7 +396,7 @@ describe("doors and switches", () => {
   });
 
   it("disconnects switches when a door becomes a room again", () => {
-    const map = setRoomDoor(starterMap, "sector-4", undefined);
+    const map = setRoomDoor(testMap, "sector-4", undefined);
     expect(map.switches[0].door).toBeNull();
   });
 });
@@ -419,14 +417,14 @@ function lowerFloor(patch: Partial<LineAction>): LineAction {
 
 function lineIssues(wall: string, patch: Partial<LineAction>) {
   return validateMap(
-    updateLine(starterMap, wall, { action: lowerFloor(patch) }),
+    updateLine(testMap, wall, { action: lowerFloor(patch) }),
   ).map((issue) => issue.id);
 }
 
 function doorOpenerIssues(wall: string, trigger: LineAction["trigger"]) {
   return validateMap(
     setLineTarget(
-      updateLine({ ...starterMap, switches: [] }, wall, {
+      updateLine({ ...testMap, switches: [] }, wall, {
         action: { ...lowerFloor({ trigger }), kind: "door-open" },
       }),
       wall,
@@ -441,12 +439,12 @@ describe("line editing", () => {
 
   it("writes flags without losing the line's own bits", () => {
     const solid = lineOn(
-      updateLine(starterMap, solidWall, { blocksEnemies: true, hidden: true }),
+      updateLine(testMap, solidWall, { blocksEnemies: true, hidden: true }),
       solidWall,
     );
     expect(solid.flags).toBe(1 | 2 | 128);
     const open = lineOn(
-      updateLine(starterMap, openWall, {
+      updateLine(testMap, openWall, {
         blocksAll: true,
         upperFixed: true,
         lowerFixed: true,
@@ -457,7 +455,7 @@ describe("line editing", () => {
   });
 
   it("writes each side's offsets and textures", () => {
-    const map = updateLineSide(starterMap, openWall, "sector-2", {
+    const map = updateLineSide(testMap, openWall, "sector-2", {
       offsetX: -8,
       offsetY: 16,
       lower: "BRICK1",
@@ -475,10 +473,10 @@ describe("line editing", () => {
   });
 
   it("gives a line's target its tag and keeps switch doors apart", () => {
-    const doorIndex = starterMap.sectors.findIndex((item) => item.door);
+    const doorIndex = testMap.sectors.findIndex((item) => item.door);
     const taken = doorIndex + 1;
     const withAction = updateSector(
-      updateLine(starterMap, openWall, {
+      updateLine(testMap, openWall, {
         action: lowerFloor({ tag: taken }),
       }),
       "sector-1",
@@ -497,7 +495,7 @@ describe("line editing", () => {
 
   it("assigns one tag when a target is chosen", () => {
     const map = setLineTarget(
-      updateLine(starterMap, openWall, { action: lowerFloor({}) }),
+      updateLine(testMap, openWall, { action: lowerFloor({}) }),
       openWall,
       "sector-3",
     );
@@ -522,7 +520,7 @@ describe("line editing", () => {
   });
 
   it("requires the key a locked line needs", () => {
-    const locked = updateLine(starterMap, openWall, {
+    const locked = updateLine(testMap, openWall, {
       action: {
         kind: "door-raise",
         trigger: "door",
@@ -540,10 +538,10 @@ describe("line editing", () => {
   });
 
   it("runs an action from an unwired switch", () => {
-    const item = { ...starterMap.switches[0], door: null };
+    const item = { ...testMap.switches[0], door: null };
     const wall = wallKey(item.from, item.to);
     const map = updateSector(
-      updateLine({ ...starterMap, switches: [item] }, wall, {
+      updateLine({ ...testMap, switches: [item] }, wall, {
         action: lowerFloor({ trigger: "switch", tag: 4 }),
       }),
       "sector-2",
@@ -557,7 +555,7 @@ describe("line editing", () => {
   it("moves a wall's action onto a switch placed on it", () => {
     const wall = wallKey("v10", "v11");
     const action = lowerFloor({ trigger: "switch", tag: 4 });
-    const map = updateLine(starterMap, wall, { action, hidden: true });
+    const map = updateLine(testMap, wall, { action, hidden: true });
     const at = { x: 960, y: 160 };
     const added = addSwitch(map, freeWallNear(map, at, 32)!, at);
     const item = added.map.switches.at(-1)!;
@@ -571,7 +569,7 @@ describe("line editing", () => {
 
   it("accepts a switch door opened by a line action", () => {
     const map = setLineTarget(
-      updateLine({ ...starterMap, switches: [] }, openWall, {
+      updateLine({ ...testMap, switches: [] }, openWall, {
         action: { ...lowerFloor({}), kind: "door-open" },
       }),
       openWall,
@@ -588,7 +586,7 @@ describe("line editing", () => {
       tag: 0,
     };
     const map = updateLine(
-      { ...starterMap, switches: [] },
+      { ...testMap, switches: [] },
       wallKey("v13", "v14"),
       { action },
     );
@@ -612,7 +610,7 @@ describe("line editing", () => {
       repeat: false,
       tag: 0,
     };
-    const map = updateLine(starterMap, wall, { action });
+    const map = updateLine(testMap, wall, { action });
     const added = addSwitchInRoom(map, "sector-1", "sector-4")!;
     expect(added.map.lines?.[wall]?.action).toEqual(action);
     expect(lineOn(added.map, wall).special).toBe(11);
@@ -620,11 +618,9 @@ describe("line editing", () => {
 
   it("picks a free tag when the highest one is taken", () => {
     const map = setLineTarget(
-      updateLine(
-        updateSector(starterMap, "sector-1", { tag: 32767 }),
-        openWall,
-        { action: lowerFloor({}) },
-      ),
+      updateLine(updateSector(testMap, "sector-1", { tag: 32767 }), openWall, {
+        action: lowerFloor({}),
+      }),
       openWall,
       "sector-2",
     );
@@ -645,7 +641,7 @@ describe("line editing", () => {
 
   it("forgets a deleted room's side and any line left without a wall", () => {
     const map = updateLineSide(
-      updateLineSide(starterMap, openWall, "sector-2", { offsetX: 8 }),
+      updateLineSide(testMap, openWall, "sector-2", { offsetX: 8 }),
       solidWall,
       "sector-1",
       { offsetX: 8 },
@@ -659,7 +655,7 @@ describe("line editing", () => {
 
   it("keeps a wall's settings on both halves when a switch splits it", () => {
     const wall = wallKey("v10", "v11");
-    const map = updateLine(starterMap, wall, { hidden: true });
+    const map = updateLine(testMap, wall, { hidden: true });
     const at = { x: 960, y: 160 };
     const added = addSwitch(map, freeWallNear(map, at, 32)!, at);
     expect(added.map.lines?.[wall]).toBeUndefined();
@@ -672,7 +668,7 @@ describe("line editing", () => {
 describe("context menu edits", () => {
   const ids = ["imp-1", "demon-1"];
   const map: GameMap = {
-    ...starterMap,
+    ...testMap,
     things: [
       { id: "player-1", kind: "player", x: 96, y: 160, angle: 0 },
       { id: "imp-1", kind: "imp", x: 128, y: 64, angle: 90 },
@@ -724,9 +720,9 @@ describe("context menu edits", () => {
 
   it("snaps only the chosen corners", () => {
     const off = {
-      ...starterMap,
+      ...testMap,
       vertices: {
-        ...starterMap.vertices,
+        ...testMap.vertices,
         v1: { x: 3, y: 5 },
         v2: { x: 387, y: 5 },
       },
@@ -737,14 +733,14 @@ describe("context menu edits", () => {
   });
 
   it("selects every corner of the rooms sharing a corner", () => {
-    const corners = connectedCorners(starterMap, ["v3"]);
+    const corners = connectedCorners(testMap, ["v3"]);
     expect(corners).toEqual(expect.arrayContaining(["v1", "v6", "v13", "v14"]));
     expect(corners).not.toContain("v9");
   });
 
   it("only offers a switch on a free solid wall", () => {
-    expect(freeWallAt(starterMap, wallKey("v1", "v15"))).not.toBeNull();
-    expect(freeWallAt(starterMap, wallKey("v3", "v4"))).toBeNull();
+    expect(freeWallAt(testMap, wallKey("v1", "v15"))).not.toBeNull();
+    expect(freeWallAt(testMap, wallKey("v3", "v4"))).toBeNull();
   });
 });
 
@@ -765,29 +761,27 @@ describe("context menu targets", () => {
 
   it("notices when undo removes a target", () => {
     const wall = wallTarget("sector-1", wallKey("v1", "v15"), null);
-    expect(targetExists(starterMap, wall)).toBe(true);
-    expect(targetExists(removeSector(starterMap, "sector-1"), wall)).toBe(
-      false,
-    );
+    expect(targetExists(testMap, wall)).toBe(true);
+    expect(targetExists(removeSector(testMap, "sector-1"), wall)).toBe(false);
     expect(
-      targetExists(starterMap, { kind: "things", ids: ["gone"], point: null }),
+      targetExists(testMap, { kind: "things", ids: ["gone"], point: null }),
     ).toBe(false);
   });
 
   it("maps 3D surfaces to the same targets as the map", () => {
-    expect(targetForSurface(starterMap, "floor:sector-1", null)).toMatchObject({
+    expect(targetForSurface(testMap, "floor:sector-1", null)).toMatchObject({
       kind: "room",
       sector: "sector-1",
     });
     const wall = wallKey("v1", "v15");
     expect(
-      targetForSurface(starterMap, `wall:sector-1:${wall}:middle`, null),
+      targetForSurface(testMap, `wall:sector-1:${wall}:middle`, null),
     ).toMatchObject({ kind: "wall", sector: "sector-1", wall });
     const switched = wallKey("v15", "v16");
     expect(
-      targetForSurface(starterMap, `wall:sector-1:${switched}:middle`, null),
+      targetForSurface(testMap, `wall:sector-1:${switched}:middle`, null),
     ).toMatchObject({ kind: "switch", id: "switch-1" });
-    expect(targetForSurface(starterMap, "thing:player-1", null)).toMatchObject({
+    expect(targetForSurface(testMap, "thing:player-1", null)).toMatchObject({
       kind: "things",
       ids: ["player-1"],
     });
@@ -795,13 +789,13 @@ describe("context menu targets", () => {
 
   it("frames a wall from inside a room and refuses door rooms", () => {
     const view = viewOfTarget(
-      starterMap,
+      testMap,
       wallTarget("sector-1", wallKey("v1", "v15"), null),
     );
     expect(view?.at).toEqual({ x: 80, y: 0 });
-    expect(view && canStand(starterMap, view.from)).toBe(true);
+    expect(view && canStand(testMap, view.from)).toBe(true);
     expect(
-      viewOfTarget(starterMap, {
+      viewOfTarget(testMap, {
         kind: "room",
         sector: "sector-4",
         point: null,
@@ -820,7 +814,7 @@ function thingFlagsOf(map: GameMap, index: number) {
 describe("thing settings", () => {
   it("writes difficulty and ambush flags", () => {
     const map = updateThing(
-      updateThing(starterMap, "imp-1", {
+      updateThing(testMap, "imp-1", {
         skills: ["easy", "hard"],
         ambush: true,
       }),
@@ -835,7 +829,7 @@ describe("thing settings", () => {
 
   it("requires a locked door's key on every difficulty", () => {
     const locked = addThing(
-      updateLine(starterMap, wallKey("v3", "v4"), {
+      updateLine(testMap, wallKey("v3", "v4"), {
         action: {
           kind: "door-raise",
           trigger: "door",
@@ -855,7 +849,7 @@ describe("thing settings", () => {
   });
 
   it("changes each selected thing from its own values", () => {
-    const map = updateThing(starterMap, "imp-1", { skills: ["hard"] });
+    const map = updateThing(testMap, "imp-1", { skills: ["hard"] });
     const next = updateThings(map, ["imp-1", "zombieman-1"], (thing) => ({
       angle: thing.id === "imp-1" ? 90 : 270,
     }));
@@ -869,7 +863,7 @@ describe("thing settings", () => {
   });
 
   it("rejects a thing inside a closed door", () => {
-    const map = updateThing(starterMap, "imp-1", { x: 504, y: 160 });
+    const map = updateThing(testMap, "imp-1", { x: 504, y: 160 });
     expect(validateMap(map).map((issue) => issue.id)).toContain(
       "in-door:imp-1",
     );
@@ -881,7 +875,7 @@ describe("thing settings", () => {
   });
 
   it("copies difficulty settings with a thing", () => {
-    const map = updateThing(starterMap, "imp-1", {
+    const map = updateThing(testMap, "imp-1", {
       skills: ["hard"],
       ambush: true,
     });
@@ -901,7 +895,7 @@ describe("thing settings", () => {
       { id: "d", kind: "clip", x: 160, y: 64, angle: 0 },
       { id: "e", kind: "blue-key", x: 192, y: 64, angle: 0 },
     ];
-    const map = updateLine({ ...starterMap, things }, wallKey("v3", "v4"), {
+    const map = updateLine({ ...testMap, things }, wallKey("v3", "v4"), {
       action: {
         kind: "door-raise",
         trigger: "door",
@@ -940,14 +934,14 @@ function checkIds(map: GameMap) {
 
 describe("map check", () => {
   it("separates warnings from blocking errors", () => {
-    const checks = checkMap(starterMap);
+    const checks = checkMap(testMap);
     expect(checks.every((issue) => issue.severity === "warning")).toBe(true);
     expect(checks.map((issue) => issue.id)).toContain("no-exit");
-    expect(validateMap(starterMap)).toEqual([]);
+    expect(validateMap(testMap)).toEqual([]);
   });
 
   it("warns about unused keys and thin supplies", () => {
-    const key = addThing(starterMap, "yellow-key", { x: 64, y: 64 });
+    const key = addThing(testMap, "yellow-key", { x: 64, y: 64 });
     const crowded = Array.from({ length: 5 }, (_, index) => ({
       id: `pain-${index}`,
       kind: "pain-elemental" as const,
@@ -967,7 +961,7 @@ describe("map check", () => {
   });
 
   it("groups every issue for the build dialog", () => {
-    const broken = updateSector({ ...starterMap, things: [] }, "sector-1", {
+    const broken = updateSector({ ...testMap, things: [] }, "sector-1", {
       ceiling: 0,
     });
     const checks = buildChecks(broken);
@@ -984,7 +978,7 @@ describe("map check", () => {
   });
 
   it("keeps range errors in one group and marks unknown groups", () => {
-    const tall = updateSector(starterMap, "sector-1", { ceiling: 40000 });
+    const tall = updateSector(testMap, "sector-1", { ceiling: 40000 });
     const checks = buildChecks(tall);
     const holding = checks.filter((check) =>
       check.issues.some((issue) => issue.id === "height-range:sector-1"),
@@ -993,7 +987,7 @@ describe("map check", () => {
     expect(checks.find((check) => check.name === "Wall sides")?.waiting).toBe(
       true,
     );
-    expect(buildChecks(starterMap).some((check) => check.waiting)).toBe(false);
+    expect(buildChecks(testMap).some((check) => check.waiting)).toBe(false);
   });
 
   it("makes safe WAD file names", () => {
@@ -1015,18 +1009,18 @@ describe("map check", () => {
   });
 
   it("fixes problems with one safe answer", () => {
-    const low = updateSector(starterMap, "sector-1", { ceiling: 0 });
+    const low = updateSector(testMap, "sector-1", { ceiling: 0 });
     const issue = validateMap(low).find((item) =>
       item.id.startsWith("height"),
     )!;
     expect(validateMap(fixIssue(low, issue)!)).toEqual([]);
-    const unwired = { ...starterMap, switches: [] };
+    const unwired = { ...testMap, switches: [] };
     const door = validateMap(unwired).find((item) =>
       item.id.startsWith("door-unwired"),
     )!;
     expect(fixIssue(unwired, door)).toBeNull();
     const wall = wallKey("v1", "v15");
-    const walking = updateLine(starterMap, wall, {
+    const walking = updateLine(testMap, wall, {
       action: { kind: "exit", trigger: "walk", repeat: false, tag: 0 },
     });
     const walkIssue = validateMap(walking).find((item) =>
@@ -1038,29 +1032,27 @@ describe("map check", () => {
       trigger: "switch",
     });
     expect(validateMap(fixedWalk)).toEqual([]);
-    expect(
-      fixIssue(starterMap, { id: "outside:imp-1", message: "x" }),
-    ).toBeNull();
+    expect(fixIssue(testMap, { id: "outside:imp-1", message: "x" })).toBeNull();
   });
 
   it("finds what an issue points at", () => {
-    expect(targetForIssue(starterMap, "sector-2")).toMatchObject({
+    expect(targetForIssue(testMap, "sector-2")).toMatchObject({
       kind: "room",
     });
-    expect(targetForIssue(starterMap, "imp-1")).toMatchObject({
+    expect(targetForIssue(testMap, "imp-1")).toMatchObject({
       kind: "things",
     });
-    expect(targetForIssue(starterMap, "switch-1")).toMatchObject({
+    expect(targetForIssue(testMap, "switch-1")).toMatchObject({
       kind: "switch",
     });
-    expect(targetForIssue(starterMap, wallKey("v3", "v4"))).toMatchObject({
+    expect(targetForIssue(testMap, wallKey("v3", "v4"))).toMatchObject({
       kind: "wall",
     });
   });
 
   it("counts the wall parts a map actually shows", () => {
     const shared = wallKey("v3", "v4");
-    const painted = updateLineSide(starterMap, shared, "sector-1", {
+    const painted = updateLineSide(testMap, shared, "sector-1", {
       upper: "BRICK1",
     });
     expect(wallUse(painted).get("BRICK1")).toBe(1);

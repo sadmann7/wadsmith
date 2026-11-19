@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { starterMap } from "../map/starter-map";
+import { testMap } from "../map/test-map";
 import type { RoomMessage } from "./room";
 import { decodeMessage, encodeMessage } from "./room-socket";
 
@@ -27,7 +27,7 @@ describe("room messages on the wire", () => {
     const start: RoomMessage = {
       type: "start",
       game: {
-        map: starterMap,
+        map: testMap,
         wad: new Uint8Array(70_000).map((_, index) => index % 251),
         title: "Starter map",
         slot: "MAP01",

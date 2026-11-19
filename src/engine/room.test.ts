@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { starterMap } from "../map/starter-map";
+import { testMap } from "../map/test-map";
 import {
   hostRoom,
   joinRoom,
@@ -48,7 +48,7 @@ function guestEvents() {
 }
 
 const game: CoopGame = {
-  map: starterMap,
+  map: testMap,
   wad: new Uint8Array([1, 2, 3]),
   title: "Starter map",
   slot: "MAP01",
