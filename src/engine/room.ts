@@ -67,6 +67,7 @@ type RoomMessage =
   | { type: "pong"; peer: number; sent: number }
   | { type: "kick"; peer: number }
   | { type: "start" }
+  | { type: "stall"; peers: number[] }
   | { type: "packet"; from: number; to: number; data: Uint8Array }
   | { type: "signal"; from: number; to: number; signal: PeerSignal }
   | { type: "leave"; peer: number }
@@ -295,6 +296,7 @@ function hostRoom(
       started = true;
       transport.post({ type: "start" });
     },
+    stall: (peers: number[]) => transport.post({ type: "stall", peers }),
     send: (to: number, data: Uint8Array) =>
       transport.post({ type: "packet", from: hostPeer, to, data }),
     close: () => {
@@ -315,6 +317,7 @@ type GuestRoomEvents = {
   onProgress: (progress: number) => void;
   onGame: (game: CoopGame) => void;
   onStart: () => void;
+  onStall: (peers: number[]) => void;
   onPacket: (from: number, data: Uint8Array) => void;
   onSignal: (from: number, signal: PeerSignal) => void;
   onClosed: (ending: Ending) => void;
@@ -399,6 +402,8 @@ function joinRoom(
       events.onClosed("removed");
     } else if (message.type === "start") {
       events.onStart();
+    } else if (message.type === "stall") {
+      events.onStall(message.peers);
     } else if (message.type === "packet" && message.to === peer) {
       events.onPacket(message.from, message.data);
     } else if (message.type === "signal" && message.to === peer) {

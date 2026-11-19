@@ -425,6 +425,58 @@ index 6427083..29f1949 100644
      if (!SDL_Init(SDL_INIT_VIDEO))
      {
          I_Error("Failed to initialize video: %s", SDL_GetError());
+diff --git a/src/nw_server.c b/src/nw_server.c
+index 142a217..e1539c3 100644
+--- a/src/nw_server.c
++++ b/src/nw_server.c
+@@ -2105,3 +2105,35 @@ void NW_SV_Shutdown(void)
+     master_server = NULL;
+     server_initialized = false;
+ }
++
++// Players whose commands for the oldest tic are missing while someone else's
++// arrived, as a bitmask of player slots.
++int NW_SV_LaggingPlayers(void)
++{
++    int missing = 0;
++    boolean any_received = false;
++
++    if (!server_initialized || server_state != SERVER_IN_GAME)
++    {
++        return 0;
++    }
++
++    for (int i = 0; i < NW_MAXPLAYERS; ++i)
++    {
++        if (sv_players[i] == NULL || !ClientConnected(sv_players[i]))
++        {
++            continue;
++        }
++
++        if (recvwindow[0][i].active)
++        {
++            any_received = true;
++        }
++        else
++        {
++            missing |= 1 << i;
++        }
++    }
++
++    return any_received ? missing : 0;
++}
+diff --git a/src/nw_server.h b/src/nw_server.h
+index d9f81d4..b706b84 100644
+--- a/src/nw_server.h
++++ b/src/nw_server.h
+@@ -31,6 +31,7 @@ void NW_SV_Run(void);
+ // Blocks until all clients disconnect, or until a 5 second timeout
+ 
+ void NW_SV_Shutdown(void);
++int NW_SV_LaggingPlayers(void);
+ 
+ // Add a network module to the context used by the server
+ 
 diff --git a/src/wadsmith.c b/src/wadsmith.c
 new file mode 100644
 index 0000000..afe29df
@@ -1201,10 +1253,10 @@ index 0000000..7a6836a
 +}
 diff --git a/src/wadsmith_net.c b/src/wadsmith_net.c
 new file mode 100644
-index 0000000..82e9706
+index 0000000..a1f7791
 --- /dev/null
 +++ b/src/wadsmith_net.c
-@@ -0,0 +1,252 @@
+@@ -0,0 +1,258 @@
 +// Woof's network module for the browser. Packets come in through memory the
 +// page shares with this worker, so Woof's own loops that wait for replies keep
 +// working. An address is the number the room gives each player.
@@ -1224,6 +1276,7 @@ index 0000000..82e9706
 +#include "nw_io.h"
 +#include "nw_packet.h"
 +#include "nw_sdl.h"
++#include "nw_server.h"
 +#include "p_mobj.h"
 +
 +#define EXPORT EMSCRIPTEN_KEEPALIVE
@@ -1456,6 +1509,11 @@ index 0000000..82e9706
 +{
 +    const player_t *p = NetPlayer(player);
 +    return p ? p->secretcount : 0;
++}
++
++EXPORT int wadsmith_net_lagging_players(void)
++{
++    return NW_SV_LaggingPlayers();
 +}
 diff --git a/src/wadsmith_unused.c b/src/wadsmith_unused.c
 new file mode 100644
