@@ -242,7 +242,8 @@ async function compileAll() {
     }
   };
   // SDL is shared by every file, so it has to exist before they run in parallel.
-  run("embuilder", ["build", "sdl3"]);
+  // A new Emscripten cache has no sysroot, and the SDL3 port can't install into it.
+  run("embuilder", ["build", "sysroot", "sdl3"]);
   await Promise.all(Array.from({ length: availableParallelism() }, worker));
   return built;
 }

@@ -1,0 +1,93 @@
+name: Code check
+
+on:
+  pull_request:
+    branches: ["*"]
+  push:
+    branches: ["main"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  FORCE_COLOR: 3
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    name: Format
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v7
+      - uses: ./.github/setup
+
+      - name: Check formatting
+        run: pnpm format:check
+
+  lint:
+    runs-on: ubuntu-latest
+    name: Lint
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v7
+      - uses: ./.github/setup
+
+      - run: pnpm lint
+
+  typecheck:
+    runs-on: ubuntu-latest
+    name: Typecheck
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v7
+      - uses: ./.github/setup
+
+      - run: pnpm typecheck
+
+  test:
+    runs-on: ubuntu-latest
+    name: Test
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v7
+      - uses: ./.github/setup
+      - uses: ./.github/engine
+
+      - run: pnpm test
+
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [format, lint, typecheck, test]
+    runs-on: ubuntu-latest
+    name: Deploy
+    timeout-minutes: 20
+    environment:
+      name: production
+      url: https://wadsmith.com
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    env:
+      VERCEL_ORG_ID: team_AHDLC7i2CKyIJ7JNVzB8SA1C
+      VERCEL_PROJECT_ID: prj_CALAZ9FWc3YgKfF41CathGDsGluz
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v7
+      - uses: ./.github/setup
+      - uses: ./.github/engine
+
+      # The game loads the gzipped Freedoom, and only the tests use this copy.
+      - name: Leave the raw Freedoom out of the upload
+        run: rm public/engine/freedoom2.wad
+
+      # Vercel can't build the engine, so it gets a build made here.
+      - name: Build
+        run: |
+          pnpm dlx vercel@65.12.1 pull --yes --environment=production
+          pnpm dlx vercel@65.12.1 build --prod
+
+      - name: Deploy
+        run: pnpm dlx vercel@65.12.1 deploy --prebuilt --prod --archive=tgz

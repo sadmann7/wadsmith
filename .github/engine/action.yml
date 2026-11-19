@@ -1,0 +1,25 @@
+name: Engine
+description: Builds Woof and fetches Freedoom into public/engine
+runs:
+  using: composite
+  steps:
+    - name: Setup Emscripten
+      uses: mymindstorm/setup-emsdk@4528d102f7230f0e7b276855c01ea1159be0e984 # v16
+      with:
+        version: 7.0.0
+        actions-cache-folder: emsdk-cache
+
+    - name: Cache engine builds
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          .cache/woof-objects
+          .cache/freedoom-*.zip
+          ~/.cache/emscripten
+        key: engine-${{ runner.os }}-${{ hashFiles('engine/**', 'scripts/setup-engine.mjs', 'scripts/engine-files.mjs') }}
+        # Objects are cached by a hash of their inputs, so an older cache is safe.
+        restore-keys: engine-${{ runner.os }}-
+
+    - name: Build the engine
+      shell: bash
+      run: pnpm setup:engine
