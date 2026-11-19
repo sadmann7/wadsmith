@@ -19,6 +19,7 @@ import {
 import { useState, type ReactNode } from "react";
 
 import { MapOutline } from "../editor/map-outline";
+import { skillNames } from "./coop";
 import type { GameMap } from "../map/types";
 import type { MouseMode } from "./mouse-capture";
 import {
@@ -27,6 +28,7 @@ import {
   screenSizes,
   type GameStatus,
   type Resolution,
+  type Skill,
 } from "./runtime";
 
 type SoundSettings = { volume: number; muted: boolean };
@@ -147,6 +149,7 @@ function GameHud({
   fullscreen,
   showHelp,
   coop,
+  skill,
   deathmatch,
   exit,
   canEdit,
@@ -175,6 +178,7 @@ function GameHud({
   fullscreen: boolean;
   showHelp: boolean;
   coop: "host" | "guest" | null;
+  skill: Skill;
   deathmatch: boolean;
   exit: { label: string; hint: string };
   canEdit: boolean;
@@ -213,7 +217,7 @@ function GameHud({
         <div className="min-w-0 @max-xl:hidden">
           <div className="truncate text-[15px] font-semibold">{title}</div>
           <div className="font-mono text-[11px] text-fg-soft">
-            {slot} · Medium ·{" "}
+            {slot} · {skillNames[skill]} ·{" "}
             {deathmatch ? "Deathmatch" : coop ? "Co-op" : "Playtest"}
           </div>
         </div>

@@ -102,6 +102,47 @@ function updateThing(
   };
 }
 
+// Rings of spots around player 1, nearest first, for the starts that join it.
+const startOffsets = [48, 96, 144].flatMap((distance) =>
+  [
+    [1, 0],
+    [0, 1],
+    [-1, 0],
+    [0, -1],
+    [1, 1],
+    [-1, 1],
+    [1, -1],
+    [-1, -1],
+  ].map(([x, y]) => ({ x: x * distance, y: y * distance })),
+);
+
+// Places any missing co-op starts beside player 1's start, facing its way.
+function addPlayerStarts(map: GameMap, players: number) {
+  const first = map.things.find((thing) => thing.kind === "player");
+  const room = first ? sectorAt(map, first) : null;
+  if (!first || !room) return map;
+  const fits = (map: GameMap, point: Point) =>
+    [-20, 20].every((dx) =>
+      [-20, 20].every(
+        (dy) => sectorAt(map, { x: point.x + dx, y: point.y + dy }) === room,
+      ),
+    ) &&
+    map.things.every(
+      (thing) => Math.hypot(thing.x - point.x, thing.y - point.y) >= 40,
+    );
+  let next = map;
+  for (let player = 2; player <= players; player += 1) {
+    const kind = `player-${player}` as ThingKind;
+    if (next.things.some((thing) => thing.kind === kind)) continue;
+    const spot = startOffsets
+      .map((offset) => ({ x: first.x + offset.x, y: first.y + offset.y }))
+      .find((point) => fits(next, point));
+    if (!spot) break;
+    next = addThing(next, kind, spot, first.angle).map;
+  }
+  return next;
+}
+
 function addThing(
   map: GameMap,
   kind: ThingKind,
@@ -681,6 +722,7 @@ function roomCenter(map: GameMap, sector: Sector): Point {
 
 export {
   addNote,
+  addPlayerStarts,
   addRoom,
   addRoomOnSide,
   addSwitch,

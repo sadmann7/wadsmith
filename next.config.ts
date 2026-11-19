@@ -2,6 +2,11 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   devIndicators: false,
+  env: {
+    // Co-op players must run the same build, so rooms compare this.
+    NEXT_PUBLIC_APP_VERSION:
+      process.env.GITHUB_SHA ?? process.env.VERCEL_GIT_COMMIT_SHA ?? "dev",
+  },
   headers() {
     return [
       {
