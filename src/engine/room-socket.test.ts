@@ -24,18 +24,29 @@ describe("room messages on the wire", () => {
   });
 
   it("keeps the bytes inside other messages", () => {
-    const start: RoomMessage = {
-      type: "start",
-      game: {
-        map: testMap,
-        mode: "coop",
-        wad: new Uint8Array(70_000).map((_, index) => index % 251),
+    const chunk: RoomMessage = {
+      type: "chunk",
+      to: 2,
+      index: 0,
+      count: 3,
+      data: new Uint8Array(70_000).map((_, index) => index % 251),
+    };
+    expect(roundTrip(chunk)).toEqual(chunk);
+    const info: RoomMessage = {
+      type: "info",
+      nonce: "n",
+      info: {
         title: "Starter map",
-        slot: "MAP01",
-        par: 30,
+        host: "Sadman",
+        mode: "coop",
+        skill: "medium",
+        map: testMap,
+        players: [],
+        maxPlayers: 2,
+        started: false,
       },
     };
-    expect(roundTrip(start)).toEqual(start);
+    expect(roundTrip(info)).toEqual(info);
   });
 
   it("ignores frames it can't read", () => {

@@ -31,6 +31,7 @@ import {
   type GameStatus,
   type NetworkMode,
   type Resolution,
+  type Skill,
 } from "./runtime";
 import { hostPeer } from "./room";
 
@@ -92,6 +93,7 @@ function spotOf({ x, y }: GameStatus): Point {
 type CoopSession = {
   role: "host" | "guest";
   mode: NetworkMode;
+  skill: Skill;
   wad: Uint8Array;
   send: (to: number, data: Uint8Array) => void;
   listen: (receive: (from: number, data: Uint8Array) => void) => void;
@@ -139,6 +141,7 @@ type GameSessionProps = {
   onEditSpot?: (spot: PlayerSpot) => void;
   coop: CoopSession | null;
   exit: GameExit;
+  skill: Skill;
 };
 
 function GameSession({
@@ -158,6 +161,7 @@ function GameSession({
   onEditSpot,
   coop,
   exit,
+  skill,
 }: GameSessionProps) {
   const canEdit = !coop && Boolean(onAddNote && onEditSpot);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -226,6 +230,7 @@ function GameSession({
           map: coop?.wad ?? compileMap(map),
           sound: soundRef.current,
           resolution,
+          skill: coop?.skill ?? skill,
           onFrame: (pixels) =>
             context.putImageData(new ImageData(pixels, width, height), 0, 0),
           // The WAD holds one map, so leaving it would load an unrelated level.
@@ -285,7 +290,7 @@ function GameSession({
       client?.stop();
       gameRef.current = null;
     };
-  }, [map, resolution, width, height, coop]);
+  }, [map, resolution, width, height, coop, skill]);
 
   const pressKey = (source: string, key: number) => {
     if (heldKeys.current.press(source, key)) gameRef.current?.key(true, key);
@@ -476,6 +481,7 @@ function GameSession({
           fullscreen={fullscreen}
           showHelp={showHelp && !noteSpot && !noteSaved}
           coop={coop?.role ?? null}
+          skill={coop?.skill ?? skill}
           deathmatch={coop?.mode === "deathmatch"}
           exit={gameExits[coop?.role === "guest" ? "leave" : exit]}
           canEdit={canEdit}
@@ -610,6 +616,7 @@ function GameView({
   onEditSpot,
   coop = null,
   exit = "editor",
+  skill = "medium",
 }: {
   map: GameMap;
   title: string;
@@ -620,6 +627,7 @@ function GameView({
   onEditSpot?: (spot: PlayerSpot) => void;
   coop?: CoopSession | null;
   exit?: GameExit;
+  skill?: Skill;
 }) {
   const stageRef = useRef<HTMLElement>(null);
   const [run, setRun] = useState(0);
@@ -671,6 +679,7 @@ function GameView({
         onEditSpot={onEditSpot}
         coop={coop}
         exit={exit}
+        skill={skill}
       />
     </section>
   );

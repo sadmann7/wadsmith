@@ -1,9 +1,14 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { testMap } from "../map/test-map";
 import {
+  formatRoomCode,
   hostRoom,
   joinRoom,
+  newRoomCode,
+  packGame,
+  parseRoomCode,
+  unpackGame,
   type CoopGame,
   type RoomMessage,
   type RoomTransport,
@@ -35,11 +40,34 @@ function createHub() {
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
+const game: CoopGame = {
+  map: testMap,
+  mode: "coop",
+  skill: "hard",
+  wad: new Uint8Array(40_000).map((_, index) => index % 251),
+  title: "Test map",
+  slot: "MAP01",
+  par: 90,
+};
+
+function hostEvents() {
+  return {
+    onRoster: vi.fn(),
+    onLeft: vi.fn(),
+    onPacket: vi.fn(),
+    onSignal: vi.fn(),
+    onDropped: vi.fn(),
+  };
+}
+
 function guestEvents() {
   return {
+    onInfo: vi.fn(),
     onJoined: vi.fn(),
     onRefused: vi.fn(),
     onRoster: vi.fn(),
+    onProgress: vi.fn(),
+    onGame: vi.fn(),
     onStart: vi.fn(),
     onPacket: vi.fn(),
     onSignal: vi.fn(),
@@ -47,178 +75,135 @@ function guestEvents() {
   };
 }
 
-const game: CoopGame = {
-  map: testMap,
-  mode: "coop",
-  wad: new Uint8Array([1, 2, 3]),
-  title: "Starter map",
-  slot: "MAP01",
-  par: null,
-};
+function openRoom(maxPlayers = 3, version = "v1") {
+  const hub = createHub();
+  const events = hostEvents();
+  const host = hostRoom(
+    hub.transport(),
+    { game, name: "Sadman", version, maxPlayers },
+    events,
+  );
+  const guest = (version = "v1") => {
+    const guestEvents_ = guestEvents();
+    const room = joinRoom(hub.transport(), version, guestEvents_);
+    return { room, events: guestEvents_ };
+  };
+  return { host, events, guest };
+}
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe("co-op room", () => {
-  it("numbers guests after the host and shares the roster", async () => {
-    const hub = createHub();
-    const onRoster = vi.fn();
-    hostRoom(
-      hub.transport(),
-      { title: "Starter map", maxPlayers: 3 },
-      {
-        onRoster,
-        onLeft: vi.fn(),
-        onPacket: vi.fn(),
-        onSignal: vi.fn(),
-        onDropped: vi.fn(),
-      },
-    );
-    const first = guestEvents();
-    const second = guestEvents();
-    joinRoom(hub.transport(), first);
+  it("tells a visitor about the room before they join", async () => {
+    const { host, guest } = openRoom();
+    const visitor = guest();
     await settle();
-    joinRoom(hub.transport(), second);
-    await settle();
-    expect(first.onJoined).toHaveBeenCalledWith(2, "Starter map");
-    expect(second.onJoined).toHaveBeenCalledWith(3, "Starter map");
-    expect(onRoster).toHaveBeenLastCalledWith([1, 2, 3]);
-    expect(first.onRoster).toHaveBeenLastCalledWith([1, 2, 3]);
-  });
-
-  it("refuses players once the room is full or started", async () => {
-    const hub = createHub();
-    const host = hostRoom(
-      hub.transport(),
-      { title: "Map", maxPlayers: 2 },
-      {
-        onRoster: vi.fn(),
-        onLeft: vi.fn(),
-        onPacket: vi.fn(),
-        onSignal: vi.fn(),
-        onDropped: vi.fn(),
-      },
-    );
-    joinRoom(hub.transport(), guestEvents());
-    await settle();
-    const late = guestEvents();
-    joinRoom(hub.transport(), late);
-    await settle();
-    expect(late.onRefused).toHaveBeenCalledWith("This game is full.");
-    expect(host.peers()).toEqual([1, 2]);
-  });
-
-  it("frees a slot when a guest leaves", async () => {
-    const hub = createHub();
-    const onRoster = vi.fn();
-    const onLeft = vi.fn();
-    hostRoom(
-      hub.transport(),
-      { title: "Map", maxPlayers: 2 },
-      {
-        onRoster,
-        onLeft,
-        onPacket: vi.fn(),
-        onSignal: vi.fn(),
-        onDropped: vi.fn(),
-      },
-    );
-    const guest = joinRoom(hub.transport(), guestEvents());
-    await settle();
-    guest.leave();
-    await settle();
-    expect(onRoster).toHaveBeenLastCalledWith([1]);
-    expect(onLeft).toHaveBeenCalledWith(2);
-    const next = guestEvents();
-    joinRoom(hub.transport(), next);
-    await settle();
-    expect(next.onJoined).toHaveBeenCalledWith(2, "Map");
-  });
-
-  it("delivers packets only to the player they're for", async () => {
-    const hub = createHub();
-    const onPacket = vi.fn();
-    const host = hostRoom(
-      hub.transport(),
-      { title: "Map", maxPlayers: 3 },
-      {
-        onRoster: vi.fn(),
-        onLeft: vi.fn(),
-        onPacket,
-        onSignal: vi.fn(),
-        onDropped: vi.fn(),
-      },
-    );
-    const first = guestEvents();
-    const second = guestEvents();
-    const guest = joinRoom(hub.transport(), first);
-    await settle();
-    joinRoom(hub.transport(), second);
-    await settle();
-    host.send(3, new Uint8Array([9]));
-    guest.send(1, new Uint8Array([7]));
-    await settle();
-    expect(second.onPacket).toHaveBeenCalledWith(1, new Uint8Array([9]));
-    expect(first.onPacket).not.toHaveBeenCalled();
-    expect(onPacket).toHaveBeenCalledWith(2, new Uint8Array([7]));
-  });
-
-  it("starts every guest and tells them when the host leaves", async () => {
-    const hub = createHub();
-    const host = hostRoom(
-      hub.transport(),
-      { title: "Map", maxPlayers: 2 },
-      {
-        onRoster: vi.fn(),
-        onLeft: vi.fn(),
-        onPacket: vi.fn(),
-        onSignal: vi.fn(),
-        onDropped: vi.fn(),
-      },
-    );
-    const guest = guestEvents();
-    joinRoom(hub.transport(), guest);
-    await settle();
-    host.start(game);
-    await settle();
-    expect(guest.onStart).toHaveBeenCalledWith(game);
-    const late = guestEvents();
-    joinRoom(hub.transport(), late);
-    await settle();
-    expect(late.onRefused).toHaveBeenCalledWith(
-      "This game has already started.",
+    expect(visitor.events.onInfo).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Test map",
+        host: "Sadman",
+        mode: "coop",
+        skill: "hard",
+        maxPlayers: 3,
+        started: false,
+        players: [expect.objectContaining({ peer: 1, name: "Sadman" })],
+      }),
     );
     host.close();
-    await settle();
-    expect(guest.onClosed).toHaveBeenCalledWith("The host ended the game.");
   });
 
-  it("passes WebRTC setup between a guest and the host", async () => {
-    const hub = createHub();
-    const onSignal = vi.fn();
-    const host = hostRoom(
-      hub.transport(),
-      { title: "Map", maxPlayers: 2 },
-      {
-        onRoster: vi.fn(),
-        onLeft: vi.fn(),
-        onPacket: vi.fn(),
-        onSignal,
-        onDropped: vi.fn(),
-      },
-    );
-    const events = guestEvents();
-    const guest = joinRoom(hub.transport(), events);
+  it("numbers guests by name and sends each one the map", async () => {
+    const { host, events, guest } = openRoom();
+    const ana = guest();
+    ana.room.join("Ana");
     await settle();
-    guest.signal(1, { description: { type: "offer", sdp: "offer" } });
-    host.signal(2, { description: { type: "answer", sdp: "answer" } });
+    const jules = guest();
+    jules.room.join("jules");
     await settle();
-    expect(onSignal).toHaveBeenCalledWith(2, {
-      description: { type: "offer", sdp: "offer" },
-    });
-    expect(events.onSignal).toHaveBeenCalledWith(1, {
-      description: { type: "answer", sdp: "answer" },
-    });
+    await settle();
+    expect(ana.events.onJoined).toHaveBeenCalledWith(2);
+    expect(jules.events.onJoined).toHaveBeenCalledWith(3);
+    expect(ana.events.onGame).toHaveBeenCalledWith(game);
+    expect(ana.events.onProgress).toHaveBeenLastCalledWith(1);
+    expect(host.players()).toEqual([
+      expect.objectContaining({ peer: 1, name: "Sadman", ready: true }),
+      expect.objectContaining({ peer: 2, name: "Ana", ready: true }),
+      expect.objectContaining({ peer: 3, name: "jules", ready: true }),
+    ]);
+    expect(events.onRoster).toHaveBeenCalled();
+    host.close();
   });
 
-  it("tells a guest when its connection to the room drops", async () => {
+  it("refuses a full room, a started game and another version", async () => {
+    const { host, guest } = openRoom(2);
+    guest().room.join("Ana");
+    await settle();
+    const late = guest();
+    late.room.join("Late");
+    await settle();
+    expect(late.events.onRefused).toHaveBeenCalledWith("full");
+    const older = guest("v0");
+    older.room.join("Old");
+    await settle();
+    expect(older.events.onRefused).toHaveBeenCalledWith("version");
+    host.start();
+    const after = guest();
+    after.room.join("After");
+    await settle();
+    expect(after.events.onRefused).toHaveBeenCalledWith("started");
+    host.close();
+  });
+
+  it("frees a slot when a guest leaves or is removed", async () => {
+    const { host, events, guest } = openRoom(2);
+    const ana = guest();
+    ana.room.join("Ana");
+    await settle();
+    ana.room.leave();
+    await settle();
+    expect(events.onLeft).toHaveBeenCalledWith(2);
+    const jules = guest();
+    jules.room.join("jules");
+    await settle();
+    expect(jules.events.onJoined).toHaveBeenCalledWith(2);
+    host.kick(2);
+    await settle();
+    expect(jules.events.onClosed).toHaveBeenCalledWith("removed");
+    expect(host.players()).toHaveLength(1);
+    host.close();
+  });
+
+  it("measures each guest's ping", async () => {
+    vi.useFakeTimers();
+    const { host, guest } = openRoom();
+    guest().room.join("Ana");
+    await vi.advanceTimersByTimeAsync(2100);
+    expect(host.players()[1].ping).toEqual(expect.any(Number));
+    host.close();
+  });
+
+  it("starts guests, routes packets and tells them when the host leaves", async () => {
+    const { host, events, guest } = openRoom();
+    const ana = guest();
+    ana.room.join("Ana");
+    await settle();
+    host.start();
+    host.send(2, new Uint8Array([9]));
+    ana.room.send(1, new Uint8Array([7]));
+    ana.room.signal(1, { relayOnly: true });
+    await settle();
+    expect(ana.events.onStart).toHaveBeenCalled();
+    expect(ana.events.onPacket).toHaveBeenCalledWith(1, new Uint8Array([9]));
+    expect(events.onPacket).toHaveBeenCalledWith(2, new Uint8Array([7]));
+    expect(events.onSignal).toHaveBeenCalledWith(2, { relayOnly: true });
+    host.close();
+    await settle();
+    expect(ana.events.onClosed).toHaveBeenCalledWith("host-left");
+  });
+
+  it("tells a guest when its connection to the room drops", () => {
     let deliver: (message: RoomMessage) => void = () => {};
     const events = guestEvents();
     joinRoom(
@@ -230,11 +215,24 @@ describe("co-op room", () => {
         identify: () => {},
         close: () => {},
       },
+      "v1",
       events,
     );
     deliver({ type: "dropped" });
-    expect(events.onClosed).toHaveBeenCalledWith(
-      "Lost the connection to the game.",
-    );
+    expect(events.onClosed).toHaveBeenCalledWith("lost");
+  });
+});
+
+describe("room codes and map packing", () => {
+  it("makes short codes that survive being typed back", () => {
+    const code = newRoomCode();
+    expect(code).toMatch(/^[2-9A-HJKMNP-TV-Z]{6}$/);
+    expect(parseRoomCode(formatRoomCode(code).toLowerCase())).toBe(code);
+    expect(parseRoomCode("7KQ-4P")).toBeNull();
+    expect(parseRoomCode("7KQ-4PO")).toBeNull();
+  });
+
+  it("packs a game and unpacks the same game", () => {
+    expect(unpackGame(packGame(game))).toEqual(game);
   });
 });

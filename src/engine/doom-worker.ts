@@ -7,6 +7,7 @@ import {
   type GameStatus,
   type NetworkMode,
   type Resolution,
+  type Skill,
 } from "./runtime";
 
 type SoundLevel = { volume: number; muted: boolean };
@@ -32,6 +33,7 @@ type DoomWorkerRequest =
       sampleRate: number;
       audioPort: MessagePort | null;
       resolution: Resolution;
+      skill: Skill;
       network: WorkerNetwork | null;
     }
   | { type: "launch" }
@@ -151,6 +153,7 @@ async function start(request: Extract<DoomWorkerRequest, { type: "start" }>) {
     },
     sampleRate: request.audioPort ? request.sampleRate : null,
     resolution: request.resolution,
+    skill: request.skill,
     network: request.network
       ? {
           role: request.network.role,

@@ -6,13 +6,14 @@ import type {
 } from "./doom-worker";
 import { engineBase } from "./iwad";
 import { NetInbox } from "./net-inbox";
-import type { GameStatus, NetworkMode, Resolution } from "./runtime";
+import type { GameStatus, NetworkMode, Resolution, Skill } from "./runtime";
 
 type GameClientOptions = {
   iwad: Uint8Array;
   map: Uint8Array;
   sound: SoundLevel;
   resolution: Resolution;
+  skill: Skill;
   onFrame: (pixels: Uint8ClampedArray<ArrayBuffer>) => void;
   onStatus: (status: GameStatus) => void;
   onDropouts: (count: number) => void;
@@ -196,6 +197,7 @@ function startGameClient(options: GameClientOptions) {
         sampleRate: audio.sampleRate,
         audioPort,
         resolution: options.resolution,
+        skill: options.skill,
         network:
           network && inbox
             ? {

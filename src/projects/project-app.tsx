@@ -11,7 +11,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { wadFileName } from "../editor/build-dialog";
 import { App } from "../editor/editor-app";
-import { CoopLobby, type HostedGame } from "../engine/coop-panel";
+import { PlayTogether, type HostedGame } from "../engine/play-together";
 import { GameView } from "../engine/play-panel";
 import { checkMap } from "../map/checks";
 import type { FeaturedMap } from "../map/featured";
@@ -624,7 +624,7 @@ function ProjectApp() {
           onOpenCopy={openCopy}
         />
         {lobby ? (
-          <CoopLobby
+          <PlayTogether
             map={lobby.map}
             title={lobby.title}
             slot={lobby.slot}

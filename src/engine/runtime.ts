@@ -69,6 +69,11 @@ type DoomModuleOptions = {
 
 type NetworkMode = "coop" | "deathmatch";
 
+type Skill = "easy" | "medium" | "hard";
+
+// Doom's numbers for "Hey, not too rough", "Hurt me plenty" and "Ultra-Violence".
+const skillLevels: Record<Skill, number> = { easy: 2, medium: 3, hard: 4 };
+
 const fragLimit = 10;
 
 /** How a network game reaches the other players, each numbered by the room. */
@@ -422,6 +427,7 @@ async function startDoom({
   events,
   sampleRate = null,
   resolution = "classic",
+  skill = "medium",
   network,
 }: {
   createDoom: CreateDoom;
@@ -432,6 +438,7 @@ async function startDoom({
   events?: GameEvents;
   sampleRate?: number | null;
   resolution?: Resolution;
+  skill?: Skill;
   network?: NetworkOptions;
 }) {
   const doomModule = await createDoom({
@@ -468,7 +475,7 @@ async function startDoom({
       "-warp",
       "1",
       "-skill",
-      "3",
+      String(skillLevels[skill]),
       "-complevel",
       "vanilla",
       "-nogui",
@@ -522,5 +529,6 @@ export {
   type GameStatus,
   type NetworkMode,
   type NetworkOptions,
+  type Skill,
   type Resolution,
 };

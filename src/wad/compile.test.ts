@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  addPlayerStarts,
   addRoomOnSide,
   addSwitch,
   addThing,
@@ -812,6 +813,21 @@ function thingFlagsOf(map: GameMap, index: number) {
 }
 
 describe("thing settings", () => {
+  it("adds missing co-op starts beside player 1", () => {
+    const map = addPlayerStarts(testMap, 4);
+    const first = map.things.find((thing) => thing.kind === "player")!;
+    const added = map.things.filter((thing) =>
+      ["player-2", "player-3", "player-4"].includes(thing.kind),
+    );
+    expect(added).toHaveLength(3);
+    for (const start of added) {
+      expect(sectorAt(map, start)).toBe(sectorAt(map, first));
+      expect(start.angle).toBe(first.angle);
+    }
+    expect(validateMap(map)).toEqual([]);
+    expect(addPlayerStarts(map, 4)).toBe(map);
+  });
+
   it("writes difficulty and ambush flags", () => {
     const map = updateThing(
       updateThing(testMap, "imp-1", {
