@@ -56,6 +56,7 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  type ReactNode,
 } from "react";
 
 import { agent } from "../agent";
@@ -112,7 +113,6 @@ import {
 } from "../map/storage";
 import type { GameMap, Point, ThingCategory, ThingKind } from "../map/types";
 import { checkMap, fixIssue, issueText } from "../map/checks";
-import { AppHeader } from "./app-header";
 import { MapSwitcher, type EpisodeEntry, type MapHealth } from "./map-switcher";
 import { validateMap } from "../map/validate";
 import { loadIwad } from "../engine/iwad";
@@ -264,6 +264,7 @@ type AppProps = {
   onSave: (map: GameMap) => void;
   watchExternal: (listener: (map: GameMap) => void) => () => void;
   onOpenProjects: () => void;
+  navigation: ReactNode;
   onNewMap: () => void;
   onMapSettings: () => void;
   episode: {
@@ -291,6 +292,7 @@ function App({
   onSave,
   watchExternal,
   onOpenProjects,
+  navigation,
   onNewMap,
   onMapSettings,
   episode,
@@ -987,7 +989,8 @@ function App({
   return (
     <>
       <div className="app" inert={Boolean(playedMap)}>
-        <AppHeader onHome={onOpenProjects}>
+        <header className="topbar">
+          {navigation}
           <MapSwitcher
             episodeName={episode.name}
             maps={episode.maps.map((entry) =>
@@ -1173,7 +1176,7 @@ function App({
               Playtest
             </button>
           </div>
-        </AppHeader>
+        </header>
 
         <main className="workspace">
           <SegmentedControl

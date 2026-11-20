@@ -2,7 +2,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import type { Metadata } from "next";
-import Link from "next/link";
+
+import { SourceShell } from "@/projects/source-shell";
 
 export const metadata: Metadata = {
   title: "Source and licences",
@@ -69,94 +70,93 @@ function Section({
 export default function SourcePage() {
   const engine = engineInfo();
   return (
-    <main className="mx-auto grid w-full max-w-[720px] gap-8 px-4 py-12 text-fg">
-      <div className="grid gap-3">
-        <Link href="/" className={`${linkClass} justify-self-start text-sm`}>
-          Back to Wadsmith
-        </Link>
-        <h1 className="m-0 text-4xl font-bold">Source and licences</h1>
-        <p className="m-0 text-[15px] text-fg-soft">
-          Wadsmith plays maps in Woof, a Doom engine released under the GNU
-          General Public License, version 2. This page has the engine&apos;s
-          source, every change Wadsmith makes to it, and the licences of
-          everything built into it.
-        </p>
-      </div>
-      {engine ? (
-        <>
-          <Section title="Engine source">
-            <p className="m-0 text-[15px]">
-              <a
-                className={linkClass}
-                href={`${engineFiles}woof-source.tar.gz`}
-              >
-                Download the engine source
-              </a>
-              <span className="text-fg-muted">
-                {" "}
-                · Woof {engine.woof.version} at the commit Wadsmith builds, its
-                patch and the build scripts
-              </span>
-            </p>
-            <dl className="m-0 grid grid-cols-[max-content_1fr] gap-x-6 gap-y-1 font-mono text-xs">
-              <dt className="text-fg-muted">Upstream</dt>
-              <dd className="m-0">
+    <SourceShell>
+      <main className="grid max-w-[744px] gap-8 px-8 pt-10 pb-12 max-[760px]:px-4">
+        <div className="grid gap-3">
+          <h1 className="m-0 text-4xl font-bold">Source and licences</h1>
+          <p className="m-0 text-[15px] text-fg-soft">
+            Wadsmith plays maps in Woof, a Doom engine released under the GNU
+            General Public License, version 2. This page has the engine&apos;s
+            source, every change Wadsmith makes to it, and the licences of
+            everything built into it.
+          </p>
+        </div>
+        {engine ? (
+          <>
+            <Section title="Engine source">
+              <p className="m-0 text-[15px]">
                 <a
                   className={linkClass}
-                  href={`${engine.woof.repository}/tree/${engine.woof.commit}`}
+                  href={`${engineFiles}woof-source.tar.gz`}
                 >
-                  fabiangreffrath/woof
+                  Download the engine source
                 </a>
-              </dd>
-              <dt className="text-fg-muted">Commit</dt>
-              <dd className="m-0 break-all">{engine.woof.commit}</dd>
-              <dt className="text-fg-muted">Licence</dt>
-              <dd className="m-0">
-                <a
-                  className={linkClass}
-                  href={`${engineFiles}WOOF-LICENSE.txt`}
-                >
-                  GNU GPL, version 2
-                </a>
-              </dd>
-            </dl>
-          </Section>
-          <Section title="Game data">
-            <p className="m-0 text-[15px]">
-              Levels use textures, sounds and monsters from{" "}
-              <a className={linkClass} href="https://freedoom.github.io/">
-                Freedoom
-              </a>{" "}
-              {engine.freedoom.version}, under a{" "}
-              <a
-                className={linkClass}
-                href={`${engineFiles}FREEDOOM-LICENSE.txt`}
-              >
-                BSD licence
-              </a>
-              .
-            </p>
-          </Section>
-          <Section title="Built into the engine">
-            <ul className="m-0 grid list-none grid-cols-2 gap-x-6 gap-y-1 p-0 text-sm max-[520px]:grid-cols-1">
-              {engine.licenses.map((file) => (
-                <li key={file}>
+                <span className="text-fg-muted">
+                  {" "}
+                  · Woof {engine.woof.version} at the commit Wadsmith builds,
+                  its patch and the build scripts
+                </span>
+              </p>
+              <dl className="m-0 grid grid-cols-[max-content_1fr] gap-x-6 gap-y-1 font-mono text-xs">
+                <dt className="text-fg-muted">Upstream</dt>
+                <dd className="m-0">
                   <a
                     className={linkClass}
-                    href={`${engineFiles}licenses/${file}`}
+                    href={`${engine.woof.repository}/tree/${engine.woof.commit}`}
                   >
-                    {licenseNames[file] ?? file.replace(/\.txt$/, "")}
+                    fabiangreffrath/woof
                   </a>
-                </li>
-              ))}
-            </ul>
-          </Section>
-        </>
-      ) : (
-        <p className="notice m-0" role="status">
-          The engine hasn&apos;t been built here. Run pnpm setup:engine.
-        </p>
-      )}
-    </main>
+                </dd>
+                <dt className="text-fg-muted">Commit</dt>
+                <dd className="m-0 break-all">{engine.woof.commit}</dd>
+                <dt className="text-fg-muted">Licence</dt>
+                <dd className="m-0">
+                  <a
+                    className={linkClass}
+                    href={`${engineFiles}WOOF-LICENSE.txt`}
+                  >
+                    GNU GPL, version 2
+                  </a>
+                </dd>
+              </dl>
+            </Section>
+            <Section title="Game data">
+              <p className="m-0 text-[15px]">
+                Levels use textures, sounds and monsters from{" "}
+                <a className={linkClass} href="https://freedoom.github.io/">
+                  Freedoom
+                </a>{" "}
+                {engine.freedoom.version}, under a{" "}
+                <a
+                  className={linkClass}
+                  href={`${engineFiles}FREEDOOM-LICENSE.txt`}
+                >
+                  BSD licence
+                </a>
+                .
+              </p>
+            </Section>
+            <Section title="Built into the engine">
+              <ul className="m-0 grid list-none grid-cols-2 gap-x-6 gap-y-1 p-0 text-sm max-[520px]:grid-cols-1">
+                {engine.licenses.map((file) => (
+                  <li key={file}>
+                    <a
+                      className={linkClass}
+                      href={`${engineFiles}licenses/${file}`}
+                    >
+                      {licenseNames[file] ?? file.replace(/\.txt$/, "")}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </Section>
+          </>
+        ) : (
+          <p className="notice m-0" role="status">
+            The engine hasn&apos;t been built here. Run pnpm setup:engine.
+          </p>
+        )}
+      </main>
+    </SourceShell>
   );
 }
