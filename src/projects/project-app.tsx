@@ -54,13 +54,12 @@ import {
   prepareProjects,
   serializeProject,
   slotMoves,
-  type EpisodeStart,
   type Project,
   type ProjectMap,
   type ProjectStore,
 } from "./project-data";
+import { SidebarDrawer, type SidebarProps } from "./app-sidebar";
 import { FeaturedMaps } from "./featured-maps";
-import type { HomeView } from "./home-header";
 import { ProjectHome } from "./project-home";
 import { parseRoute, pathOf, type Route } from "./routes";
 import { createMemoryStore, openProjectStore } from "./project-store";
@@ -74,6 +73,7 @@ type Session = {
 
 type SessionDetails = { name: string; slot: string; par: number | null };
 type SaveStatus = "saving" | "saved" | "failed";
+type HomeView = "projects" | "featured";
 
 const channelName = "wadsmith";
 const saveFailure = "Your browser couldn't save that change.";
@@ -311,9 +311,10 @@ function ProjectApp() {
     }
   };
 
-  const applyRoute = useEffectEvent((route: Route) => {
+  const routeTo = (route: Route) => {
     if (!store) return;
     setEpisodePlay(null);
+    setMessage(null);
     void whenSaved(async () => {
       if (route.kind === "map") {
         const entry = (await store.listMaps(route.id)).find(
@@ -329,10 +330,13 @@ function ProjectApp() {
       setView(route.kind === "featured" ? "featured" : "projects");
       if (route.kind === "episode" || route.kind === "map") {
         selectProject(route.id);
+        void store.setSetting(lastProjectKey, route.id).catch(() => {});
         await refresh(store, route.id).catch(() => setMessage(saveFailure));
       }
     });
-  });
+  };
+
+  const applyRoute = useEffectEvent(routeTo);
 
   useEffect(() => {
     const onPop = () => applyRoute(parseRoute(location.pathname));
@@ -406,9 +410,25 @@ function ProjectApp() {
     }
   };
 
-  const navigate = (next: HomeView) => {
-    setView(next);
-    setMessage(null);
+  const sidebar: SidebarProps = {
+    projects,
+    counts,
+    current:
+      session && details
+        ? { kind: "map", id: session.projectId, slot: details.slot }
+        : view === "featured"
+          ? { kind: "featured" }
+          : { kind: "episode", id: project.id },
+    durable: store.durable,
+    onNavigate: routeTo,
+    onCreateProject: (name, start) => {
+      const created = createProject(name);
+      void attempt(async () => {
+        await store.addProject(created, episodeMaps(created.id, start));
+        await store.setSetting(lastProjectKey, created.id);
+        routeTo({ kind: "episode", id: created.id });
+      });
+    },
   };
 
   const openCopy = (featured: FeaturedMap) =>
@@ -611,6 +631,7 @@ function ProjectApp() {
               void closeSession(store);
             })
           }
+          navigation={<SidebarDrawer {...sidebar} />}
           onNewMap={() => openDialog("new")}
           onMapSettings={() => openDialog("settings")}
           episode={{
@@ -744,8 +765,8 @@ function ProjectApp() {
     return (
       <>
         <FeaturedMaps
+          sidebar={sidebar}
           message={message}
-          onNavigate={navigate}
           onPlaySolo={(entry) => setPlaying({ entry, hosted: null })}
           onPlayTogether={setLobby}
           onOpenCopy={openCopy}
@@ -770,28 +791,10 @@ function ProjectApp() {
 
   return (
     <ProjectHome
-      onNavigate={navigate}
-      projects={projects}
-      counts={counts}
+      sidebar={sidebar}
       project={project}
       maps={maps}
-      durable={store.durable}
       message={message}
-      onSelectProject={(id) => {
-        selectProject(id);
-        setMessage(null);
-        void store.setSetting(lastProjectKey, id).catch(() => {});
-        void refresh(store, id).catch(() => setMessage(saveFailure));
-      }}
-      onCreateProject={(name: string, start: EpisodeStart) => {
-        const created = createProject(name);
-        void attempt(async () => {
-          await store.addProject(created, episodeMaps(created.id, start));
-          selectProject(created.id);
-          await store.setSetting(lastProjectKey, created.id);
-          await refresh(store, created.id);
-        });
-      }}
       onRenameProject={(name) =>
         void attempt(async () => {
           await store.putProject({ ...project, name });

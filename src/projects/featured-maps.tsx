@@ -9,7 +9,7 @@ import {
   type FeaturedMap,
   type FeaturedMode,
 } from "../map/featured";
-import { HomeHeader, type HomeView } from "./home-header";
+import { AppShell, Crumb, type SidebarProps } from "./app-sidebar";
 import { formatPar } from "./project-data";
 
 const modes: Record<FeaturedMode, { label: string; dot: string }> = {
@@ -67,14 +67,14 @@ function Stat({ label, value }: { label: string; value: string }) {
 }
 
 function FeaturedMaps({
+  sidebar,
   message,
-  onNavigate,
   onPlaySolo,
   onPlayTogether,
   onOpenCopy,
 }: {
+  sidebar: SidebarProps;
   message: string | null;
-  onNavigate: (view: HomeView) => void;
   onPlaySolo: (entry: FeaturedMap) => void;
   onPlayTogether: (entry: FeaturedMap) => void;
   onOpenCopy: (entry: FeaturedMap) => void;
@@ -97,12 +97,11 @@ function FeaturedMaps({
     ),
   ];
   return (
-    <div className="grid h-dvh grid-rows-[48px_minmax(0,1fr)] bg-canvas text-fg">
-      <HomeHeader view="featured" onNavigate={onNavigate} />
-      <main className="flex min-h-0 flex-col gap-6 overflow-y-auto px-8 pt-8 pb-10 max-[760px]:px-4">
+    <AppShell sidebar={sidebar} crumbs={<Crumb>Featured maps</Crumb>}>
+      <main className="flex flex-col gap-6 px-8 pt-10 pb-10 max-[760px]:px-4">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="min-w-0">
-            <h2 className="m-0 text-4xl font-bold">Featured maps</h2>
+            <h1 className="m-0 text-4xl font-bold">Featured maps</h1>
             <p className="m-0 mt-1 text-[15px] text-fg-muted">
               {countWords[featuredMaps.length] ?? featuredMaps.length} maps made
               in Wadsmith. Play one, bring friends, or open a copy to see how
@@ -144,7 +143,7 @@ function FeaturedMaps({
             />
             <div className="flex flex-col gap-4 p-8 max-[760px]:p-5">
               <ModeLine entry={selected} />
-              <h3 className="m-0 text-4xl font-bold">{selected.title}</h3>
+              <h2 className="m-0 text-4xl font-bold">{selected.title}</h2>
               <p className="m-0 text-[15px] text-fg-soft">{selected.blurb}</p>
               <ul className="m-0 flex list-none flex-wrap gap-2 p-0">
                 {selected.tags.map((tag) => (
@@ -238,7 +237,7 @@ function FeaturedMaps({
           ))}
         </ul>
       </main>
-    </div>
+    </AppShell>
   );
 }
 
