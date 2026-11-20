@@ -1,21 +1,11 @@
 import {
   Dialog,
   DialogBackdrop,
-  DialogClose,
   DialogContent,
   DialogTitle,
 } from "@ui-sdk/react/dialog";
-import {
-  Check,
-  CircleCheck,
-  Copy,
-  Lock,
-  Plus,
-  TriangleAlert,
-  Users,
-  X,
-} from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Check, Copy, Lock, Play, Plus, TriangleAlert } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { deathmatchStarts } from "../map/catalog";
 import type { GameMap } from "../map/types";
@@ -37,11 +27,18 @@ import {
   saveName,
   skillNames,
 } from "./coop";
-import { Choice, PlayerBadge, Progress } from "./coop-ui";
+import {
+  CardHeading,
+  CardPreview,
+  Choice,
+  FieldLabel,
+  PlayerBadge,
+  Progress,
+  SectionLabel,
+} from "./coop-ui";
 import { peerLinks, type LinkState, type PeerLinks } from "./peer-link";
 import type { CoopSession } from "./play-panel";
 import {
-  formatRoomCode,
   hostPeer,
   hostRoom,
   newRoomCode,
@@ -52,10 +49,9 @@ import {
 import type { NetworkMode, Skill } from "./runtime";
 
 const dialogClass =
-  "fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-32px)] w-[600px] max-w-[calc(100vw-32px)] -translate-1/2 flex-col overflow-hidden rounded-[4px] border border-border-strong bg-surface outline-none";
+  "fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-32px)] w-[480px] max-w-[calc(100vw-32px)] -translate-1/2 flex-col overflow-hidden rounded-[6px] border border-border-strong bg-surface outline-none";
 const titleClass =
-  "block font-sans text-xl font-bold tracking-normal text-fg normal-case";
-const labelClass = "mb-2 block text-[13px] text-fg-soft";
+  "m-0 block font-sans text-2xl font-bold tracking-normal text-fg normal-case";
 
 type HostedGame = { session: CoopSession; close: () => void };
 
@@ -72,58 +68,38 @@ function listPlayers(players: number[]) {
     : `${players[0]}`;
 }
 
-function Checklist({ map, settings }: { map: GameMap; settings: Settings }) {
-  const starts =
-    settings.mode === "coop" ? coopPlayers(map) : deathmatchSpots(map);
-  const rows = [
-    { done: true, title: "Map check passed", detail: "No errors" },
-    settings.mode === "coop"
-      ? {
-          done: starts >= settings.players,
-          title: `${starts} player ${starts === 1 ? "start" : "starts"} placed`,
-          detail: "One for each player",
-        }
-      : {
-          done: starts >= deathmatchStarts,
-          title: `${starts} deathmatch ${starts === 1 ? "start" : "starts"} placed`,
-          detail: `${deathmatchStarts} or more for deathmatch`,
-        },
-  ];
+function CheckRow({
+  icon,
+  title,
+  detail,
+  action,
+}: {
+  icon: "done" | "todo" | "lock";
+  title: string;
+  detail?: string;
+  action?: ReactNode;
+}) {
+  const Icon = { done: Check, todo: TriangleAlert, lock: Lock }[icon];
+  const color = {
+    done: "text-success",
+    todo: "text-warning",
+    lock: "text-fg-muted",
+  }[icon];
   return (
-    <ul className="m-0 grid list-none gap-3 p-0">
-      {rows.map((row) => (
-        <li key={row.title} className="flex gap-2.5">
-          {row.done ? (
-            <CircleCheck
-              size={16}
-              aria-hidden="true"
-              className="text-success"
-            />
-          ) : (
-            <TriangleAlert
-              size={16}
-              aria-hidden="true"
-              className="text-warning"
-            />
-          )}
-          <span className="grid gap-0.5">
-            <span className="text-sm">{row.title}</span>
-            <span className="font-mono text-[11px] text-fg-muted">
-              {row.detail}
-            </span>
-          </span>
-        </li>
-      ))}
-      <li className="flex gap-2.5">
-        <Lock size={16} aria-hidden="true" className="text-fg-muted" />
-        <span className="grid gap-0.5">
-          <span className="text-sm">Editing pauses while the room is open</span>
-          <span className="font-mono text-[11px] text-fg-muted">
-            Everyone plays the same version of the map
-          </span>
+    <li className="flex min-h-[44px] items-center gap-3 border-b border-border py-2">
+      <span className="grid w-[22px] shrink-0 place-items-center">
+        <Icon size={16} aria-hidden="true" className={color} />
+      </span>
+      <span className="grid min-w-0 flex-1 gap-0.5">
+        <span className={`text-sm ${icon === "lock" ? "text-fg-soft" : ""}`}>
+          {title}
         </span>
-      </li>
-    </ul>
+        {detail ? (
+          <span className="text-xs text-fg-muted">{detail}</span>
+        ) : null}
+      </span>
+      {action}
+    </li>
   );
 }
 
@@ -144,10 +120,12 @@ function Setup({
     (_, index) => coop + index + 1,
   );
   const spots = deathmatchSpots(map);
+  const short =
+    settings.mode === "coop" ? missing.length > 0 : spots < deathmatchStarts;
   return (
-    <div className="grid gap-5 overflow-y-auto p-5">
-      <label className="field">
-        <span className="label">Your name</span>
+    <>
+      <label className="grid">
+        <FieldLabel>Your name</FieldLabel>
         <input
           className="text-input"
           maxLength={maxNameLength}
@@ -159,7 +137,7 @@ function Setup({
         />
       </label>
       <div>
-        <span className={labelClass}>Mode</span>
+        <FieldLabel>Mode</FieldLabel>
         <Choice
           label="Mode"
           value={settings.mode}
@@ -169,13 +147,13 @@ function Setup({
           }))}
           onChange={(mode) => onChange({ ...settings, mode })}
         />
-        <p className="m-0 mt-2 text-[13px] text-fg-muted">
+        <p className="m-0 mt-1.5 text-xs text-fg-muted">
           {modeHelp[settings.mode]}
         </p>
       </div>
-      <div className="grid grid-cols-2 gap-5 max-[520px]:grid-cols-1">
+      <div className="grid grid-cols-2 gap-4 max-[520px]:grid-cols-1">
         <div>
-          <span className={labelClass}>Players</span>
+          <FieldLabel>Players</FieldLabel>
           <Choice
             label="Players"
             value={settings.players}
@@ -187,7 +165,7 @@ function Setup({
           />
         </div>
         <div>
-          <span className={labelClass}>Skill</span>
+          <FieldLabel>Skill</FieldLabel>
           <Choice
             label="Skill"
             value={settings.skill}
@@ -199,60 +177,56 @@ function Setup({
           />
         </div>
       </div>
-      {settings.mode === "coop" && missing.length > 0 ? (
-        <section
-          aria-label="Missing starts"
-          className="grid gap-3 rounded-[3px] border border-border-strong p-4"
+      <section aria-label="Before the room opens">
+        <SectionLabel
+          aside={short ? <span className="text-warning">1 to fix</span> : null}
         >
-          <h3 className="m-0 flex items-center gap-2 text-base font-semibold">
-            <TriangleAlert
-              size={16}
-              aria-hidden="true"
-              className="text-warning"
+          Before the room opens
+        </SectionLabel>
+        <ul className="m-0 list-none p-0">
+          <CheckRow icon="done" title="Map check passed" />
+          {settings.mode === "coop" ? (
+            missing.length > 0 ? (
+              <CheckRow
+                icon="todo"
+                title={`${missing.length === 1 ? "Player" : "Players"} ${listPlayers(missing)} ${missing.length === 1 ? "has no start" : "have no starts"}`}
+                detail={
+                  onAddStarts
+                    ? "Co-op needs a start for each player."
+                    : `Co-op needs a start for each player. Choose ${coop > 1 ? `${coop} players` : "a map with more starts"}.`
+                }
+                action={
+                  onAddStarts ? (
+                    <button
+                      type="button"
+                      className="button shrink-0"
+                      onClick={() => onAddStarts(settings.players)}
+                    >
+                      <Plus size={14} aria-hidden="true" />
+                      {missing.length === 1 ? "Add start" : "Add starts"}
+                    </button>
+                  ) : null
+                }
+              />
+            ) : (
+              <CheckRow
+                icon="done"
+                title={`${coop} player ${coop === 1 ? "start" : "starts"} placed`}
+              />
+            )
+          ) : spots < deathmatchStarts ? (
+            <CheckRow
+              icon="todo"
+              title={`Deathmatch needs ${deathmatchStarts} deathmatch starts`}
+              detail={`This map has ${spots}. Place them in Things mode, under Starts.`}
             />
-            Starts for {missing.length === 1 ? "player" : "players"}{" "}
-            {listPlayers(missing)} {missing.length === 1 ? "is" : "are"} missing
-          </h3>
-          <p className="m-0 text-sm text-fg-soft">
-            Co-op needs a start for each player.{" "}
-            {onAddStarts ? "Add them next to player 1's start, or" : "Choose"}{" "}
-            {coop > 1 ? `${coop} players` : "a map with more starts"}.
-          </p>
-          {onAddStarts ? (
-            <button
-              type="button"
-              className="button justify-self-start"
-              onClick={() => onAddStarts(settings.players)}
-            >
-              <Plus size={14} aria-hidden="true" />
-              Add starts
-            </button>
-          ) : null}
-        </section>
-      ) : null}
-      {settings.mode === "deathmatch" && spots < deathmatchStarts ? (
-        <section
-          aria-label="Missing starts"
-          className="grid gap-2 rounded-[3px] border border-border-strong p-4"
-        >
-          <h3 className="m-0 flex items-center gap-2 text-base font-semibold">
-            <TriangleAlert
-              size={16}
-              aria-hidden="true"
-              className="text-warning"
-            />
-            Deathmatch needs {deathmatchStarts} deathmatch starts
-          </h3>
-          <p className="m-0 text-sm text-fg-soft">
-            This map has {spots}. Place them in Things mode, under Starts.
-          </p>
-        </section>
-      ) : null}
-      <div>
-        <span className={labelClass}>Before the room opens</span>
-        <Checklist map={map} settings={settings} />
-      </div>
-    </div>
+          ) : (
+            <CheckRow icon="done" title={`${spots} deathmatch starts placed`} />
+          )}
+          <CheckRow icon="lock" title="Editing pauses while the room is open" />
+        </ul>
+      </section>
+    </>
   );
 }
 
@@ -288,9 +262,8 @@ function Lobby({
     (_, index) => players.length + index + 1,
   );
   return (
-    <div className="grid gap-4 overflow-y-auto p-5">
-      <div>
-        <span className={labelClass}>Invite link</span>
+    <>
+      <div className="grid gap-1.5">
         <div className="flex gap-2">
           <input
             className="text-input min-w-0 flex-1 font-mono text-xs"
@@ -316,10 +289,10 @@ function Lobby({
             {copied ? "Copied" : "Copy link"}
           </button>
         </div>
-        <p className="m-0 mt-2 text-[13px] text-fg-muted">
+        <p className="m-0 text-xs text-fg-muted">
           {roomsUrl
-            ? "Stops working once the game starts."
-            : "Opens in other tabs of this browser. Stops working once the game starts."}
+            ? "Anyone with the link can join until you start."
+            : "Opens in other tabs of this browser until you start."}
         </p>
       </div>
       {lost ? (
@@ -328,28 +301,29 @@ function Lobby({
         </p>
       ) : null}
       <section aria-label="Players">
-        <div className="flex justify-between border-b border-border pb-2 font-mono text-[11px] tracking-wide text-fg-muted uppercase">
-          <span>Players</span>
-          <span>
-            {players.length} of {max}
-          </span>
-        </div>
+        <SectionLabel
+          aside={
+            <span>
+              {players.length} of {max}
+            </span>
+          }
+        >
+          Players
+        </SectionLabel>
         <ul className="m-0 list-none p-0">
           {players.map((player) => (
             <li
               key={player.peer}
-              className="flex items-center gap-3 border-b border-border py-2.5"
+              className="flex h-[44px] items-center gap-3 border-b border-border"
             >
               <PlayerBadge peer={player.peer} />
-              <span className="grid min-w-0 flex-1 gap-0.5">
-                <span className="truncate text-[15px] font-semibold">
-                  {player.name}
-                </span>
-                <span className="font-mono text-[11px] text-fg-muted uppercase">
-                  {player.peer === hostPeer
-                    ? "You · Host"
-                    : `Player ${player.peer}`}
-                </span>
+              <span className="min-w-0 flex-1 truncate text-sm font-semibold">
+                {player.name}
+                {player.peer === hostPeer ? (
+                  <span className="ml-2 font-mono text-[11px] font-normal tracking-[0.06em] text-fg-muted">
+                    YOU · HOST
+                  </span>
+                ) : null}
               </span>
               {player.peer !== hostPeer ? (
                 <span className="font-mono text-[11px] text-fg-muted">
@@ -362,7 +336,7 @@ function Lobby({
                 </span>
               ) : null}
               {player.ready ? (
-                <span className="flex items-center gap-1.5 text-[13px]">
+                <span className="flex items-center gap-1.5 text-[13px] text-fg-soft">
                   <span
                     aria-hidden="true"
                     className="size-1.5 rounded-full bg-success"
@@ -370,7 +344,7 @@ function Lobby({
                   Ready
                 </span>
               ) : (
-                <span className="w-32">
+                <span className="w-28">
                   <Progress label="Getting map" value={player.progress} />
                 </span>
               )}
@@ -389,20 +363,15 @@ function Lobby({
           {open.map((peer) => (
             <li
               key={peer}
-              className="flex items-center gap-3 border-b border-border py-2.5 text-fg-muted"
+              className="flex h-[44px] items-center gap-3 border-b border-border text-sm text-fg-disabled"
             >
               <PlayerBadge peer={peer} open />
-              <span className="grid gap-0.5">
-                <span className="text-[15px]">Open slot</span>
-                <span className="font-mono text-[11px] uppercase">
-                  Waiting for someone to join
-                </span>
-              </span>
+              Open slot
             </li>
           ))}
         </ul>
       </section>
-    </div>
+    </>
   );
 }
 
@@ -568,55 +537,43 @@ function PlayTogether({
     >
       <DialogBackdrop className="fixed inset-0 z-40 bg-scrim" />
       <DialogContent className={dialogClass}>
-        <header className="flex shrink-0 items-start justify-between gap-4 border-b border-border px-5 py-4">
-          <div className="grid gap-1">
-            <DialogTitle className={titleClass}>
-              {code ? "Waiting for players" : "Play together"}
-            </DialogTitle>
-            <span className="font-mono text-[11px] tracking-wide text-fg-muted uppercase">
-              {code
-                ? `${modeNames[settings.mode]} · ${skillNames[settings.skill]} · ${title}`
-                : `${title} · ${slot}`}
-            </span>
-          </div>
+        <CardPreview map={map} code={code ?? undefined} />
+        <div className="grid min-h-0 gap-[18px] overflow-y-auto px-6 pt-5">
+          <CardHeading
+            eyebrow={
+              code
+                ? `${modeNames[settings.mode]} · ${skillNames[settings.skill]} · ${slot} ${title}`
+                : `${slot} · ${title}`
+            }
+            title={
+              <DialogTitle className={titleClass}>
+                {code ? "Waiting for players" : "Play together"}
+              </DialogTitle>
+            }
+          />
           {code ? (
-            <span
-              aria-label="Room code"
-              className="rounded-[3px] border border-border-strong px-2 py-1 font-mono text-sm tracking-widest"
-            >
-              {formatRoomCode(code)}
-            </span>
+            <Lobby
+              code={code}
+              players={players}
+              max={settings.players}
+              links={links}
+              lost={lost}
+              onRemove={(peer) => roomRef.current?.kick(peer)}
+            />
           ) : (
-            <DialogClose
-              aria-label="Close"
-              className="border-0 bg-transparent p-1 text-fg-muted hover:text-fg"
-            >
-              <X size={16} aria-hidden="true" />
-            </DialogClose>
+            <Setup
+              map={map}
+              settings={settings}
+              onChange={setSettings}
+              onAddStarts={onAddStarts}
+            />
           )}
-        </header>
-        {code ? (
-          <Lobby
-            code={code}
-            players={players}
-            max={settings.players}
-            links={links}
-            lost={lost}
-            onRemove={(peer) => roomRef.current?.kick(peer)}
-          />
-        ) : (
-          <Setup
-            map={map}
-            settings={settings}
-            onChange={setSettings}
-            onAddStarts={onAddStarts}
-          />
-        )}
-        <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-border px-5 py-3">
+        </div>
+        <footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 px-6 pt-[18px] pb-5">
           <span className="text-[13px] text-fg-muted" role="status">
             {code
               ? statusOf(players, settings.players)
-              : "Anyone with the link can join until you start."}
+              : "You get a link to share next."}
           </span>
           <div className="flex gap-2">
             <button type="button" className="button" onClick={onClose}>
@@ -629,6 +586,7 @@ function PlayTogether({
                 disabled={!everyoneReady || lost}
                 onClick={start}
               >
+                <Play size={14} aria-hidden="true" />
                 Start game
               </button>
             ) : (
@@ -638,7 +596,6 @@ function PlayTogether({
                 disabled={!ready}
                 onClick={createRoom}
               >
-                <Users size={14} aria-hidden="true" />
                 Create room
               </button>
             )}
