@@ -6,7 +6,13 @@ import { AppShell, Crumb } from "./app-sidebar";
 import type { Project } from "./project-data";
 import { openProjectStore } from "./project-store";
 
-function SourceShell({ children }: { children: ReactNode }) {
+function StandaloneShell({
+  crumb,
+  children,
+}: {
+  crumb: string;
+  children: ReactNode;
+}) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [durable, setDurable] = useState(true);
@@ -40,11 +46,11 @@ function SourceShell({ children }: { children: ReactNode }) {
   return (
     <AppShell
       sidebar={{ projects, counts, current: null, durable }}
-      crumbs={<Crumb>Source and licences</Crumb>}
+      crumbs={<Crumb>{crumb}</Crumb>}
     >
       {children}
     </AppShell>
   );
 }
 
-export { SourceShell };
+export { StandaloneShell };

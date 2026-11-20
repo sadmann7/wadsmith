@@ -1,16 +1,6 @@
-import {
-  Download,
-  LogIn,
-  LogOut,
-  RefreshCw,
-  Timer,
-  Users,
-  WifiOff,
-} from "lucide-react";
+import { LogOut, RefreshCw, Timer, Users, WifiOff } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
-import { AppHeader } from "../editor/app-header";
-import { MapPlan } from "../editor/map-plan";
 import {
   appVersion,
   loadName,
@@ -23,7 +13,16 @@ import {
   skillNames,
   stallRelay,
 } from "./coop";
-import { PlayerBadge, Progress, StatusCard } from "./coop-ui";
+import { StandaloneShell } from "../projects/standalone-shell";
+import {
+  CardHeading,
+  CoopCard,
+  FieldLabel,
+  PlayerBadge,
+  Progress,
+  SectionLabel,
+  StatusCard,
+} from "./coop-ui";
 import { peerLinks, type PeerLinks } from "./peer-link";
 import { GameView, type CoopSession } from "./play-panel";
 import {
@@ -191,50 +190,19 @@ function Invite({
     if (name.trim()) onJoin(name.trim());
   };
   return (
-    <section
-      aria-label={`Join ${info.title}`}
-      className="overflow-hidden rounded-[4px] border border-border-strong bg-surface"
-    >
-      <div className="relative bg-canvas">
-        <span
-          aria-label="Room code"
-          className="absolute top-3 left-3 rounded-[3px] border border-border-strong bg-surface px-2 py-0.5 font-mono text-xs tracking-widest"
-        >
-          {formatRoomCode(code)}
-        </span>
-        <MapPlan
-          map={info.map}
-          label={`Plan of ${info.title}`}
-          className="aspect-[16/8] w-full p-6"
-        />
-      </div>
-      <form className="grid gap-4 p-6" onSubmit={submit}>
-        <div className="grid gap-1.5">
-          <span className="font-mono text-[11px] tracking-widest text-fg-muted uppercase">
-            {info.host} invited you to play
-          </span>
-          <h1 className="m-0 text-3xl font-bold">{info.title}</h1>
-          <span className="text-sm text-fg-muted">
-            {modeNames[info.mode]} · {skillNames[info.skill]} ·{" "}
-            {info.players.length} of {info.maxPlayers} players in the room
-          </span>
-        </div>
-        <ul
-          aria-label="Players"
-          className="m-0 flex list-none flex-wrap gap-2 p-0"
-        >
-          {info.players.map((player) => (
-            <li
-              key={player.peer}
-              className="flex items-center gap-2 rounded-full bg-surface-raised py-0.5 pr-3 pl-0.5 text-sm"
-            >
-              <PlayerBadge peer={player.peer} />
-              {player.name}
-            </li>
-          ))}
-        </ul>
-        <label className="field">
-          <span className="label">Your name</span>
+    <CoopCard label={`Join ${info.title}`} map={info.map}>
+      <CardHeading
+        eyebrow={`Room ${formatRoomCode(code)} · ${modeNames[info.mode]} · ${skillNames[info.skill]}`}
+        title={
+          <h1 className="m-0 text-2xl font-bold">
+            Join {info.host}&apos;s game
+          </h1>
+        }
+        detail={`${info.title} · ${info.players.length} of ${info.maxPlayers} players here`}
+      />
+      <form className="grid gap-3.5" onSubmit={submit}>
+        <label className="grid">
+          <FieldLabel>Your name</FieldLabel>
           <input
             className="text-input"
             maxLength={maxNameLength}
@@ -245,18 +213,13 @@ function Invite({
         </label>
         <button
           type="submit"
-          className="button primary justify-center"
+          className="button primary h-9 justify-center"
           disabled={!name.trim() || joining}
         >
-          <LogIn size={14} aria-hidden="true" />
           {joining ? "Joining…" : "Join game"}
         </button>
-        <p className="m-0 text-[13px] text-fg-muted">
-          No account needed. The game runs in your browser, and {info.host}
-          &apos;s map loads when you join.
-        </p>
       </form>
-    </section>
+    </CoopCard>
   );
 }
 
@@ -266,44 +229,74 @@ function Waiting({
   peer,
   onLeave,
 }: {
-  info: RoomInfo | null;
+  info: RoomInfo;
   players: RoomPlayer[];
   peer: number;
   onLeave: () => void;
 }) {
   return (
-    <StatusCard
-      icon={Users}
-      tone="info"
-      title="You're in"
-      actions={
-        <button type="button" className="button" onClick={onLeave}>
-          Leave
-        </button>
+    <CoopCard
+      label="You're in"
+      map={info.map}
+      footer={
+        <>
+          <span className="text-[13px] text-fg-muted" role="status">
+            The game starts for everyone at once.
+          </span>
+          <button type="button" className="button" onClick={onLeave}>
+            Leave room
+          </button>
+        </>
       }
     >
-      <p className="m-0">
-        Waiting for {info?.host ?? "the host"} to start the game.
-      </p>
-      <ul aria-label="Players" className="m-0 grid list-none gap-2 p-0">
-        {players.map((player) => (
-          <li key={player.peer} className="flex items-center gap-3">
-            <PlayerBadge peer={player.peer} />
-            <span className="flex-1 text-fg">
-              {player.name}
-              {player.peer === peer ? " (you)" : ""}
+      <CardHeading
+        eyebrow={`${modeNames[info.mode]} · ${skillNames[info.skill]} · ${info.title}`}
+        title={<h1 className="m-0 text-2xl font-bold">You&apos;re in</h1>}
+        detail={`Waiting for ${info.host} to start the game.`}
+      />
+      <section aria-label="Players">
+        <SectionLabel
+          aside={
+            <span>
+              {players.length} of {info.maxPlayers}
             </span>
-            <span className="font-mono text-[11px] text-fg-muted uppercase">
-              {player.peer === hostPeer
-                ? "Host"
-                : player.ready
-                  ? "Ready"
-                  : `${Math.round(player.progress * 100)}%`}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </StatusCard>
+          }
+        >
+          Players
+        </SectionLabel>
+        <ul className="m-0 list-none p-0">
+          {players.map((player) => (
+            <li
+              key={player.peer}
+              className="flex h-11 items-center gap-3 border-b border-border"
+            >
+              <PlayerBadge peer={player.peer} />
+              <span className="min-w-0 flex-1 truncate text-sm font-semibold">
+                {player.name}
+                {player.peer === peer || player.peer === hostPeer ? (
+                  <span className="ml-2 font-mono text-[11px] font-normal tracking-[0.06em] text-fg-muted">
+                    {player.peer === peer ? "YOU" : "HOST"}
+                  </span>
+                ) : null}
+              </span>
+              {player.ready ? (
+                <span className="flex items-center gap-1.5 text-[13px] text-fg-soft">
+                  <span
+                    aria-hidden="true"
+                    className="size-1.5 rounded-full bg-success"
+                  />
+                  Ready
+                </span>
+              ) : (
+                <span className="font-mono text-[11px] text-fg-muted">
+                  {Math.round(player.progress * 100)}%
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      </section>
+    </CoopCard>
   );
 }
 
@@ -448,10 +441,9 @@ function CoopJoin({ code }: { code: string }) {
   }
 
   return (
-    <div className="grid min-h-dvh grid-rows-[48px_minmax(0,1fr)] bg-canvas text-fg">
-      <AppHeader onHome={backHome} />
-      <main className="grid place-items-center p-4">
-        <div className="w-[min(460px,100%)]">
+    <StandaloneShell crumb="Join a game">
+      <main className="grid min-h-full place-items-center p-4">
+        <div className="w-[min(420px,100%)]">
           {state.step === "finding" ? (
             <p className="m-0 text-center text-sm text-fg-muted" role="status">
               {!state.slow
@@ -473,25 +465,30 @@ function CoopJoin({ code }: { code: string }) {
               }}
             />
           ) : null}
-          {state.step === "getting" ? (
-            <StatusCard
-              icon={Download}
-              tone="info"
-              title={`Getting ${info?.title ?? "the map"}`}
-              actions={
-                <button type="button" className="button" onClick={leave}>
-                  Cancel
-                </button>
+          {state.step === "getting" && info ? (
+            <CoopCard
+              label={`Getting ${info.title}`}
+              map={info.map}
+              footer={
+                <>
+                  <span />
+                  <button type="button" className="button" onClick={leave}>
+                    Cancel
+                  </button>
+                </>
               }
             >
-              <p className="m-0">
-                Building the level on your computer so it matches{" "}
-                {info?.host ?? "the host"}&apos;s.
-              </p>
+              <CardHeading
+                eyebrow={`${modeNames[info.mode]} · ${skillNames[info.skill]} · ${info.title}`}
+                title={
+                  <h1 className="m-0 text-2xl font-bold">Getting the map</h1>
+                }
+                detail={`Building the level on your computer so it matches ${info.host}'s.`}
+              />
               <Progress label="Map file" value={state.progress} />
-            </StatusCard>
+            </CoopCard>
           ) : null}
-          {state.step === "waiting" ? (
+          {state.step === "waiting" && info ? (
             <Waiting
               info={info}
               players={players}
@@ -504,7 +501,7 @@ function CoopJoin({ code }: { code: string }) {
           ) : null}
         </div>
       </main>
-    </div>
+    </StandaloneShell>
   );
 }
 

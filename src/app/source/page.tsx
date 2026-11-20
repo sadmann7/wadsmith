@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import type { Metadata } from "next";
 
-import { SourceShell } from "@/projects/source-shell";
+import { StandaloneShell } from "@/projects/standalone-shell";
 
 export const metadata: Metadata = {
   title: "Source and licences",
@@ -70,7 +70,7 @@ function Section({
 export default function SourcePage() {
   const engine = engineInfo();
   return (
-    <SourceShell>
+    <StandaloneShell crumb="Source and licences">
       <main className="grid max-w-[744px] gap-8 px-8 pt-10 pb-12 max-[760px]:px-4">
         <div className="grid gap-3">
           <h1 className="m-0 text-4xl font-bold">Source and licences</h1>
@@ -157,6 +157,6 @@ export default function SourcePage() {
           </p>
         )}
       </main>
-    </SourceShell>
+    </StandaloneShell>
   );
 }
