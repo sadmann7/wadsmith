@@ -55,15 +55,17 @@ function ModeLine({ entry }: { entry: FeaturedMap }) {
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="grid gap-1">
-      <dt className="font-mono text-[10px] tracking-wide text-fg-muted uppercase">
-        {label}
-      </dt>
-      <dd className="m-0 text-lg font-semibold">{value}</dd>
-    </div>
-  );
+function detailsOf(entry: FeaturedMap) {
+  return entry.mode === "deathmatch"
+    ? `First to ${fragLimit} frags · ${entry.skill}`
+    : `Par ${formatPar(entry.par)} · ${enemiesOf(entry)} enemies · ${entry.skill}`;
+}
+
+function cardLine(entry: FeaturedMap) {
+  const mode = entry.mode === "single" ? "Solo" : modes[entry.mode].label;
+  return entry.mode === "deathmatch"
+    ? `${mode} · ${fragLimit} frags`
+    : `${mode} · Par ${formatPar(entry.par)}`;
 }
 
 function FeaturedMaps({
@@ -134,57 +136,29 @@ function FeaturedMaps({
         {selected ? (
           <section
             aria-label={selected.title}
-            className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] rounded-[4px] border border-border bg-surface max-[900px]:grid-cols-1"
+            className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] overflow-hidden rounded-[6px] border border-border bg-surface max-[900px]:grid-cols-1"
           >
             <MapPlan
               map={selected.map}
               label={`Plan of ${selected.title}`}
-              className="aspect-[16/11] w-full border-r border-border bg-canvas p-6 max-[900px]:border-r-0 max-[900px]:border-b"
+              className="aspect-[16/10] w-full border-r border-border bg-map-bg p-10 max-[900px]:border-r-0 max-[900px]:border-b"
             />
-            <div className="flex flex-col gap-4 p-8 max-[760px]:p-5">
+            <div className="flex flex-col gap-3 p-8 max-[760px]:p-5">
               <ModeLine entry={selected} />
               <h2 className="m-0 text-4xl font-bold">{selected.title}</h2>
               <p className="m-0 text-[15px] text-fg-soft">{selected.blurb}</p>
-              <ul className="m-0 flex list-none flex-wrap gap-2 p-0">
-                {selected.tags.map((tag) => (
-                  <li
-                    key={tag}
-                    className="rounded-full bg-surface-raised px-2.5 py-1 text-xs text-fg-soft"
-                  >
-                    {tag}
-                  </li>
-                ))}
-              </ul>
-              <dl className="m-0 mt-auto flex flex-wrap gap-x-10 gap-y-3 pt-4">
-                {selected.mode === "deathmatch" ? (
-                  <>
-                    <Stat
-                      label="Players"
-                      value={playersLabel(selected.players).split(" ")[0]}
-                    />
-                    <Stat label="Skill" value={selected.skill} />
-                    <Stat label="Goal" value={`${fragLimit} frags`} />
-                  </>
-                ) : (
-                  <>
-                    <Stat label="Par" value={formatPar(selected.par)} />
-                    <Stat label="Enemies" value={String(enemiesOf(selected))} />
-                    <Stat label="Skill" value={selected.skill} />
-                  </>
-                )}
-                <Stat label="Slot" value={selected.slot} />
-              </dl>
+              <p className="m-0 mt-auto pt-6 font-mono text-xs text-fg-muted">
+                {detailsOf(selected)}
+              </p>
               <div className="flex flex-wrap gap-2">
-                {selected.players.max > 1 ? (
-                  <button
-                    type="button"
-                    className="button primary"
-                    onClick={() => onPlayTogether(selected)}
-                  >
-                    <Users size={14} aria-hidden="true" />
-                    Play together
-                  </button>
-                ) : null}
+                <button
+                  type="button"
+                  className="button"
+                  onClick={() => onOpenCopy(selected)}
+                >
+                  <Copy size={14} aria-hidden="true" />
+                  Open a copy
+                </button>
                 {selected.mode === "deathmatch" ? null : (
                   <button
                     type="button"
@@ -195,41 +169,42 @@ function FeaturedMaps({
                     {selected.players.max > 1 ? "Play solo" : "Play"}
                   </button>
                 )}
-                <button
-                  type="button"
-                  className="button"
-                  onClick={() => onOpenCopy(selected)}
-                >
-                  <Copy size={14} aria-hidden="true" />
-                  Open a copy
-                </button>
+                {selected.players.max > 1 ? (
+                  <button
+                    type="button"
+                    className="button primary"
+                    onClick={() => onPlayTogether(selected)}
+                  >
+                    <Users size={14} aria-hidden="true" />
+                    Play together
+                  </button>
+                ) : null}
               </div>
             </div>
           </section>
         ) : null}
         <ul
           aria-label="Maps"
-          className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4 p-0"
+          className="m-0 grid list-none grid-cols-6 max-[1200px]:grid-cols-3 max-[600px]:grid-cols-2 gap-4 p-0"
         >
           {shown.map((entry) => (
             <li key={entry.id}>
               <button
                 type="button"
                 aria-pressed={entry.id === selected?.id}
-                className="grid w-full gap-0 overflow-hidden rounded-[4px] border border-border bg-surface p-0 text-left text-fg hover:border-border-strong aria-pressed:border-accent"
+                className="grid h-full w-full grid-rows-[auto_1fr] gap-0 overflow-hidden rounded-[6px] border border-border bg-surface p-0 text-left text-fg hover:border-border-strong aria-pressed:border-accent"
                 onClick={() => setSelectedId(entry.id)}
               >
                 <MapPlan
                   map={entry.map}
-                  className="aspect-[16/9] w-full bg-canvas p-4"
+                  className="aspect-[16/9] w-full bg-map-bg p-4"
                 />
-                <span className="grid gap-1.5 p-3.5">
-                  <span className="text-base font-semibold">{entry.title}</span>
-                  <ModeLine entry={entry} />
-                  <span className="font-mono text-[11px] text-fg-muted">
-                    {entry.mode === "deathmatch"
-                      ? `First to ${fragLimit} frags`
-                      : `Par ${formatPar(entry.par)} · ${enemiesOf(entry)} enemies`}
+                <span className="grid gap-1 px-3 py-3">
+                  <span className="truncate text-[15px] font-semibold">
+                    {entry.title}
+                  </span>
+                  <span className="truncate font-mono text-[10px] text-fg-muted uppercase">
+                    {cardLine(entry)}
                   </span>
                 </span>
               </button>
