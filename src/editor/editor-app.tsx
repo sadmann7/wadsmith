@@ -147,6 +147,7 @@ const thingCategoryLabels: Record<ThingCategory, string> = {
 };
 
 const layoutKey = "wadsmith:layout";
+const welcomedKey = "wadsmith:welcomed";
 // Below this width, two panes can't hold the map controls and a usable 3D view.
 const narrowQuery = "(max-width: 1100px)";
 const defaultSplit = [50, 50];
@@ -188,6 +189,22 @@ function loadLayout() {
 function saveLayout(view: ViewLayout, sizes: number[], dock: boolean) {
   try {
     localStorage.setItem(layoutKey, JSON.stringify({ view, sizes, dock }));
+  } catch {
+    return;
+  }
+}
+
+function loadWelcomed() {
+  try {
+    return localStorage.getItem(welcomedKey) !== null;
+  } catch {
+    return true;
+  }
+}
+
+function saveWelcomed() {
+  try {
+    localStorage.setItem(welcomedKey, "1");
   } catch {
     return;
   }
@@ -299,6 +316,7 @@ function App({
   const [coopGame, setCoopGame] = useState<HostedGame | null>(null);
   const [mapVersion, setMapVersion] = useState(0);
   const [fileError, setFileError] = useState<string | null>(null);
+  const [welcomed, setWelcomed] = useState(loadWelcomed);
   const playButton = useRef<HTMLButtonElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const [agentLog, setAgentLog] = useState("");
@@ -878,6 +896,13 @@ function App({
 
   const play = () => {
     if (canPlay && !buildProblem()) setPlayedMap(map);
+    dismissWelcome();
+  };
+
+  const dismissWelcome = () => {
+    if (welcomed) return;
+    setWelcomed(true);
+    saveWelcomed();
   };
 
   const canPlayCoop = canPlay;
@@ -1304,7 +1329,44 @@ function App({
                       contextMenuOpen={contextMenuOpen}
                     />
                   </MenuContextTrigger>
-                  <p className="tool-hint">{toolHints[tool]}</p>
+                  {welcomed ? (
+                    <p className="tool-hint">{toolHints[tool]}</p>
+                  ) : (
+                    <section
+                      aria-labelledby="welcome-title"
+                      className="absolute bottom-3 left-3 z-[4] grid max-w-[min(380px,calc(100%-24px))] gap-3 rounded-[3px] border border-border bg-surface p-4 shadow-lg"
+                    >
+                      <h2
+                        id="welcome-title"
+                        className="text-[15px] font-semibold text-fg"
+                      >
+                        Welcome to Wadsmith
+                      </h2>
+                      <p className="text-[13px] text-fg-muted">
+                        Build Doom maps in your browser and play them on the
+                        spot. This starter map is ready, so playtest it, then
+                        change anything and play again.
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          className="button primary"
+                          disabled={!canPlay}
+                          onClick={play}
+                        >
+                          <Play size={14} aria-hidden="true" />
+                          Playtest
+                        </button>
+                        <button
+                          type="button"
+                          className="button"
+                          onClick={dismissWelcome}
+                        >
+                          Start editing
+                        </button>
+                      </div>
+                    </section>
+                  )}
                   {visibleLayout === "map" && showDock && !narrow ? (
                     <div className="player-dock">
                       <div className="player-dock-bar">
@@ -1621,11 +1683,8 @@ function App({
             </section>
 
             <section className="inspector-section">
-              <h2>Agent actions</h2>
-              <p className="muted">
-                These call the same bridge an AI agent uses. No model is
-                connected.
-              </p>
+              <h2>Quick build</h2>
+              <p className="muted">One-click changes to the selected room.</p>
               {sector ? (
                 <div className="agent-actions">
                   {roomSides.map((side) => (
