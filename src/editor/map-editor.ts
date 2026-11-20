@@ -135,6 +135,12 @@ const hiddenLine = { x1: "0", y1: "0", x2: "0", y2: "0" };
 const clickSlop = 4;
 const switchReach = 32;
 const cameraNudge = 16;
+const arrowSteps: Record<string, Point> = {
+  ArrowUp: { x: 0, y: -1 },
+  ArrowDown: { x: 0, y: 1 },
+  ArrowLeft: { x: -1, y: 0 },
+  ArrowRight: { x: 1, y: 0 },
+};
 const wallReach = 14;
 const labelInset = 24;
 const agentHeightLimit = 2048;
@@ -381,6 +387,7 @@ const mapEditor = definePrimitive({
       key: "positions",
       draft: "moving",
       step: () => gridSize,
+      largeStep: () => gridSize * 8,
       scale: () => store.get().viewport.zoom,
       disabled: (key) =>
         store.get().tool !== "select" || key.startsWith(switchKeyPrefix),
@@ -572,6 +579,24 @@ const mapEditor = definePrimitive({
         return;
       }
       store.set({ drawing: [...drawing, point] });
+    };
+
+    const nudgeSelection = (event: KeyboardEvent) => {
+      const direction = arrowSteps[event.key];
+      if (!direction || event.altKey || event.ctrlKey || event.metaKey) {
+        return false;
+      }
+      const { selection, positions } = store.get();
+      const keys = selection.filter(
+        (key) => key in positions && !key.startsWith(switchKeyPrefix),
+      );
+      if (keys.length === 0) return false;
+      const by = event.shiftKey ? gridSize * 8 : gridSize;
+      move.moveBy(keys, direction.x * by, direction.y * by, {
+        reason: "move-key",
+        event,
+      });
+      return true;
     };
 
     const deleteSelection = () => {
@@ -770,17 +795,12 @@ const mapEditor = definePrimitive({
       },
       cameraKeydown(event: KeyboardEvent) {
         const position = store.get().cameraPosition;
-        const direction = {
-          ArrowUp: [0, -1],
-          ArrowDown: [0, 1],
-          ArrowLeft: [-1, 0],
-          ArrowRight: [1, 0],
-        }[event.key];
+        const direction = arrowSteps[event.key];
         if (!position || !direction) return;
         event.preventDefault();
         moveCamera({
-          x: position.x + direction[0] * cameraNudge,
-          y: position.y + direction[1] * cameraNudge,
+          x: position.x + direction.x * cameraNudge,
+          y: position.y + direction.y * cameraNudge,
         });
       },
       rooms: () =>
@@ -975,8 +995,9 @@ const mapEditor = definePrimitive({
           return;
         }
         if (
-          (event.key === "Delete" || event.key === "Backspace") &&
-          deleteSelection()
+          ((event.key === "Delete" || event.key === "Backspace") &&
+            deleteSelection()) ||
+          (tool === "select" && nudgeSelection(event))
         ) {
           event.preventDefault();
           return;
