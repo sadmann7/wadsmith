@@ -1,3 +1,5 @@
+import { createLocalStorage } from "@ui-sdk/core";
+
 import { deathmatchStarts } from "../map/catalog";
 import type { GameMap } from "../map/types";
 import type { LinkState } from "./peer-link";
@@ -14,7 +16,7 @@ const roomsUrl = process.env.NEXT_PUBLIC_ROOMS_URL;
 // Players must run the same build, since the map compiler and engine change
 // between versions.
 const appVersion = process.env.NEXT_PUBLIC_APP_VERSION ?? "dev";
-const nameKey = "wadsmith:name";
+const savedName = createLocalStorage("wadsmith:name");
 const maxNameLength = 24;
 
 function openTransport(code: string) {
@@ -28,19 +30,11 @@ function inviteLink(code: string) {
 }
 
 function loadName() {
-  try {
-    return localStorage.getItem(nameKey) ?? "";
-  } catch {
-    return "";
-  }
+  return savedName.get() ?? "";
 }
 
 function saveName(name: string) {
-  try {
-    localStorage.setItem(nameKey, name);
-  } catch {
-    return;
-  }
+  savedName.set(name);
 }
 
 const modeNames: Record<NetworkMode, string> = {
