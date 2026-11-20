@@ -86,7 +86,7 @@ function CheckRow({
     lock: "text-fg-muted",
   }[icon];
   return (
-    <li className="flex min-h-11 items-center gap-3 border-b border-border py-2">
+    <li className="flex min-h-[44px] items-center gap-3 border-b border-border py-2">
       <span className="grid w-[22px] shrink-0 place-items-center">
         <Icon size={16} aria-hidden="true" className={color} />
       </span>
@@ -314,7 +314,7 @@ function Lobby({
           {players.map((player) => (
             <li
               key={player.peer}
-              className="flex h-11 items-center gap-3 border-b border-border"
+              className="flex h-[44px] items-center gap-3 border-b border-border"
             >
               <PlayerBadge peer={player.peer} />
               <span className="min-w-0 flex-1 truncate text-sm font-semibold">
@@ -363,7 +363,7 @@ function Lobby({
           {open.map((peer) => (
             <li
               key={peer}
-              className="flex h-11 items-center gap-3 border-b border-border text-sm text-fg-disabled"
+              className="flex h-[44px] items-center gap-3 border-b border-border text-sm text-fg-disabled"
             >
               <PlayerBadge peer={peer} open />
               Open slot

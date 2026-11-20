@@ -268,7 +268,7 @@ function Waiting({
           {players.map((player) => (
             <li
               key={player.peer}
-              className="flex h-11 items-center gap-3 border-b border-border"
+              className="flex h-[44px] items-center gap-3 border-b border-border"
             >
               <PlayerBadge peer={player.peer} />
               <span className="min-w-0 flex-1 truncate text-sm font-semibold">
