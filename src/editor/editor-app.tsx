@@ -127,7 +127,7 @@ import { compileMap } from "../wad/compile";
 
 const toolHints: Record<MapTool, string> = {
   select:
-    "Drag corners and things. Shift-click adds to the selection. Drag empty space to pan.",
+    "Drag corners and things, or nudge them with the arrow keys. Shift-click adds to the selection.",
   draw: "Click corners, then click the first one or press Enter. Reuse a wall's corners to connect rooms.",
   thing: "Click inside a room to place the chosen thing.",
   switch: "Click a solid wall to add a switch, then drag from it to a door.",
@@ -1276,7 +1276,12 @@ function App({
                       thingKind={thingKind}
                       activeSector={activeSector}
                       selection={selection}
-                      onMapChange={(next) => commit(next)}
+                      onMapChange={(next, details) =>
+                        commit(
+                          next,
+                          details.reason === "move-key" ? "nudge" : undefined,
+                        )
+                      }
                       onToolChange={setTool}
                       onActiveSectorChange={setActiveSector}
                       onSelectionChange={setSelection}
