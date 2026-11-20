@@ -1,6 +1,10 @@
 "use client";
 
-import { createUndoStack, matchesShortcut } from "@ui-sdk/core";
+import {
+  createLocalStorage,
+  createUndoStack,
+  matchesShortcut,
+} from "@ui-sdk/core";
 import {
   createMenuController,
   Menu,
@@ -146,8 +150,8 @@ const thingCategoryLabels: Record<ThingCategory, string> = {
   decor: "Decor",
 };
 
-const layoutKey = "wadsmith:layout";
-const welcomedKey = "wadsmith:welcomed";
+const savedLayout = createLocalStorage("wadsmith:layout");
+const savedWelcome = createLocalStorage("wadsmith:welcomed");
 // Below this width, two panes can't hold the map controls and a usable 3D view.
 const narrowQuery = "(max-width: 1100px)";
 const defaultSplit = [50, 50];
@@ -168,7 +172,7 @@ const editModes: { value: EditMode; label: string; key: string }[] = [
 
 function loadLayout() {
   try {
-    const saved = JSON.parse(localStorage.getItem(layoutKey) ?? "null");
+    const saved = JSON.parse(savedLayout.get() ?? "null");
     return {
       view: ["map", "split", "scene"].includes(saved?.view)
         ? (saved.view as ViewLayout)
@@ -187,27 +191,12 @@ function loadLayout() {
 }
 
 function saveLayout(view: ViewLayout, sizes: number[], dock: boolean) {
-  try {
-    localStorage.setItem(layoutKey, JSON.stringify({ view, sizes, dock }));
-  } catch {
-    return;
-  }
+  savedLayout.set(JSON.stringify({ view, sizes, dock }));
 }
 
+// Without storage the card would come back on every visit.
 function loadWelcomed() {
-  try {
-    return localStorage.getItem(welcomedKey) !== null;
-  } catch {
-    return true;
-  }
-}
-
-function saveWelcomed() {
-  try {
-    localStorage.setItem(welcomedKey, "1");
-  } catch {
-    return;
-  }
+  return !savedWelcome.available() || savedWelcome.get() !== null;
 }
 
 function subscribeNarrow(listener: () => void) {
@@ -902,7 +891,7 @@ function App({
   const dismissWelcome = () => {
     if (welcomed) return;
     setWelcomed(true);
-    saveWelcomed();
+    savedWelcome.set("1");
   };
 
   const canPlayCoop = canPlay;

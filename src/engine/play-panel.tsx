@@ -1,3 +1,4 @@
+import { createLocalStorage } from "@ui-sdk/core";
 import {
   useEffect,
   useEffectEvent,
@@ -38,8 +39,8 @@ import { hostPeer, type RoomPlayer } from "./room";
 
 type SoundSettings = { volume: number; muted: boolean };
 
-const soundKey = "wadsmith:sound";
-const resolutionKey = "wadsmith:resolution";
+const savedSound = createLocalStorage("wadsmith:sound");
+const savedResolution = createLocalStorage("wadsmith:resolution");
 const defaultSound: SoundSettings = { volume: 8, muted: false };
 const noteMessageMs = 2000;
 // Escape can reach the page just after it released the pointer.
@@ -52,7 +53,7 @@ const stallMs = 1000;
 
 function loadSound(): SoundSettings {
   try {
-    const saved = JSON.parse(localStorage.getItem(soundKey) ?? "null");
+    const saved = JSON.parse(savedSound.get() ?? "null");
     return Number.isInteger(saved?.volume) &&
       saved.volume >= 0 &&
       saved.volume <= maxVolume &&
@@ -65,27 +66,15 @@ function loadSound(): SoundSettings {
 }
 
 function saveSound(sound: SoundSettings) {
-  try {
-    localStorage.setItem(soundKey, JSON.stringify(sound));
-  } catch {
-    return;
-  }
+  savedSound.set(JSON.stringify(sound));
 }
 
 function loadResolution(): Resolution {
-  try {
-    return localStorage.getItem(resolutionKey) === "high" ? "high" : "classic";
-  } catch {
-    return "classic";
-  }
+  return savedResolution.get() === "high" ? "high" : "classic";
 }
 
 function saveResolution(resolution: Resolution) {
-  try {
-    localStorage.setItem(resolutionKey, resolution);
-  } catch {
-    return;
-  }
+  savedResolution.set(resolution);
 }
 
 type PlayerSpot = Point & { angle: number };
