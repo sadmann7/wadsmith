@@ -213,7 +213,7 @@ function AppSidebar({
     current?.kind === "episode" || current?.kind === "map" ? current.id : null;
   return (
     <div className="flex h-full min-h-0 flex-col bg-surface">
-      <div className="flex h-12 shrink-0 items-center px-[18px]">
+      <div className="flex h-[48px] shrink-0 items-center px-[18px]">
         <SidebarLink
           route={{ kind: "home" }}
           current={false}

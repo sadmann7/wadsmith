@@ -68,7 +68,7 @@ const slowPingMs = 120;
 const panelClass = "pointer-events-auto rounded-[3px] bg-surface/90";
 const buttonClass = `${panelClass} flex items-center gap-2 border-0 px-3 py-2 text-fg hover:bg-surface-raised`;
 const iconButtonClass =
-  "flex size-7 items-center justify-center rounded-[3px] border-0 bg-transparent p-0 text-fg-muted hover:bg-surface-raised hover:text-fg";
+  "flex size-[30px] items-center justify-center rounded-[3px] border-0 bg-transparent p-0 text-fg-muted hover:bg-surface-raised hover:text-fg";
 
 function formatTime(tics: number) {
   const seconds = Math.floor(tics / ticsPerSecond);
@@ -397,17 +397,165 @@ function NoteForm({ onSave }: { onSave: (text: string) => void }) {
   );
 }
 
-function GameHud({
-  map,
+function GameTopBar({
   title,
   slot,
   par,
   status,
   sound,
   fullscreen,
-  showHelp,
   coop,
   skill,
+  deathmatch,
+  episode,
+  exit,
+  resolution,
+  onSoundChange,
+  onResolutionChange,
+  onRestart,
+  onToggleFullscreen,
+  onExit,
+  onControlUsed,
+}: {
+  title: string;
+  slot: string;
+  par: number | null;
+  status: GameStatus | null;
+  sound: SoundSettings;
+  fullscreen: boolean;
+  coop: "host" | "guest" | null;
+  skill: Skill;
+  deathmatch: boolean;
+  episode: boolean;
+  exit: { label: string };
+  resolution: Resolution;
+  onSoundChange: (sound: SoundSettings) => void;
+  onResolutionChange: (resolution: Resolution) => void;
+  onRestart: () => void;
+  onToggleFullscreen: () => void;
+  onExit: () => void;
+  onControlUsed: () => void;
+}) {
+  const FullscreenIcon = fullscreen ? Minimize : Maximize;
+  const SoundIcon = sound.muted ? VolumeX : Volume2;
+  const mode = deathmatch
+    ? "Deathmatch"
+    : coop
+      ? "Co-op"
+      : episode
+        ? "Episode"
+        : "Playtest";
+  return (
+    <header className="flex h-[48px] min-w-0 items-center gap-4 border-b border-border bg-surface px-3 text-fg">
+      <button type="button" className="button shrink-0" onClick={onExit}>
+        <ArrowLeft size={14} aria-hidden="true" />
+        {exit.label}
+        {fullscreen ? null : (
+          <kbd className="font-mono text-[11px] text-fg-muted">Esc</kbd>
+        )}
+      </button>
+      <div className="flex min-w-0 flex-1 items-center gap-2.5">
+        <span className="shrink-0 font-mono text-xs text-fg-muted">{slot}</span>
+        <span className="truncate text-[15px] font-semibold">{title}</span>
+        <span className="shrink-0 rounded-full border border-border-strong px-2 py-0.5 font-mono text-[11px] tracking-[0.06em] text-fg-soft uppercase max-[640px]:hidden">
+          {mode} · {skillNames[skill]}
+        </span>
+      </div>
+      <span
+        aria-label="Time"
+        className="shrink-0 font-mono text-[13px] text-fg-soft"
+      >
+        {status ? formatTime(status.tics) : "0:00"}
+        {par ? (
+          <span className="text-fg-muted max-[640px]:hidden">
+            {" "}
+            / par {formatTime(par * ticsPerSecond)}
+          </span>
+        ) : null}
+      </span>
+      <span aria-hidden="true" className="separator max-[640px]:hidden" />
+      <div className="flex shrink-0 items-center gap-1">
+        <button
+          type="button"
+          className={iconButtonClass}
+          aria-label={sound.muted ? "Unmute" : "Mute"}
+          aria-pressed={sound.muted}
+          title={sound.muted ? "Unmute" : "Mute"}
+          onClick={(event) => {
+            onSoundChange({ ...sound, muted: !sound.muted });
+            // A mouse click shouldn't take the keys away from the game.
+            if (event.detail > 0) onControlUsed();
+          }}
+        >
+          <SoundIcon size={15} aria-hidden="true" />
+        </button>
+        <Slider
+          className="slider w-24 justify-center max-[640px]:hidden"
+          data-game-control=""
+          value={sound.volume}
+          min={0}
+          max={maxVolume}
+          step={1}
+          onValueChange={(volume) =>
+            onSoundChange({ volume: volume as number, muted: false })
+          }
+          onPointerUp={onControlUsed}
+        >
+          <SliderControl className="slider-control">
+            <SliderTrack className="slider-track">
+              <SliderIndicator className="slider-indicator" />
+              <SliderThumb className="slider-thumb" aria-label="Volume" />
+            </SliderTrack>
+          </SliderControl>
+        </Slider>
+        {coop ? null : (
+          <>
+            <button
+              type="button"
+              className={`${iconButtonClass} text-xs font-medium aria-pressed:text-accent`}
+              aria-label="Double resolution"
+              aria-pressed={resolution === "high"}
+              title={`${screenSizes[resolution].width}×${screenSizes[resolution].height}, restarts the level`}
+              onClick={() =>
+                onResolutionChange(resolution === "high" ? "classic" : "high")
+              }
+            >
+              2×
+            </button>
+            <button
+              type="button"
+              className={iconButtonClass}
+              aria-label="Restart"
+              title="Restart"
+              onClick={onRestart}
+            >
+              <RotateCcw size={15} aria-hidden="true" />
+            </button>
+          </>
+        )}
+        <button
+          type="button"
+          className={iconButtonClass}
+          aria-label={fullscreen ? "Exit fullscreen" : "Fullscreen"}
+          title={fullscreen ? "Exit fullscreen" : "Fullscreen"}
+          onClick={onToggleFullscreen}
+        >
+          <FullscreenIcon size={15} aria-hidden="true" />
+        </button>
+      </div>
+    </header>
+  );
+}
+
+function GameHud({
+  map,
+  title,
+  slot,
+  par,
+  status,
+  fullscreen,
+  showHelp,
+  coop,
   deathmatch,
   scores,
   others,
@@ -421,27 +569,20 @@ function GameHud({
   noteSaved,
   finished,
   audioUnavailable,
-  onSoundChange,
-  resolution,
-  onResolutionChange,
   onRestart,
-  onToggleFullscreen,
   onExit,
   onOpenNote,
   onSaveNote,
   onEditSpot,
-  onControlUsed,
 }: {
   map: GameMap;
   title: string;
   slot: string;
   par: number | null;
   status: GameStatus | null;
-  sound: SoundSettings;
   fullscreen: boolean;
   showHelp: boolean;
   coop: "host" | "guest" | null;
-  skill: Skill;
   deathmatch: boolean;
   scores: ScoreRow[] | null;
   others: OtherPlayer[];
@@ -455,48 +596,18 @@ function GameHud({
   noteSaved: boolean;
   finished: boolean;
   audioUnavailable: boolean;
-  onSoundChange: (sound: SoundSettings) => void;
-  resolution: Resolution;
-  onResolutionChange: (resolution: Resolution) => void;
   onRestart: () => void;
-  onToggleFullscreen: () => void;
   onExit: () => void;
   onOpenNote: () => void;
   onSaveNote: (text: string) => void;
   onEditSpot: () => void;
-  onControlUsed: () => void;
 }) {
   const inLevel = status?.inLevel ?? false;
-  const FullscreenIcon = fullscreen ? Minimize : Maximize;
-  const SoundIcon = sound.muted ? VolumeX : Volume2;
   const ammoName = status ? ammoNames[status.ammoType] : undefined;
   const tabHelp = coop ? "Tab scores" : "Tab automap";
   return (
     <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden text-fg">
-      <div className="absolute inset-x-0 top-0 h-40 bg-linear-to-b from-void/55 to-transparent" />
       <div className="absolute inset-x-0 bottom-0 h-56 bg-linear-to-t from-void/70 to-transparent" />
-      <div className="absolute top-5 left-5 flex items-center gap-3">
-        <button type="button" className={buttonClass} onClick={onExit}>
-          <ArrowLeft size={14} aria-hidden="true" />
-          {exit.label}
-          {fullscreen ? null : (
-            <kbd className="font-mono text-[11px] text-fg-muted">Esc</kbd>
-          )}
-        </button>
-        <div className="min-w-0 @max-xl:hidden">
-          <div className="truncate text-[15px] font-semibold">{title}</div>
-          <div className="font-mono text-[11px] text-fg-soft">
-            {slot} · {skillNames[skill]} ·{" "}
-            {deathmatch
-              ? "Deathmatch"
-              : coop
-                ? "Co-op"
-                : episode
-                  ? "Episode"
-                  : "Playtest"}
-          </div>
-        </div>
-      </div>
       {inLevel && !finished ? (
         <Crosshair
           size={20}
@@ -506,7 +617,7 @@ function GameHud({
       ) : null}
       <aside
         aria-label="Run"
-        className={`${panelClass} absolute top-5 right-5 w-[260px] overflow-hidden @max-xl:w-44`}
+        className="pointer-events-auto absolute top-0 right-5 w-[260px] overflow-hidden rounded-b-[3px] border border-t-0 border-border bg-surface @max-xl:w-44"
       >
         <Minimap map={map} status={status} others={others} />
         <dl className="m-0 grid gap-1.5 p-3">
@@ -533,84 +644,7 @@ function GameHud({
               />
             </>
           )}
-          <Stat
-            label="Time"
-            value={
-              status
-                ? `${formatTime(status.tics)}${par ? ` / par ${formatTime(par * ticsPerSecond)}` : ""}`
-                : "-"
-            }
-          />
         </dl>
-        <div className="flex items-center gap-1 border-t border-border px-2 py-1.5">
-          <button
-            type="button"
-            className={iconButtonClass}
-            aria-label={sound.muted ? "Unmute" : "Mute"}
-            aria-pressed={sound.muted}
-            title={sound.muted ? "Unmute" : "Mute"}
-            onClick={(event) => {
-              onSoundChange({ ...sound, muted: !sound.muted });
-              // A mouse click shouldn't take the keys away from the game.
-              if (event.detail > 0) onControlUsed();
-            }}
-          >
-            <SoundIcon size={15} aria-hidden="true" />
-          </button>
-          <Slider
-            className="slider min-w-0 flex-1 justify-center"
-            data-game-control=""
-            value={sound.volume}
-            min={0}
-            max={maxVolume}
-            step={1}
-            onValueChange={(volume) =>
-              onSoundChange({ volume: volume as number, muted: false })
-            }
-            onPointerUp={onControlUsed}
-          >
-            <SliderControl className="slider-control">
-              <SliderTrack className="slider-track">
-                <SliderIndicator className="slider-indicator" />
-                <SliderThumb className="slider-thumb" aria-label="Volume" />
-              </SliderTrack>
-            </SliderControl>
-          </Slider>
-          {coop ? null : (
-            <>
-              <button
-                type="button"
-                className={`${iconButtonClass} text-xs font-medium aria-pressed:text-accent`}
-                aria-label="Double resolution"
-                aria-pressed={resolution === "high"}
-                title={`${screenSizes[resolution].width}×${screenSizes[resolution].height}, restarts the level`}
-                onClick={() =>
-                  onResolutionChange(resolution === "high" ? "classic" : "high")
-                }
-              >
-                2×
-              </button>
-              <button
-                type="button"
-                className={iconButtonClass}
-                aria-label="Restart"
-                title="Restart"
-                onClick={onRestart}
-              >
-                <RotateCcw size={15} aria-hidden="true" />
-              </button>
-            </>
-          )}
-          <button
-            type="button"
-            className={iconButtonClass}
-            aria-label={fullscreen ? "Exit fullscreen" : "Fullscreen"}
-            title={fullscreen ? "Exit fullscreen" : "Fullscreen"}
-            onClick={onToggleFullscreen}
-          >
-            <FullscreenIcon size={15} aria-hidden="true" />
-          </button>
-        </div>
         {audioUnavailable ? (
           <p className="px-3 pb-2 text-xs text-fg-muted">
             Sound needs HTTPS or localhost.
@@ -769,4 +803,4 @@ function GameHud({
   );
 }
 
-export { formatTime, GameHud, type ScoreRow };
+export { formatTime, GameHud, GameTopBar, type ScoreRow };
