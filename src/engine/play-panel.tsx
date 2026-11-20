@@ -12,7 +12,7 @@ import type { GameMap, Point } from "../map/types";
 import { compileEpisode, compileMap } from "../wad/compile";
 import type { NetworkState } from "./doom-worker";
 import { startGameClient, type GameClient } from "./game-client";
-import { GameHud, type ScoreRow } from "./game-hud";
+import { GameHud, GameTopBar, type ScoreRow } from "./game-hud";
 import { loadIwad } from "./iwad";
 import { HeldKeys } from "./held-keys";
 import {
@@ -528,190 +528,207 @@ function GameSession({
     return () => window.removeEventListener("keydown", onShortcut);
   }, []);
 
+  const gameExit = gameExits[coop?.role === "guest" ? "leave" : exit];
+
   return (
-    <div
-      className="game-screen"
-      onPointerDown={(event) => {
-        if (event.target !== event.currentTarget) return;
-        event.preventDefault();
-        focusGame();
-      }}
-    >
+    <>
+      <GameTopBar
+        title={level.title}
+        slot={level.slot}
+        par={level.par}
+        status={status}
+        sound={sound}
+        fullscreen={fullscreen}
+        coop={coop?.role ?? null}
+        skill={coop?.skill ?? skill}
+        deathmatch={coop?.mode === "deathmatch"}
+        episode={episode !== null}
+        exit={gameExit}
+        resolution={resolution}
+        onSoundChange={onSoundChange}
+        onResolutionChange={onResolutionChange}
+        onRestart={onRestart}
+        onToggleFullscreen={onToggleFullscreen}
+        onExit={onExit}
+        onControlUsed={focusGame}
+      />
       <div
-        className="game-frame @container"
+        className="game-screen"
         onPointerDown={(event) => {
-          const target = event.target as Element;
-          if (
-            target === canvasRef.current ||
-            target.closest("button, form, [data-game-control]")
-          ) {
-            return;
-          }
+          if (event.target !== event.currentTarget) return;
           event.preventDefault();
           focusGame();
         }}
       >
-        <GameHud
-          map={level.map}
-          title={level.title}
-          slot={level.slot}
-          par={level.par}
-          episode={episode !== null}
-          between={
-            between && episode
-              ? {
-                  tally: between,
-                  next: episode[levelIndex + 1],
-                  onNext: nextLevel,
-                }
-              : null
-          }
-          status={status}
-          sound={sound}
-          fullscreen={fullscreen}
-          showHelp={showHelp && !noteSpot && !noteSaved}
-          coop={coop?.role ?? null}
-          skill={coop?.skill ?? skill}
-          deathmatch={coop?.mode === "deathmatch"}
-          scores={
-            coop && network && scoresOpen ? scoreRows(coop, network) : null
-          }
-          others={
-            coop && network
-              ? network.scores.filter((score) => score.peer !== coop.peer)
-              : []
-          }
-          stall={
-            coop && stall.peers.length > 0
-              ? {
-                  names: stall.peers.map((peer) =>
-                    peer === coop.peer ? "you" : nameOf(coop, peer),
-                  ),
-                  since: stall.since,
-                }
-              : null
-          }
-          exit={gameExits[coop?.role === "guest" ? "leave" : exit]}
-          canEdit={canEdit}
-          noteOpen={noteSpot !== null}
-          mouseMode={capture.mode}
-          noteSaved={noteSaved}
-          finished={finished}
-          audioUnavailable={audioUnavailable}
-          onSoundChange={onSoundChange}
-          resolution={resolution}
-          onResolutionChange={onResolutionChange}
-          onRestart={onRestart}
-          onToggleFullscreen={onToggleFullscreen}
-          onExit={onExit}
-          onOpenNote={openNote}
-          onSaveNote={(text) => {
-            if (noteSpot) onAddNote?.(noteSpot, text);
-            closeNote();
-            setNoteSaved(true);
-            clearTimeout(noteTimer.current);
-            noteTimer.current = setTimeout(
-              () => setNoteSaved(false),
-              noteMessageMs,
-            );
+        <div
+          className="game-frame @container"
+          onPointerDown={(event) => {
+            const target = event.target as Element;
+            if (
+              target === canvasRef.current ||
+              target.closest("button, form, [data-game-control]")
+            ) {
+              return;
+            }
+            event.preventDefault();
+            focusGame();
           }}
-          onEditSpot={editSpot}
-          onControlUsed={focusGame}
-        />
-        {coop && !error && !finished && !coopStarted ? (
-          <p
-            className="absolute inset-x-4 top-1/2 z-20 m-0 -translate-y-1/2 text-center font-mono text-sm text-fg-soft"
-            role="status"
-          >
-            {coopWaiting(coop, network)}
-          </p>
-        ) : null}
-        {error ? (
-          <p className="notice absolute inset-x-4 top-20 z-20" role="alert">
-            {error}
-          </p>
-        ) : (
-          <canvas
-            ref={canvasRef}
-            className="game-canvas"
-            width={width}
-            height={height}
-            tabIndex={0}
-            aria-label={`Game. Click to capture the mouse, which then turns the player and fires with the left button. Arrows or W, A, S and D move, Space fires, E uses${canEdit ? ", N leaves a note, F2 edits this spot" : ""}. Escape releases the mouse, and pressing it again ${gameExits[coop?.role === "guest" ? "leave" : exit].action}.`}
-            onBlur={() => {
-              releaseAllKeys();
-              setScoresOpen(false);
+        >
+          <GameHud
+            map={level.map}
+            title={level.title}
+            slot={level.slot}
+            par={level.par}
+            episode={episode !== null}
+            between={
+              between && episode
+                ? {
+                    tally: between,
+                    next: episode[levelIndex + 1],
+                    onNext: nextLevel,
+                  }
+                : null
+            }
+            status={status}
+            fullscreen={fullscreen}
+            showHelp={showHelp && !noteSpot && !noteSaved}
+            coop={coop?.role ?? null}
+            deathmatch={coop?.mode === "deathmatch"}
+            scores={
+              coop && network && scoresOpen ? scoreRows(coop, network) : null
+            }
+            others={
+              coop && network
+                ? network.scores.filter((score) => score.peer !== coop.peer)
+                : []
+            }
+            stall={
+              coop && stall.peers.length > 0
+                ? {
+                    names: stall.peers.map((peer) =>
+                      peer === coop.peer ? "you" : nameOf(coop, peer),
+                    ),
+                    since: stall.since,
+                  }
+                : null
+            }
+            exit={gameExit}
+            canEdit={canEdit}
+            noteOpen={noteSpot !== null}
+            mouseMode={capture.mode}
+            noteSaved={noteSaved}
+            finished={finished}
+            audioUnavailable={audioUnavailable}
+            onRestart={onRestart}
+            onExit={onExit}
+            onOpenNote={openNote}
+            onSaveNote={(text) => {
+              if (noteSpot) onAddNote?.(noteSpot, text);
+              closeNote();
+              setNoteSaved(true);
+              clearTimeout(noteTimer.current);
+              noteTimer.current = setTimeout(
+                () => setNoteSaved(false),
+                noteMessageMs,
+              );
             }}
-            onContextMenu={(event) => event.preventDefault()}
-            onPointerDown={(event) => {
-              event.currentTarget.focus();
-              gameRef.current?.resumeAudio();
-              if (event.button === 0 && !noteSpot && !finished) {
-                if (!clickFires(capture)) {
-                  event.preventDefault();
-                  mouseFire.current.ignoreUntilReleased();
+            onEditSpot={editSpot}
+          />
+          {coop && !error && !finished && !coopStarted ? (
+            <p
+              className="absolute inset-x-4 top-1/2 z-20 m-0 -translate-y-1/2 text-center font-mono text-sm text-fg-soft"
+              role="status"
+            >
+              {coopWaiting(coop, network)}
+            </p>
+          ) : null}
+          {error ? (
+            <p className="notice absolute inset-x-4 top-20 z-20" role="alert">
+              {error}
+            </p>
+          ) : (
+            <canvas
+              ref={canvasRef}
+              className="game-canvas"
+              width={width}
+              height={height}
+              tabIndex={0}
+              aria-label={`Game. Click to capture the mouse, which then turns the player and fires with the left button. Arrows or W, A, S and D move, Space fires, E uses${canEdit ? ", N leaves a note, F2 edits this spot" : ""}. Escape releases the mouse, and pressing it again ${gameExits[coop?.role === "guest" ? "leave" : exit].action}.`}
+              onBlur={() => {
+                releaseAllKeys();
+                setScoresOpen(false);
+              }}
+              onContextMenu={(event) => event.preventDefault()}
+              onPointerDown={(event) => {
+                event.currentTarget.focus();
+                gameRef.current?.resumeAudio();
+                if (event.button === 0 && !noteSpot && !finished) {
+                  if (!clickFires(capture)) {
+                    event.preventDefault();
+                    mouseFire.current.ignoreUntilReleased();
+                    requestCapture();
+                    return;
+                  }
+                }
+                syncFire(event);
+                if (
+                  event.button === 0 &&
+                  capture.mode === "denied" &&
+                  !noteSpot &&
+                  !finished
+                ) {
                   requestCapture();
+                }
+              }}
+              onPointerMove={(event) => {
+                if (capture.mode === "locked" && event.movementX) {
+                  gameRef.current?.turn(event.movementX);
+                }
+                syncFire(event);
+              }}
+              onPointerUp={syncFire}
+              onPointerCancel={() => releaseKey(mouseFireSource)}
+              onLostPointerCapture={() => {
+                if (capture.mode !== "locked") {
+                  releaseKey(mouseFireSource);
+                }
+              }}
+              onKeyDown={(event) => {
+                // macOS sends no keyup for keys released while Cmd is down.
+                if (event.metaKey) {
+                  releaseAllKeys();
                   return;
                 }
-              }
-              syncFire(event);
-              if (
-                event.button === 0 &&
-                capture.mode === "denied" &&
-                !noteSpot &&
-                !finished
-              ) {
-                requestCapture();
-              }
-            }}
-            onPointerMove={(event) => {
-              if (capture.mode === "locked" && event.movementX) {
-                gameRef.current?.turn(event.movementX);
-              }
-              syncFire(event);
-            }}
-            onPointerUp={syncFire}
-            onPointerCancel={() => releaseKey(mouseFireSource)}
-            onLostPointerCapture={() => {
-              if (capture.mode !== "locked") {
-                releaseKey(mouseFireSource);
-              }
-            }}
-            onKeyDown={(event) => {
-              // macOS sends no keyup for keys released while Cmd is down.
-              if (event.metaKey) {
-                releaseAllKeys();
-                return;
-              }
-              if (coop && event.code === "Tab" && !event.shiftKey) {
+                if (coop && event.code === "Tab" && !event.shiftKey) {
+                  event.preventDefault();
+                  setScoresOpen(true);
+                  return;
+                }
+                const key = keysByCode[event.code];
+                // Tab is Doom's automap, so Shift+Tab is the way out to the buttons.
+                if (
+                  key === undefined ||
+                  (event.shiftKey && event.code === "Tab")
+                ) {
+                  return;
+                }
                 event.preventDefault();
-                setScoresOpen(true);
-                return;
-              }
-              const key = keysByCode[event.code];
-              // Tab is Doom's automap, so Shift+Tab is the way out to the buttons.
-              if (
-                key === undefined ||
-                (event.shiftKey && event.code === "Tab")
-              ) {
-                return;
-              }
-              event.preventDefault();
-              event.stopPropagation();
-              setShowHelp(false);
-              if (lockPending.current && !event.repeat) cancelCapture();
-              updateCapture("keyboard");
-              gameRef.current?.resumeAudio();
-              pressKey(event.code, key);
-            }}
-            onKeyUp={(event) => {
-              if (event.code === "Tab") setScoresOpen(false);
-              releaseKey(event.code);
-            }}
-          />
-        )}
+                event.stopPropagation();
+                setShowHelp(false);
+                if (lockPending.current && !event.repeat) cancelCapture();
+                updateCapture("keyboard");
+                gameRef.current?.resumeAudio();
+                pressKey(event.code, key);
+              }}
+              onKeyUp={(event) => {
+                if (event.code === "Tab") setScoresOpen(false);
+                releaseKey(event.code);
+              }}
+            />
+          )}
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
