@@ -18,6 +18,8 @@ import {
 import {
   Select,
   SelectContent,
+  SelectGroup,
+  SelectGroupLabel,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -238,6 +240,14 @@ function downloadWad(map: GameMap, slot: string, fileName: string) {
     "application/octet-stream",
   );
 }
+
+const thingGroups: { category: ThingCategory; label: string }[] = [
+  { category: "start", label: "Player starts" },
+  { category: "enemy", label: "Enemies" },
+  { category: "item", label: "Items" },
+  { category: "key", label: "Keys" },
+  { category: "decor", label: "Decoration" },
+];
 
 type AppProps = {
   initialMap: GameMap;
@@ -725,17 +735,26 @@ function App({
         <SelectValue />
         <span aria-hidden="true">▾</span>
       </SelectTrigger>
-      <SelectContent className="select-content">
-        {thingKinds.map((kind) => {
-          const { icon: Icon, color } = thingIcons[kind];
-          return (
-            <SelectItem key={kind} value={kind} className="select-item">
-              <Icon size={14} style={{ color }} aria-hidden="true" />
-              {thingCatalog[kind].label}
-              <SelectCheck />
-            </SelectItem>
-          );
-        })}
+      <SelectContent className="select-content max-h-[min(var(--available-height),360px)]">
+        {thingGroups.map(({ category, label }) => (
+          <SelectGroup key={category}>
+            <SelectGroupLabel className="px-2 pt-2 pb-1 font-mono text-[11px] tracking-wide text-fg-muted uppercase">
+              {label}
+            </SelectGroupLabel>
+            {thingKinds
+              .filter((kind) => thingCatalog[kind].category === category)
+              .map((kind) => {
+                const { icon: Icon, color } = thingIcons[kind];
+                return (
+                  <SelectItem key={kind} value={kind} className="select-item">
+                    <Icon size={14} style={{ color }} aria-hidden="true" />
+                    {thingCatalog[kind].label}
+                    <SelectCheck />
+                  </SelectItem>
+                );
+              })}
+          </SelectGroup>
+        ))}
       </SelectContent>
     </Select>
   );
