@@ -55,6 +55,8 @@ const firstProjectId = "first-project";
 const firstMapId = "first-map";
 const lastMapKey = "lastMap";
 const lastProjectKey = "lastProject";
+const firstEpisodeName = "Episode 1";
+const oldFirstNames = new Set(["My project", "My episode"]);
 const hubSides: RoomSide[] = ["north", "east", "south", "west"];
 
 const mapSlots = Array.from(
@@ -199,10 +201,22 @@ function parseStoredMap(value: ProjectMap): ProjectMap {
 // Fixed ids let tabs opened together create the same first project. The old
 // single-map save stays in place as a backup after it is copied.
 async function prepareProjects(store: ProjectStore) {
-  const projects = await store.listProjects();
+  const listed = await store.listProjects();
+  // Browsers from before the fixed id gave the first episode a random one.
+  const projects = await Promise.all(
+    listed.map(async (project, index) => {
+      if (index > 0 || !oldFirstNames.has(project.name)) return project;
+      const renamed = { ...project, name: firstEpisodeName };
+      await store.putProject(renamed);
+      return renamed;
+    }),
+  );
   if (projects.length === 0) {
     const saved = loadSavedMap();
-    const project = { ...createProject("My episode"), id: firstProjectId };
+    const project = {
+      ...createProject(firstEpisodeName),
+      id: firstProjectId,
+    };
     const entry = {
       ...createMapEntry(project.id, mapSlots[0], saved ?? starterMap),
       id: firstMapId,

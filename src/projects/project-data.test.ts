@@ -168,6 +168,30 @@ describe("project storage", () => {
   });
 });
 
+describe("first episode", () => {
+  it("is called Episode 1, and keeps a name the player chose", async () => {
+    stubLegacy(null);
+    const store = createMemoryStore();
+    const ready = await prepareProjects(store);
+    expect(ready.projects[0].name).toBe("Episode 1");
+    await store.putProject({ ...ready.projects[0], name: "My project" });
+    expect((await prepareProjects(store)).projects[0].name).toBe("Episode 1");
+    await store.putProject({ ...ready.projects[0], name: "Ashfall" });
+    await store.putProject({
+      id: "older",
+      name: "My project",
+      createdAt: ready.projects[0].createdAt - 1,
+    });
+    const renamed = await prepareProjects(store);
+    expect(renamed.projects.map((project) => project.name)).toEqual([
+      "Episode 1",
+      "Ashfall",
+    ]);
+    await store.deleteProject("older");
+    expect((await prepareProjects(store)).projects[0].name).toBe("Ashfall");
+  });
+});
+
 describe("episode order", () => {
   it("moves maps into the slots the episode already uses", () => {
     const [a, b, c] = ["MAP01", "MAP02", "MAP05"].map((slot) =>
