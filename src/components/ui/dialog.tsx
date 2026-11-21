@@ -4,8 +4,6 @@ import * as React from "react";
 
 import { cn } from "../../lib/cn";
 
-type WithClass<P> = Omit<P, "className"> & { className?: string };
-
 const backdropClass = "fixed inset-0 z-40 bg-scrim";
 const contentClass =
   "fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-32px)] max-w-[calc(100vw-32px)] -translate-1/2 flex-col rounded-[4px] border border-input bg-card outline-none";
@@ -15,7 +13,7 @@ const titleClass =
 function DialogBackdrop({
   className,
   ...props
-}: WithClass<React.ComponentProps<typeof DialogPrimitive.DialogBackdrop>>) {
+}: React.ComponentProps<typeof DialogPrimitive.DialogBackdrop>) {
   return (
     <DialogPrimitive.DialogBackdrop
       className={cn(backdropClass, className)}
@@ -27,7 +25,7 @@ function DialogBackdrop({
 function DialogContent({
   className,
   ...props
-}: WithClass<React.ComponentProps<typeof DialogPrimitive.DialogContent>>) {
+}: React.ComponentProps<typeof DialogPrimitive.DialogContent>) {
   return (
     <DialogPrimitive.DialogContent
       className={cn(contentClass, className)}
@@ -39,7 +37,7 @@ function DialogContent({
 function DialogTitle({
   className,
   ...props
-}: WithClass<React.ComponentProps<typeof DialogPrimitive.DialogTitle>>) {
+}: React.ComponentProps<typeof DialogPrimitive.DialogTitle>) {
   return (
     <DialogPrimitive.DialogTitle
       className={cn(titleClass, className ?? "text-xl font-semibold")}
@@ -51,7 +49,7 @@ function DialogTitle({
 function DialogDescription({
   className,
   ...props
-}: WithClass<React.ComponentProps<typeof DialogPrimitive.DialogDescription>>) {
+}: React.ComponentProps<typeof DialogPrimitive.DialogDescription>) {
   return (
     <DialogPrimitive.DialogDescription
       className={cn(

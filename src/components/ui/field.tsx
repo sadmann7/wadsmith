@@ -9,9 +9,7 @@ const labelClass = "text-sm text-muted-foreground";
 function Field({
   className,
   ...props
-}: Omit<React.ComponentProps<typeof FieldPrimitive.Field>, "className"> & {
-  className?: string;
-}) {
+}: React.ComponentProps<typeof FieldPrimitive.Field>) {
   return (
     <FieldPrimitive.Field className={cn(fieldClass, className)} {...props} />
   );
@@ -20,9 +18,7 @@ function Field({
 function FieldLabel({
   className,
   ...props
-}: Omit<React.ComponentProps<typeof FieldPrimitive.FieldLabel>, "className"> & {
-  className?: string;
-}) {
+}: React.ComponentProps<typeof FieldPrimitive.FieldLabel>) {
   return (
     <FieldPrimitive.FieldLabel
       className={cn(labelClass, className)}

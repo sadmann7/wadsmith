@@ -4,10 +4,6 @@ import * as React from "react";
 
 import { cn } from "../../lib/cn";
 
-type WithClass<P> = Omit<P, "className"> & {
-  className?: string;
-};
-
 const popupClass =
   "z-20 max-h-(--available-height) overflow-y-auto rounded-[7px] border border-input bg-muted p-1 shadow-popover";
 
@@ -16,7 +12,7 @@ const itemClass = "flex items-center gap-2 rounded-[4px] px-2 py-[5px]";
 function SelectTrigger({
   className,
   ...props
-}: WithClass<React.ComponentProps<typeof SelectPrimitive.SelectTrigger>>) {
+}: React.ComponentProps<typeof SelectPrimitive.SelectTrigger>) {
   return (
     <SelectPrimitive.SelectTrigger
       className={cn(
@@ -31,7 +27,7 @@ function SelectTrigger({
 function SelectContent({
   className,
   ...props
-}: WithClass<React.ComponentProps<typeof SelectPrimitive.SelectContent>>) {
+}: React.ComponentProps<typeof SelectPrimitive.SelectContent>) {
   return (
     <SelectPrimitive.SelectContent
       className={cn(popupClass, "min-w-(--anchor-width)", className)}
@@ -43,7 +39,7 @@ function SelectContent({
 function SelectItem({
   className,
   ...props
-}: WithClass<React.ComponentProps<typeof SelectPrimitive.SelectItem>>) {
+}: React.ComponentProps<typeof SelectPrimitive.SelectItem>) {
   return (
     <SelectPrimitive.SelectItem
       className={cn(itemClass, "data-[highlighted]:bg-accent", className)}
@@ -55,7 +51,7 @@ function SelectItem({
 function SelectLabel({
   className,
   ...props
-}: WithClass<React.ComponentProps<typeof SelectPrimitive.SelectLabel>>) {
+}: React.ComponentProps<typeof SelectPrimitive.SelectLabel>) {
   return (
     <SelectPrimitive.SelectLabel
       className={cn("text-sm text-muted-foreground", className)}

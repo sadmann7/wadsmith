@@ -43,14 +43,13 @@ function Button({
   size,
   className,
   ...props
-}: Omit<React.ComponentProps<typeof ButtonPrimitive.Button>, "className"> & {
+}: React.ComponentProps<typeof ButtonPrimitive.Button> & {
   variant?: ButtonVariant;
   size?: ButtonSize;
-  className?: string;
 }) {
   return (
     <ButtonPrimitive.Button
-      className={buttonVariants({ variant, size, className })}
+      className={cn(buttonVariants({ variant, size }), className)}
       {...props}
     />
   );

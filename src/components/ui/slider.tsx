@@ -8,12 +8,8 @@ function Slider({
   className,
   children,
   ...props
-}: Omit<
-  React.ComponentProps<typeof SliderPrimitive.Slider>,
-  "className" | "children"
-> & {
+}: Omit<React.ComponentProps<typeof SliderPrimitive.Slider>, "children"> & {
   label: string;
-  className?: string;
   children?: React.ReactNode;
 }) {
   return (

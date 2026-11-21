@@ -6,12 +6,7 @@ import { cn } from "../../lib/cn";
 function Switch({
   className,
   ...props
-}: Omit<
-  React.ComponentProps<typeof SwitchPrimitive.Switch>,
-  "className" | "children"
-> & {
-  className?: string;
-}) {
+}: Omit<React.ComponentProps<typeof SwitchPrimitive.Switch>, "children">) {
   return (
     <SwitchPrimitive.Switch
       className={cn(

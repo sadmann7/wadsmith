@@ -4,14 +4,10 @@ import * as React from "react";
 import { cn } from "../../lib/cn";
 import { itemClass, popupClass } from "./select";
 
-type WithClass<P> = Omit<P, "className"> & {
-  className?: string;
-};
-
 function MenuContent({
   className,
   ...props
-}: WithClass<React.ComponentProps<typeof MenuPrimitive.MenuContent>>) {
+}: React.ComponentProps<typeof MenuPrimitive.MenuContent>) {
   return (
     <MenuPrimitive.MenuContent
       className={cn(popupClass, className)}
@@ -24,7 +20,7 @@ function MenuItem({
   variant = "default",
   className,
   ...props
-}: WithClass<React.ComponentProps<typeof MenuPrimitive.MenuItem>> & {
+}: React.ComponentProps<typeof MenuPrimitive.MenuItem> & {
   variant?: "default" | "destructive";
 }) {
   return (
@@ -45,7 +41,7 @@ function MenuItem({
 function MenuSeparator({
   className,
   ...props
-}: WithClass<React.ComponentProps<typeof MenuPrimitive.MenuSeparator>>) {
+}: React.ComponentProps<typeof MenuPrimitive.MenuSeparator>) {
   return (
     <MenuPrimitive.MenuSeparator
       className={cn("my-1 h-px bg-input/30", className)}
