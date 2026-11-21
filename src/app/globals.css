@@ -1099,6 +1099,15 @@
     white-space: nowrap;
   }
 
+  /* A big imported map names a room once it's wide enough on screen. */
+  .map[data-crowded] .map-label {
+    opacity: clamp(
+      0,
+      calc((var(--room-width) * var(--canvas-zoom, 1) - 80) / 40),
+      1
+    );
+  }
+
   .map[data-mode="things"] .map-label {
     z-index: auto;
   }

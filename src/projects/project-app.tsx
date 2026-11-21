@@ -30,12 +30,15 @@ import {
 import type { GameMap } from "../map/types";
 import { validateMap } from "../map/validate";
 import { compileEpisode, compileMap } from "../wad/compile";
+import { decompileMap } from "../wad/decompile";
 import {
   WadFileError,
   inspectWads,
+  isWad,
   type GameFile,
   type WadSummary,
 } from "../wad/inspect";
+import { readMaps } from "../wad/read-map";
 import { isZip, unzip } from "../wad/zip";
 import {
   dialogClass,
@@ -69,6 +72,7 @@ import { SidebarDrawer, type SidebarProps } from "./app-sidebar";
 import { EpisodeBuildDialog } from "./episode-build-dialog";
 import { FeaturedMaps } from "./featured-maps";
 import { ProjectHome } from "./project-home";
+import { WadImportDialog, type ImportedMap } from "./wad-import-dialog";
 import { WadPlayDialog } from "./wad-play-dialog";
 import { findEpisode, parseRoute, pathOf, type Route } from "./routes";
 import { createMemoryStore, openProjectStore } from "./project-store";
@@ -172,6 +176,18 @@ function problemOf(error: unknown, slot: string) {
   return isSlotConflict(error) ? `${slot} is already in use.` : saveFailure;
 }
 
+async function readGameFiles(picked: File[]) {
+  const files = await Promise.all(
+    picked.map(async (file): Promise<GameFile[]> => {
+      const data = new Uint8Array(await file.arrayBuffer());
+      return isZip(data)
+        ? unzip({ name: file.name, data })
+        : [{ name: file.name, data }];
+    }),
+  );
+  return files.flat();
+}
+
 function ProjectApp() {
   const [store, setStore] = useState<ProjectStore | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -199,6 +215,12 @@ function ProjectApp() {
     entry: FeaturedMap;
     hosted: HostedGame | null;
   } | null>(null);
+  const [wadImport, setWadImport] = useState<{
+    projectId: string;
+    fileName: string;
+    maps: ImportedMap[];
+    slots: string[];
+  } | null>(null);
   const [wadPick, setWadPick] = useState<{
     title: string;
     summary: WadSummary;
@@ -212,6 +234,7 @@ function ProjectApp() {
   const playPushed = useRef(false);
   const routeRun = useRef(0);
   const wadRun = useRef(0);
+  const importRun = useRef(0);
   const settling = useRef(true);
   const settleCount = useRef(0);
   const historySettle = useRef(0);
@@ -485,6 +508,8 @@ function ProjectApp() {
       }
       setEpisodePlay(null);
       wadRun.current += 1;
+      importRun.current += 1;
+      setWadImport(null);
       setWadPick(null);
       setWadPlay(null);
       endPlay();
@@ -737,21 +762,14 @@ function ProjectApp() {
   const openWads = async (picked: File[]) => {
     const run = ++wadRun.current;
     try {
-      const files = await Promise.all(
-        picked.map(async (file): Promise<GameFile[]> => {
-          const data = new Uint8Array(await file.arrayBuffer());
-          return isZip(data)
-            ? unzip({ name: file.name, data })
-            : [{ name: file.name, data }];
-        }),
-      );
+      const files = await readGameFiles(picked);
       if (run !== wadRun.current) return;
       setMessage(null);
       setWadPick({
         title: (
           picked.find((file) => !/\.(deh|bex)$/i.test(file.name)) ?? picked[0]
         ).name.replace(/\.[^.]+$/, ""),
-        summary: inspectWads(files.flat()),
+        summary: inspectWads(files),
       });
     } catch (error) {
       if (run !== wadRun.current) return;
@@ -761,6 +779,90 @@ function ProjectApp() {
           : "Couldn't open those files.",
       );
     }
+  };
+
+  const importWadMaps = async (picked: File[]) => {
+    const run = ++importRun.current;
+    const projectAt = project.id;
+    const label = picked.length === 1 ? picked[0].name : "those files";
+    try {
+      const files = (await readGameFiles(picked)).filter((file) =>
+        isWad(file.data),
+      );
+      if (files.length === 0) {
+        throw new WadFileError("Choose a map file, a WAD or a zip.");
+      }
+      const found = readMaps(files);
+      const converted: ImportedMap[] = [];
+      for (const [index, doom] of found.entries()) {
+        setMessage(`Reading ${doom.slot}, ${index + 1} of ${found.length}…`);
+        // Big WADs take a while, so the page gets a frame between maps.
+        await new Promise((done) => setTimeout(done));
+        if (run !== importRun.current) return;
+        converted.push({ slot: doom.slot, ...decompileMap(doom) });
+      }
+      const slots = freeSlots(await store.listMaps(projectAt));
+      if (run !== importRun.current) return;
+      if (slots.length === 0) {
+        setMessage("All 32 map slots are in use.");
+        return;
+      }
+      setMessage(null);
+      setWadImport({
+        projectId: projectAt,
+        fileName:
+          files.length === 1
+            ? files[0].name
+            : `${files[0].name} and ${files.length - 1} more`,
+        maps: converted,
+        slots,
+      });
+    } catch (error) {
+      if (run !== importRun.current) return;
+      setMessage(
+        error instanceof WadFileError
+          ? `Couldn't import ${label}. ${error.message}`
+          : `Couldn't import ${label}.`,
+      );
+    }
+  };
+
+  const saveImported = async (
+    fileName: string,
+    picked: { map: GameMap; slot: string }[],
+  ) => {
+    setWadImport(null);
+    const base = fileName.replace(/\.[^.]+( and \d+ more)?$/, "");
+    try {
+      for (const { map, slot } of picked) {
+        await store.putMap(
+          createMapEntry(project.id, slot, {
+            ...map,
+            name: `${base} ${map.name}`,
+          }),
+        );
+      }
+      announce();
+      setMessage(
+        picked.length === 1
+          ? `${base} ${picked[0].map.name} was added as ${picked[0].slot}.`
+          : `${picked.length} maps were added as ${picked[0].slot} to ${picked.at(-1)!.slot}.`,
+      );
+    } catch (error) {
+      setMessage(
+        isSlotConflict(error)
+          ? "A slot was just taken. Try again."
+          : "Couldn't save the imported maps.",
+      );
+    }
+    await refresh(store, project.id);
+  };
+
+  const importFiles = async (picked: File[]) => {
+    const maps = picked.filter((file) => /\.json$/i.test(file.name));
+    for (const file of maps) await importMap(file);
+    const rest = picked.filter((file) => !maps.includes(file));
+    if (rest.length > 0) await importWadMaps(rest);
   };
 
   const importMap = async (file: File) => {
@@ -1064,6 +1166,15 @@ function ProjectApp() {
 
   return (
     <>
+      {wadImport?.projectId === project.id ? (
+        <WadImportDialog
+          fileName={wadImport.fileName}
+          maps={wadImport.maps}
+          slots={wadImport.slots}
+          onImport={(picked) => void saveImported(wadImport.fileName, picked)}
+          onClose={() => setWadImport(null)}
+        />
+      ) : null}
       {buildingEpisode === project.id ? (
         <EpisodeBuildDialog
           name={project.name}
@@ -1098,7 +1209,7 @@ function ProjectApp() {
         }
         onExportProject={exportProject}
         onImportProject={(file) => void importProject(file)}
-        onImportMap={(file) => void importMap(file)}
+        onImportFiles={(files) => void importFiles(files)}
         onBuildEpisode={() => setBuildingEpisode(project.id)}
         onPlayEpisode={() => playEpisode(maps)}
         onOpenMap={(entry) => void openMap(entry)}

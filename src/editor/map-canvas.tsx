@@ -25,6 +25,7 @@ import {
 import { thingIcons } from "./thing-icons";
 
 const worldSize = 65536;
+const crowdedRooms = 60;
 
 function wallsOf(map: GameMap) {
   const walls = new Map<
@@ -42,6 +43,11 @@ function wallsOf(map: GameMap) {
   return [...walls].map(([key, wall]) => ({ key, ...wall }));
 }
 
+function widthOf(map: GameMap, sector: GameMap["sectors"][number]) {
+  const xs = sector.vertices.map((id) => map.vertices[id].x);
+  return Math.max(...xs) - Math.min(...xs);
+}
+
 function MapCanvas({
   map,
   callouts,
@@ -51,7 +57,13 @@ function MapCanvas({
   callouts: { id: string; x: number; y: number; text: string }[];
 }) {
   return (
-    <MapEditor aria-label="Map" className="map" map={map} {...props}>
+    <MapEditor
+      aria-label="Map"
+      className="map"
+      map={map}
+      data-crowded={map.sectors.length > crowdedRooms ? "" : undefined}
+      {...props}
+    >
       <MapWorld className="map-world">
         <svg className="map-svg" width="1" height="1" aria-hidden="true">
           <defs>
@@ -107,7 +119,12 @@ function MapCanvas({
         {map.sectors
           .filter((sector) => !sector.door)
           .map((sector, index) => (
-            <MapLabel key={sector.id} value={sector.id} className="map-label">
+            <MapLabel
+              key={sector.id}
+              value={sector.id}
+              className="map-label"
+              style={{ "--room-width": widthOf(map, sector) } as CSSProperties}
+            >
               <strong>{sector.name}</strong>
               <span>
                 S{String(index + 1).padStart(2, "0")} {sector.floor}/

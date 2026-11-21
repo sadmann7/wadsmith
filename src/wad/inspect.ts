@@ -223,4 +223,11 @@ function inspectWads(files: GameFile[]): WadSummary {
   };
 }
 
-export { WadFileError, inspectWads, readLumps, type GameFile, type WadSummary };
+export {
+  WadFileError,
+  inspectWads,
+  isWad,
+  readLumps,
+  type GameFile,
+  type WadSummary,
+};
