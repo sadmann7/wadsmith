@@ -287,6 +287,40 @@ describe("readMaps", () => {
     expect(maps[1].things).toHaveLength(testMap.things.length);
   });
 
+  it("names maps after the titles a patch or UMAPINFO gives them", () => {
+    const lump = (name: string, body: string) => {
+      const data = new TextEncoder().encode(body);
+      const wad = new Uint8Array(12 + data.length + 16);
+      const view = new DataView(wad.buffer);
+      wad.set(new TextEncoder().encode("PWAD"));
+      view.setInt32(4, 1, true);
+      view.setInt32(8, 12 + data.length, true);
+      wad.set(data, 12);
+      view.setInt32(12 + data.length, 12, true);
+      view.setInt32(12 + data.length + 4, data.length, true);
+      wad.set(new TextEncoder().encode(name), 12 + data.length + 8);
+      return { name: `${name}.wad`, data: wad };
+    };
+    const episode = compileEpisode(
+      ["MAP01", "MAP02", "MAP03"].map((slot) => ({ slot, map: starterMap })),
+    );
+    const maps = readMaps([
+      { name: "episode.wad", data: episode },
+      lump(
+        "DEHACKED",
+        "[STRINGS]\nHUSTR_1 = MAP01: Hydroelectric Plant\nPHUSTR_2 = level 2: Wrong\nHUSTR_3 = MAP03\n",
+      ),
+      lump("UMAPINFO", 'map MAP02\n{\n  levelname = "Filtration Tunnels"\n}\n'),
+    ]);
+    expect(maps.map((map) => map.title)).toEqual([
+      "Hydroelectric Plant",
+      "Filtration Tunnels",
+      undefined,
+    ]);
+    expect(decompileMap(maps[0]).map.name).toBe("Hydroelectric Plant");
+    expect(decompileMap(maps[2]).map.name).toBe("MAP03");
+  });
+
   it("explains WADs the editor can't open", () => {
     const wad = (names: string[]) => {
       const directory = new Uint8Array(12 + names.length * 16);
@@ -319,6 +353,7 @@ describe.skipIf(!existsSync(freedoom))("Freedoom's maps", () => {
 
   it("convert into rooms that keep their shape and save", () => {
     expect(maps).toHaveLength(32);
+    expect(maps.every((doom) => doom.title)).toBe(true);
     for (const doom of maps) {
       const { map } = decompileMap(doom);
       const kinds = new Set(

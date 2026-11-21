@@ -855,19 +855,18 @@ function EpisodeApp() {
   ) => {
     setWadImport(null);
     const base = fileName.replace(/\.[^.]+( and \d+ more)?$/, "");
+    const nameOf = (map: GameMap) =>
+      /^MAP\d\d$/.test(map.name ?? "") ? `${base} ${map.name}` : map.name;
     try {
       for (const { map, slot } of picked) {
         await store.putMap(
-          createMapEntry(episode.id, slot, {
-            ...map,
-            name: `${base} ${map.name}`,
-          }),
+          createMapEntry(episode.id, slot, { ...map, name: nameOf(map) }),
         );
       }
       announce();
       setMessage(
         picked.length === 1
-          ? `${base} ${picked[0].map.name} was added as ${picked[0].slot}.`
+          ? `${nameOf(picked[0].map)} was added as ${picked[0].slot}.`
           : `${picked.length} maps were added as ${picked[0].slot} to ${picked.at(-1)!.slot}.`,
       );
     } catch (error) {

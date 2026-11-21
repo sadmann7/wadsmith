@@ -811,7 +811,7 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
   report.replacedTextures = [...replaced].toSorted();
   return {
     map: {
-      name: doom.slot,
+      name: doom.title ?? doom.slot,
       vertices,
       sectors,
       things,

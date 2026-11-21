@@ -39,11 +39,15 @@ type DoomMap = {
   sides: DoomSide[];
   sectors: DoomSector[];
   things: DoomThing[];
+  title?: string;
 };
 
 const mapLump = /^MAP(0[1-9]|[12][0-9]|3[0-2])$/;
 const noSide = 0xffff;
 const text = new TextDecoder("latin1");
+const levelString = /^\s*HUSTR_(\d+)\s*=\s*(.*?)\s*$/gim;
+const levelInfo = /^\s*map\s+(MAP\d\d)\s*\{([^}]*)\}/gim;
+const levelName = /^\s*levelname\s*=\s*"([^"]*)"/im;
 
 function name(bytes: Uint8Array) {
   const end = bytes.indexOf(0);
@@ -109,13 +113,46 @@ function parseMap(slot: string, lumps: Map<string, Uint8Array>): DoomMap {
 }
 
 // A map in a later WAD replaces one in the same slot, as when the engine loads them.
+// Titles often repeat the slot, as in "MAP01: Entryway".
+function titleOf(slot: string, value: string) {
+  const title = value.replace(/^(MAP\d\d|level \d+)\s*:\s*/i, "").trim();
+  return title && title.toUpperCase() !== slot ? title : null;
+}
+
+function readTitles(lumpName: string, data: Uint8Array) {
+  const source = text.decode(data);
+  const titles: [string, string][] = [];
+  if (lumpName === "DEHACKED") {
+    for (const [, number, value] of source.matchAll(levelString)) {
+      const slot = `MAP${number.padStart(2, "0")}`;
+      const title = titleOf(slot, value);
+      if (mapLump.test(slot) && title) titles.push([slot, title]);
+    }
+  } else {
+    for (const [, slot, body] of source.matchAll(levelInfo)) {
+      const title = titleOf(
+        slot.toUpperCase(),
+        levelName.exec(body)?.[1] ?? "",
+      );
+      if (title) titles.push([slot.toUpperCase(), title]);
+    }
+  }
+  return titles;
+}
+
 function readMaps(files: GameFile[]): DoomMap[] {
   const maps = new Map<string, DoomMap>();
+  const titles = new Map<string, string>();
   let doomOne = false;
   for (const file of files) {
     const lumps = readLumps(file);
     for (const [index, lump] of lumps.entries()) {
       if (/^E\dM\d$/.test(lump.name)) doomOne = true;
+      if (lump.name === "DEHACKED" || lump.name === "UMAPINFO") {
+        for (const [slot, title] of readTitles(lump.name, lump.data)) {
+          titles.set(slot, title);
+        }
+      }
       if (!mapLump.test(lump.name)) continue;
       const parts = new Map<string, Uint8Array>();
       for (const part of lumps.slice(index + 1, index + 12)) {
@@ -142,7 +179,11 @@ function readMaps(files: GameFile[]): DoomMap[] {
         : "There are no maps in these files.",
     );
   }
-  return [...maps.values()].toSorted((a, b) => a.slot.localeCompare(b.slot));
+  return [...maps.values()]
+    .map((map) =>
+      titles.has(map.slot) ? { ...map, title: titles.get(map.slot) } : map,
+    )
+    .toSorted((a, b) => a.slot.localeCompare(b.slot));
 }
 
 export {
