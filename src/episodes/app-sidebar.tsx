@@ -41,6 +41,11 @@ const starts: { value: EpisodeStart; label: string; detail: string }[] = [
     label: "Featured maps",
     detail: `All ${featuredMaps.length}, in MAP01 to MAP${String(featuredMaps.length).padStart(2, "0")}`,
   },
+  {
+    value: "freedoom",
+    label: "Freedoom",
+    detail: "All 32 levels of Freedoom: Phase 2",
+  },
 ];
 
 function StartPreview({ start }: { start: EpisodeStart }) {
@@ -58,6 +63,15 @@ function StartPreview({ start }: { start: EpisodeStart }) {
         className="h-[92px] w-full bg-background p-5"
         solidColor="var(--color-muted-foreground)"
       />
+    );
+  }
+  if (start === "freedoom") {
+    return (
+      <div className="grid h-[92px] grid-cols-8 content-center gap-1 bg-background p-3">
+        {Array.from({ length: 32 }, (_, index) => (
+          <span key={index} className="h-3 rounded-[1px] bg-input" />
+        ))}
+      </div>
     );
   }
   return (
@@ -111,14 +125,19 @@ function NewEpisodeDialog({
               <legend className="mb-2 p-0 text-sm text-muted-foreground">
                 Start with
               </legend>
-              <div className="grid grid-cols-3 gap-2.5 max-[560px]:grid-cols-1">
+              <div className="grid grid-cols-2 gap-2.5 max-[560px]:grid-cols-1">
                 {starts.map((item) => (
                   <button
                     key={item.value}
                     type="button"
                     aria-pressed={start === item.value}
                     className="grid gap-2 rounded-[3px] border border-input bg-transparent p-2 text-left text-foreground aria-pressed:border-primary aria-pressed:bg-primary/10 aria-pressed:text-foreground"
-                    onClick={() => setStart(item.value)}
+                    onClick={() => {
+                      setStart(item.value);
+                      if (item.value === "freedoom" && !name.trim()) {
+                        setName("Freedoom");
+                      }
+                    }}
                   >
                     <StartPreview start={item.value} />
                     <span className="grid gap-0.5 px-1 pb-1">
