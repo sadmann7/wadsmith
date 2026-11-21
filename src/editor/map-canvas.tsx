@@ -1,10 +1,11 @@
 import { Focus, LocateFixed, Maximize, StickyNote } from "lucide-react";
+import { useMemo, useState } from "react";
 import type { ComponentProps, CSSProperties } from "react";
 
 import { thingCatalog } from "../map/catalog";
 import { doorKeyPrefix, switchKeyPrefix, thingKeyPrefix } from "../map/edit";
 import { sectorEdges } from "../map/geometry";
-import type { GameMap } from "../map/types";
+import type { GameMap, Sector } from "../map/types";
 import {
   MapCamera,
   MapConnecting,
@@ -27,6 +28,10 @@ import { buttonVariants } from "../components/ui/button";
 
 const worldSize = 65536;
 const crowdedRooms = 60;
+const farZoom = 0.5;
+const labelWidth = 80;
+const noSelection: string[] = [];
+const nowhere = { left: 0, top: 0, right: -1, bottom: -1 };
 
 function wallsOf(map: GameMap) {
   const walls = new Map<
@@ -44,25 +49,298 @@ function wallsOf(map: GameMap) {
   return [...walls].map(([key, wall]) => ({ key, ...wall }));
 }
 
-function widthOf(map: GameMap, sector: GameMap["sectors"][number]) {
-  const xs = sector.vertices.map((id) => map.vertices[id].x);
-  return Math.max(...xs) - Math.min(...xs);
+type Area = { left: number; top: number; right: number; bottom: number };
+
+// The view grown by a cell of at least half its size on every side and
+// snapped to those cells, so panning renders again only after crossing one.
+function areaAround(view: Area): Area {
+  const cell =
+    2 **
+    Math.ceil(
+      Math.log2(
+        Math.max(view.right - view.left, view.bottom - view.top, 2) / 2,
+      ),
+    );
+  return {
+    left: (Math.floor(view.left / cell) - 1) * cell,
+    top: (Math.floor(view.top / cell) - 1) * cell,
+    right: (Math.ceil(view.right / cell) + 1) * cell,
+    bottom: (Math.ceil(view.bottom / cell) + 1) * cell,
+  };
+}
+
+function sameArea(a: Area | null, b: Area) {
+  return (
+    a !== null &&
+    a.left === b.left &&
+    a.top === b.top &&
+    a.right === b.right &&
+    a.bottom === b.bottom
+  );
+}
+
+function inArea(area: Area | null, { x, y }: { x: number; y: number }) {
+  return (
+    !area ||
+    (x >= area.left && x <= area.right && y >= area.top && y <= area.bottom)
+  );
+}
+
+function boxOf(map: GameMap, sector: GameMap["sectors"][number]): Area {
+  const points = sector.vertices.map((id) => map.vertices[id]);
+  const xs = points.map((point) => point.x);
+  const ys = points.map((point) => point.y);
+  return {
+    left: Math.min(...xs),
+    top: Math.min(...ys),
+    right: Math.max(...xs),
+    bottom: Math.max(...ys),
+  };
+}
+
+// A crowded map keeps the bigger room's label where two would overlap. The
+// sizes are rough, from the name's length, and the zoom step can run up to a
+// fifth over the zoom, so they're scaled up to match.
+function clearOf<Room extends { sector: Sector; box: Area }>(
+  rooms: Room[],
+  zoom: number,
+) {
+  if (!Number.isFinite(zoom)) return rooms;
+  const scale = 1.2 / zoom;
+  const placed: Area[] = [];
+  const kept = new Set(
+    rooms
+      .toSorted(
+        (a, b) =>
+          (b.box.right - b.box.left) * (b.box.bottom - b.box.top) -
+          (a.box.right - a.box.left) * (a.box.bottom - a.box.top),
+      )
+      .filter(({ sector, box }) => {
+        const halfWidth = ((sector.name.length * 7.5 + 8) / 2) * scale;
+        const x = (box.left + box.right) / 2;
+        const y = box.top + 24 / zoom;
+        const label = {
+          left: x - halfWidth,
+          right: x + halfWidth,
+          top: y - 10 * scale,
+          bottom: y + 10 * scale,
+        };
+        if (
+          placed.some(
+            (other) =>
+              label.left < other.right &&
+              label.right > other.left &&
+              label.top < other.bottom &&
+              label.bottom > other.top,
+          )
+        ) {
+          return false;
+        }
+        placed.push(label);
+        return true;
+      }),
+  );
+  return rooms.filter((room) => kept.has(room));
+}
+
+// Zoom in quarter octaves, rounded up, so the canvas renders again only when
+// the zoom crosses a step.
+function zoomStep(zoom: number) {
+  return 2 ** (Math.ceil(Math.log2(zoom) * 4) / 4);
 }
 
 function MapCanvas({
   map,
   callouts,
+  onViewChange,
   ...props
 }: ComponentProps<typeof MapEditor> & {
   map: GameMap;
   callouts: { id: string; x: number; y: number; text: string }[];
 }) {
+  const [step, setStep] = useState(1);
+  const [zoomedOut, setZoomedOut] = useState(false);
+  const [seen, setSeen] = useState<Area | null>(null);
+  const crowded = map.sectors.length > crowdedRooms;
+  // Zoomed out, a big map's corners and icons would bury its rooms, and every
+  // mounted part updates on every pan and zoom.
+  const far = crowded && zoomedOut;
+  const corners =
+    (props.editMode ?? "vertices") === "vertices" &&
+    (!far || (props.tool ?? "select") !== "select");
+  const labelStep = crowded ? step : Infinity;
+  const area = crowded ? (seen ?? nowhere) : null;
+  const selection = props.selection ?? noSelection;
+
+  const shapes = useMemo(
+    () => (
+      <>
+        {map.sectors.map((sector) => (
+          <MapSector key={sector.id} value={sector.id} className="map-sector" />
+        ))}
+        {wallsOf(map).map((wall) => (
+          <MapWall
+            key={wall.key}
+            value={wall.key}
+            from={wall.from}
+            to={wall.to}
+            className="map-wall"
+            data-portal={wall.shared ? "" : undefined}
+          />
+        ))}
+        {map.switches.flatMap((item) =>
+          item.door
+            ? [
+                <MapWire
+                  key={item.id}
+                  value={item.id}
+                  from={`${switchKeyPrefix}${item.id}`}
+                  to={`${doorKeyPrefix}${item.door}`}
+                  className="map-wire"
+                />,
+              ]
+            : [],
+        )}
+      </>
+    ),
+    [map],
+  );
+
+  const rooms = useMemo(
+    () =>
+      map.sectors
+        .filter((sector) => !sector.door)
+        .map((sector, index) => ({
+          sector,
+          number: String(index + 1).padStart(2, "0"),
+          box: boxOf(map, sector),
+        })),
+    [map],
+  );
+
+  const labels = useMemo(
+    () =>
+      clearOf(
+        rooms.filter(
+          ({ box }) =>
+            (box.right - box.left) * labelStep >= labelWidth &&
+            (!area ||
+              (box.right >= area.left &&
+                box.left <= area.right &&
+                box.bottom >= area.top &&
+                box.top <= area.bottom)),
+        ),
+        labelStep,
+      ).map(({ sector, number, box }) => (
+        <MapLabel
+          key={sector.id}
+          value={sector.id}
+          className="map-label"
+          style={{ "--room-width": box.right - box.left } as CSSProperties}
+        >
+          <strong>{sector.name}</strong>
+          <span>
+            S{number} {sector.floor}/{sector.ceiling}
+          </span>
+        </MapLabel>
+      )),
+    [rooms, labelStep, area],
+  );
+
+  const handles = useMemo(
+    () =>
+      Object.entries(map.vertices)
+        .filter(
+          ([id, point]) =>
+            (corners && inArea(area, point)) || selection.includes(id),
+        )
+        .map(([id]) => id)
+        .map((id) => (
+          <MapHandle
+            key={id}
+            value={id}
+            className="map-vertex"
+            aria-label={`Corner ${id}`}
+          />
+        )),
+    [map, corners, area, selection],
+  );
+
+  const things = useMemo(
+    () =>
+      map.things
+        .filter(
+          (thing) =>
+            inArea(area, thing) ||
+            selection.includes(`${thingKeyPrefix}${thing.id}`),
+        )
+        .map((thing) => {
+          const { label } = thingCatalog[thing.kind];
+          const { icon: Icon, color } = thingIcons[thing.kind];
+          const startNumber = /^player-(\d)$/.exec(thing.kind)?.[1];
+          return (
+            <MapHandle
+              key={thing.id}
+              value={`${thingKeyPrefix}${thing.id}`}
+              className="map-thing"
+              aria-label={label}
+              title={label}
+              style={{ "--thing-color": color } as CSSProperties}
+            >
+              {far
+                ? null
+                : (startNumber ?? <Icon size={13} aria-hidden="true" />)}
+            </MapHandle>
+          );
+        }),
+    [map, far, area, selection],
+  );
+
+  const ports = useMemo(
+    () => (
+      <>
+        {map.sectors
+          .filter((sector) => sector.door)
+          .map((sector) => (
+            <MapPort
+              key={sector.id}
+              value={`${doorKeyPrefix}${sector.id}`}
+              className="map-port map-door"
+              aria-label={`Door: ${sector.name}`}
+              title={sector.name}
+            />
+          ))}
+        {map.switches.map((item) => (
+          <MapPort
+            key={item.id}
+            value={`${switchKeyPrefix}${item.id}`}
+            className="map-port map-switch"
+            aria-label={`Switch ${item.id}. Drag to a door, or press C.`}
+            title="Drag to a door"
+          />
+        ))}
+      </>
+    ),
+    [map],
+  );
+
   return (
     <MapEditor
       aria-label="Map"
       className="map"
       map={map}
-      data-crowded={map.sectors.length > crowdedRooms ? "" : undefined}
+      data-crowded={crowded ? "" : undefined}
+      data-far={far ? "" : undefined}
+      onViewChange={(status) => {
+        setStep(zoomStep(status.zoom));
+        setZoomedOut(status.zoom < farZoom);
+        // A hidden pane reports no size, which says nothing about its view.
+        if (status.view.right > status.view.left) {
+          const next = areaAround(status.view);
+          setSeen((current) => (sameArea(current, next) ? current : next));
+        }
+        onViewChange?.(status);
+      }}
       {...props}
     >
       <MapWorld className="map-world">
@@ -84,100 +362,14 @@ function MapCanvas({
             height={worldSize}
             fill="url(#map-grid)"
           />
-          {map.sectors.map((sector) => (
-            <MapSector
-              key={sector.id}
-              value={sector.id}
-              className="map-sector"
-            />
-          ))}
-          {wallsOf(map).map((wall) => (
-            <MapWall
-              key={wall.key}
-              value={wall.key}
-              from={wall.from}
-              to={wall.to}
-              className="map-wall"
-              data-portal={wall.shared ? "" : undefined}
-            />
-          ))}
-          {map.switches.flatMap((item) =>
-            item.door
-              ? [
-                  <MapWire
-                    key={item.id}
-                    value={item.id}
-                    from={`${switchKeyPrefix}${item.id}`}
-                    to={`${doorKeyPrefix}${item.door}`}
-                    className="map-wire"
-                  />,
-                ]
-              : [],
-          )}
+          {shapes}
           <MapConnecting className="map-wire map-connecting" />
           <MapDraft className="map-draft" />
         </svg>
-        {map.sectors
-          .filter((sector) => !sector.door)
-          .map((sector, index) => (
-            <MapLabel
-              key={sector.id}
-              value={sector.id}
-              className="map-label"
-              style={{ "--room-width": widthOf(map, sector) } as CSSProperties}
-            >
-              <strong>{sector.name}</strong>
-              <span>
-                S{String(index + 1).padStart(2, "0")} {sector.floor}/
-                {sector.ceiling}
-              </span>
-            </MapLabel>
-          ))}
-        {Object.keys(map.vertices).map((id) => (
-          <MapHandle
-            key={id}
-            value={id}
-            className="map-vertex"
-            aria-label={`Corner ${id}`}
-          />
-        ))}
-        {map.things.map((thing) => {
-          const { label } = thingCatalog[thing.kind];
-          const { icon: Icon, color } = thingIcons[thing.kind];
-          const startNumber = /^player-(\d)$/.exec(thing.kind)?.[1];
-          return (
-            <MapHandle
-              key={thing.id}
-              value={`${thingKeyPrefix}${thing.id}`}
-              className="map-thing"
-              aria-label={label}
-              title={label}
-              style={{ "--thing-color": color } as CSSProperties}
-            >
-              {startNumber ?? <Icon size={13} aria-hidden="true" />}
-            </MapHandle>
-          );
-        })}
-        {map.sectors
-          .filter((sector) => sector.door)
-          .map((sector) => (
-            <MapPort
-              key={sector.id}
-              value={`${doorKeyPrefix}${sector.id}`}
-              className="map-port map-door"
-              aria-label={`Door: ${sector.name}`}
-              title={sector.name}
-            />
-          ))}
-        {map.switches.map((item) => (
-          <MapPort
-            key={item.id}
-            value={`${switchKeyPrefix}${item.id}`}
-            className="map-port map-switch"
-            aria-label={`Switch ${item.id}. Drag to a door, or press C.`}
-            title="Drag to a door"
-          />
-        ))}
+        {labels}
+        {handles}
+        {things}
+        {ports}
         {map.notes?.map((note) => (
           <MapMarker
             key={note.id}
