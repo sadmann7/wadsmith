@@ -1026,7 +1026,7 @@ function App({
               <MenuTrigger className="menu-trigger">File</MenuTrigger>
               <MenuContent className="select-content">
                 <MenuItem value="projects" className="select-item">
-                  All episodes
+                  Episode home
                 </MenuItem>
                 <MenuItem value="new" className="select-item">
                   New map…

@@ -52,16 +52,6 @@ function MapSwitcher({
     <nav aria-label="Breadcrumb" className="map-title min-w-0 gap-2">
       <button
         type="button"
-        className="shrink-0 border-0 bg-transparent p-0 text-[13px] text-fg-muted hover:text-fg max-xl:hidden"
-        onClick={onEpisodeHome}
-      >
-        Episodes
-      </button>
-      <span aria-hidden="true" className="text-fg-disabled max-xl:hidden">
-        /
-      </span>
-      <button
-        type="button"
         className="min-w-0 truncate border-0 bg-transparent p-0 text-[13px] text-fg-muted hover:text-fg max-lg:hidden"
         onClick={onEpisodeHome}
       >

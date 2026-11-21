@@ -250,7 +250,7 @@ function MapDialog({
                 )}
                 {source === "featured" ? (
                   <p className="m-0 mt-1 text-xs text-fg-muted">
-                    You get your own copy in this project. The featured map
+                    You get your own copy in this episode. The featured map
                     stays as it is.
                   </p>
                 ) : null}

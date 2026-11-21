@@ -294,14 +294,38 @@ function ProjectApp() {
         const route = parseRoute(location.pathname);
         const play = route.kind !== "home" && route.play && !coopEntry();
         setStore(opened);
-        const wanted =
+        const badSlot = /^\/episodes\/([^/]+)\/[^/]+\/?$/.exec(
+          location.pathname,
+        );
+        const named =
           route.kind === "episode" || route.kind === "map"
             ? route.id
-            : ready.projectId;
+            : badSlot
+              ? decodeURIComponent(badSlot[1])
+              : null;
+        const missing =
+          named !== null &&
+          !(await opened.listProjects()).some((item) => item.id === named);
+        const wanted = named && !missing ? named : ready.projectId;
         selectProject(wanted);
         await refresh(opened, wanted);
         if (stale()) return;
-        if (route.kind === "map") {
+        if (missing) {
+          setMessage(
+            "That episode isn't in this browser. Episodes are saved per browser, so import its backup to bring it here.",
+          );
+        } else if (route.kind === "home" && badSlot) {
+          setMessage("That isn't a map slot. Slots run from MAP01 to MAP32.");
+        } else if (
+          route.kind === "home" &&
+          location.pathname.startsWith("/join/")
+        ) {
+          setMessage(
+            "That invite link isn't valid. Ask the host for a new one.",
+          );
+        } else if (route.kind === "home" && location.pathname !== "/") {
+          setMessage("That address doesn't match a page in Wadsmith.");
+        } else if (route.kind === "map") {
           const entry = (await opened.listMaps(route.id)).find(
             (item) => item.slot === route.slot && !item.broken,
           );
