@@ -3,7 +3,7 @@ import { checkMap } from "../map/checks";
 import { blankMap, starterMap } from "../map/starter-map";
 import { loadSavedMap, MapFileError, parseMap } from "../map/storage";
 import type { GameMap } from "../map/types";
-import { compileMap } from "../wad/compile";
+import { compileLumps } from "../wad/compile";
 import { featuredMaps } from "../map/featured";
 
 type Episode = { id: string; name: string; createdAt: number };
@@ -108,13 +108,16 @@ function mapName({ map }: EpisodeMap) {
   return map.name ?? "Untitled map";
 }
 
-function buildProblem(map: GameMap) {
+function buildMap(map: GameMap) {
   try {
-    compileMap(map);
-    return null;
+    return { problem: null, lumps: compileLumps(map) };
   } catch (error) {
-    return (error as Error).message;
+    return { problem: (error as Error).message, lumps: null };
   }
+}
+
+function buildProblem(map: GameMap) {
+  return buildMap(map).problem;
 }
 
 const checked = new Map<
@@ -442,6 +445,7 @@ function parsePar(text: string) {
 }
 
 export {
+  buildMap,
   buildProblem,
   bySlot,
   createMapEntry,
