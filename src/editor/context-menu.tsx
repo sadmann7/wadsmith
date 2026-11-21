@@ -1,3 +1,4 @@
+import { formatShortcut } from "@ui-sdk/core";
 import {
   Menu,
   MenuCheckboxItem,
@@ -399,7 +400,7 @@ function ThingsMenu({
       ) : null}
       <Item
         icon={Copy}
-        hint="⌘D"
+        hint={formatShortcut("mod+d")}
         disabled={things.every((thing) => isPlayerStart(thing.kind))}
         onSelect={() => {
           const copies = duplicateThings(map, ids);
