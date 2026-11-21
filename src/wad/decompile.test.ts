@@ -247,6 +247,7 @@ describe("decompileMap", () => {
     const [doom] = readMaps([{ name: "map.wad", data: compileMap(map) }]);
     const line = doom.lines.find((item) => item.special === 62)!;
     expect(doom.sectors[doom.sides[line.front!].sector].tag).toBe(0);
+    expect(doom.sides[line.front!].lower).toMatch(/^SW1/);
     expect(parseMapFile(serializeMap(map))).toEqual(map);
   });
 

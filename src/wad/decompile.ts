@@ -746,12 +746,17 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
         const facesDoor = kept.some(
           (other) => other !== item && doors.has(other.sector),
         );
+        // A switch on an open line keeps its texture so the press still shows.
+        const part = (name: string) =>
+          entry.action?.trigger === "switch" && isSwitch(name)
+            ? switchTexture(name)
+            : wall(name);
         const value: LineSide = {
           ...offsets(side),
           ...(side.upper !== noTexture && !facesDoor
-            ? { upper: wall(side.upper) }
+            ? { upper: part(side.upper) }
             : {}),
-          ...(side.lower !== noTexture ? { lower: wall(side.lower) } : {}),
+          ...(side.lower !== noTexture ? { lower: part(side.lower) } : {}),
           ...(side.middle !== noTexture &&
           !opening &&
           middleTextures.includes(side.middle)
