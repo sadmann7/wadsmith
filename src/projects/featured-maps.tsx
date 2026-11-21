@@ -1,5 +1,5 @@
-import { Copy, Play, Users } from "lucide-react";
-import { useState } from "react";
+import { Copy, FolderOpen, Play, Users } from "lucide-react";
+import { useRef, useState } from "react";
 
 import { MapPlan } from "../editor/map-plan";
 import { fragLimit } from "../engine/runtime";
@@ -77,6 +77,7 @@ function FeaturedMaps({
   onPlaySolo,
   onPlayTogether,
   onOpenCopy,
+  onPlayWad,
   selectedId,
   onSelect,
 }: {
@@ -87,8 +88,10 @@ function FeaturedMaps({
   onPlaySolo: (entry: FeaturedMap) => void;
   onPlayTogether: (entry: FeaturedMap) => void;
   onOpenCopy: (entry: FeaturedMap) => void;
+  onPlayWad: (files: File[]) => void;
 }) {
   const [filter, setFilter] = useState<Filter>("all");
+  const wadInput = useRef<HTMLInputElement>(null);
   const shown = featuredMaps.filter(
     (entry) => filter === "all" || entry.mode === filter,
   );
@@ -114,22 +117,44 @@ function FeaturedMaps({
               it&apos;s built.
             </p>
           </div>
-          <div
-            role="group"
-            aria-label="Show"
-            className="flex rounded-[3px] border border-border bg-surface p-0.5"
-          >
-            {filters.map((item) => (
-              <button
-                key={item}
-                type="button"
-                aria-pressed={filter === item}
-                className="rounded-[2px] border-0 bg-transparent px-3 py-1.5 text-xs text-fg-muted aria-pressed:bg-surface-raised aria-pressed:font-semibold aria-pressed:text-fg"
-                onClick={() => setFilter(item)}
-              >
-                {item === "all" ? "All" : modes[item].label}
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              className="button"
+              onClick={() => wadInput.current?.click()}
+            >
+              <FolderOpen size={14} aria-hidden="true" />
+              Play a WAD
+            </button>
+            <input
+              ref={wadInput}
+              type="file"
+              multiple
+              hidden
+              accept=".wad,.deh,.bex,.zip"
+              onChange={(event) => {
+                const files = [...(event.currentTarget.files ?? [])];
+                event.currentTarget.value = "";
+                if (files.length > 0) onPlayWad(files);
+              }}
+            />
+            <div
+              role="group"
+              aria-label="Show"
+              className="flex rounded-[3px] border border-border bg-surface p-0.5"
+            >
+              {filters.map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  aria-pressed={filter === item}
+                  className="rounded-[2px] border-0 bg-transparent px-3 py-1.5 text-xs text-fg-muted aria-pressed:bg-surface-raised aria-pressed:font-semibold aria-pressed:text-fg"
+                  onClick={() => setFilter(item)}
+                >
+                  {item === "all" ? "All" : modes[item].label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
         {message ? (
