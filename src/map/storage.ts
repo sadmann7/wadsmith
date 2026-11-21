@@ -224,7 +224,7 @@ function parseLineSide(value: unknown, label: string): LineSide {
   };
 }
 
-function parseLine(value: unknown, sectors: Sector[]): LineSettings {
+function parseLine(value: unknown, rooms: Set<string>): LineSettings {
   const label = "A line";
   const line = record(value, label);
   const flags = (
@@ -251,7 +251,7 @@ function parseLine(value: unknown, sectors: Sector[]): LineSettings {
       : {
           sides: Object.fromEntries(
             Object.entries(record(line.sides, label)).map(([sector, side]) => {
-              if (!sectors.some((item) => item.id === id(sector, label))) {
+              if (!rooms.has(id(sector, label))) {
                 fail(`${label} points at something missing.`);
               }
               return [sector, parseLineSide(side, label)];
@@ -263,7 +263,7 @@ function parseLine(value: unknown, sectors: Sector[]): LineSettings {
       : {
           front: (() => {
             const front = id(line.front, label);
-            if (!sectors.some((item) => item.id === front)) {
+            if (!rooms.has(front)) {
               fail(`${label} points at something missing.`);
             }
             return front;
@@ -305,7 +305,7 @@ function parseThing(value: unknown): Thing {
 function parseSwitch(
   value: unknown,
   vertices: Record<string, Point>,
-  sectors: Sector[],
+  rooms: Set<string>,
 ): MapSwitch {
   const item = record(value, "A switch");
   const switchId = id(item.id, "A switch");
@@ -314,10 +314,9 @@ function parseSwitch(
   const from = id(item.from, label);
   const to = id(item.to, label);
   const door = item.door === null ? null : id(item.door, label);
-  const known = (room: string) => sectors.some((entry) => entry.id === room);
   if (
-    !known(sector) ||
-    (door && !known(door)) ||
+    !rooms.has(sector) ||
+    (door && !rooms.has(door)) ||
     !Object.hasOwn(vertices, from) ||
     !Object.hasOwn(vertices, to)
   ) {
@@ -363,9 +362,10 @@ function parseMap(value: unknown): GameMap {
   const sectors = list(map.sectors, "The rooms").map((sector) =>
     parseSector(sector, vertices),
   );
+  const rooms = new Set(sectors.map((sector) => sector.id));
   const things = list(map.things, "The things").map(parseThing);
   const switches = list(map.switches, "The switches").map((item) =>
-    parseSwitch(item, vertices, sectors),
+    parseSwitch(item, vertices, rooms),
   );
   const lines =
     map.lines === undefined
@@ -373,7 +373,7 @@ function parseMap(value: unknown): GameMap {
       : Object.fromEntries(
           Object.entries(record(map.lines, "The lines")).map(([wall, line]) => [
             wallId(wall, "A line"),
-            parseLine(line, sectors),
+            parseLine(line, rooms),
           ]),
         );
   const notes =

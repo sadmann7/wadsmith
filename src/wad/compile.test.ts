@@ -34,7 +34,14 @@ import {
   wallTarget,
 } from "../editor/map-target";
 import { sectorAt, wallKey } from "../map/geometry";
-import { fitLineAction, newLineAction, triggersFor } from "../map/lines";
+import {
+  fitLineAction,
+  lineActionGroups,
+  lineActionKinds,
+  lineActions,
+  newLineAction,
+  triggersFor,
+} from "../map/lines";
 import { mapBalance } from "../map/balance";
 import {
   ceilingTextures,
@@ -1189,6 +1196,37 @@ describe("map check", () => {
     expect(warned(1088, 96)).toBe(true);
     expect(warned(1088, 100)).toBe(true);
     expect(warned(1088, -128)).toBe(false);
+  });
+
+  it("lists every line action once, under its group", () => {
+    const groups = lineActionGroups(lineActionKinds);
+    expect(
+      groups.flatMap((group) => group.items.map((item) => item.value)),
+    ).toHaveLength(lineActionKinds.length);
+    expect(groups.map((group) => group.label)).toEqual([
+      "Doors",
+      "Floors",
+      "Ceilings",
+      "Lifts",
+      "Teleporters",
+      "Level",
+    ]);
+    const floors = groups.find((group) => group.label === "Floors")!;
+    expect(floors.items[0]).toMatchObject({
+      label: "Floor: lower to lowest",
+      short: "Lower to lowest",
+    });
+  });
+
+  it("gives every line action its own Doom specials", () => {
+    const specials = Object.values(lineActions).flatMap(({ triggers, keys }) =>
+      [
+        ...Object.values(triggers),
+        ...Object.values(keys ?? {}).flatMap((colors) => Object.values(colors)),
+      ].flatMap(({ once, repeat }) => [once, repeat]),
+    );
+    const defined = specials.filter((special) => special !== undefined);
+    expect(new Set(defined).size).toBe(defined.length);
   });
 
   it("gives every thing its own Doom number", () => {

@@ -3,6 +3,8 @@ import {
   Menu,
   MenuCheckboxItem,
   MenuContent,
+  MenuGroup,
+  MenuGroupLabel,
   MenuItem,
   MenuItemIcon,
   MenuItemIndicator,
@@ -70,8 +72,8 @@ import {
   describeLine,
   fitLineAction,
   isLineActionKind,
+  lineActionGroups,
   lineActionKinds,
-  lineActions,
   newLineAction,
   triggersFor,
 } from "../map/lines";
@@ -231,7 +233,7 @@ function SubMenu({
         </MenuItemIcon>
       </MenuSubTrigger>
       <MenuSubContent
-        className={`${contentClass} max-h-(--available-height) w-44 overflow-y-auto`}
+        className={`${contentClass} max-h-(--available-height) w-max max-w-72 min-w-44 overflow-y-auto`}
         sideOffset={4}
       >
         {children}
@@ -515,6 +517,21 @@ function WallMenu({
   const line = describeLine(map, wall, sector);
   const { action, blocksEnemies, hidden } = line.settings;
   const free = freeWallAt(map, wall);
+  const chooseAction = (kind: string) => {
+    if (!isLineActionKind(kind)) {
+      onCommit(updateLine(map, wall, { action: undefined }));
+      return;
+    }
+    onCommit(
+      updateLine(map, wall, {
+        action: action
+          ? fitLineAction({ ...action, kind }, line.twoSided)
+          : newLineAction(line.twoSided, kind),
+        scrolls: undefined,
+      }),
+    );
+  };
+
   return (
     <>
       <Heading>Wall · {line.sector.name}</Heading>
@@ -539,34 +556,30 @@ function WallMenu({
       <SubMenu icon={Zap} label="Action" disabled={line.wiredSwitch}>
         <Choices
           value={action?.kind ?? "none"}
-          items={[
-            { value: "none", label: "Nothing" },
-            ...lineActionKinds
-              .filter(
-                (value) =>
-                  value === action?.kind ||
-                  triggersFor(value, line.twoSided).length > 0,
-              )
-              .map((value) => ({
-                value,
-                label: lineActions[value].label,
-              })),
-          ]}
-          onChange={(kind) => {
-            if (!isLineActionKind(kind)) {
-              onCommit(updateLine(map, wall, { action: undefined }));
-              return;
-            }
-            onCommit(
-              updateLine(map, wall, {
-                action: action
-                  ? fitLineAction({ ...action, kind }, line.twoSided)
-                  : newLineAction(line.twoSided, kind),
-                scrolls: undefined,
-              }),
-            );
-          }}
+          items={[{ value: "none", label: "Nothing" }]}
+          onChange={chooseAction}
         />
+        {lineActionGroups(
+          lineActionKinds.filter(
+            (value) =>
+              value === action?.kind ||
+              triggersFor(value, line.twoSided).length > 0,
+          ),
+        ).map((group) => (
+          <MenuGroup key={group.label}>
+            <MenuGroupLabel className="px-2 pt-2 pb-1 font-mono text-xs tracking-wide text-muted-foreground uppercase">
+              {group.label}
+            </MenuGroupLabel>
+            <Choices
+              value={action?.kind ?? "none"}
+              items={group.items.map((item) => ({
+                value: item.value,
+                label: item.short,
+              }))}
+              onChange={chooseAction}
+            />
+          </MenuGroup>
+        ))}
       </SubMenu>
       <Rule />
       <CheckItem

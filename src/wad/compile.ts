@@ -402,8 +402,18 @@ function compileMap(map: GameMap, slot = mapLumpName) {
   return packWad(compileLumps(map, slot));
 }
 
-function compileEpisode(maps: { slot: string; map: GameMap }[]) {
-  return packWad(maps.flatMap(({ slot, map }) => compileLumps(map, slot)));
+// Lumps built ahead of time keep their data and take the slot they're packed
+// under.
+function compileEpisode(
+  maps: { slot: string; map: GameMap; lumps?: Lump[] | null }[],
+) {
+  return packWad(
+    maps.flatMap(({ slot, map, lumps }) =>
+      lumps
+        ? [{ name: slot, data: new Uint8Array() }, ...lumps.slice(1)]
+        : compileLumps(map, slot),
+    ),
+  );
 }
 
 export {
@@ -413,4 +423,5 @@ export {
   compileMap,
   mapLumpName,
   toDoom,
+  type Lump,
 };

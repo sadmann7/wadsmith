@@ -1,50 +1,75 @@
 import { useEffect, useSyncExternalStore } from "react";
 
 import type { GameMap } from "../map/types";
+import type { Lump } from "../wad/compile";
 import type { BuildCheckRequest, BuildCheckResult } from "./build-worker";
-import { buildProblem, type EpisodeMap } from "./episode-data";
+import { buildMap, type EpisodeMap } from "./episode-data";
+
+type Build = Pick<BuildCheckResult, "problem" | "lumps">;
 
 type Check = {
   revision: number;
   result: Promise<string | null>;
-  problem?: string | null;
+  build?: Build;
 };
 
+type Job = { id: number; map: GameMap; done: (build: Build) => void };
+
+type Builder = { worker: Worker; job: Job | null };
+
 // Building a big map's nodes takes seconds, so it runs off the page's thread
-// once per saved revision.
+// once per saved revision, on a few workers at once.
 const checks = new Map<string, Check>();
-const waiting = new Map<
-  number,
-  { map: GameMap; done: (problem: string | null) => void }
->();
+const queue: Job[] = [];
+const builders: Builder[] = [];
 const listeners = new Set<() => void>();
-let worker: Worker | null = null;
 let nextId = 0;
 
-function startWorker() {
-  const started = new Worker(new URL("./build-worker.ts", import.meta.url), {
-    type: "module",
-  });
-  started.addEventListener(
+function builderLimit() {
+  return Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 2) - 1));
+}
+
+function startBuilder() {
+  const builder: Builder = {
+    worker: new Worker(new URL("./build-worker.ts", import.meta.url), {
+      type: "module",
+    }),
+    job: null,
+  };
+  builder.worker.addEventListener(
     "message",
     ({ data }: MessageEvent<BuildCheckResult>) => {
-      waiting.get(data.id)?.done(data.problem);
-      waiting.delete(data.id);
+      if (builder.job?.id !== data.id) return;
+      builder.job.done(data);
+      builder.job = null;
+      runQueue();
     },
   );
-  // Without the worker, the waiting maps are built on the page instead, with
-  // a frame between maps.
-  started.addEventListener("error", async () => {
-    const stranded = [...waiting.values()];
-    waiting.clear();
-    started.terminate();
-    worker = null;
-    for (const { map, done } of stranded) {
-      await new Promise((next) => setTimeout(next));
-      done(buildProblem(map));
-    }
+  // Without the worker, its map is built on the page instead, a frame later.
+  builder.worker.addEventListener("error", async () => {
+    const { job } = builder;
+    builder.worker.terminate();
+    builders.splice(builders.indexOf(builder), 1);
+    runQueue();
+    if (!job) return;
+    await new Promise((next) => setTimeout(next));
+    job.done(buildMap(job.map));
   });
-  return started;
+  builders.push(builder);
+  return builder;
+}
+
+function runQueue() {
+  while (queue.length > 0) {
+    const builder =
+      builders.find((item) => !item.job) ??
+      (builders.length < builderLimit() ? startBuilder() : null);
+    if (!builder) return;
+    const job = queue.shift()!;
+    builder.job = job;
+    const request: BuildCheckRequest = { id: job.id, map: job.map };
+    builder.worker.postMessage(request);
+  }
 }
 
 function checkBuild(entry: EpisodeMap) {
@@ -52,29 +77,34 @@ function checkBuild(entry: EpisodeMap) {
   if (known?.revision === entry.mapRevision) return known.result;
   const check: Check = {
     revision: entry.mapRevision,
-    result: new Promise<string | null>((resolve) => {
+    result: new Promise<Build>((resolve) => {
       if (typeof Worker === "undefined") {
-        resolve(buildProblem(entry.map));
+        resolve(buildMap(entry.map));
         return;
       }
-      worker ??= startWorker();
-      const id = nextId++;
-      waiting.set(id, { map: entry.map, done: resolve });
-      const request: BuildCheckRequest = { id, map: entry.map };
-      worker.postMessage(request);
-    }).then((problem) => {
-      check.problem = problem;
+      queue.push({ id: nextId++, map: entry.map, done: resolve });
+      runQueue();
+    }).then((build) => {
+      check.build = build;
       for (const listener of listeners) listener();
-      return problem;
+      return build.problem;
     }),
   };
   checks.set(entry.id, check);
   return check.result;
 }
 
-function knownBuildProblem(entry: EpisodeMap) {
+function knownBuild(entry: EpisodeMap) {
   const known = checks.get(entry.id);
-  return known?.revision === entry.mapRevision ? known.problem : undefined;
+  return known?.revision === entry.mapRevision ? known.build : undefined;
+}
+
+function knownBuildProblem(entry: EpisodeMap) {
+  return knownBuild(entry)?.problem;
+}
+
+function knownLumps(entry: EpisodeMap): Lump[] | null {
+  return knownBuild(entry)?.lumps ?? null;
 }
 
 function subscribe(listener: () => void) {
@@ -98,4 +128,4 @@ function useBuildChecks(entries: EpisodeMap[]) {
   });
 }
 
-export { checkBuild, knownBuildProblem, useBuildChecks };
+export { checkBuild, knownBuildProblem, knownLumps, useBuildChecks };

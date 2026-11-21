@@ -1,17 +1,26 @@
 import type { GameMap } from "../map/types";
-import { buildProblem } from "./episode-data";
+import type { Lump } from "../wad/compile";
+import { buildMap } from "./episode-data";
 
 type BuildCheckRequest = { id: number; map: GameMap };
-type BuildCheckResult = { id: number; problem: string | null };
+type BuildCheckResult = {
+  id: number;
+  problem: string | null;
+  lumps: Lump[] | null;
+};
 
-self.addEventListener(
+const scope = self as unknown as Worker;
+
+scope.addEventListener(
   "message",
   ({ data }: MessageEvent<BuildCheckRequest>) => {
-    const result: BuildCheckResult = {
-      id: data.id,
-      problem: buildProblem(data.map),
-    };
-    self.postMessage(result);
+    const result: BuildCheckResult = { id: data.id, ...buildMap(data.map) };
+    scope.postMessage(
+      result,
+      result.lumps
+        ? [...new Set(result.lumps.map((lump) => lump.data.buffer))]
+        : [],
+    );
   },
 );
 

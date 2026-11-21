@@ -10,8 +10,17 @@ import type {
 
 type Specials = { once?: number; repeat?: number };
 
+type ActionGroup =
+  | "Doors"
+  | "Floors"
+  | "Ceilings"
+  | "Lifts"
+  | "Teleporters"
+  | "Level";
+
 type ActionDefinition = {
   label: string;
+  group: ActionGroup;
   target?: string;
   triggers: Partial<Record<LineTrigger, Specials>>;
   keys?: Partial<Record<LineTrigger, Record<KeyColor, Specials>>>;
@@ -20,6 +29,7 @@ type ActionDefinition = {
 const lineActions: Record<LineActionKind, ActionDefinition> = {
   "door-raise": {
     label: "Door: open, wait, close",
+    group: "Doors",
     triggers: {
       door: { repeat: 1 },
       switch: { once: 29, repeat: 63 },
@@ -35,6 +45,7 @@ const lineActions: Record<LineActionKind, ActionDefinition> = {
   },
   "door-open": {
     label: "Door: open and stay",
+    group: "Doors",
     triggers: {
       door: { once: 31 },
       switch: { once: 103, repeat: 61 },
@@ -52,6 +63,7 @@ const lineActions: Record<LineActionKind, ActionDefinition> = {
   },
   "door-close": {
     label: "Door: close",
+    group: "Doors",
     triggers: {
       switch: { once: 50, repeat: 42 },
       walk: { once: 3, repeat: 75 },
@@ -59,6 +71,7 @@ const lineActions: Record<LineActionKind, ActionDefinition> = {
   },
   "door-raise-fast": {
     label: "Door: open fast, wait, close",
+    group: "Doors",
     triggers: {
       door: { repeat: 117 },
       switch: { once: 111, repeat: 114 },
@@ -67,6 +80,7 @@ const lineActions: Record<LineActionKind, ActionDefinition> = {
   },
   "door-open-fast": {
     label: "Door: open fast and stay",
+    group: "Doors",
     triggers: {
       door: { once: 118 },
       switch: { once: 112, repeat: 115 },
@@ -75,6 +89,7 @@ const lineActions: Record<LineActionKind, ActionDefinition> = {
   },
   "door-close-fast": {
     label: "Door: close fast",
+    group: "Doors",
     triggers: {
       switch: { once: 113, repeat: 116 },
       walk: { once: 110, repeat: 107 },
@@ -82,6 +97,7 @@ const lineActions: Record<LineActionKind, ActionDefinition> = {
   },
   "floor-lower": {
     label: "Floor: lower to lowest",
+    group: "Floors",
     triggers: {
       switch: { once: 23, repeat: 60 },
       walk: { once: 38, repeat: 82 },
@@ -89,6 +105,7 @@ const lineActions: Record<LineActionKind, ActionDefinition> = {
   },
   "floor-raise": {
     label: "Floor: raise to ceiling",
+    group: "Floors",
     triggers: {
       switch: { once: 101, repeat: 64 },
       walk: { once: 5, repeat: 91 },
@@ -97,13 +114,69 @@ const lineActions: Record<LineActionKind, ActionDefinition> = {
   },
   "floor-raise-next": {
     label: "Floor: raise to next floor",
+    group: "Floors",
     triggers: {
       switch: { once: 18, repeat: 69 },
       walk: { once: 119, repeat: 128 },
     },
   },
+  "floor-raise-next-fast": {
+    label: "Floor: raise fast to next floor",
+    group: "Floors",
+    triggers: {
+      switch: { once: 131, repeat: 132 },
+      walk: { once: 130, repeat: 129 },
+    },
+  },
+  "floor-raise-24": {
+    label: "Floor: raise by 24",
+    group: "Floors",
+    triggers: { walk: { once: 58, repeat: 92 } },
+  },
+  "floor-raise-texture": {
+    label: "Floor: raise by its shortest lower wall",
+    group: "Floors",
+    triggers: { walk: { once: 30, repeat: 96 } },
+  },
+  "floor-raise-512": {
+    label: "Floor: raise by 512",
+    group: "Floors",
+    triggers: { switch: { once: 140 } },
+  },
+  "floor-lower-highest": {
+    label: "Floor: lower to highest nearby floor",
+    group: "Floors",
+    triggers: {
+      switch: { once: 102, repeat: 45 },
+      walk: { once: 19, repeat: 83 },
+    },
+  },
+  "floor-lower-fast": {
+    label: "Floor: lower fast to 8 above nearby floor",
+    group: "Floors",
+    triggers: {
+      switch: { once: 71, repeat: 70 },
+      walk: { once: 36, repeat: 98 },
+    },
+  },
+  "ceiling-lower": {
+    label: "Ceiling: lower to floor",
+    group: "Ceilings",
+    triggers: { switch: { once: 41, repeat: 43 } },
+  },
+  "ceiling-lower-8": {
+    label: "Ceiling: lower to 8 above floor",
+    group: "Ceilings",
+    triggers: { walk: { once: 44, repeat: 72 } },
+  },
+  "ceiling-raise": {
+    label: "Ceiling: raise to highest, floor: lower to lowest",
+    group: "Ceilings",
+    triggers: { walk: { once: 40 } },
+  },
   lift: {
     label: "Lift: lower, wait, raise",
+    group: "Lifts",
     triggers: {
       switch: { once: 21, repeat: 62 },
       walk: { once: 10, repeat: 88 },
@@ -111,6 +184,7 @@ const lineActions: Record<LineActionKind, ActionDefinition> = {
   },
   "lift-fast": {
     label: "Lift: fast lower, wait, raise",
+    group: "Lifts",
     triggers: {
       switch: { once: 122, repeat: 123 },
       walk: { once: 121, repeat: 120 },
@@ -118,21 +192,49 @@ const lineActions: Record<LineActionKind, ActionDefinition> = {
   },
   exit: {
     label: "End the level",
+    group: "Level",
     triggers: { switch: { once: 11 }, walk: { once: 52 } },
   },
   teleport: {
     label: "Teleport",
+    group: "Teleporters",
     target: "Teleports to",
     triggers: { walk: { once: 39, repeat: 97 } },
   },
   "teleport-monsters": {
     label: "Teleport monsters only",
+    group: "Teleporters",
     target: "Teleports to",
     triggers: { walk: { once: 125, repeat: 126 } },
   },
 };
 
 const lineActionKinds = Object.keys(lineActions) as LineActionKind[];
+const actionGroups: ActionGroup[] = [
+  "Doors",
+  "Floors",
+  "Ceilings",
+  "Lifts",
+  "Teleporters",
+  "Level",
+];
+
+function lineActionGroups(kinds: LineActionKind[]) {
+  return actionGroups.flatMap((group) => {
+    const items = kinds
+      .filter((kind) => lineActions[kind].group === group)
+      .map((kind) => {
+        const { label } = lineActions[kind];
+        const rest = label.replace(/^[A-Z][a-z]+: /, "");
+        return {
+          value: kind,
+          label,
+          short: rest === label ? label : rest[0].toUpperCase() + rest.slice(1),
+        };
+      });
+    return items.length > 0 ? [{ label: group, items }] : [];
+  });
+}
 const lineTriggers: LineTrigger[] = ["door", "switch", "walk", "shoot"];
 const keyColors: KeyColor[] = ["blue", "yellow", "red"];
 
@@ -283,6 +385,7 @@ export {
   isLineActionKind,
   keyColors,
   keysFor,
+  lineActionGroups,
   lineActionKinds,
   lineActions,
   lineSpecial,
