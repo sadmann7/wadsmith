@@ -80,9 +80,8 @@ function writeBox(writer: LumpWriter, box: Box) {
 type LevelLine = NodeLine & { wall: string };
 
 function buildLevel(map: GameMap) {
-  const vertexIds = Object.keys(map.vertices).filter((id) =>
-    map.sectors.some((sector) => sector.vertices.includes(id)),
-  );
+  const used = new Set(map.sectors.flatMap((sector) => sector.vertices));
+  const vertexIds = Object.keys(map.vertices).filter((id) => used.has(id));
   const vertexIndex = new Map(vertexIds.map((id, index) => [id, index]));
   const vertices = vertexIds.map((id) => toDoom(map.vertices[id]));
   const sectors = map.sectors.map((sector) => clockwiseLoop(map, sector));
