@@ -55,7 +55,7 @@ async function launch(
     createDoom,
     iwad: readFileSync(resolve(engineDirectory, "freedoom2.wad")),
     base: readFileSync(resolve(engineDirectory, "woof.pk3")),
-    wads: [map instanceof Uint8Array ? map : compileMap(map)],
+    map: map instanceof Uint8Array ? map : compileMap(map),
     options: { print: () => {}, printErr: (line) => engineWarnings.push(line) },
     events,
     sampleRate,

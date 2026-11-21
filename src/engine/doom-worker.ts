@@ -4,7 +4,6 @@ import {
   screenSizes,
   type CreateDoom,
   type DoomGame,
-  type GameFiles,
   type GameStatus,
   type NetworkMode,
   type Resolution,
@@ -29,7 +28,7 @@ type DoomWorkerRequest =
       engineUrl: string;
       baseUrl: string;
       iwad: Uint8Array;
-      files: GameFiles;
+      map: Uint8Array;
       sound: SoundLevel;
       paused: boolean;
       sampleRate: number;
@@ -143,7 +142,7 @@ async function start(request: Extract<DoomWorkerRequest, { type: "start" }>) {
     createDoom,
     iwad: request.iwad,
     base,
-    ...request.files,
+    map: request.map,
     options: {
       print: () => {},
       printErr: (line) => errors.push(line),

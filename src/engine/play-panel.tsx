@@ -30,7 +30,6 @@ import {
   keysByCode,
   maxVolume,
   screenSizes,
-  type GameFiles,
   type GameStatus,
   type NetworkMode,
   type Resolution,
@@ -139,9 +138,7 @@ type Level = {
   par: number | null;
 };
 
-type GameSessionProps = Omit<Level, "map"> & {
-  map: GameMap | null;
-  files: GameFiles | null;
+type GameSessionProps = Level & {
   episode: Level[] | null;
   sound: SoundSettings;
   onSoundChange: (sound: SoundSettings) => void;
@@ -160,7 +157,6 @@ type GameSessionProps = Omit<Level, "map"> & {
 
 function GameSession({
   map,
-  files,
   title,
   slot,
   par,
@@ -179,8 +175,7 @@ function GameSession({
   exit,
   skill,
 }: GameSessionProps) {
-  const canEdit =
-    !coop && !episode && Boolean(map && onAddNote && onEditSpot);
+  const canEdit = !coop && !episode && Boolean(onAddNote && onEditSpot);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameRef = useRef<GameClient | null>(null);
   const heldKeys = useRef(new HeldKeys());
@@ -198,15 +193,7 @@ function GameSession({
   const [levelIndex, setLevelIndex] = useState(0);
   const [between, setBetween] = useState<GameStatus | null>(null);
   const advanceTimer = useRef<ReturnType<typeof setInterval>>(undefined);
-  const level = episode?.[levelIndex] ?? {
-    map,
-    title,
-    slot:
-      files && status
-        ? `MAP${String(status.map).padStart(2, "0")}`
-        : slot,
-    par,
-  };
+  const level = episode?.[levelIndex] ?? { map, title, slot, par };
   const [network, setNetwork] = useState<NetworkState | null>(null);
   const [coopBegan, setCoopBegan] = useState(false);
   const [scoresOpen, setScoresOpen] = useState(false);
@@ -272,32 +259,25 @@ function GameSession({
         const context = canvas?.getContext("2d");
         if (stopped || !canvas || !context) return;
         canvas.focus();
-        const built =
-          coop?.wad ??
-          (episode
-            ? compileEpisode(
-                episode.map((entry, index) => ({
-                  slot: `MAP${String(index + 1).padStart(2, "0")}`,
-                  map: entry.map,
-                })),
-              )
-            : map && compileMap(map));
         client = startGameClient({
           iwad,
-          files: files ?? {
-            wads: built ? [built] : [],
-            dehacked: [],
-            complevel: "vanilla",
-            warp: 1,
-          },
+          map:
+            coop?.wad ??
+            (episode
+              ? compileEpisode(
+                  episode.map((entry, index) => ({
+                    slot: `MAP${String(index + 1).padStart(2, "0")}`,
+                    map: entry.map,
+                  })),
+                )
+              : compileMap(map)),
           sound: soundRef.current,
           resolution,
           skill: coop?.skill ?? skill,
           onFrame: (pixels) =>
             context.putImageData(new ImageData(pixels, width, height), 0, 0),
           // A playtest's WAD holds one map, and an episode's ends with its last,
-          // so leaving either would load an unrelated level. A loaded WAD runs
-          // its own levels.
+          // so leaving either would load an unrelated level.
           onStatus: (next) => {
             if (next.tics !== lastTics) {
               lastTics = next.tics;
@@ -313,7 +293,7 @@ function GameSession({
                 setLevelIndex(Math.min(next.map, episode.length) - 1);
               }
             }
-            if (reachedLevel && !next.inLevel && !files) {
+            if (reachedLevel && !next.inLevel) {
               if (!episode || next.map >= episode.length) {
                 client?.stop();
                 setFinished(true);
@@ -386,7 +366,7 @@ function GameSession({
       client?.stop();
       gameRef.current = null;
     };
-  }, [map, files, episode, resolution, width, height, coop, skill]);
+  }, [map, episode, resolution, width, height, coop, skill]);
 
   useEffect(() => () => clearInterval(advanceTimer.current), []);
 
@@ -828,7 +808,6 @@ function coopWaiting(coop: CoopSession, network: NetworkState | null) {
 
 function GameView({
   map,
-  files = null,
   title,
   slot,
   par,
@@ -840,8 +819,7 @@ function GameView({
   exit = "editor",
   skill = "medium",
 }: {
-  map: GameMap | null;
-  files?: GameFiles | null;
+  map: GameMap;
   title: string;
   slot: string;
   par: number | null;
@@ -882,7 +860,6 @@ function GameView({
       <GameSession
         key={`${run}-${resolution}`}
         map={map}
-        files={files}
         title={title}
         slot={slot}
         par={par}

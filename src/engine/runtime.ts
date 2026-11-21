@@ -79,15 +79,6 @@ type NetworkMode = "coop" | "deathmatch";
 
 type Skill = "easy" | "medium" | "hard";
 
-type Complevel = "vanilla" | "boom" | "mbf" | "mbf21";
-
-type GameFiles = {
-  wads: Uint8Array[];
-  dehacked: Uint8Array[];
-  complevel: Complevel;
-  warp: number;
-};
-
 // Doom's numbers for "Hey, not too rough", "Hurt me plenty" and "Ultra-Violence".
 const skillLevels: Record<Skill, number> = { easy: 2, medium: 3, hard: 4 };
 
@@ -461,10 +452,7 @@ async function startDoom({
   createDoom,
   iwad,
   base,
-  wads,
-  dehacked = [],
-  complevel = "vanilla",
-  warp = 1,
+  map,
   options,
   events,
   sampleRate = null,
@@ -475,10 +463,7 @@ async function startDoom({
   createDoom: CreateDoom;
   iwad: Uint8Array;
   base: Uint8Array;
-  wads: Uint8Array[];
-  dehacked?: Uint8Array[];
-  complevel?: Complevel;
-  warp?: number;
+  map: Uint8Array;
   options?: DoomModuleOptions;
   events?: GameEvents;
   sampleRate?: number | null;
@@ -508,16 +493,7 @@ async function startDoom({
   });
   doomModule.FS.writeFile("/freedoom2.wad", iwad);
   doomModule.FS.writeFile("/woof.pk3", base);
-  const wadPaths = wads.map((wad, index) => {
-    const path = `/file${index}.wad`;
-    doomModule.FS.writeFile(path, wad);
-    return path;
-  });
-  const patchPaths = dehacked.map((patch, index) => {
-    const path = `/patch${index}.deh`;
-    doomModule.FS.writeFile(path, patch);
-    return path;
-  });
+  doomModule.FS.writeFile("/wadsmith.wad", map);
   doomModule.FS.writeFile(
     "/woof.cfg",
     engineConfig(resolution, network?.peer ?? null),
@@ -528,14 +504,13 @@ async function startDoom({
       "-iwad",
       "/freedoom2.wad",
       "-file",
-      ...wadPaths,
-      ...(patchPaths.length > 0 ? ["-deh", ...patchPaths] : []),
+      "/wadsmith.wad",
       "-warp",
-      String(warp),
+      "1",
       "-skill",
       String(skillLevels[skill]),
       "-complevel",
-      complevel,
+      "vanilla",
       "-nogui",
       "-config",
       "/woof.cfg",
@@ -582,10 +557,8 @@ export {
   maxVolume,
   screenSizes,
   startDoom,
-  type Complevel,
   type CreateDoom,
   type GameEvents,
-  type GameFiles,
   type GameStatus,
   type NetworkMode,
   type NetworkOptions,

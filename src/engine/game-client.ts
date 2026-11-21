@@ -6,17 +6,11 @@ import type {
 } from "./doom-worker";
 import { engineBase } from "./iwad";
 import { NetInbox } from "./net-inbox";
-import type {
-  GameFiles,
-  GameStatus,
-  NetworkMode,
-  Resolution,
-  Skill,
-} from "./runtime";
+import type { GameStatus, NetworkMode, Resolution, Skill } from "./runtime";
 
 type GameClientOptions = {
   iwad: Uint8Array;
-  files: GameFiles;
+  map: Uint8Array;
   sound: SoundLevel;
   resolution: Resolution;
   skill: Skill;
@@ -198,7 +192,7 @@ function startGameClient(options: GameClientOptions) {
         engineUrl: new URL(`${engineBase}woof.js`, location.href).href,
         baseUrl: new URL(`${engineBase}woof.pk3`, location.href).href,
         iwad: options.iwad,
-        files: options.files,
+        map: options.map,
         sound,
         paused: document.hidden || held,
         sampleRate: audio.sampleRate,
