@@ -364,7 +364,7 @@ describe("decompileMap", () => {
     const f = build.vertex(512, 0);
     build.line(a, b, room, null, { middle: "BTSXWALL" });
     build.line(b, c, room);
-    build.line(c, d, room, next, { special: 12, middle: "MIDGRATE" });
+    build.line(c, d, room, next, { special: 242, middle: "MIDGRATE" });
     build.line(d, a, room);
     build.line(c, e, next);
     build.line(e, f, next);
@@ -382,7 +382,7 @@ describe("decompileMap", () => {
       droppedThings: { "Other things": 1 },
       multiplayerThings: 1,
       outsideThings: 1,
-      droppedActions: { "Light changes": 1 },
+      droppedActions: { "Boom and later actions": 1 },
       droppedEffects: 1,
       seeThroughWalls: 1,
       replacedTextures: ["BTSXFLAT", "BTSXWALL"],
@@ -475,8 +475,15 @@ describe.skipIf(!existsSync(freedoom))("Freedoom's maps", () => {
     expect(maps).toHaveLength(32);
     expect(maps.every((doom) => doom.title)).toBe(true);
     for (const doom of maps) {
-      const { map } = decompileMap(doom);
+      const { map, report } = decompileMap(doom);
       expect(validateMap(map), doom.slot).toEqual([]);
+      // A teleporter that only lands on a multiplayer-only spot has nowhere to go.
+      expect(
+        Object.keys(report.droppedActions).filter(
+          (group) => group !== "Teleporters to multiplayer spots",
+        ),
+        doom.slot,
+      ).toEqual([]);
       expect(() => parseMapFile(serializeMap(map))).not.toThrow();
       expect(map.things.every((thing) => thingCatalog[thing.kind])).toBe(true);
     }

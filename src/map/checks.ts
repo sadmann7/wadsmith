@@ -1,7 +1,7 @@
 import { mapBalance } from "./balance";
 import { deathmatchStarts, thingCatalog } from "./catalog";
 import { removeSwitch, removeThings, updateLine, updateSector } from "./edit";
-import { fitLineAction, triggersFor } from "./lines";
+import { endsLevel, fitLineAction, triggersFor } from "./lines";
 import type { GameMap, KeyColor } from "./types";
 import { activeLineActions, inspectMap, type MapIssue } from "./validate";
 
@@ -128,7 +128,7 @@ function isArena(map: GameMap) {
 }
 
 function hasExit(map: GameMap) {
-  return activeLineActions(map).some(({ action }) => action.kind === "exit");
+  return activeLineActions(map).some(({ action }) => endsLevel(action.kind));
 }
 
 const buildGroups: {

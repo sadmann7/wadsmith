@@ -1208,9 +1208,11 @@ describe("map check", () => {
       "Floors",
       "Ceilings",
       "Lifts",
+      "Platforms",
       "Crushers",
       "Stairs",
       "Teleporters",
+      "Lights",
       "Level",
     ]);
     const floors = groups.find((group) => group.label === "Floors")!;

@@ -15,9 +15,11 @@ type ActionGroup =
   | "Floors"
   | "Ceilings"
   | "Lifts"
+  | "Platforms"
   | "Crushers"
   | "Stairs"
   | "Teleporters"
+  | "Lights"
   | "Level";
 
 type ActionDefinition = {
@@ -70,6 +72,11 @@ const lineActions: Record<LineActionKind, ActionDefinition> = {
       switch: { once: 50, repeat: 42 },
       walk: { once: 3, repeat: 75 },
     },
+  },
+  "door-close-wait": {
+    label: "Door: close, wait, open",
+    group: "Doors",
+    triggers: { walk: { once: 16, repeat: 76 } },
   },
   "door-raise-fast": {
     label: "Door: open fast, wait, close",
@@ -238,6 +245,78 @@ const lineActions: Record<LineActionKind, ActionDefinition> = {
     group: "Level",
     triggers: { switch: { once: 11 }, walk: { once: 52 } },
   },
+  "floor-raise-next-texture": {
+    label: "Floor: raise to next floor and take its texture",
+    group: "Floors",
+    triggers: {
+      switch: { once: 20, repeat: 68 },
+      walk: { once: 22, repeat: 95 },
+      shoot: { once: 47 },
+    },
+  },
+  "floor-raise-24-texture": {
+    label: "Floor: raise by 24 and take the texture",
+    group: "Floors",
+    triggers: {
+      switch: { once: 15, repeat: 66 },
+      walk: { once: 59, repeat: 93 },
+    },
+  },
+  "floor-raise-32-texture": {
+    label: "Floor: raise by 32 and take the texture",
+    group: "Floors",
+    triggers: { switch: { once: 14, repeat: 67 } },
+  },
+  "floor-lower-texture": {
+    label: "Floor: lower to lowest and take the texture",
+    group: "Floors",
+    triggers: { walk: { once: 37, repeat: 84 } },
+  },
+  donut: {
+    label: "Floor: lower the middle and raise the ring around it",
+    group: "Floors",
+    triggers: { switch: { once: 9 } },
+  },
+  platform: {
+    label: "Platform: move up and down",
+    group: "Platforms",
+    triggers: { walk: { once: 53, repeat: 87 } },
+  },
+  "platform-stop": {
+    label: "Platform: stop",
+    group: "Platforms",
+    triggers: { walk: { once: 54, repeat: 89 } },
+  },
+  "exit-secret": {
+    label: "Go to the secret level",
+    group: "Level",
+    triggers: { switch: { once: 51 }, walk: { once: 124 } },
+  },
+  "light-brightest": {
+    label: "Light: match the brightest nearby",
+    group: "Lights",
+    triggers: { walk: { once: 12, repeat: 80 } },
+  },
+  "light-dimmest": {
+    label: "Light: match the dimmest nearby",
+    group: "Lights",
+    triggers: { walk: { once: 104 } },
+  },
+  "light-max": {
+    label: "Light: full brightness",
+    group: "Lights",
+    triggers: { switch: { repeat: 138 }, walk: { once: 13, repeat: 81 } },
+  },
+  "light-dark": {
+    label: "Light: turn off",
+    group: "Lights",
+    triggers: { switch: { repeat: 139 }, walk: { once: 35, repeat: 79 } },
+  },
+  "light-blink": {
+    label: "Light: start blinking",
+    group: "Lights",
+    triggers: { walk: { once: 17 } },
+  },
   teleport: {
     label: "Teleport",
     group: "Teleporters",
@@ -258,9 +337,11 @@ const actionGroups: ActionGroup[] = [
   "Floors",
   "Ceilings",
   "Lifts",
+  "Platforms",
   "Crushers",
   "Stairs",
   "Teleporters",
+  "Lights",
   "Level",
 ];
 
@@ -304,8 +385,17 @@ function lineSpecial(action: LineAction) {
   return (action.repeat ? specials?.repeat : specials?.once) ?? null;
 }
 
+function endsLevel(kind: LineActionKind) {
+  return kind === "exit" || kind === "exit-secret";
+}
+
+function movesSector(kind: LineActionKind) {
+  const { group } = lineActions[kind];
+  return group !== "Level" && group !== "Lights";
+}
+
 function lineUsesTag({ kind, trigger }: LineAction) {
-  return kind !== "exit" && trigger !== "door";
+  return !endsLevel(kind) && trigger !== "door";
 }
 
 function opensDoor(kind: LineActionKind) {
@@ -425,6 +515,7 @@ export {
   canRepeatChoice,
   closesDoor,
   describeLine,
+  endsLevel,
   fitLineAction,
   isFast,
   isLineActionKind,
@@ -436,6 +527,7 @@ export {
   lineSpecial,
   lineTriggers,
   lineUsesTag,
+  movesSector,
   newLineAction,
   opensDoor,
   triggerLabels,
