@@ -36,6 +36,8 @@ import {
 import { sectorAt, wallKey } from "../map/geometry";
 import {
   fitLineAction,
+  lineActionGroups,
+  lineActionKinds,
   lineActions,
   newLineAction,
   triggersFor,
@@ -1194,6 +1196,26 @@ describe("map check", () => {
     expect(warned(1088, 96)).toBe(true);
     expect(warned(1088, 100)).toBe(true);
     expect(warned(1088, -128)).toBe(false);
+  });
+
+  it("lists every line action once, under its group", () => {
+    const groups = lineActionGroups(lineActionKinds);
+    expect(
+      groups.flatMap((group) => group.items.map((item) => item.value)),
+    ).toHaveLength(lineActionKinds.length);
+    expect(groups.map((group) => group.label)).toEqual([
+      "Doors",
+      "Floors",
+      "Ceilings",
+      "Lifts",
+      "Teleporters",
+      "Level",
+    ]);
+    const floors = groups.find((group) => group.label === "Floors")!;
+    expect(floors.items[0]).toMatchObject({
+      label: "Floor: lower to lowest",
+      short: "Lower to lowest",
+    });
   });
 
   it("gives every line action its own Doom specials", () => {
