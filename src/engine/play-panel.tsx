@@ -71,7 +71,7 @@ function saveSound(sound: SoundSettings) {
 }
 
 function loadResolution(): Resolution {
-  return savedResolution.get() === "high" ? "high" : "classic";
+  return savedResolution.get() === "classic" ? "classic" : "high";
 }
 
 function saveResolution(resolution: Resolution) {
