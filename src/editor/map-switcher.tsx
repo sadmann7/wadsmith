@@ -1,3 +1,4 @@
+import { ChevronDown, LayoutList, Plus } from "lucide-react";
 import {
   Menu,
   MenuContent,
@@ -6,8 +7,7 @@ import {
   MenuItem,
   MenuSeparator,
   MenuTrigger,
-} from "@ui-sdk/react/menu";
-import { ChevronDown, LayoutList, Plus } from "lucide-react";
+} from "../components/ui/menu";
 
 type MapHealth = "ready" | "warning" | "error";
 
@@ -87,7 +87,7 @@ function MapSwitcher({
             className="shrink-0 text-muted-foreground"
           />
         </MenuTrigger>
-        <MenuContent className="select-content min-w-[300px]" align="center">
+        <MenuContent className="min-w-[300px]" align="center">
           <MenuGroup>
             <MenuGroupLabel className="px-2 pt-1 pb-1.5 font-mono text-xs tracking-wide text-muted-foreground uppercase">
               {episodeName} · {maps.length} {maps.length === 1 ? "map" : "maps"}
@@ -98,7 +98,7 @@ function MapSwitcher({
                 value={entry.id}
                 aria-current={entry.id === currentId ? "page" : undefined}
                 aria-label={`${entry.slot} ${entry.name}, ${healthLabels[entry.health]}`}
-                className="select-item gap-3 aria-[current=page]:bg-accent aria-[current=page]:font-semibold"
+                className="gap-3! aria-[current=page]:bg-accent aria-[current=page]:font-semibold"
               >
                 <span className="font-mono text-xs text-muted-foreground">
                   {entry.slot}
@@ -111,12 +111,8 @@ function MapSwitcher({
               </MenuItem>
             ))}
           </MenuGroup>
-          <MenuSeparator className="menu-separator" />
-          <MenuItem
-            value="add"
-            className="select-item gap-3"
-            disabled={!canAddMap}
-          >
+          <MenuSeparator />
+          <MenuItem value="add" className="gap-3!" disabled={!canAddMap}>
             <Plus
               size={14}
               aria-hidden="true"
@@ -124,7 +120,7 @@ function MapSwitcher({
             />
             Add a map
           </MenuItem>
-          <MenuItem value="home" className="select-item gap-3">
+          <MenuItem value="home" className="gap-3!">
             <LayoutList
               size={14}
               aria-hidden="true"

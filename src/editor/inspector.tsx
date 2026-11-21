@@ -1,5 +1,4 @@
 import { Checkbox, CheckboxIndicator } from "@ui-sdk/react/checkbox";
-import { Input } from "@ui-sdk/react/input";
 import {
   NumberInput,
   NumberInputControl,
@@ -7,14 +6,6 @@ import {
   NumberInputGroup,
   NumberInputIncrement,
 } from "@ui-sdk/react/number-input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@ui-sdk/react/select";
 import {
   Slider,
   SliderControl,
@@ -76,9 +67,20 @@ import type {
 import { flatUse, wallUse, type TextureUse } from "../map/textures";
 import { TextureSwatch } from "../preview/surface-panel";
 import type { SceneAssets } from "../wad/assets";
-import { SelectCheck } from "./select-check";
 import { TexturePicker, type TextureKind } from "./texture-picker";
 import { thingIcons } from "./thing-icons";
+import { Button } from "../components/ui/button";
+import { InputGroup, InputGroupInput } from "../components/ui/input";
+import {
+  Select,
+  SelectCheck,
+  SelectContent,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "../components/ui/select";
+import { FieldItem, Label } from "../components/ui/field";
 
 type ThingTab = "enemy" | "item" | "key" | "decor";
 
@@ -159,8 +161,8 @@ function NumberField({
   onChange: (value: number) => void;
 }) {
   return (
-    <div className="field">
-      <span className="label">{label}</span>
+    <FieldItem>
+      <Label>{label}</Label>
       <NumberInput
         value={value}
         step={step}
@@ -180,7 +182,7 @@ function NumberField({
           </NumberInputIncrement>
         </NumberInputGroup>
       </NumberInput>
-    </div>
+    </FieldItem>
   );
 }
 
@@ -240,16 +242,16 @@ function TextureField({
           if (next) onChange(next);
         }}
       >
-        <div className="field">
-          <SelectLabel className="label">{label}</SelectLabel>
-          <SelectTrigger className="select-trigger">
+        <FieldItem>
+          <SelectLabel>{label}</SelectLabel>
+          <SelectTrigger>
             <SelectValue />
             <span aria-hidden="true">▾</span>
           </SelectTrigger>
-        </div>
-        <SelectContent className="select-content">
+        </FieldItem>
+        <SelectContent>
           {items.map((option) => (
-            <SelectItem key={option} value={option} className="select-item">
+            <SelectItem key={option} value={option}>
               <TextureSwatch
                 name={option}
                 picture={picture(option)}
@@ -305,20 +307,16 @@ function ChoiceField({
         if (next) onChange(next);
       }}
     >
-      <div className="field">
-        <SelectLabel className="label">{label}</SelectLabel>
-        <SelectTrigger className="select-trigger">
+      <FieldItem>
+        <SelectLabel>{label}</SelectLabel>
+        <SelectTrigger>
           <SelectValue />
           <span aria-hidden="true">▾</span>
         </SelectTrigger>
-      </div>
-      <SelectContent className="select-content">
+      </FieldItem>
+      <SelectContent>
         {items.map((item) => (
-          <SelectItem
-            key={item.value}
-            value={item.value}
-            className="select-item"
-          >
+          <SelectItem key={item.value} value={item.value}>
             {item.label}
             <SelectCheck />
           </SelectItem>
@@ -478,7 +476,7 @@ function SectorInspector({
           onValueChange={(light) => onChange({ light: light as number })}
         >
           <div className="slider-head">
-            <span className="label">Light level</span>
+            <Label>Light level</Label>
             <SliderValue />
           </div>
           <SliderControl className="slider-control">
@@ -654,16 +652,14 @@ function LineInspector({
           />
         </div>
         {fields.some(({ info }) => info.paints === "wall") ? (
-          <button
-            type="button"
-            className="button"
+          <Button
             onClick={() => {
               const field = fields.find(({ info }) => info.paints === "wall")!;
               onPaint(field.part, field.info.texture!, true);
             }}
           >
             Use on every wall in this room
-          </button>
+          </Button>
         ) : null}
       </InspectorSection>
       <InspectorSection title="Action">
@@ -695,13 +691,9 @@ function LineInspector({
               }}
             />
             {onAddSwitch && !action ? (
-              <button
-                type="button"
-                className="button self-start"
-                onClick={onAddSwitch}
-              >
+              <Button className="self-start" onClick={onAddSwitch}>
                 Add a switch
-              </button>
+              </Button>
             ) : null}
             {action ? (
               <>
@@ -810,8 +802,8 @@ function CompactNumber({
   onChange: (value: number) => void;
 }) {
   return (
-    <div className="field min-w-0 flex-1">
-      <span className="label">{label}</span>
+    <FieldItem className="min-w-0 flex-1">
+      <Label>{label}</Label>
       <NumberInput
         value={value}
         min={min}
@@ -821,7 +813,7 @@ function CompactNumber({
           if (next !== null) onChange(Math.round(next));
         }}
       >
-        <NumberInputGroup className="input-box flex h-8 items-center rounded-[2px] border border-input px-2">
+        <NumberInputGroup className="flex h-8 items-center rounded-[3px] border border-input px-2 has-focus-visible:outline-2 has-focus-visible:outline-offset-1 has-focus-visible:outline-ring">
           <NumberInputControl
             aria-label={label}
             className="w-full min-w-0 border-0 bg-transparent font-mono text-xs tabular-nums outline-none"
@@ -833,7 +825,7 @@ function CompactNumber({
           ) : null}
         </NumberInputGroup>
       </NumberInput>
-    </div>
+    </FieldItem>
   );
 }
 
@@ -851,7 +843,7 @@ function Meter({
   return (
     <div className="grid gap-1">
       <div className="flex justify-between">
-        <span className="label">{label}</span>
+        <Label>{label}</Label>
         <span className="font-mono text-xs">{value}</span>
       </div>
       <div className="h-1 bg-muted">
@@ -932,20 +924,19 @@ function PlaceThings({
   );
   return (
     <InspectorSection title="Place a thing">
-      <label className="input-box flex h-8 items-center gap-2 rounded-[2px] border border-input px-2">
+      <InputGroup className="h-8">
         <Search
           size={14}
           className="text-muted-foreground"
           aria-hidden="true"
         />
-        <Input
+        <InputGroupInput
           aria-label="Search things"
           placeholder="Search things"
-          className="w-full min-w-0 border-0 bg-transparent outline-none"
           value={query}
           onValueChange={setQuery}
         />
-      </label>
+      </InputGroup>
       <SegmentedControl
         aria-label="Thing type"
         className="segments w-full [&>button]:flex-1 [&>button]:px-1"

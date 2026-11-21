@@ -12,6 +12,7 @@ import { useState } from "react";
 
 import type { GameMap } from "../map/types";
 import type { ImportReport } from "../wad/decompile";
+import { Button } from "../components/ui/button";
 
 type ImportedMap = { slot: string; map: GameMap; report: ImportReport };
 
@@ -254,9 +255,9 @@ function WadImportDialog({
               ? `${plural(split, "sector")} with pillars or holes become several rooms.`
               : "Each sector becomes a room."}
           </p>
-          <button
-            type="button"
-            className="button primary shrink-0"
+          <Button
+            variant="primary"
+            className="shrink-0"
             disabled={chosen.length === 0}
             onClick={() =>
               onImport(
@@ -268,7 +269,7 @@ function WadImportDialog({
             }
           >
             Import {chosen.length > 1 ? plural(chosen.length, "map") : "map"}
-          </button>
+          </Button>
         </footer>
       </DialogContent>
     </Dialog>

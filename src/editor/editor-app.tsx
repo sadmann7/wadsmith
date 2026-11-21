@@ -5,16 +5,6 @@ import {
   createUndoStack,
   matchesShortcut,
 } from "@ui-sdk/core";
-import {
-  createMenuController,
-  Menu,
-  MenuContent,
-  MenuContextTrigger,
-  MenuItem,
-  MenuSeparator,
-  MenuTrigger,
-} from "@ui-sdk/react/menu";
-import { Input } from "@ui-sdk/react/input";
 import { useShortcut } from "@ui-sdk/react/shortcuts";
 import {
   SegmentedControl,
@@ -124,6 +114,17 @@ import {
 import { sectorAt, wallKey, wallOwners } from "../map/geometry";
 import { createFlatAssets, readWadAssets } from "../wad/assets";
 import { compileMap } from "../wad/compile";
+import { Button, buttonVariants } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import {
+  createMenuController,
+  Menu,
+  MenuContent,
+  MenuContextTrigger,
+  MenuItem,
+  MenuSeparator,
+  MenuTrigger,
+} from "../components/ui/menu";
 
 const modeHints: Record<EditMode, string> = {
   vertices:
@@ -1049,35 +1050,27 @@ function App({
           <span className="separator" aria-hidden="true" />
           <div className="flex items-center gap-4">
             <Menu onAction={(action) => runFileAction(action as string)}>
-              <MenuTrigger className="menu-trigger">File</MenuTrigger>
-              <MenuContent className="select-content">
-                <MenuItem value="projects" className="select-item">
-                  Episode home
-                </MenuItem>
-                <MenuItem value="new" className="select-item">
-                  New map…
-                </MenuItem>
-                <MenuItem value="settings" className="select-item">
-                  Map settings…
-                </MenuItem>
-                <MenuItem value="open" className="select-item">
-                  Replace with map file…
-                </MenuItem>
-                <MenuItem value="save" className="select-item">
-                  Save map file
-                </MenuItem>
-                <MenuSeparator className="menu-separator" />
-                <MenuItem value="wad" className="select-item">
-                  Build WAD…
-                </MenuItem>
+              <MenuTrigger className={buttonVariants({ variant: "text" })}>
+                File
+              </MenuTrigger>
+              <MenuContent>
+                <MenuItem value="projects">Episode home</MenuItem>
+                <MenuItem value="new">New map…</MenuItem>
+                <MenuItem value="settings">Map settings…</MenuItem>
+                <MenuItem value="open">Replace with map file…</MenuItem>
+                <MenuItem value="save">Save map file</MenuItem>
+                <MenuSeparator />
+                <MenuItem value="wad">Build WAD…</MenuItem>
               </MenuContent>
             </Menu>
             <Menu onAction={(action) => (action === "undo" ? undo() : redo())}>
-              <MenuTrigger className="menu-trigger">Edit</MenuTrigger>
-              <MenuContent className="select-content">
+              <MenuTrigger className={buttonVariants({ variant: "text" })}>
+                Edit
+              </MenuTrigger>
+              <MenuContent>
                 <MenuItem
                   value="undo"
-                  className="select-item"
+
                   shortcut={editorShortcuts.undo.keys}
                   disabled={!history.canUndo()}
                 >
@@ -1085,7 +1078,7 @@ function App({
                 </MenuItem>
                 <MenuItem
                   value="redo"
-                  className="select-item"
+
                   shortcut={editorShortcuts.redo.keys}
                   disabled={!history.canRedo()}
                 >
@@ -1094,32 +1087,28 @@ function App({
               </MenuContent>
             </Menu>
             <Menu onAction={(action) => runViewAction(action as string)}>
-              <MenuTrigger className="menu-trigger">View</MenuTrigger>
-              <MenuContent className="select-content">
-                <MenuItem value="map" className="select-item">
-                  Map
-                </MenuItem>
+              <MenuTrigger className={buttonVariants({ variant: "text" })}>
+                View
+              </MenuTrigger>
+              <MenuContent>
+                <MenuItem value="map">Map</MenuItem>
                 <MenuItem
                   value="split"
-                  className="select-item"
+
                   disabled={narrow}
                 >
                   Split
                 </MenuItem>
-                <MenuItem value="scene" className="select-item">
-                  3D
-                </MenuItem>
-                <MenuSeparator className="menu-separator" />
-                <MenuItem value="dock" className="select-item">
+                <MenuItem value="scene">3D</MenuItem>
+                <MenuSeparator />
+                <MenuItem value="dock">
                   {showDock ? "Hide player view" : "Show player view"}
                 </MenuItem>
-                <MenuItem value="camera" className="select-item">
-                  Find camera on map
-                </MenuItem>
-                <MenuSeparator className="menu-separator" />
+                <MenuItem value="camera">Find camera on map</MenuItem>
+                <MenuSeparator />
                 <MenuItem
                   value="shortcuts"
-                  className="select-item"
+
                   shortcut={editorShortcuts.help.keys}
                 >
                   Keyboard shortcuts
@@ -1127,25 +1116,27 @@ function App({
               </MenuContent>
             </Menu>
             <Menu onAction={(action) => runMapAction(action as string)}>
-              <MenuTrigger className="menu-trigger">Map</MenuTrigger>
-              <MenuContent className="select-content">
+              <MenuTrigger className={buttonVariants({ variant: "text" })}>
+                Map
+              </MenuTrigger>
+              <MenuContent>
                 <MenuItem
                   value="check"
-                  className="select-item"
+
                   disabled={checks.length === 0}
                 >
                   Check map
                 </MenuItem>
                 <MenuItem
                   value="play"
-                  className="select-item"
+
                   disabled={!canPlay}
                 >
                   Play
                 </MenuItem>
                 <MenuItem
                   value="coop"
-                  className="select-item"
+
                   disabled={!canPlayCoop}
                 >
                   Play together…
@@ -1165,28 +1156,30 @@ function App({
             }}
           />
           <div className="topbar-end">
-            <button
-              type="button"
-              className="icon-button"
+            <Button
+              variant="ghost"
+              size="icon"
+
               aria-label="Undo"
               title="Undo"
               disabled={!history.canUndo()}
               onClick={undo}
             >
               <Undo2 size={16} aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              className="icon-button"
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+
               aria-label="Redo"
               title="Redo"
               disabled={!history.canRedo()}
               onClick={redo}
             >
               <Redo2 size={16} aria-hidden="true" />
-            </button>
+            </Button>
             {checks.length === 0 ? (
-              <span className="button border-transparent">
+              <span className={buttonVariants({ variant: "ghost" })}>
                 <span className="sr-only">Map check: </span>
                 <CircleCheck
                   size={15}
@@ -1196,9 +1189,9 @@ function App({
                 <span className="max-xl:sr-only">{mapStatus}</span>
               </span>
             ) : (
-              <button
-                type="button"
-                className="button border-transparent hover:bg-accent"
+              <Button
+                variant="ghost"
+
                 title="Open map check"
                 aria-label={`Map check: ${mapStatus}`}
                 onClick={showMapCheck}
@@ -1209,28 +1202,26 @@ function App({
                   aria-hidden="true"
                 />
                 <span className="max-xl:sr-only">{mapStatus}</span>
-              </button>
+              </Button>
             )}
-            <button
-              type="button"
-              className="button"
+            <Button
               disabled={!canPlayCoop}
               title="Play together"
               onClick={openCoop}
             >
               <Users size={14} aria-hidden="true" />
               <span className="max-xl:sr-only">Play together</span>
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="primary"
               ref={playButton}
-              type="button"
-              className="button primary"
+
               disabled={!canPlay}
               onClick={play}
             >
               <Play size={14} aria-hidden="true" />
               Play
-            </button>
+            </Button>
           </div>
         </header>
 
@@ -1365,22 +1356,16 @@ function App({
                         anything and play again.
                       </p>
                       <div className="flex gap-2">
-                        <button
-                          type="button"
-                          className="button primary"
+                        <Button
+                          variant="primary"
+
                           disabled={!canPlay}
                           onClick={play}
                         >
                           <Play size={14} aria-hidden="true" />
                           Play
-                        </button>
-                        <button
-                          type="button"
-                          className="button"
-                          onClick={dismissWelcome}
-                        >
-                          Start editing
-                        </button>
+                        </Button>
+                        <Button onClick={dismissWelcome}>Start editing</Button>
                       </div>
                     </section>
                   )}
@@ -1417,13 +1402,7 @@ function App({
                   <div className="scene-bar">
                     {sceneStatus}
                     {visibleLayout === "scene" ? (
-                      <button
-                        type="button"
-                        className="button"
-                        onClick={findCameraOnMap}
-                      >
-                        Find on map
-                      </button>
+                      <Button onClick={findCameraOnMap}>Find on map</Button>
                     ) : null}
                   </div>
                 </section>
@@ -1504,7 +1483,8 @@ function App({
                 {roomSelected && sector ? (
                   <Input
                     aria-label="Room name"
-                    className="selection-name"
+                    variant="ghost"
+                    className="-mx-1.5 -mt-0.5 text-[18px] font-semibold"
                     maxLength={80}
                     value={sector.name}
                     onValueChange={(name) =>
@@ -1522,25 +1502,25 @@ function App({
               {sector ? (
                 <Menu onAction={(action) => runQuickBuild(action as string)}>
                   <MenuTrigger
-                    className="icon-button shrink-0"
+                    className={buttonVariants({
+                      variant: "ghost",
+                      size: "icon",
+                      className: "shrink-0",
+                    })}
                     aria-label={`Quick build around ${sector.name}`}
                     title="Quick build"
                   >
                     <Ellipsis size={16} aria-hidden="true" />
                   </MenuTrigger>
-                  <MenuContent className="select-content" align="end">
+                  <MenuContent align="end">
                     {roomSides.map((side) => (
-                      <MenuItem key={side} value={side} className="select-item">
+                      <MenuItem key={side} value={side}>
                         Add a room to the {side}
                       </MenuItem>
                     ))}
-                    <MenuSeparator className="menu-separator" />
-                    <MenuItem value="imp" className="select-item">
-                      Add an imp
-                    </MenuItem>
-                    <MenuItem value="door" className="select-item">
-                      Make a door
-                    </MenuItem>
+                    <MenuSeparator />
+                    <MenuItem value="imp">Add an imp</MenuItem>
+                    <MenuItem value="door">Make a door</MenuItem>
                   </MenuContent>
                 </Menu>
               ) : null}

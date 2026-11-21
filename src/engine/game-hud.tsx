@@ -34,6 +34,8 @@ import {
   type Resolution,
   type Skill,
 } from "./runtime";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
 
 type SoundSettings = { volume: number; muted: boolean };
 
@@ -315,13 +317,11 @@ function BetweenLevels({
         </div>
       </div>
       <div className="flex justify-end gap-2">
-        <button type="button" className="button" onClick={onExit}>
-          {exitLabel}
-        </button>
-        <button type="button" className="button primary" onClick={onNext}>
+        <Button onClick={onExit}>{exitLabel}</Button>
+        <Button variant="primary" onClick={onNext}>
           <ArrowRight size={14} aria-hidden="true" />
           Next map
-        </button>
+        </Button>
       </div>
     </section>
   );
@@ -370,19 +370,19 @@ function NoteForm({ onSave }: { onSave: (text: string) => void }) {
         if (text.trim()) onSave(text.trim());
       }}
     >
-      <input
+      <Input
         // oxlint-disable-next-line jsx-a11y/no-autofocus
         autoFocus
         aria-label="Note"
         maxLength={280}
         placeholder="What should change here?"
-        className="input min-w-0 flex-1"
+        className="min-w-0 flex-1"
         value={text}
-        onChange={(event) => setText(event.target.value)}
+        onValueChange={setText}
       />
-      <button type="submit" className="button primary" disabled={!text.trim()}>
+      <Button variant="primary" type="submit" disabled={!text.trim()}>
         Save
-      </button>
+      </Button>
     </form>
   );
 }
@@ -437,7 +437,7 @@ function GameTopBar({
         : "Solo";
   return (
     <header className="flex h-[48px] min-w-0 items-center gap-4 border-b border-border bg-card px-3 text-foreground">
-      <button type="button" className="button shrink-0" onClick={onExit}>
+      <Button className="shrink-0" onClick={onExit}>
         <ArrowLeft size={14} aria-hidden="true" />
         <span>
           Exit
@@ -448,7 +448,7 @@ function GameTopBar({
         {fullscreen ? null : (
           <kbd className="font-mono text-xs text-muted-foreground">Esc</kbd>
         )}
-      </button>
+      </Button>
       <div className="flex min-w-0 flex-1 items-center gap-2.5">
         <span className="shrink-0 font-mono text-xs text-muted-foreground">
           {slot}
@@ -678,14 +678,10 @@ function GameHud({
               : `${status.kills} / ${status.totalKills} enemies`}
           </p>
           <div className="flex gap-2">
-            {coop ? null : (
-              <button type="button" className="button" onClick={onRestart}>
-                Play again
-              </button>
-            )}
-            <button type="button" className="button primary" onClick={onExit}>
+            {coop ? null : <Button onClick={onRestart}>Play again</Button>}
+            <Button variant="primary" onClick={onExit}>
               {exit.label}
-            </button>
+            </Button>
           </div>
         </section>
       ) : null}
@@ -830,21 +826,20 @@ function EndGameConfirm({
         </p>
       </div>
       <div className="flex justify-end gap-2">
-        <button
+        <Button
           ref={keepPlaying}
-          type="button"
-          className="button"
+
           onClick={onKeepPlaying}
         >
           Keep playing
-        </button>
-        <button
-          type="button"
-          className="button border-destructive text-destructive"
+        </Button>
+        <Button
+          variant="destructive"
+
           onClick={onEndGame}
         >
           End game
-        </button>
+        </Button>
       </div>
     </section>
   );

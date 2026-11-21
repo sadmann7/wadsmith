@@ -13,7 +13,6 @@ import {
   DrawerTitle,
   DrawerTrigger,
 } from "@ui-sdk/react/drawer";
-import { Input } from "@ui-sdk/react/input";
 import { PanelLeft, Plus, Star, X } from "lucide-react";
 import {
   useState,
@@ -29,6 +28,9 @@ import { blankMap } from "../map/starter-map";
 import { dialogClass, titleClass } from "./map-dialog";
 import { maxNameLength, type EpisodeStart, type Project } from "./project-data";
 import { pathOf, type Route } from "./routes";
+import { Button, buttonVariants } from "../components/ui/button";
+import { Field, FieldLabel } from "../components/ui/field";
+import { Input } from "../components/ui/input";
 
 const starts: { value: EpisodeStart; label: string; detail: string }[] = [
   { value: "empty", label: "Empty", detail: "No maps yet" },
@@ -101,17 +103,18 @@ function NewEpisodeDialog({
             </DialogClose>
           </header>
           <div className="grid min-h-0 gap-5 overflow-y-auto p-5">
-            <label className="field">
-              <span className="label">Name</span>
+            <Field>
+              <FieldLabel>Name</FieldLabel>
               <Input
-                className="input"
                 maxLength={maxNameLength}
                 value={name}
                 onValueChange={setName}
               />
-            </label>
+            </Field>
             <fieldset className="m-0 grid gap-2 border-0 p-0">
-              <legend className="label mb-2 p-0">Start with</legend>
+              <legend className="mb-2 p-0 text-sm text-muted-foreground">
+                Start with
+              </legend>
               <div className="grid grid-cols-3 gap-2.5 max-[560px]:grid-cols-1">
                 {starts.map((item) => (
                   <button
@@ -141,16 +144,15 @@ function NewEpisodeDialog({
                 ? "Saved in this browser."
                 : "Kept until this tab closes."}
             </p>
-            <button type="button" className="button" onClick={onClose}>
-              Cancel
-            </button>
-            <button
+            <Button onClick={onClose}>Cancel</Button>
+            <Button
+              variant="primary"
               type="submit"
-              className="button primary"
+
               disabled={!name.trim()}
             >
               Create episode
-            </button>
+            </Button>
           </footer>
         </form>
       </DialogContent>
@@ -325,7 +327,11 @@ function SidebarDrawer({
   return (
     <Drawer side="left" preventEdgeSwipe open={open} onOpenChange={setOpen}>
       <DrawerTrigger
-        className={`icon-button shrink-0 ${className}`}
+        className={buttonVariants({
+          variant: "ghost",
+          size: "icon",
+          className: `shrink-0 ${className}`,
+        })}
         aria-label="Show sidebar"
         title="Show sidebar"
       >

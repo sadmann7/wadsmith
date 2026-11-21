@@ -5,22 +5,12 @@ import {
   DialogContent,
   DialogTitle,
 } from "@ui-sdk/react/dialog";
-import { Input } from "@ui-sdk/react/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@ui-sdk/react/select";
 import { X } from "lucide-react";
 import { useState, type FormEvent } from "react";
 
 import { MapOutline } from "../editor/map-outline";
 import { MapPlan } from "../editor/map-plan";
 import { featuredMaps, type FeaturedMap } from "../map/featured";
-import { SelectCheck } from "../editor/select-check";
 import {
   formatPar,
   freeSlots,
@@ -32,6 +22,18 @@ import {
   type MapTemplate,
   type ProjectMap,
 } from "./project-data";
+import { Button } from "../components/ui/button";
+import { Field, FieldItem, FieldLabel, Label } from "../components/ui/field";
+import { Input } from "../components/ui/input";
+import {
+  Select,
+  SelectCheck,
+  SelectContent,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "../components/ui/select";
 
 type MapDetails = {
   name: string;
@@ -116,15 +118,14 @@ function MapDialog({
           </header>
           <div className="grid min-h-0 gap-5 overflow-y-auto p-5">
             <div className="grid grid-cols-[minmax(0,1fr)_120px] gap-3">
-              <label className="field">
-                <span className="label">Name</span>
+              <Field>
+                <FieldLabel>Name</FieldLabel>
                 <Input
-                  className="input"
                   maxLength={maxNameLength}
                   value={name}
                   onValueChange={setName}
                 />
-              </label>
+              </Field>
               <Select
                 value={slot}
                 items={slots}
@@ -132,16 +133,16 @@ function MapDialog({
                   if (next) setSlot(next);
                 }}
               >
-                <div className="field">
-                  <SelectLabel className="label">Slot</SelectLabel>
-                  <SelectTrigger className="select-trigger">
+                <FieldItem>
+                  <SelectLabel>Slot</SelectLabel>
+                  <SelectTrigger>
                     <SelectValue />
                     <span aria-hidden="true">▾</span>
                   </SelectTrigger>
-                </div>
-                <SelectContent className="select-content">
+                </FieldItem>
+                <SelectContent>
                   {slots.map((item) => (
-                    <SelectItem key={item} value={item} className="select-item">
+                    <SelectItem key={item} value={item}>
                       {item}
                       <SelectCheck />
                     </SelectItem>
@@ -151,30 +152,30 @@ function MapDialog({
             </div>
             {entry ? (
               <div className="grid grid-cols-[minmax(0,1fr)_120px] gap-3">
-                <label className="field">
-                  <span className="label">Description</span>
+                <Field>
+                  <FieldLabel>Description</FieldLabel>
                   <Input
-                    className="input"
                     maxLength={maxDescriptionLength}
                     value={description}
                     onValueChange={setDescription}
                   />
-                </label>
-                <label className="field">
-                  <span className="label">Par time</span>
+                </Field>
+                <Field>
+                  <FieldLabel>Par time</FieldLabel>
                   <Input
-                    className="input"
                     aria-invalid={parValue === undefined}
                     placeholder="2:15"
                     value={par}
                     onValueChange={setPar}
                   />
-                </label>
+                </Field>
               </div>
             ) : (
               <fieldset className="m-0 grid gap-1.5 border-0 p-0">
                 <div className="mb-1.5 flex items-center justify-between gap-3">
-                  <legend className="label p-0">Start from</legend>
+                  <legend className="p-0 text-sm text-muted-foreground">
+                    Start from
+                  </legend>
                   <div
                     role="group"
                     aria-label="Start from"
@@ -257,14 +258,14 @@ function MapDialog({
               </fieldset>
             )}
             <div className="grid grid-cols-2 gap-3">
-              <div className="field">
-                <span className="label">Format</span>
+              <FieldItem>
+                <Label>Format</Label>
                 <span>Classic Doom</span>
-              </div>
-              <div className="field">
-                <span className="label">Texture pack</span>
+              </FieldItem>
+              <FieldItem>
+                <Label>Texture pack</Label>
                 <span>freedoom2</span>
-              </div>
+              </FieldItem>
             </div>
           </div>
           <footer className="flex items-center justify-end gap-2 border-t border-border px-5 py-3.5">
@@ -273,16 +274,15 @@ function MapDialog({
                 {error ?? "All 32 map slots are in use."}
               </p>
             ) : null}
-            <button type="button" className="button" onClick={onClose}>
-              Cancel
-            </button>
-            <button
+            <Button onClick={onClose}>Cancel</Button>
+            <Button
+              variant="primary"
               type="submit"
-              className="button primary"
+
               disabled={!canSubmit}
             >
               {entry ? "Save" : "Create map"}
-            </button>
+            </Button>
           </footer>
         </form>
       </DialogContent>

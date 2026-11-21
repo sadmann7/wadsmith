@@ -43,6 +43,8 @@ import {
   type RoomInfo,
   type RoomPlayer,
 } from "./room";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
 
 const slowFindMs = 4000;
 
@@ -95,9 +97,9 @@ function Ended({
 }) {
   const host = info?.host ?? "The host";
   const back = (
-    <button type="button" className="button primary" onClick={backHome}>
+    <Button variant="primary" onClick={backHome}>
       Make your own map
-    </button>
+    </Button>
   );
   if (reason === "full") {
     return (
@@ -136,14 +138,14 @@ function Ended({
         tone="warning"
         title="Update to join"
         actions={
-          <button
-            type="button"
-            className="button primary"
+          <Button
+            variant="primary"
+
             onClick={() => location.reload()}
           >
             <RefreshCw size={14} aria-hidden="true" />
             Reload
-          </button>
+          </Button>
         }
       >
         <p className="m-0">
@@ -214,13 +216,7 @@ function Ended({
       title="You left the room"
       actions={
         <>
-          <button
-            type="button"
-            className="button"
-            onClick={() => location.reload()}
-          >
-            Join again
-          </button>
+          <Button onClick={() => location.reload()}>Join again</Button>
           {back}
         </>
       }
@@ -260,21 +256,21 @@ function Invite({
       <form className="grid gap-3.5" onSubmit={submit}>
         <label className="grid">
           <FieldLabel>Your name</FieldLabel>
-          <input
-            className="input"
+          <Input
             maxLength={maxNameLength}
             autoFocus
             value={name}
-            onChange={(event) => setName(event.target.value)}
+            onValueChange={setName}
           />
         </label>
-        <button
+        <Button
+          variant="primary"
           type="submit"
-          className="button primary h-9 justify-center"
+          className="h-9 justify-center"
           disabled={!name.trim() || joining}
         >
           {joining ? "Joining…" : "Join"}
-        </button>
+        </Button>
       </form>
     </CoopCard>
   );
@@ -300,9 +296,7 @@ function Waiting({
           <span className="text-sm text-muted-foreground" role="status">
             The game starts for everyone at once.
           </span>
-          <button type="button" className="button" onClick={onLeave}>
-            Leave room
-          </button>
+          <Button onClick={onLeave}>Leave room</Button>
         </>
       }
     >
@@ -512,11 +506,7 @@ function CoopJoin({ code }: { code: string }) {
                 ? "Still looking for this room. Check the link, and that the host still has the room open."
                 : "Still looking for this room. The host's tab has to stay open in this browser."}
           </p>
-          {state.slow ? (
-            <button type="button" className="button" onClick={backHome}>
-              Stop looking
-            </button>
-          ) : null}
+          {state.slow ? <Button onClick={backHome}>Stop looking</Button> : null}
         </div>
       ) : null}
       {(state.step === "invite" || state.step === "joining") && info ? (
@@ -538,9 +528,7 @@ function CoopJoin({ code }: { code: string }) {
           footer={
             <>
               <span />
-              <button type="button" className="button" onClick={leave}>
-                Cancel
-              </button>
+              <Button onClick={leave}>Cancel</Button>
             </>
           }
         >

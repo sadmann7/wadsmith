@@ -6,22 +6,24 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@ui-sdk/react/dialog";
+import { Play, X } from "lucide-react";
+import { useState } from "react";
+
+import { skillNames } from "../engine/coop";
+import { Choice } from "../engine/coop-ui";
+import type { Complevel, GameFiles, Skill } from "../engine/runtime";
+import type { WadSummary } from "../wad/inspect";
+import { Button } from "../components/ui/button";
 import {
   Select,
+  SelectCheck,
   SelectContent,
   SelectItem,
   SelectLabel,
   SelectTrigger,
   SelectValue,
-} from "@ui-sdk/react/select";
-import { Play, X } from "lucide-react";
-import { useState } from "react";
-
-import { SelectCheck } from "../editor/select-check";
-import { skillNames } from "../engine/coop";
-import { Choice } from "../engine/coop-ui";
-import type { Complevel, GameFiles, Skill } from "../engine/runtime";
-import type { WadSummary } from "../wad/inspect";
+} from "../components/ui/select";
+import { FieldItem, Label } from "../components/ui/field";
 
 const complevelNames: Record<Complevel, string> = {
   vanilla: "Vanilla",
@@ -85,8 +87,8 @@ function WadPlayDialog({
           </DialogClose>
         </header>
         <div className="grid min-h-0 gap-4 overflow-y-auto p-5">
-          <div className="field">
-            <span className="label">Compatibility</span>
+          <FieldItem>
+            <Label>Compatibility</Label>
             <Choice
               label="Compatibility"
               value={complevel}
@@ -103,7 +105,7 @@ function WadPlayDialog({
                   : "Detected from its maps and patches."
                 : `The WAD looks like ${complevelNames[summary.complevel]}.`}
             </p>
-          </div>
+          </FieldItem>
           <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)] gap-3">
             <Select
               value={slotOf(warp)}
@@ -112,24 +114,24 @@ function WadPlayDialog({
                 if (next) setWarp(Number(next.slice(3)));
               }}
             >
-              <div className="field">
-                <SelectLabel className="label">Start at</SelectLabel>
-                <SelectTrigger className="select-trigger">
+              <FieldItem>
+                <SelectLabel>Start at</SelectLabel>
+                <SelectTrigger>
                   <SelectValue />
                   <span aria-hidden="true">▾</span>
                 </SelectTrigger>
-              </div>
-              <SelectContent className="select-content">
+              </FieldItem>
+              <SelectContent>
                 {slots.map((item) => (
-                  <SelectItem key={item} value={item} className="select-item">
+                  <SelectItem key={item} value={item}>
                     {item}
                     <SelectCheck />
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            <div className="field">
-              <span className="label">Skill</span>
+            <FieldItem>
+              <Label>Skill</Label>
               <Choice
                 label="Skill"
                 value={skill}
@@ -139,16 +141,16 @@ function WadPlayDialog({
                 }))}
                 onChange={setSkill}
               />
-            </div>
+            </FieldItem>
           </div>
         </div>
         <footer className="flex items-center justify-between gap-3 border-t border-border px-5 py-3">
           <p className="muted min-w-0">
             Anything the WAD doesn&apos;t replace comes from Freedoom.
           </p>
-          <button
-            type="button"
-            className="button primary shrink-0"
+          <Button
+            variant="primary"
+            className="shrink-0"
             onClick={() =>
               onPlay(
                 {
@@ -163,7 +165,7 @@ function WadPlayDialog({
           >
             <Play size={14} aria-hidden="true" />
             Play
-          </button>
+          </Button>
         </footer>
       </DialogContent>
     </Dialog>

@@ -47,6 +47,8 @@ import {
   type RoomPlayer,
 } from "./room";
 import type { NetworkMode, Skill } from "./runtime";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
 
 const dialogClass =
   "fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-32px)] w-[480px] max-w-[calc(100vw-32px)] -translate-1/2 flex-col overflow-hidden rounded-[6px] border border-input bg-card outline-none";
@@ -126,14 +128,11 @@ function Setup({
     <>
       <label className="grid">
         <FieldLabel>Your name</FieldLabel>
-        <input
-          className="input"
+        <Input
           maxLength={maxNameLength}
           placeholder="Player 1"
           value={settings.name}
-          onChange={(event) =>
-            onChange({ ...settings, name: event.target.value })
-          }
+          onValueChange={(name) => onChange({ ...settings, name })}
         />
       </label>
       <div>
@@ -197,14 +196,13 @@ function Setup({
                 }
                 action={
                   onAddStarts ? (
-                    <button
-                      type="button"
-                      className="button shrink-0"
+                    <Button
+                      className="shrink-0"
                       onClick={() => onAddStarts(settings.players)}
                     >
                       <Plus size={14} aria-hidden="true" />
                       {missing.length === 1 ? "Add start" : "Add starts"}
-                    </button>
+                    </Button>
                   ) : null
                 }
               />
@@ -265,16 +263,14 @@ function Lobby({
     <>
       <div className="grid gap-1.5">
         <div className="flex gap-2">
-          <input
-            className="input min-w-0 flex-1 font-mono text-xs"
+          <Input
+            className="min-w-0 flex-1 font-mono text-xs"
             aria-label="Invite link"
             readOnly
             value={link}
             onFocus={(event) => event.currentTarget.select()}
           />
-          <button
-            type="button"
-            className="button"
+          <Button
             onClick={() =>
               void navigator.clipboard
                 ?.writeText(link)
@@ -287,7 +283,7 @@ function Lobby({
               <Copy size={14} aria-hidden="true" />
             )}
             {copied ? "Copied" : "Copy link"}
-          </button>
+          </Button>
         </div>
         <p className="m-0 text-sm text-muted-foreground">
           {roomsUrl
@@ -576,28 +572,26 @@ function PlayTogether({
               : "You get a link to share next."}
           </span>
           <div className="flex gap-2">
-            <button type="button" className="button" onClick={onClose}>
-              {code ? "Leave room" : "Cancel"}
-            </button>
+            <Button onClick={onClose}>{code ? "Leave room" : "Cancel"}</Button>
             {code ? (
-              <button
-                type="button"
-                className="button primary"
+              <Button
+                variant="primary"
+
                 disabled={!everyoneReady || lost}
                 onClick={start}
               >
                 <Play size={14} aria-hidden="true" />
                 Start game
-              </button>
+              </Button>
             ) : (
-              <button
-                type="button"
-                className="button primary"
+              <Button
+                variant="primary"
+
                 disabled={!ready}
                 onClick={createRoom}
               >
                 Create room
-              </button>
+              </Button>
             )}
           </div>
         </footer>

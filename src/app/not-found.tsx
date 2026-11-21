@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { buttonVariants } from "@/components/ui/button";
 
 export const metadata: Metadata = { title: "Page not found" };
 
@@ -14,7 +15,13 @@ export default function NotFound() {
         <p className="m-0 text-muted-foreground">
           The link may be old, or the address has a typo.
         </p>
-        <Link href="/" className="button primary mt-2 no-underline">
+        <Link
+          href="/"
+          className={buttonVariants({
+            variant: "primary",
+            className: "mt-2 no-underline",
+          })}
+        >
           Go to Wadsmith
         </Link>
       </div>
