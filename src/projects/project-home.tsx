@@ -403,18 +403,7 @@ function ProjectHome({
   return (
     <AppShell
       sidebar={sidebar}
-      crumbs={
-        <>
-          <span className="max-[760px]:hidden">Episodes</span>
-          <span
-            aria-hidden="true"
-            className="text-fg-disabled max-[760px]:hidden"
-          >
-            /
-          </span>
-          <Crumb>{project.name}</Crumb>
-        </>
-      }
+      crumbs={<Crumb>{project.name}</Crumb>}
       actions={
         <>
           <button type="button" className="button" onClick={onExportProject}>
