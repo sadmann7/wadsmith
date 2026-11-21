@@ -191,6 +191,7 @@ function GameSession({
   const advanceTimer = useRef<ReturnType<typeof setInterval>>(undefined);
   const level = episode?.[levelIndex] ?? { map, title, slot, par };
   const [network, setNetwork] = useState<NetworkState | null>(null);
+  const [coopBegan, setCoopBegan] = useState(false);
   const [scoresOpen, setScoresOpen] = useState(false);
   const [stall, setStall] = useState<{ peers: number[]; since: number }>({
     peers: [],
@@ -209,7 +210,7 @@ function GameSession({
   const gameHeld = noteSpot !== null || holdsGame(capture);
   const gameHeldRef = useRef(gameHeld);
   const { width, height } = screenSizes[resolution];
-  const coopStarted = (network?.playersInGame ?? 0) > 1 && status?.inLevel;
+  const coopStarted = coopBegan && status?.inLevel;
 
   useEffect(() => {
     captureRef.current = capture;
@@ -313,7 +314,10 @@ function GameSession({
                 send: coop.send,
                 onState: (state) => {
                   setNetwork(state);
-                  if (state.playersInGame > 1) netStarted = true;
+                  if (state.playersInGame > 1) {
+                    netStarted = true;
+                    setCoopBegan(true);
+                  }
                   if (coop.role !== "host") return;
                   const frozen = performance.now() - ticsChangedAt > stallMs;
                   const lagging = frozen
