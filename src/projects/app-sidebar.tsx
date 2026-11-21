@@ -136,7 +136,7 @@ function NewEpisodeDialog({
             </fieldset>
           </div>
           <footer className="flex items-center justify-end gap-2 border-t border-border px-5 py-3.5">
-            <p className="m-0 mr-auto text-[13px] text-fg-muted">
+            <p className="m-0 mr-auto text-sm text-fg-muted">
               {durable
                 ? "Saved in this browser."
                 : "Kept until this tab closes."}
@@ -168,7 +168,7 @@ type SidebarProps = {
 };
 
 const rowClass =
-  "relative flex items-center gap-2.5 rounded-[3px] px-2 py-1.5 text-[14px] text-fg-soft no-underline hover:bg-surface-raised hover:text-fg aria-[current=page]:bg-surface-raised aria-[current=page]:font-semibold aria-[current=page]:text-fg";
+  "relative flex items-center gap-2.5 rounded-[3px] px-2 py-1.5 text-sm text-fg-soft no-underline hover:bg-surface-raised hover:text-fg aria-[current=page]:bg-surface-raised aria-[current=page]:font-semibold aria-[current=page]:text-fg";
 
 function SidebarLink({
   route,
@@ -237,7 +237,7 @@ function AppSidebar({
           Featured maps
         </SidebarLink>
         <div className="grid gap-0.5">
-          <div className="mb-1 flex h-6 items-center justify-between pr-1 pl-2 font-mono text-[11px] tracking-[0.08em] text-fg-muted">
+          <div className="mb-1 flex h-6 items-center justify-between pr-1 pl-2 font-mono text-xs tracking-[0.08em] text-fg-muted">
             EPISODES
             {onCreateProject ? (
               <button
@@ -269,7 +269,7 @@ function AppSidebar({
                 <span className="min-w-0 flex-1 truncate pl-1.5">
                   {item.name}
                 </span>
-                <span className="font-mono text-[11px] font-normal text-fg-muted">
+                <span className="font-mono text-xs font-normal text-fg-muted">
                   {counts[item.id] ?? 0}
                   <span className="sr-only"> maps</span>
                 </span>
@@ -279,20 +279,20 @@ function AppSidebar({
         </div>
       </nav>
       <div className="mx-2.5 grid shrink-0 gap-1 border-t border-border px-2 pt-3 pb-4">
-        <div className="flex items-center gap-2 text-[13px] text-fg-soft">
+        <div className="flex items-center gap-2 text-sm text-fg-soft">
           <span
             aria-hidden="true"
             className={`size-1.5 rounded-full ${durable ? "bg-success" : "bg-warning"}`}
           />
           {durable ? "Saved in this browser" : "Kept until this tab closes"}
         </div>
-        <p className="m-0 text-xs text-fg-muted">
+        <p className="m-0 text-sm text-fg-muted">
           Back up an episode to keep it safe or move it to another computer.
         </p>
         <Link
           href="/source"
           aria-current={current === null ? "page" : undefined}
-          className="mt-1 justify-self-start text-xs text-fg-muted underline underline-offset-4 hover:text-fg aria-[current=page]:text-fg"
+          className="mt-1 justify-self-start text-sm text-fg-muted underline underline-offset-4 hover:text-fg aria-[current=page]:text-fg"
         >
           Source and licences
         </Link>
@@ -360,13 +360,13 @@ function AppShell({
       </aside>
       <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)]">
         <header
-          className={`flex h-12 min-w-0 items-center gap-3 border-b border-border px-8 max-[760px]:px-3 ${bare ? "min-[760px]:hidden" : ""}`}
+          className={`flex h-[48px] min-w-0 items-center gap-3 border-b border-border px-8 max-[760px]:px-3 ${bare ? "min-[760px]:hidden" : ""}`}
         >
           <SidebarDrawer {...sidebar} className="min-[760px]:hidden" />
           {crumbs ? (
             <nav
               aria-label="Breadcrumb"
-              className="flex min-w-0 flex-1 items-center gap-2 text-[13px] text-fg-muted"
+              className="flex min-w-0 flex-1 items-center gap-2 text-sm text-fg-muted"
             >
               {crumbs}
             </nav>
@@ -377,7 +377,7 @@ function AppShell({
                 current={false}
                 onNavigate={sidebar.onNavigate}
               >
-                <span className="text-[15px] font-bold tracking-[0.12em] text-accent">
+                <span className="text-base font-bold tracking-[0.12em] text-accent">
                   WADSMITH
                 </span>
               </SidebarLink>

@@ -60,7 +60,7 @@ function Section({
 }) {
   return (
     <section className="grid gap-3 border-t border-border pt-6">
-      <h2 className="m-0 font-mono text-[11px] font-medium tracking-wide text-fg-muted uppercase">
+      <h2 className="m-0 font-mono text-xs font-medium tracking-wide text-fg-muted uppercase">
         {title}
       </h2>
       {children}
@@ -75,7 +75,7 @@ export default function SourcePage() {
       <main className="grid max-w-[744px] gap-8 px-8 pt-10 pb-12 max-[760px]:px-4">
         <div className="grid gap-3">
           <h1 className="m-0 text-4xl font-bold">Source and licences</h1>
-          <p className="m-0 text-[15px] text-fg-soft">
+          <p className="m-0 text-base text-fg-soft">
             Wadsmith plays maps in Woof, a Doom engine released under the GNU
             General Public License, version 2. This page has the engine&apos;s
             source, every change Wadsmith makes to it, and the licences of
@@ -85,7 +85,7 @@ export default function SourcePage() {
         {engine ? (
           <>
             <Section title="Engine source">
-              <p className="m-0 text-[15px]">
+              <p className="m-0 text-base">
                 <a
                   className={linkClass}
                   href={`${engineFiles}woof-source.tar.gz`}
@@ -122,7 +122,7 @@ export default function SourcePage() {
               </dl>
             </Section>
             <Section title="Game data">
-              <p className="m-0 text-[15px]">
+              <p className="m-0 text-base">
                 Levels use textures, sounds and monsters from{" "}
                 <a className={linkClass} href="https://freedoom.github.io/">
                   Freedoom

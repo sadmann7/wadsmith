@@ -110,8 +110,8 @@ const itemClass =
   "flex h-7 cursor-default items-center gap-2 rounded-[4px] px-2 outline-none select-none data-[disabled]:text-fg-disabled data-[highlighted]:bg-surface-hover data-[popup-open]:bg-surface-hover";
 const iconClass = "flex w-3.5 shrink-0 justify-center text-fg-muted";
 const destructiveIconClass = "flex w-3.5 shrink-0 justify-center text-danger";
-const hintClass = "ml-auto font-mono text-[11px] text-fg-muted";
-const destructiveHintClass = "ml-auto font-mono text-[11px] text-danger";
+const hintClass = "ml-auto font-mono text-xs text-fg-muted";
+const destructiveHintClass = "ml-auto font-mono text-xs text-danger";
 
 const roomSides: { side: RoomSide; label: string }[] = [
   { side: "north", label: "North" },
@@ -280,7 +280,7 @@ function Choices({
 
 function Heading({ children }: { children: ReactNode }) {
   return (
-    <div className="truncate px-2 pt-1 pb-1.5 font-mono text-[11px] tracking-[0.04em] text-fg-muted uppercase">
+    <div className="truncate px-2 pt-1 pb-1.5 font-mono text-xs tracking-[0.04em] text-fg-muted uppercase">
       {children}
     </div>
   );

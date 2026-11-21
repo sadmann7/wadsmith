@@ -1,6 +1,12 @@
 @import "tailwindcss";
 
 @theme static {
+  --text-xs: 11px;
+  --text-xs--line-height: 14px;
+  --text-sm: 13px;
+  --text-sm--line-height: 18px;
+  --text-base: 15px;
+  --text-base--line-height: 22px;
   --color-canvas: oklch(0.16 0.003 67.6);
   --color-surface: oklch(0.193 0.005 67.5);
   --color-surface-raised: oklch(0.241 0.009 75.2);
@@ -75,6 +81,8 @@
   body {
     background: var(--color-canvas);
     color: var(--color-fg);
+    font-size: 13px;
+    line-height: 1.4;
   }
 
   h1,
@@ -570,7 +578,7 @@
     padding: 4px;
     border-radius: 6px;
     color: var(--color-fg-muted);
-    font-size: 10px;
+    font-size: 11px;
     overflow-wrap: anywhere;
   }
 
@@ -632,7 +640,7 @@
 
   .save-state {
     color: var(--color-fg-muted);
-    font-size: 12px;
+    font-size: 13px;
     white-space: nowrap;
   }
 
@@ -667,7 +675,7 @@
   }
 
   .card h2 {
-    font-size: 12px;
+    font-size: 13px;
   }
 
   .issues {
@@ -698,7 +706,7 @@
 
   .label {
     color: var(--color-fg-muted);
-    font-size: 12px;
+    font-size: 13px;
   }
 
   .field .select-trigger {
@@ -1133,13 +1141,13 @@
 
   .map-label strong {
     color: var(--color-fg);
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
   }
 
   .map-label span {
     color: var(--color-fg-muted);
-    font: 10px var(--font-mono);
+    font: 11px var(--font-mono);
   }
 
   .map:not([data-mode="sectors"]) .map-label span {
@@ -1418,6 +1426,6 @@
     place-items: center;
     height: 100%;
     color: var(--color-fg-muted);
-    font: 12px var(--font-mono);
+    font: 11px var(--font-mono);
   }
 }

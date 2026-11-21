@@ -88,7 +88,7 @@ function NewMapPanel({
                     </span>
                     {step.title}
                   </div>
-                  <div className="font-mono text-[11px] text-fg-muted">
+                  <div className="font-mono text-xs text-fg-muted">
                     {step.hint}
                   </div>
                 </div>

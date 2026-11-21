@@ -136,9 +136,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 function Vital({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div>
-      <div className="font-mono text-[11px] text-fg-soft uppercase">
-        {label}
-      </div>
+      <div className="font-mono text-xs text-fg-soft uppercase">{label}</div>
       <div className="text-[44px] leading-none font-bold @max-2xl:text-2xl">
         {value}
       </div>
@@ -177,7 +175,7 @@ function Scoreboard({
           <h2 className="m-0 text-lg font-semibold">
             {deathmatch ? "Deathmatch" : "Co-op"}
           </h2>
-          <span className="font-mono text-[11px] text-fg-muted uppercase">
+          <span className="font-mono text-xs text-fg-muted uppercase">
             {title}
             {status ? ` · ${formatTime(status.tics)}` : ""}
             {par ? ` / par ${formatTime(par * ticsPerSecond)}` : ""}
@@ -193,7 +191,7 @@ function Scoreboard({
       </header>
       <table className="w-full border-collapse text-left">
         <thead>
-          <tr className="font-mono text-[11px] text-fg-muted uppercase">
+          <tr className="font-mono text-xs text-fg-muted uppercase">
             <th className="py-2 pl-5 font-normal" colSpan={2}>
               Player
             </th>
@@ -215,14 +213,14 @@ function Scoreboard({
                 <PlayerBadge peer={row.peer} />
               </td>
               <td className="py-2.5 pl-3">
-                <span className="text-[15px] font-semibold">{row.name}</span>
+                <span className="text-base font-semibold">{row.name}</span>
                 {row.host ? (
-                  <span className="ml-2 font-mono text-[10px] text-fg-muted uppercase">
+                  <span className="ml-2 font-mono text-xs text-fg-muted uppercase">
                     Host
                   </span>
                 ) : null}
                 {row.you ? (
-                  <span className="ml-2 font-mono text-[10px] text-fg-muted uppercase">
+                  <span className="ml-2 font-mono text-xs text-fg-muted uppercase">
                     You
                   </span>
                 ) : null}
@@ -241,7 +239,7 @@ function Scoreboard({
           ))}
         </tbody>
       </table>
-      <footer className="border-t border-border px-5 py-2 text-xs text-fg-muted">
+      <footer className="border-t border-border px-5 py-2 text-sm text-fg-muted">
         Release Tab to hide
       </footer>
     </section>
@@ -251,7 +249,7 @@ function Scoreboard({
 function Tally({ label, value }: { label: string; value: string }) {
   return (
     <div className="grid gap-1">
-      <dt className="font-mono text-[11px] text-fg-muted uppercase">{label}</dt>
+      <dt className="font-mono text-xs text-fg-muted uppercase">{label}</dt>
       <dd className="m-0 text-lg font-semibold">{value}</dd>
     </div>
   );
@@ -280,7 +278,7 @@ function BetweenLevels({
       className={`${panelClass} absolute top-1/2 left-1/2 grid w-[min(420px,calc(100%-32px))] -translate-1/2 gap-4 border border-border-strong p-6`}
     >
       <div className="grid gap-1">
-        <span className="font-mono text-[11px] tracking-wide text-success uppercase">
+        <span className="font-mono text-xs tracking-wide text-success uppercase">
           {slot} complete
         </span>
         <h2 className="m-0 text-[26px] leading-tight font-bold">{title}</h2>
@@ -308,7 +306,7 @@ function BetweenLevels({
           className="h-[48px] w-[80px] shrink-0 rounded-[2px] bg-canvas"
         />
         <div className="grid min-w-0 gap-0.5">
-          <span className="font-mono text-[11px] text-fg-muted uppercase">
+          <span className="font-mono text-xs text-fg-muted uppercase">
             Next · {next.slot}
           </span>
           <span className="truncate font-semibold">{next.title}</span>
@@ -345,10 +343,10 @@ function StallBanner({ names, since }: { names: string[]; since: number }) {
         className="shrink-0 text-warning motion-safe:animate-spin"
       />
       <div className="grid min-w-0 flex-1 gap-0.5">
-        <span className="truncate text-[15px] font-semibold">
+        <span className="truncate text-base font-semibold">
           Waiting for {new Intl.ListFormat("en").format(names)}
         </span>
-        <span className="text-[13px] text-fg-muted">
+        <span className="text-sm text-fg-muted">
           Everyone waits so the game stays in step.
         </span>
       </div>
@@ -446,19 +444,19 @@ function GameTopBar({
           ) : null}
         </span>
         {fullscreen ? null : (
-          <kbd className="font-mono text-[11px] text-fg-muted">Esc</kbd>
+          <kbd className="font-mono text-xs text-fg-muted">Esc</kbd>
         )}
       </button>
       <div className="flex min-w-0 flex-1 items-center gap-2.5">
         <span className="shrink-0 font-mono text-xs text-fg-muted">{slot}</span>
-        <span className="truncate text-[15px] font-semibold">{title}</span>
-        <span className="shrink-0 rounded-full border border-border-strong px-2 py-0.5 font-mono text-[11px] tracking-[0.06em] text-fg-soft uppercase max-[640px]:hidden">
+        <span className="truncate text-base font-semibold">{title}</span>
+        <span className="shrink-0 rounded-full border border-border-strong px-2 py-0.5 font-mono text-xs tracking-[0.06em] text-fg-soft uppercase max-[640px]:hidden">
           {mode} · {skillNames[skill]}
         </span>
       </div>
       <span
         aria-label="Time"
-        className="shrink-0 font-mono text-[13px] text-fg-soft"
+        className="shrink-0 font-mono text-sm text-fg-soft"
       >
         {status ? formatTime(status.tics) : "0:00"}
         {par ? (
@@ -507,7 +505,7 @@ function GameTopBar({
           <>
             <button
               type="button"
-              className={`${iconButtonClass} text-xs font-medium aria-pressed:text-accent`}
+              className={`${iconButtonClass} text-sm font-medium aria-pressed:text-accent`}
               aria-label="Double resolution"
               aria-pressed={resolution === "high"}
               title={`${screenSizes[resolution].width}×${screenSizes[resolution].height}, restarts the level`}
@@ -641,12 +639,12 @@ function GameHud({
           )}
         </dl>
         {audioUnavailable ? (
-          <p className="px-3 pb-2 text-xs text-fg-muted">
+          <p className="px-3 pb-2 text-sm text-fg-muted">
             Sound needs HTTPS or localhost.
           </p>
         ) : null}
         {mouseMode === "denied" ? (
-          <p className="px-3 pb-2 text-xs text-fg-muted">
+          <p className="px-3 pb-2 text-sm text-fg-muted">
             This browser won't capture the mouse. Clicking fires.
           </p>
         ) : null}
@@ -725,7 +723,7 @@ function GameHud({
         </section>
       ) : null}
       {showHelp && !finished && mouseMode !== "released" ? (
-        <p className="absolute inset-x-4 bottom-24 m-0 text-center text-xs text-fg-soft">
+        <p className="absolute inset-x-4 bottom-24 m-0 text-center text-sm text-fg-soft">
           {mouseMode === "locked"
             ? `Mouse turn · Left click fire · WASD move · E use · Shift run · ${tabHelp} · Esc release mouse`
             : `${mouseMode === "denied" ? "" : "Click to use the mouse · "}WASD move · ←→ turn · Space fire · E use · Shift run · ${tabHelp}`}
@@ -751,9 +749,7 @@ function GameHud({
             />
             {/* Deathmatch hands every player every key. */}
             <div className={deathmatch ? "hidden" : "pb-1.5"}>
-              <div className="mb-1.5 font-mono text-[11px] text-fg-soft">
-                KEYS
-              </div>
+              <div className="mb-1.5 font-mono text-xs text-fg-soft">KEYS</div>
               <div className="flex h-[22px] gap-1">
                 {keyStyles.map(({ label, icon: Icon, color }, index) =>
                   status.keys & (1 << index) ? (
@@ -780,7 +776,7 @@ function GameHud({
             onClick={onOpenNote}
           >
             Leave a note
-            <kbd className="font-mono text-[11px] text-fg-muted">N</kbd>
+            <kbd className="font-mono text-xs text-fg-muted">N</kbd>
           </button>
           <button
             type="button"
@@ -789,7 +785,7 @@ function GameHud({
             onClick={onEditSpot}
           >
             Edit this spot
-            <kbd className="font-mono text-[11px] text-fg-muted">F2</kbd>
+            <kbd className="font-mono text-xs text-fg-muted">F2</kbd>
           </button>
         </div>
       </div>
@@ -819,10 +815,10 @@ function EndGameConfirm({
       className={`${panelClass} absolute top-3 left-3 z-30 grid w-[min(320px,calc(100%-24px))] gap-3.5 border border-border-strong p-4 shadow-lg`}
     >
       <div className="grid gap-1.5">
-        <h2 id="end-game-title" className="m-0 text-[15px] font-semibold">
+        <h2 id="end-game-title" className="m-0 text-base font-semibold">
           End the game for everyone?
         </h2>
-        <p id="end-game-body" className="m-0 text-[13px] text-fg-soft">
+        <p id="end-game-body" className="m-0 text-sm text-fg-soft">
           {list} {names.length === 1 ? "is" : "are"} still playing, and their
           game ends too.
         </p>

@@ -27,12 +27,12 @@ function DeviceNotice() {
     >
       <h2
         id="device-notice-title"
-        className="m-0 flex items-center gap-2 text-[15px] font-semibold"
+        className="m-0 flex items-center gap-2 text-base font-semibold"
       >
         <Monitor size={16} aria-hidden="true" className="text-fg-muted" />
         Best on a computer
       </h2>
-      <p className="m-0 text-[13px] text-fg-soft">
+      <p className="m-0 text-sm text-fg-soft">
         Building and playing maps needs a keyboard and mouse. Look around here,
         then open Wadsmith on a computer to make your own.
       </p>

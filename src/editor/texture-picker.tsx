@@ -180,7 +180,7 @@ function TexturePicker({
                   className="flex h-8 items-center justify-between gap-2 rounded-[3px] border-0 bg-transparent px-2 text-left text-fg-muted hover:text-fg aria-pressed:bg-surface-raised aria-pressed:text-fg"
                 >
                   <span className="truncate">{item.label}</span>
-                  <span className="font-mono text-[11px] text-fg-muted">
+                  <span className="font-mono text-xs text-fg-muted">
                     {item.names.length}
                   </span>
                 </Toggle>
@@ -235,7 +235,7 @@ function TexturePicker({
                       key={name}
                       value={name}
                       aria-label={name}
-                      className="group relative grid min-w-0 gap-1 border-0 bg-transparent p-0 text-left font-mono text-[11px] text-fg-muted outline-none aria-selected:text-fg"
+                      className="group relative grid min-w-0 gap-1 border-0 bg-transparent p-0 text-left font-mono text-xs text-fg-muted outline-none aria-selected:text-fg"
                     >
                       <TextureSwatch
                         name={name}
@@ -294,7 +294,7 @@ function TexturePicker({
               </dl>
             </div>
             <div className="grid gap-2">
-              <p className="m-0 font-mono text-[11px] text-fg-muted">
+              <p className="m-0 font-mono text-xs text-fg-muted">
                 Arrows move · Enter applies · Type to search
               </p>
               <button

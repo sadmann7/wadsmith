@@ -85,7 +85,7 @@ function EpisodeBuildDialog({
             </div>
           </div>
           <section aria-label="Maps in the WAD" className="grid gap-2">
-            <h3 className="m-0 flex justify-between font-mono text-[11px] font-normal text-fg-muted">
+            <h3 className="m-0 flex justify-between font-mono text-xs font-normal text-fg-muted">
               <span>MAPS</span>
               <span>
                 {blocked.length > 0
@@ -109,7 +109,7 @@ function EpisodeBuildDialog({
                     </span>
                     <span className="min-w-0 truncate">
                       {mapName(entry)}
-                      <span className="ml-2 font-mono text-[11px] text-fg-muted">
+                      <span className="ml-2 font-mono text-xs text-fg-muted">
                         {status.label}
                         {entry.broken ? " · delete it to build" : ""}
                       </span>
@@ -129,7 +129,7 @@ function EpisodeBuildDialog({
               })}
             </ul>
             {gaps.length > 0 ? (
-              <p className="m-0 text-xs text-fg-muted">
+              <p className="m-0 text-sm text-fg-muted">
                 {gaps.join(", ")} {gaps.length === 1 ? "has" : "have"} no map,
                 so the game uses Freedoom&apos;s own{" "}
                 {gaps.length === 1 ? "level" : "levels"} there.
