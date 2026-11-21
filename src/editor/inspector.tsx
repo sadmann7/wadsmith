@@ -131,13 +131,15 @@ function InspectorSection({
   children: ReactNode;
 }) {
   return (
-    <section className="inspector-section">
-      <h2>
-        {title}
-        {detail ? <span>{detail}</span> : null}
-      </h2>
+    <details className="inspector-section" open>
+      <summary>
+        <h2>
+          {title}
+          {detail ? <span>{detail}</span> : null}
+        </h2>
+      </summary>
       <div className="stack">{children}</div>
-    </section>
+    </details>
   );
 }
 
@@ -407,32 +409,6 @@ function SectorInspector({
   };
   return (
     <>
-      <InspectorSection title={door ? "Door" : "Room"}>
-        <label className="field">
-          <span className="label">Name</span>
-          <Input
-            className="input"
-            maxLength={80}
-            value={sector.name}
-            onValueChange={(name) => onChange({ name })}
-          />
-        </label>
-        <ToggleField
-          label="Door"
-          checked={Boolean(door)}
-          onChange={(checked) =>
-            onChange({ door: checked ? defaultDoor : undefined })
-          }
-        />
-        {door ? (
-          <DoorFields
-            door={door}
-            assets={assets}
-            light={sector.light}
-            onChange={(next) => onChange({ door: next })}
-          />
-        ) : null}
-      </InspectorSection>
       <InspectorSection
         title="Height"
         detail={door ? undefined : String(sector.ceiling - sector.floor)}
@@ -540,6 +516,23 @@ function SectorInspector({
           />
         </div>
       </InspectorSection>
+      <InspectorSection title="Door">
+        <ToggleField
+          label="Opens as a door"
+          checked={Boolean(door)}
+          onChange={(checked) =>
+            onChange({ door: checked ? defaultDoor : undefined })
+          }
+        />
+        {door ? (
+          <DoorFields
+            door={door}
+            assets={assets}
+            light={sector.light}
+            onChange={(next) => onChange({ door: next })}
+          />
+        ) : null}
+      </InspectorSection>
     </>
   );
 }
@@ -554,6 +547,7 @@ function LineInspector({
   onLineChange,
   onSideChange,
   onTargetChange,
+  onAddSwitch,
 }: {
   map: GameMap;
   wall: string;
@@ -564,6 +558,7 @@ function LineInspector({
   onLineChange: (patch: Omit<LineSettings, "sides">) => void;
   onSideChange: (patch: LineSide) => void;
   onTargetChange: (sector: string | null) => void;
+  onAddSwitch?: () => void;
 }) {
   const line = describeLine(map, wall, sector);
   const { settings, twoSided, front, back } = line;
@@ -699,6 +694,15 @@ function LineInspector({
                 }
               }}
             />
+            {onAddSwitch && !action ? (
+              <button
+                type="button"
+                className="button self-start"
+                onClick={onAddSwitch}
+              >
+                Add a switch
+              </button>
+            ) : null}
             {action ? (
               <>
                 <div className="row items-end">
