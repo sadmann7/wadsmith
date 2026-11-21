@@ -1,5 +1,5 @@
-import { Button as ButtonPrimitive } from "@ui-sdk/react/button";
-import type { ComponentProps } from "react";
+import * as ButtonPrimitive from "@ui-sdk/react/button";
+import * as React from "react";
 
 import { cn } from "../../lib/cn";
 
@@ -43,13 +43,13 @@ function Button({
   size,
   className,
   ...props
-}: Omit<ComponentProps<typeof ButtonPrimitive>, "className"> & {
+}: Omit<React.ComponentProps<typeof ButtonPrimitive.Button>, "className"> & {
   variant?: ButtonVariant;
   size?: ButtonSize;
   className?: string;
 }) {
   return (
-    <ButtonPrimitive
+    <ButtonPrimitive.Button
       className={buttonVariants({ variant, size, className })}
       {...props}
     />

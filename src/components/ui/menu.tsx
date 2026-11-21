@@ -1,15 +1,5 @@
-import {
-  createMenuController,
-  Menu,
-  MenuContent as MenuContentPrimitive,
-  MenuContextTrigger,
-  MenuGroup,
-  MenuGroupLabel,
-  MenuItem as MenuItemPrimitive,
-  MenuSeparator as MenuSeparatorPrimitive,
-  MenuTrigger,
-} from "@ui-sdk/react/menu";
-import type { ComponentProps } from "react";
+import * as MenuPrimitive from "@ui-sdk/react/menu";
+import * as React from "react";
 
 import { cn } from "../../lib/cn";
 import { itemClass, popupClass } from "./select";
@@ -21,9 +11,12 @@ type WithClass<P> = Omit<P, "className"> & {
 function MenuContent({
   className,
   ...props
-}: WithClass<ComponentProps<typeof MenuContentPrimitive>>) {
+}: WithClass<React.ComponentProps<typeof MenuPrimitive.MenuContent>>) {
   return (
-    <MenuContentPrimitive className={cn(popupClass, className)} {...props} />
+    <MenuPrimitive.MenuContent
+      className={cn(popupClass, className)}
+      {...props}
+    />
   );
 }
 
@@ -31,11 +24,11 @@ function MenuItem({
   variant = "default",
   className,
   ...props
-}: WithClass<ComponentProps<typeof MenuItemPrimitive>> & {
+}: WithClass<React.ComponentProps<typeof MenuPrimitive.MenuItem>> & {
   variant?: "default" | "destructive";
 }) {
   return (
-    <MenuItemPrimitive
+    <MenuPrimitive.MenuItem
       className={cn(
         itemClass,
         variant === "destructive"
@@ -52,23 +45,22 @@ function MenuItem({
 function MenuSeparator({
   className,
   ...props
-}: WithClass<ComponentProps<typeof MenuSeparatorPrimitive>>) {
+}: WithClass<React.ComponentProps<typeof MenuPrimitive.MenuSeparator>>) {
   return (
-    <MenuSeparatorPrimitive
+    <MenuPrimitive.MenuSeparator
       className={cn("my-1 h-px bg-input/30", className)}
       {...props}
     />
   );
 }
 
+export { MenuContent, MenuItem, MenuSeparator };
+
 export {
   createMenuController,
   Menu,
-  MenuContent,
   MenuContextTrigger,
   MenuGroup,
   MenuGroupLabel,
-  MenuItem,
-  MenuSeparator,
   MenuTrigger,
-};
+} from "@ui-sdk/react/menu";

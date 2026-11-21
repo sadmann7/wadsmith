@@ -12,6 +12,10 @@ Default to no comment. Write one only for a constraint, an external quirk, or an
 
 `wadsmith/comment-style` in `lint/comment-style.ts` enforces the mechanical parts.
 
+## Imports
+
+Import React as `import * as React from "react"`, and a UI SDK part as a namespace named after it, like `import * as DialogPrimitive from "@ui-sdk/react/dialog"`, instead of renaming single imports. `src/components/ui` follows this; the rest of the app still uses named React imports until it moves over.
+
 ## Project
 
 Wadsmith is a Doom map editor built with Next.js, Tailwind CSS and UI SDK. It compiles maps to real WAD files and plays them in Woof, built for WebAssembly and run in its vanilla Doom compatibility mode.

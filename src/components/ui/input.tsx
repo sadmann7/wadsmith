@@ -1,9 +1,12 @@
-import { Input as InputPrimitive } from "@ui-sdk/react/input";
-import type { ComponentProps } from "react";
+import * as InputPrimitive from "@ui-sdk/react/input";
+import * as React from "react";
 
 import { cn } from "../../lib/cn";
 
-type InputProps = Omit<ComponentProps<typeof InputPrimitive>, "className"> & {
+type InputProps = Omit<
+  React.ComponentProps<typeof InputPrimitive.Input>,
+  "className"
+> & {
   className?: string;
 };
 
@@ -18,7 +21,7 @@ function Input({
   ...props
 }: InputProps & { variant?: keyof typeof variants }) {
   return (
-    <InputPrimitive
+    <InputPrimitive.Input
       className={cn(
         "w-full rounded-[3px] border bg-transparent",
         variants[variant],
@@ -29,7 +32,7 @@ function Input({
   );
 }
 
-function InputGroup({ className, ...props }: ComponentProps<"label">) {
+function InputGroup({ className, ...props }: React.ComponentProps<"label">) {
   return (
     <label
       className={cn(
@@ -43,7 +46,7 @@ function InputGroup({ className, ...props }: ComponentProps<"label">) {
 
 function InputGroupInput({ className, ...props }: InputProps) {
   return (
-    <InputPrimitive
+    <InputPrimitive.Input
       className={cn(
         "w-full min-w-0 border-0 bg-transparent outline-none",
         className,

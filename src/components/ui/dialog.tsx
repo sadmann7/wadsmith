@@ -1,13 +1,6 @@
-import {
-  Dialog,
-  DialogBackdrop as DialogBackdropPrimitive,
-  DialogClose,
-  DialogContent as DialogContentPrimitive,
-  DialogDescription as DialogDescriptionPrimitive,
-  DialogTitle as DialogTitlePrimitive,
-} from "@ui-sdk/react/dialog";
+import * as DialogPrimitive from "@ui-sdk/react/dialog";
 import { X } from "lucide-react";
-import type { ComponentProps } from "react";
+import * as React from "react";
 
 import { cn } from "../../lib/cn";
 
@@ -22,9 +15,9 @@ const titleClass =
 function DialogBackdrop({
   className,
   ...props
-}: WithClass<ComponentProps<typeof DialogBackdropPrimitive>>) {
+}: WithClass<React.ComponentProps<typeof DialogPrimitive.DialogBackdrop>>) {
   return (
-    <DialogBackdropPrimitive
+    <DialogPrimitive.DialogBackdrop
       className={cn(backdropClass, className)}
       {...props}
     />
@@ -34,9 +27,9 @@ function DialogBackdrop({
 function DialogContent({
   className,
   ...props
-}: WithClass<ComponentProps<typeof DialogContentPrimitive>>) {
+}: WithClass<React.ComponentProps<typeof DialogPrimitive.DialogContent>>) {
   return (
-    <DialogContentPrimitive
+    <DialogPrimitive.DialogContent
       className={cn(contentClass, className)}
       {...props}
     />
@@ -46,9 +39,9 @@ function DialogContent({
 function DialogTitle({
   className,
   ...props
-}: WithClass<ComponentProps<typeof DialogTitlePrimitive>>) {
+}: WithClass<React.ComponentProps<typeof DialogPrimitive.DialogTitle>>) {
   return (
-    <DialogTitlePrimitive
+    <DialogPrimitive.DialogTitle
       className={cn(titleClass, className ?? "text-xl font-semibold")}
       {...props}
     />
@@ -58,9 +51,9 @@ function DialogTitle({
 function DialogDescription({
   className,
   ...props
-}: WithClass<ComponentProps<typeof DialogDescriptionPrimitive>>) {
+}: WithClass<React.ComponentProps<typeof DialogPrimitive.DialogDescription>>) {
   return (
-    <DialogDescriptionPrimitive
+    <DialogPrimitive.DialogDescription
       className={cn(
         className ?? "truncate font-mono text-xs text-muted-foreground",
       )}
@@ -71,16 +64,16 @@ function DialogDescription({
 
 function DialogCloseButton() {
   return (
-    <DialogClose
+    <DialogPrimitive.DialogClose
       aria-label="Close"
       className="shrink-0 border-0 bg-transparent p-1 text-muted-foreground hover:text-foreground"
     >
       <X size={16} aria-hidden="true" />
-    </DialogClose>
+    </DialogPrimitive.DialogClose>
   );
 }
 
-function DialogHeader({ className, ...props }: ComponentProps<"header">) {
+function DialogHeader({ className, ...props }: React.ComponentProps<"header">) {
   return (
     <header
       className={cn(
@@ -92,7 +85,7 @@ function DialogHeader({ className, ...props }: ComponentProps<"header">) {
   );
 }
 
-function DialogFooter({ className, ...props }: ComponentProps<"footer">) {
+function DialogFooter({ className, ...props }: React.ComponentProps<"footer">) {
   return (
     <footer
       className={cn(
@@ -107,9 +100,7 @@ function DialogFooter({ className, ...props }: ComponentProps<"footer">) {
 export {
   backdropClass,
   contentClass,
-  Dialog,
   DialogBackdrop,
-  DialogClose,
   DialogCloseButton,
   DialogContent,
   DialogDescription,
@@ -118,3 +109,5 @@ export {
   DialogTitle,
   titleClass,
 };
+
+export { Dialog, DialogClose } from "@ui-sdk/react/dialog";

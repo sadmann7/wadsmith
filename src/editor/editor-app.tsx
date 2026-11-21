@@ -6,10 +6,7 @@ import {
   matchesShortcut,
 } from "@ui-sdk/core";
 import { useShortcut } from "@ui-sdk/react/shortcuts";
-import {
-  SegmentedControl as SegmentedControlPrimitive,
-  SegmentedControlItem as SegmentedControlItemPrimitive,
-} from "@ui-sdk/react/segmented-control";
+import * as SegmentedControlPrimitive from "@ui-sdk/react/segmented-control";
 import {
   Resizable,
   ResizableHandle,
@@ -1229,14 +1226,14 @@ function App({
         </header>
 
         <main className="workspace">
-          <SegmentedControlPrimitive
+          <SegmentedControlPrimitive.SegmentedControl
             aria-label="Mode"
             className="tool-rail"
             value={railMode}
             onValueChange={(next) => chooseMode(next as RailMode)}
           >
             {railModes.map(({ value, label, shortcut: key, icon: Icon }) => (
-              <SegmentedControlItemPrimitive
+              <SegmentedControlPrimitive.SegmentedControlItem
                 key={value}
                 value={value}
                 aria-keyshortcuts={editorShortcuts[key].keys}
@@ -1245,9 +1242,9 @@ function App({
               >
                 <Icon size={18} aria-hidden="true" />
                 <span>{label}</span>
-              </SegmentedControlItemPrimitive>
+              </SegmentedControlPrimitive.SegmentedControlItem>
             ))}
-          </SegmentedControlPrimitive>
+          </SegmentedControlPrimitive.SegmentedControl>
           <div className="views" data-layout={visibleLayout}>
             <SegmentedControl
               aria-label="Main view"

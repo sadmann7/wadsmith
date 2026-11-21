@@ -1,16 +1,6 @@
-import {
-  Select,
-  SelectContent as SelectContentPrimitive,
-  SelectGroup,
-  SelectGroupLabel,
-  SelectItem as SelectItemPrimitive,
-  SelectItemIndicator,
-  SelectLabel as SelectLabelPrimitive,
-  SelectTrigger as SelectTriggerPrimitive,
-  SelectValue,
-} from "@ui-sdk/react/select";
+import * as SelectPrimitive from "@ui-sdk/react/select";
 import { Check } from "lucide-react";
-import type { ComponentProps } from "react";
+import * as React from "react";
 
 import { cn } from "../../lib/cn";
 
@@ -26,9 +16,9 @@ const itemClass = "flex items-center gap-2 rounded-[4px] px-2 py-[5px]";
 function SelectTrigger({
   className,
   ...props
-}: WithClass<ComponentProps<typeof SelectTriggerPrimitive>>) {
+}: WithClass<React.ComponentProps<typeof SelectPrimitive.SelectTrigger>>) {
   return (
-    <SelectTriggerPrimitive
+    <SelectPrimitive.SelectTrigger
       className={cn(
         "inline-flex min-h-[30px] cursor-default items-center justify-between gap-2 rounded-[3px] border border-input bg-transparent px-2.5 py-1 whitespace-nowrap hover:border-muted-foreground",
         className,
@@ -41,9 +31,9 @@ function SelectTrigger({
 function SelectContent({
   className,
   ...props
-}: WithClass<ComponentProps<typeof SelectContentPrimitive>>) {
+}: WithClass<React.ComponentProps<typeof SelectPrimitive.SelectContent>>) {
   return (
-    <SelectContentPrimitive
+    <SelectPrimitive.SelectContent
       className={cn(popupClass, "min-w-(--anchor-width)", className)}
       {...props}
     />
@@ -53,9 +43,9 @@ function SelectContent({
 function SelectItem({
   className,
   ...props
-}: WithClass<ComponentProps<typeof SelectItemPrimitive>>) {
+}: WithClass<React.ComponentProps<typeof SelectPrimitive.SelectItem>>) {
   return (
-    <SelectItemPrimitive
+    <SelectPrimitive.SelectItem
       className={cn(itemClass, "data-[highlighted]:bg-accent", className)}
       {...props}
     />
@@ -65,9 +55,9 @@ function SelectItem({
 function SelectLabel({
   className,
   ...props
-}: WithClass<ComponentProps<typeof SelectLabelPrimitive>>) {
+}: WithClass<React.ComponentProps<typeof SelectPrimitive.SelectLabel>>) {
   return (
-    <SelectLabelPrimitive
+    <SelectPrimitive.SelectLabel
       className={cn("text-sm text-muted-foreground", className)}
       {...props}
     />
@@ -76,22 +66,25 @@ function SelectLabel({
 
 function SelectCheck() {
   return (
-    <SelectItemIndicator className="ml-auto pl-3 text-primary">
+    <SelectPrimitive.SelectItemIndicator className="ml-auto pl-3 text-primary">
       <Check size={14} aria-hidden="true" />
-    </SelectItemIndicator>
+    </SelectPrimitive.SelectItemIndicator>
   );
 }
 
 export {
   itemClass,
   popupClass,
-  Select,
   SelectCheck,
   SelectContent,
-  SelectGroup,
-  SelectGroupLabel,
   SelectItem,
   SelectLabel,
   SelectTrigger,
-  SelectValue,
 };
+
+export {
+  Select,
+  SelectGroup,
+  SelectGroupLabel,
+  SelectValue,
+} from "@ui-sdk/react/select";

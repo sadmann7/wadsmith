@@ -1,4 +1,4 @@
-import type { ComponentProps } from "react";
+import * as React from "react";
 
 import { cn } from "../../lib/cn";
 
@@ -6,7 +6,7 @@ function Alert({
   variant = "default",
   className,
   ...props
-}: ComponentProps<"p"> & { variant?: "default" | "destructive" }) {
+}: React.ComponentProps<"p"> & { variant?: "default" | "destructive" }) {
   return (
     <p
       className={cn(
