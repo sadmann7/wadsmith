@@ -990,6 +990,16 @@ describe("map check", () => {
     expect(validateMap(testMap)).toEqual([]);
   });
 
+  it("counts a floor that ends the level as an exit", () => {
+    const ending: GameMap = {
+      ...testMap,
+      sectors: testMap.sectors.map((sector, index) =>
+        index === 0 ? { ...sector, effect: "damage-20-exit" } : sector,
+      ),
+    };
+    expect(checkIds(ending)).not.toContain("no-exit");
+  });
+
   it("lets a map hold many deathmatch starts but asks for four", () => {
     let map = testMap;
     for (const [index, x] of [64, 128, 192].entries()) {

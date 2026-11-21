@@ -41,11 +41,20 @@ const sectorEffects: Record<SectorEffect, { label: string; special: number }> =
     blink: { label: "Random blink", special: 1 },
     "strobe-slow": { label: "Slow strobe", special: 3 },
     "strobe-fast": { label: "Fast strobe", special: 2 },
+    "strobe-slow-sync": { label: "Slow strobe in step", special: 12 },
+    "strobe-fast-sync": { label: "Fast strobe in step", special: 13 },
     glow: { label: "Glow", special: 8 },
     secret: { label: "Secret", special: 9 },
     "damage-5": { label: "Damage 5%", special: 7 },
     "damage-10": { label: "Damage 10%", special: 5 },
     "damage-20": { label: "Damage 20%", special: 16 },
+    "damage-20-strobe": { label: "Damage 20% with fast strobe", special: 4 },
+    "damage-20-exit": {
+      label: "Damage 20%, ends the level when nearly dead",
+      special: 11,
+    },
+    "door-close-30": { label: "Closes after 30 seconds", special: 10 },
+    "door-open-300": { label: "Opens after 5 minutes", special: 14 },
   };
 
 const thingCatalog: Record<
