@@ -268,6 +268,21 @@
     height: 100%;
   }
 
+  .views {
+    position: relative;
+  }
+
+  .view-switch {
+    position: absolute;
+    z-index: 5;
+    top: 12px;
+    right: 12px;
+  }
+
+  .views[data-layout="map"] .map-actions {
+    right: 148px;
+  }
+
   .views-group {
     display: flex;
   }
@@ -475,17 +490,6 @@
 
   .map-wall[data-selected] {
     stroke-width: 4;
-  }
-
-  .tool-hint {
-    position: absolute;
-    bottom: 12px;
-    left: 12px;
-    max-width: calc(100% - 24px);
-    padding: 5px 9px;
-    border-radius: 6px;
-    color: var(--color-fg-muted);
-    pointer-events: none;
   }
 
   .side {
@@ -941,13 +945,12 @@
     opacity: 0.35;
   }
 
-  .segments,
-  .edit-modes {
+  .segments {
     border-radius: 3px;
   }
 
   .workspace {
-    grid-template-columns: 52px minmax(0, 1fr) 328px;
+    grid-template-columns: 64px minmax(0, 1fr) 328px;
   }
 
   .tool-rail {
@@ -961,11 +964,15 @@
   }
 
   .tool-rail button {
-    display: grid;
-    place-items: center;
-    width: 36px;
-    height: 36px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    align-items: center;
+    justify-content: center;
+    width: 52px;
+    height: 50px;
     padding: 0;
+    font-size: 11px;
     border: 0;
     border-radius: 3px;
     background: none;
@@ -992,43 +999,6 @@
 
   .map-pane {
     container-type: inline-size;
-  }
-
-  .map-overlay {
-    position: absolute;
-    z-index: 3;
-    top: 12px;
-    left: 12px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    max-width: calc(100% - 130px);
-  }
-
-  .edit-modes {
-    display: inline-flex;
-    gap: 2px;
-    padding: 3px;
-    border: 1px solid var(--color-border);
-    background: var(--color-surface);
-  }
-
-  .edit-modes button {
-    display: inline-flex;
-    gap: 6px;
-    align-items: center;
-    min-height: 26px;
-    padding: 3px 9px;
-    border: 0;
-    border-radius: 2px;
-    background: none;
-    color: var(--color-fg-muted);
-  }
-
-  .edit-modes button[data-checked],
-  .edit-modes button[aria-checked="true"] {
-    background: var(--color-surface-raised);
-    color: var(--color-fg);
   }
 
   .map-actions {
@@ -1202,17 +1172,6 @@
     pointer-events: none;
   }
 
-  .tool-hint {
-    border: 1px solid var(--color-border);
-    border-radius: 3px;
-    background: color-mix(in oklab, var(--color-surface) 92%, transparent);
-    font-size: 13px;
-  }
-
-  .map-pane:has(.player-dock) .tool-hint {
-    max-width: calc(100% - 320px);
-  }
-
   .player-dock {
     position: absolute;
     z-index: 3;
@@ -1241,10 +1200,32 @@
   }
 
   .selection-header {
-    display: grid;
-    gap: 2px;
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
     padding: 12px 16px;
     border-bottom: 1px solid var(--color-border);
+  }
+
+  .selection-name {
+    width: 100%;
+    margin: -2px -6px 0;
+    padding: 0 5px;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    background: transparent;
+    font-size: 18px;
+    font-weight: 600;
+  }
+
+  .selection-name:hover {
+    border-color: var(--color-border);
+  }
+
+  .side > .agent-log {
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-fg-soft);
   }
 
   .selection-header h2 {
@@ -1267,9 +1248,36 @@
     outline-offset: -2px;
   }
 
+  details.inspector-section {
+    display: block;
+  }
+
+  details.inspector-section[open] > summary {
+    margin-bottom: 10px;
+  }
+
+  .inspector-section > summary {
+    list-style: none;
+    cursor: default;
+  }
+
+  .inspector-section > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .inspector-section > summary h2::before {
+    content: "▾" / "";
+    width: 10px;
+    transition: transform 120ms;
+  }
+
+  details.inspector-section:not([open]) > summary h2::before {
+    transform: rotate(-90deg);
+  }
+
   .inspector-section h2 {
     display: flex;
-    justify-content: space-between;
+    gap: 6px;
     color: var(--color-fg-muted);
     font: 400 11px var(--font-mono);
     letter-spacing: 1px;
@@ -1277,8 +1285,14 @@
   }
 
   .inspector-section h2 span {
+    margin-left: auto;
     letter-spacing: 0;
     text-transform: none;
+  }
+
+  .map-check {
+    border-left: 2px solid var(--color-warning);
+    background: color-mix(in oklab, var(--color-warning) 6%, transparent);
   }
 
   .inspector-section.issues {
@@ -1324,34 +1338,22 @@
 
   .status-bar div {
     display: flex;
+    flex-shrink: 0;
     gap: 18px;
+  }
+
+  .status-hint {
     min-width: 0;
     overflow: hidden;
+    color: var(--color-fg-soft);
+    font: 13px var(--font-sans);
+    text-overflow: ellipsis;
   }
 
-  @container (max-width: 380px) {
-    .map-overlay {
-      max-width: calc(100% - 24px);
-    }
-
-    .map-actions {
-      top: 54px;
-    }
-  }
-
-  @container (max-width: 360px) {
-    .edit-modes {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-    }
-
-    .edit-modes button {
-      justify-content: center;
-    }
-
-    .map-actions {
-      top: 122px;
-    }
+  .status-hint strong {
+    margin-right: 8px;
+    color: var(--color-accent);
+    font-weight: 600;
   }
 
   @media (max-width: 820px) {
@@ -1389,7 +1391,7 @@
       border-bottom: 1px solid var(--color-border);
     }
 
-    .status-bar div:first-child {
+    .status-bar div {
       display: none;
     }
   }

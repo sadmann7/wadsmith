@@ -14,6 +14,7 @@ import {
   MenuSeparator,
   MenuTrigger,
 } from "@ui-sdk/react/menu";
+import { Input } from "@ui-sdk/react/input";
 import { useShortcut } from "@ui-sdk/react/shortcuts";
 import {
   SegmentedControl,
@@ -28,16 +29,18 @@ import {
 import {
   CircleCheck,
   CircleX,
-  MousePointer2,
+  CircleDot,
+  Ellipsis,
+  Pentagon,
   PenLine,
   Play,
   Redo2,
   StickyNote,
-  ToggleRight,
+  Slash,
   TriangleAlert,
   Undo2,
-  UserPlus,
   Users,
+  Waypoints,
 } from "lucide-react";
 import {
   useCallback,
@@ -80,7 +83,9 @@ import { thingCatalog } from "../map/catalog";
 import {
   addPlayerStarts,
   addNote,
+  addSwitch,
   duplicateThings,
+  freeWallAt,
   removeNote,
   setLineTarget,
   setRoomDoor,
@@ -120,12 +125,21 @@ import { sectorAt, wallKey, wallOwners } from "../map/geometry";
 import { createFlatAssets, readWadAssets } from "../wad/assets";
 import { compileMap } from "../wad/compile";
 
-const toolHints: Record<MapTool, string> = {
-  select:
-    "Drag corners and things, or nudge them with the arrow keys. Shift-click adds to the selection.",
+const modeHints: Record<EditMode, string> = {
+  vertices:
+    "Drag corners to reshape rooms, or nudge them with the arrow keys. Shift-click adds to the selection.",
+  lines: "Click a wall to change its textures or what it does.",
+  sectors: "Click a room to select it. Drag its corners to reshape it.",
+  things:
+    "Click a thing to select it, or pick one in the inspector to place it.",
+};
+
+const toolHints: Record<Exclude<MapTool, "select">, string> = {
   draw: "Click corners, then click the first one or press Enter. Reuse a wall's corners to connect rooms.",
-  thing: "Click inside a room to place the chosen thing.",
-  switch: "Click a solid wall to add a switch, then drag from it to a door.",
+  thing:
+    "Click a floor to place it, or press Enter in 3D to place it ahead. Esc stops placing.",
+  switch:
+    "Click a solid wall to add a switch, then drag from it to a door. Esc cancels.",
 };
 
 const roomSides: RoomSide[] = ["north", "east", "south", "west"];
@@ -147,19 +161,28 @@ const savedWelcome = createLocalStorage("wadsmith:welcomed");
 const narrowQuery = "(max-width: 1100px)";
 const defaultSplit = [50, 50];
 
-const tools: { value: MapTool; label: string; icon: typeof PenLine }[] = [
-  { value: "select", label: "Select", icon: MousePointer2 },
-  { value: "draw", label: "Draw room", icon: PenLine },
-  { value: "thing", label: "Place", icon: UserPlus },
-  { value: "switch", label: "Switch", icon: ToggleRight },
+type RailMode = EditMode | "draw";
+
+const railModes: {
+  value: RailMode;
+  label: string;
+  shortcut: EditorShortcut;
+  icon: typeof PenLine;
+}[] = [
+  { value: "vertices", label: "Vertex", shortcut: "vertices", icon: Waypoints },
+  { value: "lines", label: "Line", shortcut: "lines", icon: Slash },
+  { value: "sectors", label: "Sector", shortcut: "sectors", icon: Pentagon },
+  { value: "things", label: "Thing", shortcut: "things", icon: CircleDot },
+  { value: "draw", label: "Draw", shortcut: "draw", icon: PenLine },
 ];
 
-const editModes: { value: EditMode; label: string; key: string }[] = [
-  { value: "vertices", label: "Vertices", key: "V" },
-  { value: "lines", label: "Lines", key: "L" },
-  { value: "sectors", label: "Sectors", key: "S" },
-  { value: "things", label: "Things", key: "T" },
-];
+const modeNames: Record<RailMode, string> = {
+  vertices: "Vertices",
+  lines: "Lines",
+  sectors: "Sectors",
+  things: "Things",
+  draw: "Draw",
+};
 
 function loadLayout() {
   try {
@@ -537,6 +560,18 @@ function App({
     [showDock],
   );
 
+  const chooseMode = useCallback(
+    (mode: RailMode) => {
+      if (mode === "draw") {
+        if (visibleLayout !== "scene") setTool("draw");
+        return;
+      }
+      setEditMode(mode);
+      setTool("select");
+    },
+    [visibleLayout],
+  );
+
   const togglePane = useCallback(
     (pane: SinglePane) => {
       if (narrow) return;
@@ -547,23 +582,28 @@ function App({
 
   useShortcut(
     editorShortcuts.vertices.keys,
-    () => setEditMode("vertices"),
+    () => chooseMode("vertices"),
     shortcut("vertices", modeKeys),
   );
   useShortcut(
     editorShortcuts.lines.keys,
-    () => setEditMode("lines"),
+    () => chooseMode("lines"),
     shortcut("lines", modeKeys),
   );
   useShortcut(
     editorShortcuts.sectors.keys,
-    () => setEditMode("sectors"),
+    () => chooseMode("sectors"),
     shortcut("sectors", modeKeys),
   );
   useShortcut(
     editorShortcuts.things.keys,
-    () => setEditMode("things"),
+    () => chooseMode("things"),
     shortcut("things", modeKeys),
+  );
+  useShortcut(
+    editorShortcuts.draw.keys,
+    () => chooseMode("draw"),
+    shortcut("draw", modeKeys),
   );
   useShortcut(
     editorShortcuts.look.keys,
@@ -752,11 +792,9 @@ function App({
 
   const sceneStatus = (
     <p className="scene-status" role="status">
-      {tool === "thing"
-        ? `Placing ${thingCatalog[thingKind].label}. Click a floor, or press Enter to place it ahead.`
-        : sceneInfo
-          ? `${sceneInfo.label}${sceneInfo.texture ? ` · ${sceneInfo.texture}` : ""}${sceneInfo.height !== null ? ` · height ${sceneInfo.height}` : ""}`
-          : "Click a floor, ceiling, wall or thing."}
+      {sceneInfo
+        ? `${sceneInfo.label}${sceneInfo.texture ? ` · ${sceneInfo.texture}` : ""}${sceneInfo.height !== null ? ` · height ${sceneInfo.height}` : ""}`
+        : "Click a floor, ceiling, wall or thing."}
     </p>
   );
 
@@ -835,6 +873,27 @@ function App({
       ].join(" · ")
     : "";
   const placingThings = editMode === "things" || tool === "thing";
+  const roomSelected =
+    !selectedSwitch &&
+    !thing &&
+    selectedThings.length < 2 &&
+    !line &&
+    !(surfaceInfo && !surfaceInfo.thing) &&
+    !placingThings;
+  const runQuickBuild = (action: string) => {
+    if (!sector) return;
+    if (action === "imp") runAgent("placeThing", ["imp", sector.name]);
+    else if (action === "door") runAgent("makeDoor", [sector.name, "use"]);
+    else runAgent("addConnectedRoom", [sector.name, action, 192]);
+  };
+  const railMode: RailMode =
+    tool === "draw"
+      ? "draw"
+      : tool === "thing"
+        ? "things"
+        : tool === "switch"
+          ? "lines"
+          : editMode;
   const selectionTitle = selectedSwitch
     ? "Switch"
     : selectedThings.length > 1
@@ -1106,19 +1165,6 @@ function App({
             }}
           />
           <div className="topbar-end">
-            <SegmentedControl
-              aria-label="Main view"
-              className="segments"
-              value={visibleLayout}
-              onValueChange={(next) => changeLayout(next as ViewLayout)}
-            >
-              <SegmentedControlIndicator className="segments-indicator" />
-              <SegmentedControlItem value="map">Map</SegmentedControlItem>
-              <SegmentedControlItem value="split" disabled={narrow}>
-                Split
-              </SegmentedControlItem>
-              <SegmentedControlItem value="scene">3D</SegmentedControlItem>
-            </SegmentedControl>
             <button
               type="button"
               className="icon-button"
@@ -1190,27 +1236,38 @@ function App({
 
         <main className="workspace">
           <SegmentedControl
-            aria-label="Tool"
+            aria-label="Mode"
             className="tool-rail"
-            value={tool}
-            onValueChange={(next) => setTool(next as MapTool)}
+            value={railMode}
+            onValueChange={(next) => chooseMode(next as RailMode)}
           >
-            {tools.map(({ value, label, icon: Icon }) => (
+            {railModes.map(({ value, label, shortcut: key, icon: Icon }) => (
               <SegmentedControlItem
                 key={value}
                 value={value}
-                aria-label={label}
-                title={label}
-                disabled={
-                  visibleLayout === "scene" &&
-                  (value === "draw" || value === "switch")
-                }
+                aria-keyshortcuts={editorShortcuts[key].keys}
+                title={`${modeNames[value]} (${editorShortcuts[key].keys.toUpperCase()})`}
+                disabled={visibleLayout === "scene" && value === "draw"}
               >
-                <Icon size={17} aria-hidden="true" />
+                <Icon size={18} aria-hidden="true" />
+                <span>{label}</span>
               </SegmentedControlItem>
             ))}
           </SegmentedControl>
           <div className="views" data-layout={visibleLayout}>
+            <SegmentedControl
+              aria-label="Main view"
+              className="segments view-switch"
+              value={visibleLayout}
+              onValueChange={(next) => changeLayout(next as ViewLayout)}
+            >
+              <SegmentedControlIndicator className="segments-indicator" />
+              <SegmentedControlItem value="map">Map</SegmentedControlItem>
+              <SegmentedControlItem value="split" disabled={narrow}>
+                Split
+              </SegmentedControlItem>
+              <SegmentedControlItem value="scene">3D</SegmentedControlItem>
+            </SegmentedControl>
             <Resizable
               className="views-group"
               defaultLayout={initialLayout.sizes}
@@ -1229,7 +1286,7 @@ function App({
                   }}
                   onPointerMove={({ clientX, clientY, target }) => {
                     mapPointer.current = (target as Element).closest(
-                      ".map-overlay, .player-dock, [data-map-control]",
+                      ".player-dock, [data-map-control]",
                     )
                       ? null
                       : { clientX, clientY };
@@ -1239,24 +1296,6 @@ function App({
                     mapPointer.current = null;
                   }}
                 >
-                  <div className="map-overlay">
-                    <SegmentedControl
-                      aria-label="Edit mode"
-                      className="edit-modes"
-                      value={editMode}
-                      onValueChange={(next) => setEditMode(next as EditMode)}
-                    >
-                      {editModes.map(({ value, label, key }) => (
-                        <SegmentedControlItem
-                          key={value}
-                          value={value}
-                          aria-keyshortcuts={key}
-                        >
-                          {label}
-                        </SegmentedControlItem>
-                      ))}
-                    </SegmentedControl>
-                  </div>
                   <MenuContextTrigger
                     controller={menu}
                     className="contents"
@@ -1309,9 +1348,7 @@ function App({
                       contextMenuOpen={contextMenuOpen}
                     />
                   </MenuContextTrigger>
-                  {welcomed ? (
-                    <p className="tool-hint">{toolHints[tool]}</p>
-                  ) : (
+                  {welcomed ? null : (
                     <section
                       aria-labelledby="welcome-title"
                       className="absolute bottom-3 left-3 z-4 grid max-w-[min(380px,calc(100%-24px))] gap-3 rounded-[3px] border border-border bg-surface p-4 shadow-lg"
@@ -1395,10 +1432,124 @@ function App({
           </div>
 
           <aside className="side">
+            {checks.length === 0 ? null : (
+              <section
+                ref={mapCheck}
+                className="inspector-section map-check"
+                aria-label="Map check"
+                tabIndex={-1}
+              >
+                <h2>
+                  Map check
+                  <span>{checkSummary}</span>
+                </h2>
+                <ul>
+                  {checks.slice(0, 8).map((issue) => {
+                    const { title, detail } = issueText(issue);
+                    const fixed = fixIssue(map, issue);
+                    const target = issue.target
+                      ? targetForIssue(map, issue.target)
+                      : null;
+                    const Icon =
+                      issue.severity === "error" ? CircleX : TriangleAlert;
+                    return (
+                      <li key={issue.id} className="check-issue">
+                        <Icon
+                          size={14}
+                          className={
+                            issue.severity === "error"
+                              ? "text-danger"
+                              : "text-warning"
+                          }
+                          aria-hidden="true"
+                        />
+                        <span className="sr-only">
+                          {issue.severity === "error" ? "Error: " : "Warning: "}
+                        </span>
+                        <div className="min-w-0">
+                          <div>{title}</div>
+                          {detail ? (
+                            <div className="truncate font-mono text-xs text-fg-muted">
+                              {detail}
+                            </div>
+                          ) : null}
+                        </div>
+                        {fixed ? (
+                          <button
+                            type="button"
+                            className="border-0 bg-transparent p-0 text-accent"
+                            aria-label={`Fix: ${title}`}
+                            onClick={() => commit(fixed)}
+                          >
+                            Fix
+                          </button>
+                        ) : target ? (
+                          <button
+                            type="button"
+                            className="border-0 bg-transparent p-0 text-fg-muted hover:text-fg"
+                            aria-label={`Show: ${title}`}
+                            onClick={() => showTarget(target)}
+                          >
+                            Show
+                          </button>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            )}
             <header className="selection-header">
-              <h2>{selectionTitle}</h2>
-              <p>{selectionMeta}</p>
+              <div className="min-w-0 flex-1">
+                {roomSelected && sector ? (
+                  <Input
+                    aria-label="Room name"
+                    className="selection-name"
+                    maxLength={80}
+                    value={sector.name}
+                    onValueChange={(name) =>
+                      commit(
+                        updateSector(map, sector.id, { name }),
+                        `sector:${sector.id}`,
+                      )
+                    }
+                  />
+                ) : (
+                  <h2>{selectionTitle}</h2>
+                )}
+                <p>{selectionMeta}</p>
+              </div>
+              {sector ? (
+                <Menu onAction={(action) => runQuickBuild(action as string)}>
+                  <MenuTrigger
+                    className="icon-button shrink-0"
+                    aria-label={`Quick build around ${sector.name}`}
+                    title="Quick build"
+                  >
+                    <Ellipsis size={16} aria-hidden="true" />
+                  </MenuTrigger>
+                  <MenuContent className="select-content" align="end">
+                    {roomSides.map((side) => (
+                      <MenuItem key={side} value={side} className="select-item">
+                        Add a room to the {side}
+                      </MenuItem>
+                    ))}
+                    <MenuSeparator className="menu-separator" />
+                    <MenuItem value="imp" className="select-item">
+                      Add an imp
+                    </MenuItem>
+                    <MenuItem value="door" className="select-item">
+                      Make a door
+                    </MenuItem>
+                  </MenuContent>
+                </Menu>
+              ) : null}
             </header>
+            {agentLog ? (
+              <p className="agent-log" role="status">
+                {agentLog}
+              </p>
+            ) : null}
             {fileError ? (
               <section className="inspector-section issues" role="alert">
                 <h2>Map problem</h2>
@@ -1430,6 +1581,22 @@ function App({
                 wall={line.wall}
                 sector={line.sector.id}
                 assets={assets}
+                onAddSwitch={
+                  freeWallAt(map, line.wall)
+                    ? () => {
+                        const wall = freeWallAt(map, line.wall)!;
+                        const a = map.vertices[wall.from];
+                        const b = map.vertices[wall.to];
+                        const added = addSwitch(map, wall, {
+                          x: (a.x + b.x) / 2,
+                          y: (a.y + b.y) / 2,
+                        });
+                        commit(added.map);
+                        setSurface(null);
+                        setSelection([`${switchKeyPrefix}${added.id}`]);
+                      }
+                    : undefined
+                }
                 onSelectSide={(side) =>
                   selectSurface(surfaceKey({ ...selectedWall, sector: side }))
                 }
@@ -1473,6 +1640,7 @@ function App({
                 }
                 onPlace={(kind) => {
                   setThingKind(kind);
+                  setEditMode("things");
                   setTool("thing");
                 }}
               />
@@ -1569,126 +1737,24 @@ function App({
                 </ul>
               </section>
             ) : null}
-
-            {checks.length === 0 ? null : (
-              <section
-                ref={mapCheck}
-                className="inspector-section map-check"
-                aria-label="Map check"
-                tabIndex={-1}
-              >
-                <h2>
-                  Map check
-                  <span>{checkSummary}</span>
-                </h2>
-                <ul>
-                  {checks.slice(0, 8).map((issue) => {
-                    const { title, detail } = issueText(issue);
-                    const fixed = fixIssue(map, issue);
-                    const target = issue.target
-                      ? targetForIssue(map, issue.target)
-                      : null;
-                    const Icon =
-                      issue.severity === "error" ? CircleX : TriangleAlert;
-                    return (
-                      <li key={issue.id} className="check-issue">
-                        <Icon
-                          size={14}
-                          className={
-                            issue.severity === "error"
-                              ? "text-danger"
-                              : "text-warning"
-                          }
-                          aria-hidden="true"
-                        />
-                        <span className="sr-only">
-                          {issue.severity === "error" ? "Error: " : "Warning: "}
-                        </span>
-                        <div className="min-w-0">
-                          <div>{title}</div>
-                          {detail ? (
-                            <div className="truncate font-mono text-xs text-fg-muted">
-                              {detail}
-                            </div>
-                          ) : null}
-                        </div>
-                        {fixed ? (
-                          <button
-                            type="button"
-                            className="border-0 bg-transparent p-0 text-accent"
-                            aria-label={`Fix: ${title}`}
-                            onClick={() => commit(fixed)}
-                          >
-                            Fix
-                          </button>
-                        ) : target ? (
-                          <button
-                            type="button"
-                            className="border-0 bg-transparent p-0 text-fg-muted hover:text-fg"
-                            aria-label={`Show: ${title}`}
-                            onClick={() => showTarget(target)}
-                          >
-                            Show
-                          </button>
-                        ) : null}
-                      </li>
-                    );
-                  })}
-                </ul>
-              </section>
-            )}
-
-            <section className="inspector-section">
-              <h2>Quick build</h2>
-              <p className="muted">One-click changes to the selected room.</p>
-              {sector ? (
-                <div className="agent-actions">
-                  {roomSides.map((side) => (
-                    <button
-                      key={side}
-                      type="button"
-                      className="button"
-                      onClick={() =>
-                        runAgent("addConnectedRoom", [sector.name, side, 192])
-                      }
-                    >
-                      Room {side}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    className="button"
-                    onClick={() => runAgent("placeThing", ["imp", sector.name])}
-                  >
-                    Add imp
-                  </button>
-                  <button
-                    type="button"
-                    className="button"
-                    onClick={() => runAgent("makeDoor", [sector.name, "use"])}
-                  >
-                    Make door
-                  </button>
-                </div>
-              ) : (
-                <p className="muted">Select a room first.</p>
-              )}
-              {agentLog ? (
-                <p className="agent-log" role="status">
-                  {agentLog}
-                </p>
-              ) : null}
-            </section>
           </aside>
         </main>
         <footer className="status-bar">
+          <p className="status-hint">
+            <strong>{modeNames[railMode]}</strong>
+            {tool === "select"
+              ? modeHints[editMode]
+              : tool === "thing"
+                ? `Placing ${thingCatalog[thingKind].label}. ${toolHints.thing}`
+                : toolHints[tool]}
+          </p>
           <div>
-            <span>{Object.keys(map.vertices).length} vertices</span>
-            <span>{lineCount} lines</span>
-            <span>{map.sectors.length} sectors</span>
-            <span>{map.things.length} things</span>
-          </div>
-          <div>
+            <span className="max-2xl:hidden">
+              {Object.keys(map.vertices).length} vertices · {lineCount} lines
+            </span>
+            <span>
+              {map.sectors.length} sectors · {map.things.length} things
+            </span>
             <span ref={pointerStatus}>X - Y -</span>
             <span>Grid {gridSize}</span>
             <span>Snap on</span>

@@ -994,6 +994,11 @@ const mapEditor = definePrimitive({
           event.preventDefault();
           return;
         }
+        if ((tool === "thing" || tool === "switch") && event.key === "Escape") {
+          change("tool", "select", { reason: "draw" });
+          event.preventDefault();
+          return;
+        }
         if (
           ((event.key === "Delete" || event.key === "Backspace") &&
             deleteSelection()) ||
@@ -1028,7 +1033,10 @@ const mapEditor = definePrimitive({
       },
       pressHandle(event: PointerEvent, key: string, el: HTMLElement) {
         if (event.button !== 0 || isSecondaryPress(event)) return;
-        if (store.get().tool !== "select") return;
+        const { tool } = store.get();
+        if (tool === "thing" && key.startsWith(thingKeyPrefix)) {
+          change("tool", "select", { reason: "draw" });
+        } else if (tool !== "select") return;
         const { selection } = store.get();
         if (event.shiftKey) {
           select(
