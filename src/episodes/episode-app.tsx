@@ -55,16 +55,16 @@ import {
   type Project,
   type ProjectMap,
   type ProjectStore,
-} from "./project-data";
+} from "./episode-data";
 import { SidebarDrawer, type SidebarProps } from "./app-sidebar";
 import { checkBuild, knownBuildProblem, useBuildChecks } from "./build-checks";
 import { EpisodeBuildDialog } from "./episode-build-dialog";
 import { FeaturedMaps } from "./featured-maps";
-import { ProjectHome } from "./project-home";
+import { ProjectHome } from "./episode-home";
 import { WadImportDialog, type ImportedMap } from "./wad-import-dialog";
 import { WadPlayDialog } from "./wad-play-dialog";
 import { findEpisode, parseRoute, pathOf, type Route } from "./routes";
-import { createMemoryStore, openProjectStore } from "./project-store";
+import { createMemoryStore, openProjectStore } from "./episode-store";
 import { Button } from "../components/ui/button";
 import {
   AlertDialog,

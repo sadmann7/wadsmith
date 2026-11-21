@@ -3,7 +3,7 @@ import { useState } from "react";
 
 import { wadFileName } from "../editor/build-dialog";
 import { knownBuildProblem, useBuildChecks } from "./build-checks";
-import { mapName, mapSlots, mapStatus, type ProjectMap } from "./project-data";
+import { mapName, mapSlots, mapStatus, type ProjectMap } from "./episode-data";
 import { Button } from "../components/ui/button";
 import { Field, FieldItem, FieldLabel, Label } from "../components/ui/field";
 import { Input } from "../components/ui/input";

@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import type { Metadata } from "next";
 
-import { StandaloneShell } from "@/projects/standalone-shell";
+import { StandaloneShell } from "@/episodes/standalone-shell";
 import { Alert } from "@/components/ui/alert";
 
 export const metadata: Metadata = {

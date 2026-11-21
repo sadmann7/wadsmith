@@ -1,7 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { MapPlan } from "../editor/map-plan";
+import { MapPlan } from "../components/map-plan";
 import type { GameMap } from "../map/types";
 import { formatRoomCode } from "./room";
 

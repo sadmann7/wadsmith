@@ -13,8 +13,8 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
-import { MapOutline } from "../editor/map-outline";
-import { MapPlan } from "../editor/map-plan";
+import { MapOutline } from "../components/map-outline";
+import { MapPlan } from "../components/map-plan";
 import { skillNames } from "./coop";
 import { PlayerBadge } from "./coop-ui";
 import type { GameMap } from "../map/types";

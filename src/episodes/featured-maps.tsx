@@ -1,7 +1,7 @@
 import { Copy, FolderOpen, Play, Users } from "lucide-react";
 import { useRef, useState } from "react";
 
-import { MapPlan } from "../editor/map-plan";
+import { MapPlan } from "../components/map-plan";
 import { fragLimit } from "../engine/runtime";
 import { thingCatalog } from "../map/catalog";
 import {
@@ -10,7 +10,7 @@ import {
   type FeaturedMode,
 } from "../map/featured";
 import { AppShell, type SidebarProps } from "./app-sidebar";
-import { formatPar } from "./project-data";
+import { formatPar } from "./episode-data";
 import { Button } from "../components/ui/button";
 import { Alert } from "../components/ui/alert";
 
