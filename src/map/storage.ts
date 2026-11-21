@@ -210,6 +210,8 @@ function parseLineAction(value: unknown, label: string): LineAction {
   return parsed;
 }
 
+const sideTextures: readonly string[] = [...freedoomWalls, ...switchTextures];
+
 function parseLineSide(value: unknown, label: string): LineSide {
   const side = record(value, label);
   return {
@@ -221,10 +223,10 @@ function parseLineSide(value: unknown, label: string): LineSide {
       : { offsetY: integer(side.offsetY, wordLimit, label) }),
     ...(side.upper === undefined
       ? {}
-      : { upper: texture(side.upper, freedoomWalls, label) }),
+      : { upper: texture(side.upper, sideTextures, label) }),
     ...(side.lower === undefined
       ? {}
-      : { lower: texture(side.lower, freedoomWalls, label) }),
+      : { lower: texture(side.lower, sideTextures, label) }),
     ...(side.middle === undefined
       ? {}
       : { middle: texture(side.middle, middleTextures, label) }),

@@ -142,12 +142,17 @@ function describeSurface(map: GameMap, key: string | null): SurfaceInfo | null {
   if (sector.door) {
     return { ...empty, sector, label: `${sector.name} frame` };
   }
+  // Doom flips a switch texture on any part of the line when it is pressed.
+  const pressed =
+    surface.part !== "middle" &&
+    neighbor &&
+    map.lines?.[surface.wall]?.action?.trigger === "switch";
   return {
     ...empty,
     sector,
     label: `${sector.name} wall`,
     texture: wallPartTexture(map, sector, surface.wall, surface.part),
-    textures: wallTextures,
+    textures: pressed ? [...switchTextures, ...wallTextures] : wallTextures,
     paints: "wall",
   };
 }
@@ -180,7 +185,11 @@ function paintSurface(
       ? updateSector(map, door.id, { door: { ...door.door, texture } })
       : map;
   }
-  if (wholeRoom) return setRoomWalls(map, sector.id, texture);
+  if (wholeRoom) {
+    return (wallTextures as readonly string[]).includes(texture)
+      ? setRoomWalls(map, sector.id, texture)
+      : map;
+  }
   if (surface.part !== "middle" && wallOwners(map).get(surface.wall)?.[1]) {
     return updateLineSide(map, surface.wall, sector.id, {
       [surface.part]: texture,

@@ -4,7 +4,8 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { thingKinds } from "../map/catalog";
-import { updateLineSide, updateSector } from "../map/edit";
+import { updateLine, updateLineSide, updateSector } from "../map/edit";
+import { parseMapFile, serializeMap } from "../map/storage";
 import { wallKey } from "../map/geometry";
 import { testMap } from "../map/test-map";
 import {
@@ -207,6 +208,20 @@ describe("surface edits", () => {
     );
     const repainted = paintSurface(map, lower, "GRAY1", true);
     expect(repainted.lines).toBeUndefined();
+  });
+
+  it("offers switch textures on a switched open wall, but not for the whole room", () => {
+    const shared = wallKey("v3", "v4");
+    const lower = `wall:sector-1:${shared}:lower`;
+    expect(describeSurface(testMap, lower)?.textures).not.toContain("SW1GRAY");
+    const switched = updateLine(testMap, shared, {
+      action: { kind: "floor-lower", trigger: "switch", repeat: true, tag: 0 },
+    });
+    expect(describeSurface(switched, lower)?.textures).toContain("SW1GRAY");
+    const map = paintSurface(switched, lower, "SW1GRAY");
+    expect(describeSurface(map, lower)?.texture).toBe("SW1GRAY");
+    expect(parseMapFile(serializeMap(map))).toEqual(map);
+    expect(paintSurface(map, lower, "SW1GRAY", true)).toBe(map);
   });
 
   it("paints the door from its face", () => {

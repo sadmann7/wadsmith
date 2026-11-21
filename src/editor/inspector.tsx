@@ -570,6 +570,11 @@ function LineInspector({
     return info?.paints && info.texture ? [{ part, info }] : [];
   });
   const opensDoor = back?.door?.opensBy === "use";
+  const roomWall = fields.find(
+    ({ info }) =>
+      info.paints === "wall" &&
+      (wallTextures as readonly string[]).includes(info.texture!),
+  );
   const target = action?.tag
     ? map.sectors.find((item) => item.tag === action.tag)
     : undefined;
@@ -672,12 +677,9 @@ function LineInspector({
             }
           />
         </div>
-        {fields.some(({ info }) => info.paints === "wall") ? (
+        {roomWall ? (
           <Button
-            onClick={() => {
-              const field = fields.find(({ info }) => info.paints === "wall")!;
-              onPaint(field.part, field.info.texture!, true);
-            }}
+            onClick={() => onPaint(roomWall.part, roomWall.info.texture!, true)}
           >
             Use on every wall in this room
           </Button>
