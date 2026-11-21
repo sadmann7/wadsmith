@@ -3,6 +3,7 @@ type Point = { x: number; y: number };
 type DoorSettings = {
   opensBy: "use" | "switch";
   closes: boolean;
+  fast?: boolean;
   texture: string;
 };
 
@@ -37,6 +38,9 @@ type LineActionKind =
   | "door-raise"
   | "door-open"
   | "door-close"
+  | "door-raise-fast"
+  | "door-open-fast"
+  | "door-close-fast"
   | "floor-lower"
   | "floor-raise"
   | "floor-raise-next"

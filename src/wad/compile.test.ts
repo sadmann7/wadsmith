@@ -386,6 +386,23 @@ describe("doors and switches", () => {
     expect(used).toHaveLength(2);
   });
 
+  it("uses the fast specials for a fast door", () => {
+    const special = (settings: Partial<typeof door>) => {
+      const map = setRoomDoor(testMap, "sector-4", { ...door, ...settings });
+      return linesOf(
+        settings.opensBy === "use" ? { ...map, switches: [] } : map,
+      )
+        .map((item) => item.special)
+        .filter(Boolean);
+    };
+    expect(special({ fast: true })).toEqual([115]);
+    expect(special({ fast: true, closes: true })).toEqual([114]);
+    expect(special({ fast: true, opensBy: "use" })).toEqual([118, 118]);
+    expect(special({ fast: true, opensBy: "use", closes: true })).toEqual([
+      117, 117,
+    ]);
+  });
+
   it("cuts a short section out of a long wall for a switch", () => {
     const added = addSwitchInRoom(testMap, "sector-3", "sector-4");
     expect(added).not.toBeNull();
