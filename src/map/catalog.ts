@@ -798,6 +798,12 @@ const thingCatalog: Record<
     color: "#9ca3af",
     category: "decor",
   },
+  "teleport-destination": {
+    label: "Teleport destination",
+    doomType: 14,
+    color: "#9ca3af",
+    category: "decor",
+  },
 };
 
 // A keycard and a skull key of one color open the same doors.

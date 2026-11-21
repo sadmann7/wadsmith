@@ -113,14 +113,6 @@ function losses(reports: ImportReport[]) {
         "Doors that touch another door, or that were cut around a pillar, stay closed rooms. Give them height to open them.",
     });
   }
-  const backward = sum(reports, (report) => report.backwardSwitches);
-  if (backward > 0) {
-    rows.push({
-      label: plural(backward, "line you press", "lines you press"),
-      detail:
-        "Switches and doors on open walls that now work only from the other side.",
-    });
-  }
   return rows;
 }
 

@@ -252,7 +252,12 @@ describe.skipIf(!existsSync(wadPath))("readWadAssets", () => {
     expect(imp.height).toBeGreaterThan(30);
     expect(imp.opaque.includes(0)).toBe(true);
     expect(wad.sprite("player")).not.toBeNull();
-    const unseen = ["dead-lost-soul", "boss-shooter", "spawn-spot"];
+    const unseen = [
+      "dead-lost-soul",
+      "boss-shooter",
+      "spawn-spot",
+      "teleport-destination",
+    ];
     for (const kind of thingKinds) {
       expect(wad.sprite(kind) === null, kind).toBe(unseen.includes(kind));
     }

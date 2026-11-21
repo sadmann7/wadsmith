@@ -73,6 +73,7 @@ import {
   lineActionKinds,
   lineActions,
   newLineAction,
+  triggersFor,
 } from "../map/lines";
 import type { GameMap, Point, Thing, ThingKind } from "../map/types";
 import { validateMap } from "../map/validate";
@@ -540,10 +541,16 @@ function WallMenu({
           value={action?.kind ?? "none"}
           items={[
             { value: "none", label: "Nothing" },
-            ...lineActionKinds.map((value) => ({
-              value,
-              label: lineActions[value].label,
-            })),
+            ...lineActionKinds
+              .filter(
+                (value) =>
+                  value === action?.kind ||
+                  triggersFor(value, line.twoSided).length > 0,
+              )
+              .map((value) => ({
+                value,
+                label: lineActions[value].label,
+              })),
           ]}
           onChange={(kind) => {
             if (!isLineActionKind(kind)) {

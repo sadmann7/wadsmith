@@ -252,7 +252,11 @@ function pruneLines(map: GameMap, removed: string): GameMap {
   for (const [wall, line] of Object.entries(map.lines ?? {})) {
     if (!owners.has(wall)) continue;
     const sides = { ...line.sides, [removed]: undefined };
-    lines[wall] = withoutUnset({ ...line, sides: withoutUnset(sides) });
+    lines[wall] = withoutUnset({
+      ...line,
+      sides: withoutUnset(sides),
+      front: line.front === removed ? undefined : line.front,
+    });
   }
   return { ...map, lines: withoutUnset(lines) };
 }

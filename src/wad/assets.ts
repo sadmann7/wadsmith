@@ -146,6 +146,7 @@ const spriteFrames: Record<ThingKind, string | null> = {
   "pool-of-brains": "BRS1A",
   "boss-shooter": null,
   "spawn-spot": null,
+  "teleport-destination": null,
 };
 
 function lightStart(light: number, contrast: number) {

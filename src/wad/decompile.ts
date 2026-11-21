@@ -9,7 +9,12 @@ import {
 } from "../map/catalog";
 import { freedoomFlats, freedoomWalls } from "../map/freedoom-textures";
 import { pointInPolygon, signedArea, wallKey } from "../map/geometry";
-import { lineActionKinds, lineActions, lineUsesTag } from "../map/lines";
+import {
+  lineActionKinds,
+  lineActions,
+  lineUsesTag,
+  usedFromFront,
+} from "../map/lines";
 import type {
   DoorSettings,
   GameMap,
@@ -40,7 +45,6 @@ type ImportReport = {
   innerLines: number;
   plainDoors: number;
   solidSectors: number;
-  backwardSwitches: number;
 };
 
 type Edge = { from: number; to: number };
@@ -79,9 +83,6 @@ const manualDoors: Record<number, boolean> = {
 };
 const keyedManualDoors = new Set([26, 27, 28, 32, 33, 34]);
 
-const thingNames: Record<number, string> = { 14: "Teleport destination" };
-
-const teleports = new Set([39, 97, 125, 126]);
 const crushers = new Set([6, 25, 49, 73, 74, 77, 141, 57]);
 const stairs = new Set([7, 8, 100, 127]);
 const lights = new Set([12, 13, 17, 35, 79, 80, 81, 104, 138, 139]);
@@ -89,7 +90,6 @@ const secretExits = new Set([51, 124]);
 const scrollers = new Set([48]);
 
 function actionGroup(special: number) {
-  if (teleports.has(special)) return "Teleporters";
   if (crushers.has(special)) return "Crushers";
   if (stairs.has(special)) return "Stairs";
   if (lights.has(special)) return "Light changes";
@@ -380,33 +380,6 @@ function piecesTouch(pieces: number[][]) {
   return false;
 }
 
-function frontFirst(
-  sectors: Sector[],
-  facing: { front: string; back: string }[],
-) {
-  const after = new Map<string, string[]>();
-  const waiting = new Map<string, number>();
-  for (const { front, back } of facing) {
-    after.set(front, [...(after.get(front) ?? []), back]);
-    waiting.set(back, (waiting.get(back) ?? 0) + 1);
-  }
-  const byId = new Map(sectors.map((sector) => [sector.id, sector]));
-  const queue = sectors.filter((sector) => !waiting.get(sector.id));
-  const ordered: Sector[] = [];
-  const placed = new Set<string>();
-  while (queue.length > 0) {
-    const sector = queue.shift()!;
-    ordered.push(sector);
-    placed.add(sector.id);
-    for (const next of after.get(sector.id) ?? []) {
-      const left = waiting.get(next)! - 1;
-      waiting.set(next, left);
-      if (left === 0) queue.push(byId.get(next)!);
-    }
-  }
-  return [...ordered, ...sectors.filter((sector) => !placed.has(sector.id))];
-}
-
 function isSwitch(name: string) {
   return /^SW[12]/.test(name);
 }
@@ -432,7 +405,6 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
     innerLines: 0,
     plainDoors: 0,
     solidSectors: 0,
-    backwardSwitches: 0,
   };
   const replaced = new Set<string>();
   const wall = (name: string, fallback = fallbackWall) => {
@@ -686,7 +658,6 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
 
   const settings: Record<string, LineSettings> = {};
   const switches: MapSwitch[] = [];
-  const facing: { front: string; back: string }[] = [];
   for (const line of lines) {
     const kept = (
       [
@@ -750,9 +721,8 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
         if (Object.keys(value).length > 0) sides[id] = value;
       }
       if (line.flags & lineBlocksAll) entry.blocksAll = true;
-      const trigger = entry.action?.trigger;
-      if (trigger === "switch" || trigger === "door") {
-        facing.push({ front: kept[0].id, back: kept[1].id });
+      if (entry.action && usedFromFront(entry.action)) {
+        entry.front = kept[0].id;
       }
     } else {
       const [{ id, side }] = kept;
@@ -789,15 +759,6 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
     if (Object.keys(entry).length > 0) settings[key] = entry;
   }
 
-  // The engine ignores a switch used from the back of its line, and the
-  // compiler makes the first room in the list the front, so each switch's
-  // front room goes ahead of its back room where the order allows.
-  const ordered = frontFirst(sectors, facing);
-  const position = new Map(ordered.map((sector, index) => [sector.id, index]));
-  report.backwardSwitches = facing.filter(
-    ({ front, back }) => position.get(front)! > position.get(back)!,
-  ).length;
-
   const polygons = sectors.map((sector) =>
     sector.vertices.map((id) => {
       const point = points[Number(id.slice(1))];
@@ -808,7 +769,7 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
   doom.things.forEach((source, index) => {
     const kind = thingKindOf.get(source.type);
     if (!kind) {
-      const label = thingNames[source.type] ?? "Other things";
+      const label = "Other things";
       report.droppedThings[label] = (report.droppedThings[label] ?? 0) + 1;
       return;
     }
@@ -852,7 +813,7 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
     map: {
       name: doom.slot,
       vertices,
-      sectors: ordered,
+      sectors,
       things,
       switches,
       ...(Object.keys(settings).length > 0 ? { lines: settings } : {}),
