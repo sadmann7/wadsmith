@@ -159,26 +159,26 @@ function FeaturedMaps({
                   <Copy size={14} aria-hidden="true" />
                   Open a copy
                 </button>
-                {selected.mode === "deathmatch" ? null : (
-                  <button
-                    type="button"
-                    className={`button ${selected.players.max > 1 ? "" : "primary"}`}
-                    onClick={() => onPlaySolo(selected)}
-                  >
-                    <Play size={14} aria-hidden="true" />
-                    {selected.players.max > 1 ? "Play solo" : "Play"}
-                  </button>
-                )}
                 {selected.players.max > 1 ? (
                   <button
                     type="button"
-                    className="button primary"
+                    className={`button ${selected.mode === "deathmatch" ? "primary" : ""}`}
                     onClick={() => onPlayTogether(selected)}
                   >
                     <Users size={14} aria-hidden="true" />
                     Play together
                   </button>
                 ) : null}
+                {selected.mode === "deathmatch" ? null : (
+                  <button
+                    type="button"
+                    className="button primary"
+                    onClick={() => onPlaySolo(selected)}
+                  >
+                    <Play size={14} aria-hidden="true" />
+                    Play
+                  </button>
+                )}
               </div>
             </div>
           </section>

@@ -65,9 +65,9 @@ function NewMapPanel({
         </section>
       ) : null}
       {steps.some((step) => !step.done) ? (
-        <section className="inspector-section" aria-label="Playtest checklist">
+        <section className="inspector-section" aria-label="Before you can play">
           <h2>
-            Before you can playtest
+            Before you can play
             <span>
               {finished} of {required.length}
             </span>

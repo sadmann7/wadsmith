@@ -18,7 +18,7 @@ import {
   Volume2,
   VolumeX,
 } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { MapOutline } from "../editor/map-outline";
 import { MapPlan } from "../editor/map-plan";
@@ -427,7 +427,7 @@ function GameTopBar({
   skill: Skill;
   deathmatch: boolean;
   episode: boolean;
-  exit: { label: string };
+  exit: { to: string | null };
   resolution: Resolution;
   onSoundChange: (sound: SoundSettings) => void;
   onResolutionChange: (resolution: Resolution) => void;
@@ -444,12 +444,17 @@ function GameTopBar({
       ? "Co-op"
       : episode
         ? "Episode"
-        : "Playtest";
+        : "Solo";
   return (
     <header className="flex h-[48px] min-w-0 items-center gap-4 border-b border-border bg-surface px-3 text-fg">
       <button type="button" className="button shrink-0" onClick={onExit}>
         <ArrowLeft size={14} aria-hidden="true" />
-        {exit.label}
+        <span>
+          Exit
+          {exit.to ? (
+            <span className="text-fg-muted"> to {exit.to}</span>
+          ) : null}
+        </span>
         {fullscreen ? null : (
           <kbd className="font-mono text-[11px] text-fg-muted">Esc</kbd>
         )}
@@ -803,4 +808,55 @@ function GameHud({
   );
 }
 
-export { formatTime, GameHud, GameTopBar, type ScoreRow };
+function EndGameConfirm({
+  names,
+  onKeepPlaying,
+  onEndGame,
+}: {
+  names: string[];
+  onKeepPlaying: () => void;
+  onEndGame: () => void;
+}) {
+  const keepPlaying = useRef<HTMLButtonElement>(null);
+  const list = new Intl.ListFormat("en").format(names);
+
+  useEffect(() => keepPlaying.current?.focus(), []);
+
+  return (
+    <section
+      role="alertdialog"
+      aria-labelledby="end-game-title"
+      aria-describedby="end-game-body"
+      className={`${panelClass} absolute top-3 left-3 z-30 grid w-[min(320px,calc(100%-24px))] gap-3.5 border border-border-strong p-4 shadow-lg`}
+    >
+      <div className="grid gap-1.5">
+        <h2 id="end-game-title" className="m-0 text-[15px] font-semibold">
+          End the game for everyone?
+        </h2>
+        <p id="end-game-body" className="m-0 text-[13px] text-fg-soft">
+          {list} {names.length === 1 ? "is" : "are"} still playing, and their
+          game ends too.
+        </p>
+      </div>
+      <div className="flex justify-end gap-2">
+        <button
+          ref={keepPlaying}
+          type="button"
+          className="button"
+          onClick={onKeepPlaying}
+        >
+          Keep playing
+        </button>
+        <button
+          type="button"
+          className="button border-danger text-danger"
+          onClick={onEndGame}
+        >
+          End game
+        </button>
+      </div>
+    </section>
+  );
+}
+
+export { EndGameConfirm, formatTime, GameHud, GameTopBar, type ScoreRow };
