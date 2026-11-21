@@ -3,7 +3,7 @@ import {
   type Project,
   type ProjectMap,
   type ProjectStore,
-} from "./project-data";
+} from "./episode-data";
 
 const databaseName = "wadsmith";
 const databaseVersion = 1;

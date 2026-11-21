@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { compileMap } from "../../wad/compile";
-import { maxDescriptionLength } from "../../projects/project-data";
+import { maxDescriptionLength } from "../../episodes/episode-data";
 import { deathmatchStarts, doorTextures, switchTextures } from "../catalog";
 import { checkMap } from "../checks";
 import { freedoomFlats, freedoomWalls } from "../freedoom-textures";

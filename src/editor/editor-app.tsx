@@ -42,7 +42,7 @@ import {
   type ReactNode,
 } from "react";
 
-import { agent } from "../agent";
+import { agent } from "./agent";
 import { BuildDialog } from "./build-dialog";
 import { ShortcutSheet } from "./shortcut-sheet";
 import { editorShortcuts, type EditorShortcut } from "./shortcuts";

@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { useMemo, useRef, useState, type FormEvent } from "react";
 
-import { MapPlan } from "../editor/map-plan";
+import { MapPlan } from "../components/map-plan";
 import { MapDialog } from "./map-dialog";
 import type { MapDetails } from "./map-dialog";
 import {
@@ -28,7 +28,7 @@ import {
   maxNameLength,
   type Project,
   type ProjectMap,
-} from "./project-data";
+} from "./episode-data";
 import { AppShell, Crumb, type SidebarProps } from "./app-sidebar";
 import { Button, buttonVariants } from "../components/ui/button";
 import { Field, FieldLabel } from "../components/ui/field";

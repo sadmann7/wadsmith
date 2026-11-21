@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 
-import { MapOutline } from "../editor/map-outline";
-import { MapPlan } from "../editor/map-plan";
+import { MapOutline } from "../components/map-outline";
+import { MapPlan } from "../components/map-plan";
 import { featuredMaps, type FeaturedMap } from "../map/featured";
 import {
   formatPar,
@@ -13,7 +13,7 @@ import {
   templates,
   type MapTemplate,
   type ProjectMap,
-} from "./project-data";
+} from "./episode-data";
 import { Button } from "../components/ui/button";
 import { Field, FieldItem, FieldLabel, Label } from "../components/ui/field";
 import { Input } from "../components/ui/input";

@@ -14,11 +14,11 @@ import {
   type ReactNode,
 } from "react";
 
-import { MapOutline } from "../editor/map-outline";
-import { MapPlan } from "../editor/map-plan";
+import { MapOutline } from "../components/map-outline";
+import { MapPlan } from "../components/map-plan";
 import { featuredMaps } from "../map/featured";
 import { blankMap } from "../map/starter-map";
-import { maxNameLength, type EpisodeStart, type Project } from "./project-data";
+import { maxNameLength, type EpisodeStart, type Project } from "./episode-data";
 import { pathOf, type Route } from "./routes";
 import { Button, buttonVariants } from "../components/ui/button";
 import { Field, FieldLabel } from "../components/ui/field";
