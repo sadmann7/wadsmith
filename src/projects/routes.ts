@@ -5,6 +5,38 @@ type Route =
   | { kind: "map"; id: string; slot: string; play?: boolean };
 
 const slotPattern = /^MAP(0[1-9]|[12][0-9]|3[0-2])$/;
+const shortIdPattern = /^[0-9a-z]{8}$/;
+
+// Episodes made before short ids keep their stored id, and their address is a
+// stable hash of it, so links stay the same across visits and tabs.
+function episodeSlug(id: string) {
+  if (shortIdPattern.test(id)) return id;
+  let a = 0xdeadbeef;
+  let b = 0x41c6ce57;
+  for (const char of id) {
+    const code = char.codePointAt(0) ?? 0;
+    a = Math.imul(a ^ code, 2654435761);
+    b = Math.imul(b ^ code, 1597334677);
+  }
+  a =
+    Math.imul(a ^ (a >>> 16), 2246822507) ^
+    Math.imul(b ^ (b >>> 13), 3266489909);
+  b =
+    Math.imul(b ^ (b >>> 16), 2246822507) ^
+    Math.imul(a ^ (a >>> 13), 3266489909);
+  const hash = 4294967296 * (2097151 & b) + (a >>> 0);
+  return hash.toString(36).padStart(8, "0").slice(-8);
+}
+
+function findEpisode<T extends { id: string }>(episodes: T[], slug: string) {
+  return (
+    episodes.find((episode) => episode.id === slug) ??
+    episodes.find(
+      (episode) => episodeSlug(episode.id) === slug.toLowerCase(),
+    ) ??
+    null
+  );
+}
 
 function parseRoute(pathname: string): Route {
   const parts = pathname.split("/").filter(Boolean).map(decodeURIComponent);
@@ -34,12 +66,12 @@ function pathOf(route: Route) {
       : "/maps";
   }
   if (route.kind === "episode") {
-    return `/episodes/${encodeURIComponent(route.id)}${play}`;
+    return `/episodes/${episodeSlug(route.id)}${play}`;
   }
   if (route.kind === "map") {
-    return `/episodes/${encodeURIComponent(route.id)}/${route.slot}${play}`;
+    return `/episodes/${episodeSlug(route.id)}/${route.slot.toLowerCase()}${play}`;
   }
   return "/";
 }
 
-export { parseRoute, pathOf, type Route };
+export { episodeSlug, findEpisode, parseRoute, pathOf, type Route };
