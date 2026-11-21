@@ -468,7 +468,7 @@ function ProjectHome({
             onClick={onPlayEpisode}
           >
             <Play size={14} aria-hidden="true" />
-            <span className="max-[600px]:sr-only">Play episode</span>
+            <span className="max-[600px]:sr-only">Play</span>
           </button>
         </>
       }

@@ -12,7 +12,7 @@ import type { GameMap, Point } from "../map/types";
 import { compileEpisode, compileMap } from "../wad/compile";
 import type { NetworkState } from "./doom-worker";
 import { startGameClient, type GameClient } from "./game-client";
-import { GameHud, GameTopBar, type ScoreRow } from "./game-hud";
+import { EndGameConfirm, GameHud, GameTopBar, type ScoreRow } from "./game-hud";
 import { loadIwad } from "./iwad";
 import { HeldKeys } from "./held-keys";
 import {
@@ -103,25 +103,29 @@ type GameExit = "editor" | "maps" | "episode" | "leave";
 
 const gameExits: Record<
   GameExit,
-  { label: string; hint: string; action: string }
+  { label: string; to: string | null; hint: string; action: string }
 > = {
   editor: {
-    label: "Back to editor",
+    label: "Exit to editor",
+    to: "editor",
     hint: "Esc returns to the editor",
     action: "returns to the editor",
   },
   maps: {
-    label: "Back to maps",
+    label: "Exit to featured maps",
+    to: "featured maps",
     hint: "Esc returns to featured maps",
     action: "returns to featured maps",
   },
   episode: {
-    label: "Back to episode",
+    label: "Exit to episode",
+    to: "episode",
     hint: "Esc returns to the episode",
     action: "returns to the episode",
   },
   leave: {
-    label: "Leave game",
+    label: "Exit",
+    to: null,
     hint: "Esc leaves the game",
     action: "leaves the game",
   },
@@ -193,6 +197,7 @@ function GameSession({
   const [network, setNetwork] = useState<NetworkState | null>(null);
   const [coopBegan, setCoopBegan] = useState(false);
   const [scoresOpen, setScoresOpen] = useState(false);
+  const [confirmingExit, setConfirmingExit] = useState(false);
   const [stall, setStall] = useState<{ peers: number[]; since: number }>({
     peers: [],
     since: 0,
@@ -506,7 +511,34 @@ function GameSession({
     }
   };
 
+  const stillPlaying =
+    coop?.role === "host" && !finished
+      ? coop
+          .roster()
+          .filter((player) => player.peer !== coop.peer)
+          .map((player) => player.name)
+      : [];
+
+  const showExitConfirm = confirmingExit && stillPlaying.length > 0;
+
+  const requestExit = () => {
+    if (stillPlaying.length > 0) setConfirmingExit(true);
+    else onExit();
+  };
+
+  const keepPlaying = () => {
+    setConfirmingExit(false);
+    requestAnimationFrame(focusGame);
+  };
+
   const onShortcut = useEffectEvent((event: KeyboardEvent) => {
+    if (showExitConfirm) {
+      if (event.code === "Escape" && !event.repeat) {
+        event.preventDefault();
+        keepPlaying();
+      }
+      return;
+    }
     const typing = (event.target as Element).closest?.("form");
     if (event.code === "Escape") {
       event.preventDefault();
@@ -516,7 +548,7 @@ function GameSession({
         !event.repeat &&
         msSincePointerRelease(performance.now()) > escapeGraceMs
       ) {
-        onExit();
+        requestExit();
       }
     } else if (!typing && event.code === "KeyN" && !event.repeat) {
       event.preventDefault();
@@ -553,7 +585,7 @@ function GameSession({
         onResolutionChange={onResolutionChange}
         onRestart={onRestart}
         onToggleFullscreen={onToggleFullscreen}
-        onExit={onExit}
+        onExit={requestExit}
         onControlUsed={focusGame}
       />
       <div
@@ -624,7 +656,7 @@ function GameSession({
             finished={finished}
             audioUnavailable={audioUnavailable}
             onRestart={onRestart}
-            onExit={onExit}
+            onExit={requestExit}
             onOpenNote={openNote}
             onSaveNote={(text) => {
               if (noteSpot) onAddNote?.(noteSpot, text);
@@ -638,6 +670,13 @@ function GameSession({
             }}
             onEditSpot={editSpot}
           />
+          {showExitConfirm ? (
+            <EndGameConfirm
+              names={stillPlaying}
+              onKeepPlaying={keepPlaying}
+              onEndGame={onExit}
+            />
+          ) : null}
           {coop && !error && !finished && !coopStarted ? (
             <p
               className="absolute inset-x-4 top-1/2 z-20 m-0 -translate-y-1/2 text-center font-mono text-sm text-fg-soft"

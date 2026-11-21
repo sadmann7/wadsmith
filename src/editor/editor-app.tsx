@@ -378,6 +378,10 @@ function App({
         ]
           .filter(Boolean)
           .join(" · ");
+  const mapStatus =
+    checks.length === 0
+      ? "Ready"
+      : `${checks.length} ${checks.length === 1 ? "problem" : "problems"}`;
   const callouts = useMemo(
     () =>
       issues.slice(0, 5).flatMap((issue) => {
@@ -1085,7 +1089,7 @@ function App({
                   className="select-item"
                   disabled={!canPlay}
                 >
-                  Playtest
+                  Play
                 </MenuItem>
                 <MenuItem
                   value="coop"
@@ -1144,16 +1148,25 @@ function App({
             </button>
             <button
               type="button"
-              className="button"
-              title="Check map"
+              className="button border-transparent hover:bg-surface-hover"
+              title="Open map check"
+              aria-label={`Map check: ${mapStatus}`}
               onClick={showMapCheck}
             >
-              {canPlay ? (
-                <CircleCheck size={15} aria-hidden="true" />
+              {checks.length === 0 ? (
+                <CircleCheck
+                  size={15}
+                  className="text-success"
+                  aria-hidden="true"
+                />
               ) : (
-                <TriangleAlert size={15} aria-hidden="true" />
+                <TriangleAlert
+                  size={15}
+                  className={canPlay ? "text-warning" : "text-danger"}
+                  aria-hidden="true"
+                />
               )}
-              <span className="max-xl:sr-only">Check map</span>
+              <span className="max-xl:sr-only">{mapStatus}</span>
             </button>
             <button
               type="button"
@@ -1173,7 +1186,7 @@ function App({
               onClick={play}
             >
               <Play size={14} aria-hidden="true" />
-              Playtest
+              Play
             </button>
           </div>
         </header>
@@ -1326,7 +1339,7 @@ function App({
                   ) : (
                     <section
                       aria-labelledby="welcome-title"
-                      className="absolute bottom-3 left-3 z-[4] grid max-w-[min(380px,calc(100%-24px))] gap-3 rounded-[3px] border border-border bg-surface p-4 shadow-lg"
+                      className="absolute bottom-3 left-3 z-4 grid max-w-[min(380px,calc(100%-24px))] gap-3 rounded-[3px] border border-border bg-surface p-4 shadow-lg"
                     >
                       <h2
                         id="welcome-title"
@@ -1336,8 +1349,8 @@ function App({
                       </h2>
                       <p className="text-[13px] text-fg-muted">
                         Build Doom maps in your browser and play them on the
-                        spot. This starter map is ready, so playtest it, then
-                        change anything and play again.
+                        spot. This starter map is ready, so play it, then change
+                        anything and play again.
                       </p>
                       <div className="flex gap-2">
                         <button
@@ -1347,7 +1360,7 @@ function App({
                           onClick={play}
                         >
                           <Play size={14} aria-hidden="true" />
-                          Playtest
+                          Play
                         </button>
                         <button
                           type="button"
@@ -1615,7 +1628,7 @@ function App({
                 <span>{checkSummary}</span>
               </h2>
               {checks.length === 0 ? (
-                <p className="muted">This map is ready to playtest.</p>
+                <p className="muted">This map is ready to play.</p>
               ) : (
                 <ul>
                   {checks.slice(0, 8).map((issue) => {

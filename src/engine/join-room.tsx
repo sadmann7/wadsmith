@@ -216,7 +216,7 @@ function Invite({
           className="button primary h-9 justify-center"
           disabled={!name.trim() || joining}
         >
-          {joining ? "Joining…" : "Join game"}
+          {joining ? "Joining…" : "Join"}
         </button>
       </form>
     </CoopCard>
