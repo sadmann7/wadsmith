@@ -100,7 +100,7 @@ function MapSwitcher({
                 value={entry.id}
                 aria-current={entry.id === currentId ? "page" : undefined}
                 aria-label={`${entry.slot} ${entry.name}, ${healthLabels[entry.health]}`}
-                className="gap-3! aria-[current=page]:bg-accent aria-[current=page]:font-semibold"
+                className="gap-3 aria-[current=page]:bg-accent aria-[current=page]:font-semibold"
               >
                 <span className="font-mono text-xs text-muted-foreground">
                   {entry.slot}
@@ -114,7 +114,7 @@ function MapSwitcher({
             ))}
           </MenuGroup>
           <MenuSeparator />
-          <MenuItem value="add" className="gap-3!" disabled={!canAddMap}>
+          <MenuItem value="add" className="gap-3" disabled={!canAddMap}>
             <Plus
               size={14}
               aria-hidden="true"
@@ -122,7 +122,7 @@ function MapSwitcher({
             />
             Add a map
           </MenuItem>
-          <MenuItem value="home" className="gap-3!">
+          <MenuItem value="home" className="gap-3">
             <LayoutList
               size={14}
               aria-hidden="true"

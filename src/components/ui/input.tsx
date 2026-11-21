@@ -3,12 +3,7 @@ import * as React from "react";
 
 import { cn } from "../../lib/cn";
 
-type InputProps = Omit<
-  React.ComponentProps<typeof InputPrimitive.Input>,
-  "className"
-> & {
-  className?: string;
-};
+type InputProps = React.ComponentProps<typeof InputPrimitive.Input>;
 
 const variants = {
   default: "min-h-[30px] border-input px-2 py-1",

@@ -3,16 +3,12 @@ import * as React from "react";
 
 import { cn } from "../../lib/cn";
 
-type WithClass<P> = Omit<P, "className"> & { className?: string };
-
 function SegmentedControl({
   className,
   children,
   ...props
 }: Omit<
-  WithClass<
-    React.ComponentProps<typeof SegmentedControlPrimitive.SegmentedControl>
-  >,
+  React.ComponentProps<typeof SegmentedControlPrimitive.SegmentedControl>,
   "children"
 > & { children?: React.ReactNode }) {
   return (
@@ -32,8 +28,8 @@ function SegmentedControl({
 function SegmentedControlItem({
   className,
   ...props
-}: WithClass<
-  React.ComponentProps<typeof SegmentedControlPrimitive.SegmentedControlItem>
+}: React.ComponentProps<
+  typeof SegmentedControlPrimitive.SegmentedControlItem
 >) {
   return (
     <SegmentedControlPrimitive.SegmentedControlItem
