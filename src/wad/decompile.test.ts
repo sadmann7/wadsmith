@@ -353,6 +353,33 @@ describe("decompileMap", () => {
     expect(parseMapFile(serializeMap(map))).toEqual(map);
   });
 
+  it("keeps see-through middle textures on open lines", () => {
+    const build = doomMap();
+    const hall = build.sector();
+    const room = build.sector();
+    const [a, b, c, d] = box(build, hall, [0, 0, 256, 256]);
+    build.map.lines.length = 0;
+    build.map.sides.length = 0;
+    const e = build.vertex(512, 256);
+    const f = build.vertex(512, 0);
+    build.line(a, b, hall);
+    build.line(b, c, hall);
+    build.line(c, d, hall, room, { middle: "MIDGRATE" });
+    build.line(d, a, hall);
+    build.line(c, e, room);
+    build.line(e, f, room);
+    build.line(f, d, room);
+    build.map.things.push({ x: 64, y: 64, angle: 0, type: 1, flags: 7 });
+
+    const { map, report } = decompileMap(build.map);
+    expect(report.seeThroughWalls).toBe(0);
+    const [doom] = readMaps([{ name: "map.wad", data: compileMap(map) }]);
+    expect(
+      doom.sides.filter((side) => side.middle === "MIDGRATE"),
+    ).toHaveLength(1);
+    expect(parseMapFile(serializeMap(map))).toEqual(map);
+  });
+
   it("reports what the editor can't hold yet", () => {
     const build = doomMap();
     const room = build.sector({ special: 65 });
@@ -364,7 +391,7 @@ describe("decompileMap", () => {
     const f = build.vertex(512, 0);
     build.line(a, b, room, null, { middle: "BTSXWALL" });
     build.line(b, c, room);
-    build.line(c, d, room, next, { special: 242, middle: "MIDGRATE" });
+    build.line(c, d, room, next, { special: 242, middle: "BTSXMID" });
     build.line(d, a, room);
     build.line(c, e, next);
     build.line(e, f, next);

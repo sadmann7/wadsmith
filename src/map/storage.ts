@@ -4,7 +4,11 @@ import {
   switchTextures,
   thingKinds,
 } from "./catalog";
-import { freedoomFlats, freedoomWalls } from "./freedoom-textures";
+import {
+  freedoomFlats,
+  freedoomWalls,
+  middleTextures,
+} from "./freedoom-textures";
 import {
   isLineActionKind,
   keyColors,
@@ -221,6 +225,9 @@ function parseLineSide(value: unknown, label: string): LineSide {
     ...(side.lower === undefined
       ? {}
       : { lower: texture(side.lower, freedoomWalls, label) }),
+    ...(side.middle === undefined
+      ? {}
+      : { middle: texture(side.middle, middleTextures, label) }),
   };
 }
 

@@ -19,6 +19,7 @@ import {
   wallTextures,
 } from "../map/catalog";
 import { appearsOn, mapBalance } from "../map/balance";
+import { middleTextures } from "../map/freedoom-textures";
 import { defaultDoor, gridSize } from "../map/edit";
 import {
   canRepeatChoice,
@@ -626,6 +627,29 @@ function LineInspector({
             onChange={(texture) => onPaint(part, texture)}
           />
         ))}
+        {back && !front.door && !back.door ? (
+          <>
+            <ToggleField
+              label="See-through middle"
+              checked={Boolean(side?.middle)}
+              onChange={(checked) =>
+                onSideChange({ middle: checked ? "MIDGRATE" : undefined })
+              }
+            />
+            {side?.middle ? (
+              <TextureField
+                label="Middle"
+                picture={assets.texture}
+                assets={assets}
+                light={line.sector.light}
+                whole
+                value={side.middle}
+                options={middleTextures}
+                onChange={(middle) => onSideChange({ middle })}
+              />
+            ) : null}
+          </>
+        ) : null}
         <div className="flex items-center gap-2 [&>*]:min-w-0 [&>*]:flex-1">
           <NumberSetting
             label="Offset X"

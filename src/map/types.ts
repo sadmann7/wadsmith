@@ -103,6 +103,7 @@ type LineSide = {
   offsetY?: number;
   upper?: string;
   lower?: string;
+  middle?: string;
 };
 
 type LineSettings = {
