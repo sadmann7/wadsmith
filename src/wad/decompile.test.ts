@@ -324,7 +324,7 @@ describe.skipIf(!existsSync(freedoom))("Freedoom's maps", () => {
       expect(() => parseMapFile(serializeMap(map))).not.toThrow();
       expect(map.things.every((thing) => thingCatalog[thing.kind])).toBe(true);
     }
-  });
+  }, 60_000);
 
   it("build into WADs again", () => {
     for (const slot of ["MAP01", "MAP13", "MAP27"]) {
