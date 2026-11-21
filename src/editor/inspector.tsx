@@ -26,6 +26,7 @@ import {
   fitLineAction,
   isLineActionKind,
   keysFor,
+  lineActionGroups,
   lineActionKinds,
   lineActions,
   lineUsesTag,
@@ -60,6 +61,8 @@ import {
   Select,
   SelectCheck,
   SelectContent,
+  SelectGroup,
+  SelectGroupLabel,
   SelectItem,
   SelectLabel,
   SelectTrigger,
@@ -271,21 +274,33 @@ function TextureField({
   );
 }
 
+type Choice = { value: string; label: string; short?: string };
+
 function ChoiceField({
   label,
   value,
   items,
+  groups = [],
   onChange,
 }: {
   label: string;
   value: string;
-  items: { value: string; label: string }[];
+  items: Choice[];
+  groups?: { label: string; items: Choice[] }[];
   onChange: (value: string) => void;
 }) {
+  const option = (item: Choice) => (
+    <SelectItem key={item.value} value={item.value}>
+      {item.short ?? item.label}
+      <SelectCheck />
+    </SelectItem>
+  );
   return (
     <Select
       value={value}
-      items={items}
+      items={[...items, ...groups.flatMap((group) => group.items)].map(
+        (item) => ({ value: item.value, label: item.label }),
+      )}
       onValueChange={(next) => {
         if (next) onChange(next);
       }}
@@ -298,11 +313,14 @@ function ChoiceField({
         </SelectTrigger>
       </FieldItem>
       <SelectContent>
-        {items.map((item) => (
-          <SelectItem key={item.value} value={item.value}>
-            {item.label}
-            <SelectCheck />
-          </SelectItem>
+        {items.map(option)}
+        {groups.map((group) => (
+          <SelectGroup key={group.label}>
+            <SelectGroupLabel className="px-2 pt-2 pb-1 font-mono text-xs tracking-wide text-muted-foreground uppercase">
+              {group.label}
+            </SelectGroupLabel>
+            {group.items.map(option)}
+          </SelectGroup>
         ))}
       </SelectContent>
     </Select>
@@ -656,17 +674,14 @@ function LineInspector({
                   value: "none",
                   label: opensDoor ? "From door settings" : "Nothing",
                 },
-                ...lineActionKinds
-                  .filter(
-                    (value) =>
-                      value === action?.kind ||
-                      triggersFor(value, twoSided).length > 0,
-                  )
-                  .map((value) => ({
-                    value,
-                    label: lineActions[value].label,
-                  })),
               ]}
+              groups={lineActionGroups(
+                lineActionKinds.filter(
+                  (value) =>
+                    value === action?.kind ||
+                    triggersFor(value, twoSided).length > 0,
+                ),
+              )}
               onChange={(kind) => {
                 if (!isLineActionKind(kind)) {
                   onLineChange({ action: undefined });
