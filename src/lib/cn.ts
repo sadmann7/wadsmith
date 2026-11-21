@@ -1,5 +1,4 @@
-import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
+import { cn as merge, type ClassValue } from "cn";
 
 function cn(...classes: ClassValue[]): string;
 function cn<State>(
@@ -10,17 +9,15 @@ function cn<State>(
 function cn<State>(
   ...classes: (ClassValue | ((state: State) => ClassValue))[]
 ) {
-  const merge = (state: State) =>
-    twMerge(
-      clsx(
-        classes.map((value) =>
-          typeof value === "function" ? value(state) : value,
-        ),
+  const join = (state: State) =>
+    merge(
+      classes.map((value) =>
+        typeof value === "function" ? value(state) : value,
       ),
     );
   return classes.some((value) => typeof value === "function")
-    ? merge
-    : merge(undefined as State);
+    ? join
+    : join(undefined as State);
 }
 
 export { cn };
