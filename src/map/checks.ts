@@ -128,7 +128,10 @@ function isArena(map: GameMap) {
 }
 
 function hasExit(map: GameMap) {
-  return activeLineActions(map).some(({ action }) => endsLevel(action.kind));
+  return (
+    activeLineActions(map).some(({ action }) => endsLevel(action.kind)) ||
+    map.sectors.some((sector) => sector.effect === "damage-20-exit")
+  );
 }
 
 const buildGroups: {

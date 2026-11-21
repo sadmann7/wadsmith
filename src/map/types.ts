@@ -12,11 +12,17 @@ type SectorEffect =
   | "blink"
   | "strobe-slow"
   | "strobe-fast"
+  | "strobe-slow-sync"
+  | "strobe-fast-sync"
   | "glow"
   | "secret"
   | "damage-5"
   | "damage-10"
-  | "damage-20";
+  | "damage-20"
+  | "damage-20-strobe"
+  | "damage-20-exit"
+  | "door-close-30"
+  | "door-open-300";
 
 type Sector = {
   id: string;

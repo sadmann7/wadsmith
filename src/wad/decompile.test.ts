@@ -355,7 +355,7 @@ describe("decompileMap", () => {
 
   it("reports what the editor can't hold yet", () => {
     const build = doomMap();
-    const room = build.sector({ special: 4 });
+    const room = build.sector({ special: 65 });
     const next = build.sector({ floorTexture: "BTSXFLAT" });
     const [a, b, c, d] = box(build, room, [0, 0, 256, 256]);
     build.map.lines.length = 0;
@@ -484,6 +484,7 @@ describe.skipIf(!existsSync(freedoom))("Freedoom's maps", () => {
         ),
         doom.slot,
       ).toEqual([]);
+      expect(report.droppedEffects, doom.slot).toBe(0);
       expect(() => parseMapFile(serializeMap(map))).not.toThrow();
       expect(map.things.every((thing) => thingCatalog[thing.kind])).toBe(true);
     }
