@@ -141,9 +141,7 @@ function WadPlayDialog({
         </div>
         <DialogFooter className="justify-between">
           <p className="text-muted-foreground min-w-0">
-            {summary.wads.length > 0
-              ? "Anything the WAD doesn't replace comes from Freedoom."
-              : null}
+            Anything the WAD doesn&apos;t replace comes from Freedoom.
           </p>
           <Button
             variant="primary"
