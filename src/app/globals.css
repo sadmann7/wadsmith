@@ -512,6 +512,11 @@
     aspect-ratio: 4 / 3;
   }
 
+  .game-frame[data-widescreen] {
+    width: min(100cqw, calc(100cqh * 16 / 9));
+    aspect-ratio: 16 / 9;
+  }
+
   .game-canvas {
     display: block;
     width: 100%;

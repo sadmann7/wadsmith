@@ -22,9 +22,9 @@ import type { MouseMode } from "./mouse-capture";
 import {
   fragLimit,
   maxVolume,
-  screenSizes,
+  screenSize,
   type GameStatus,
-  type Resolution,
+  type Screen,
   type Skill,
 } from "./runtime";
 import { Button } from "../components/ui/button";
@@ -393,9 +393,9 @@ function GameTopBar({
   deathmatch,
   episode,
   exit,
-  resolution,
+  screen,
   onSoundChange,
-  onResolutionChange,
+  onScreenChange,
   onRestart,
   onToggleFullscreen,
   onExit,
@@ -412,9 +412,9 @@ function GameTopBar({
   deathmatch: boolean;
   episode: boolean;
   exit: { to: string | null };
-  resolution: Resolution;
+  screen: Screen;
   onSoundChange: (sound: SoundSettings) => void;
-  onResolutionChange: (resolution: Resolution) => void;
+  onScreenChange: (screen: Screen) => void;
   onRestart: () => void;
   onToggleFullscreen: () => void;
   onExit: () => void;
@@ -422,6 +422,7 @@ function GameTopBar({
 }) {
   const FullscreenIcon = fullscreen ? Minimize : Maximize;
   const SoundIcon = sound.muted ? VolumeX : Volume2;
+  const size = screenSize(screen);
   const mode = deathmatch
     ? "Deathmatch"
     : coop
@@ -498,11 +499,26 @@ function GameTopBar({
             <button
               type="button"
               className={`${iconButtonClass} text-sm font-medium aria-pressed:text-primary`}
-              aria-label="Double resolution"
-              aria-pressed={resolution === "high"}
-              title={`${screenSizes[resolution].width}×${screenSizes[resolution].height}, restarts the level`}
+              aria-label="Widescreen"
+              aria-pressed={screen.widescreen}
+              title={`${screen.widescreen ? "16:9" : "4:3"}, restarts the level`}
               onClick={() =>
-                onResolutionChange(resolution === "high" ? "classic" : "high")
+                onScreenChange({ ...screen, widescreen: !screen.widescreen })
+              }
+            >
+              16:9
+            </button>
+            <button
+              type="button"
+              className={`${iconButtonClass} text-sm font-medium aria-pressed:text-primary`}
+              aria-label="Double resolution"
+              aria-pressed={screen.resolution === "high"}
+              title={`${size.width}×${size.height}, restarts the level`}
+              onClick={() =>
+                onScreenChange({
+                  ...screen,
+                  resolution: screen.resolution === "high" ? "classic" : "high",
+                })
               }
             >
               2×

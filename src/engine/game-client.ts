@@ -10,7 +10,7 @@ import type {
   GameFiles,
   GameStatus,
   NetworkMode,
-  Resolution,
+  Screen,
   Skill,
 } from "./runtime";
 
@@ -18,7 +18,7 @@ type GameClientOptions = {
   iwad: Uint8Array;
   files: GameFiles;
   sound: SoundLevel;
-  resolution: Resolution;
+  screen: Screen;
   skill: Skill;
   onFrame: (pixels: Uint8ClampedArray<ArrayBuffer>) => void;
   onStatus: (status: GameStatus) => void;
@@ -203,7 +203,7 @@ function startGameClient(options: GameClientOptions) {
         paused: document.hidden || held,
         sampleRate: audio.sampleRate,
         audioPort,
-        resolution: options.resolution,
+        screen: options.screen,
         skill: options.skill,
         network:
           network && inbox

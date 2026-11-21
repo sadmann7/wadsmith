@@ -4,7 +4,7 @@ import { thingKinds } from "../map/catalog";
 import { addThing, updateSector } from "../map/edit";
 import { starterMap } from "../map/starter-map";
 import { compileMap } from "../wad/compile";
-import { doomKeys, screenSizes } from "./runtime";
+import { doomKeys, screenSize, type Screen } from "./runtime";
 import {
   engineWarnings,
   launch,
@@ -44,20 +44,28 @@ describe.skipIf(!ready)("generated map in the engine", () => {
     expect(status.kills).toBeGreaterThan(0);
   }, 40_000);
 
-  it("draws the level at double resolution", async () => {
-    const game = await launch(openMap, null, undefined, "high");
-    await waitForPlay(game);
-    const { width, height } = screenSizes.high;
-    const pixels = game.frame();
-    expect(pixels.length).toBe(width * height * 4);
-    const colors = new Set<number>();
-    for (let index = 0; index < pixels.length; index += 4) {
-      colors.add(
-        (pixels[index] << 16) | (pixels[index + 1] << 8) | pixels[index + 2],
-      );
-    }
-    expect(colors.size).toBeGreaterThan(16);
-  }, 30_000);
+  it.each<Screen>([
+    { resolution: "high", widescreen: false },
+    { resolution: "classic", widescreen: true },
+    { resolution: "high", widescreen: true },
+  ])(
+    "draws the level on a $resolution screen, widescreen $widescreen",
+    async (screen) => {
+      const game = await launch(openMap, null, undefined, screen);
+      await waitForPlay(game);
+      const { width, height } = screenSize(screen);
+      const pixels = game.frame();
+      expect(pixels.length).toBe(width * height * 4);
+      const colors = new Set<number>();
+      for (let index = 0; index < pixels.length; index += 4) {
+        colors.add(
+          (pixels[index] << 16) | (pixels[index + 1] << 8) | pixels[index + 2],
+        );
+      }
+      expect(colors.size).toBeGreaterThan(16);
+    },
+    30_000,
+  );
 
   it("reports a map the engine refuses", async () => {
     await expect(launch({ ...openMap, things: [] })).rejects.toBeDefined();
