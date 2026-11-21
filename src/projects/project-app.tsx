@@ -70,7 +70,7 @@ import { EpisodeBuildDialog } from "./episode-build-dialog";
 import { FeaturedMaps } from "./featured-maps";
 import { ProjectHome } from "./project-home";
 import { WadPlayDialog } from "./wad-play-dialog";
-import { parseRoute, pathOf, type Route } from "./routes";
+import { findEpisode, parseRoute, pathOf, type Route } from "./routes";
 import { createMemoryStore, openProjectStore } from "./project-store";
 
 type Session = {
@@ -186,6 +186,7 @@ function ProjectApp() {
   const [buildingEpisode, setBuildingEpisode] = useState<string | null>(null);
   const [blockedLeave, setBlockedLeave] = useState<(() => void) | null>(null);
   const [view, setView] = useState(viewOfPath);
+  const [homeId, setHomeId] = useState<string | null>(null);
   const [featuredId, setFeaturedId] = useState(() => {
     const route = parseRoute(location.pathname);
     return route.kind === "featured" ? knownFeatured(route.map) : null;
@@ -305,23 +306,30 @@ function ProjectApp() {
       .then(async ({ store: opened, ready }) => {
         if (cancelled) return;
         run = ++routeRun.current;
-        const route = parseRoute(location.pathname);
-        const play = route.kind !== "home" && route.play && !coopEntry();
+        const parsed = parseRoute(location.pathname);
+        const play = parsed.kind !== "home" && parsed.play && !coopEntry();
         setStore(opened);
         const badSlot = /^\/episodes\/([^/]+)\/[^/]+\/?$/.exec(
           location.pathname,
         );
         const named =
-          route.kind === "episode" || route.kind === "map"
-            ? route.id
+          parsed.kind === "episode" || parsed.kind === "map"
+            ? parsed.id
             : badSlot
               ? decodeURIComponent(badSlot[1])
               : null;
-        const missing =
-          named !== null &&
-          !(await opened.listProjects()).some((item) => item.id === named);
-        const wanted = named && !missing ? named : ready.projectId;
+        const found =
+          named === null
+            ? null
+            : findEpisode(await opened.listProjects(), named);
+        const missing = named !== null && !found;
+        const route =
+          found && (parsed.kind === "episode" || parsed.kind === "map")
+            ? { ...parsed, id: found.id }
+            : parsed;
+        const wanted = found?.id ?? ready.projectId;
         selectProject(wanted);
+        if (location.pathname === "/") setHomeId(wanted);
         await refresh(opened, wanted);
         if (stale()) return;
         if (missing) {
@@ -356,8 +364,6 @@ function ProjectApp() {
         } else if (route.kind === "featured" && play) {
           const entry = soloFeatured(route.map);
           if (entry) setPlaying({ entry, hosted: null });
-        } else if (route.kind === "home" && ready.created && ready.entry) {
-          startSession(opened, ready.entry);
         }
       })
       .catch(() => {
@@ -452,8 +458,14 @@ function ProjectApp() {
 
   // Routes from history change state over several awaits. The URL is already
   // right, so syncing pauses until they settle to keep history unchanged.
-  const routeTo = async (route: Route, fromHistory = false) => {
+  const routeTo = async (target: Route, fromHistory = false) => {
     if (!store) return;
+    const found =
+      target.kind === "episode" || target.kind === "map"
+        ? findEpisode(projects, target.id)
+        : null;
+    const route = found ? { ...target, id: found.id } : target;
+    setHomeId(route.kind === "home" ? projectIdRef.current : null);
     const run = ++routeRun.current;
     const current = () => run === routeRun.current;
     const play = route.kind !== "home" && Boolean(route.play);
@@ -565,7 +577,10 @@ function ProjectApp() {
             }
           : {
               key: `episode:${projectId}`,
-              route: { kind: "episode", id: projectId, play: !!episodePlay },
+              route:
+                projectId === homeId && !episodePlay
+                  ? { kind: "home" }
+                  : { kind: "episode", id: projectId, play: !!episodePlay },
             };
   const wantedPath = page ? pathOf(page.route) : null;
   const wantedPlay = page?.route.kind !== "home" && Boolean(page?.route.play);

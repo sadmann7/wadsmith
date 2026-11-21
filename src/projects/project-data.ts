@@ -144,8 +144,13 @@ function mapStatus(entry: ProjectMap) {
   return { kind: "ready" as const, label: "Playable" };
 }
 
+function newEpisodeId() {
+  const bytes = crypto.getRandomValues(new Uint8Array(8));
+  return Array.from(bytes, (byte) => (byte % 36).toString(36)).join("");
+}
+
 function createProject(name: string): Project {
-  return { id: newId(), name, createdAt: Date.now() };
+  return { id: newEpisodeId(), name, createdAt: Date.now() };
 }
 
 function createMapEntry(
