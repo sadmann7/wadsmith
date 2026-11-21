@@ -305,13 +305,6 @@
     outline-color: var(--color-selection);
   }
 
-  .pane-actions {
-    position: absolute;
-    z-index: 3;
-    top: 12px;
-    left: 12px;
-  }
-
   .map-pane {
     position: relative;
     min-width: 0;
@@ -557,11 +550,6 @@
     justify-content: space-between;
     padding: 6px 8px;
     background: var(--color-surface);
-  }
-
-  .scene-actions {
-    display: flex;
-    gap: 6px;
   }
 
   .scene-status {
@@ -996,13 +984,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
-    max-width: calc(100% - 180px);
-  }
-
-  .map-overlay .select-trigger {
-    min-height: 34px;
-    border-color: var(--color-border-control);
-    background: var(--color-surface);
+    max-width: calc(100% - 130px);
   }
 
   .edit-modes {
@@ -1031,20 +1013,13 @@
     color: var(--color-fg);
   }
 
-  .pane-actions {
-    top: 12px;
-    right: 12px;
-    left: auto;
-  }
-
   .map-actions {
     top: 12px;
-    right: 46px;
+    right: 12px;
     gap: 2px;
     max-width: none;
   }
 
-  .pane-actions .icon-button,
   .map-actions .icon-button {
     border: 1px solid var(--color-border);
     background: var(--color-surface);
@@ -1236,25 +1211,10 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 4px 0 9px;
+    padding: 0 9px;
     border-bottom: 1px solid var(--color-border);
     color: var(--color-fg-muted);
     font: 11px var(--font-mono);
-  }
-
-  .dock-button {
-    display: grid;
-    place-items: center;
-    width: 22px;
-    height: 22px;
-    padding: 0;
-    border: 0;
-    background: none;
-    color: var(--color-fg-muted);
-  }
-
-  .dock-button:hover {
-    color: var(--color-fg);
   }
 
   .side {
@@ -1351,12 +1311,11 @@
     overflow: hidden;
   }
 
-  @container (max-width: 640px) {
+  @container (max-width: 380px) {
     .map-overlay {
       max-width: calc(100% - 24px);
     }
 
-    .pane-actions,
     .map-actions {
       top: 54px;
     }
@@ -1372,7 +1331,6 @@
       justify-content: center;
     }
 
-    .pane-actions,
     .map-actions {
       top: 122px;
     }
