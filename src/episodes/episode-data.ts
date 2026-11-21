@@ -22,7 +22,7 @@ type EpisodeMap = {
 
 type MapTemplate = "blank" | "room" | "hub";
 
-type EpisodeStart = "empty" | "one" | "featured";
+type EpisodeStart = "empty" | "one" | "featured" | "freedoom";
 
 type SlotMove = { id: string; slot: string };
 
@@ -198,7 +198,10 @@ function slotMoves(maps: EpisodeMap[], order: string[]): SlotMove[] {
     );
 }
 
-function episodeMaps(episodeId: string, start: EpisodeStart) {
+function episodeMaps(
+  episodeId: string,
+  start: Exclude<EpisodeStart, "freedoom">,
+) {
   if (start === "empty") return [];
   if (start === "one") {
     return [

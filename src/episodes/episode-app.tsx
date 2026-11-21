@@ -12,6 +12,7 @@ import { wadFileName } from "../editor/build-dialog";
 import { App } from "../editor/editor-app";
 import { PlayTogether, type HostedGame } from "../engine/play-together";
 import { GameView, type Level } from "../engine/play-panel";
+import { loadIwad } from "../engine/iwad";
 import type { GameFiles, Skill } from "../engine/runtime";
 import { featuredMaps, type FeaturedMap } from "../map/featured";
 import {
@@ -715,11 +716,46 @@ function EpisodeApp() {
     onCreateEpisode: (name, start) => {
       const created = createEpisode(name);
       void attempt(async () => {
-        await store.addEpisode(created, episodeMaps(created.id, start));
+        const maps =
+          start === "freedoom"
+            ? await freedoomMaps(created.id)
+            : episodeMaps(created.id, start);
+        if (!maps) return;
+        await store.addEpisode(created, maps);
         await store.setSetting(lastEpisodeKey, created.id);
         await routeTo({ kind: "episode", id: created.id });
       });
     },
+  };
+
+  const freedoomMaps = async (episodeId: string) => {
+    const run = ++importRun.current;
+    setMessage("Loading Freedoom…");
+    let data: Uint8Array;
+    try {
+      data = await loadIwad();
+    } catch {
+      if (run === importRun.current) {
+        setMessage(
+          "Couldn't load Freedoom. Check your connection and try again.",
+        );
+      }
+      return null;
+    }
+    const found = readMaps([{ name: "freedoom2.wad", data }]);
+    const maps: EpisodeMap[] = [];
+    for (const [index, doom] of found.entries()) {
+      setMessage(`Reading ${doom.slot}, ${index + 1} of ${found.length}…`);
+      await new Promise((done) => setTimeout(done));
+      if (run !== importRun.current) return null;
+      maps.push(
+        createMapEntry(episodeId, doom.slot, decompileMap(doom).map, {
+          description: "A level from Freedoom: Phase 2.",
+        }),
+      );
+    }
+    setMessage(null);
+    return maps;
   };
 
   const openCopy = (featured: FeaturedMap) =>
