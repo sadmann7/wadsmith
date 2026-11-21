@@ -2,7 +2,7 @@ import { useEffect, useSyncExternalStore } from "react";
 
 import type { GameMap } from "../map/types";
 import type { BuildCheckRequest, BuildCheckResult } from "./build-worker";
-import { buildProblem, type ProjectMap } from "./episode-data";
+import { buildProblem, type EpisodeMap } from "./episode-data";
 
 type Check = {
   revision: number;
@@ -47,7 +47,7 @@ function startWorker() {
   return started;
 }
 
-function checkBuild(entry: ProjectMap) {
+function checkBuild(entry: EpisodeMap) {
   const known = checks.get(entry.id);
   if (known?.revision === entry.mapRevision) return known.result;
   const check: Check = {
@@ -72,7 +72,7 @@ function checkBuild(entry: ProjectMap) {
   return check.result;
 }
 
-function knownBuildProblem(entry: ProjectMap) {
+function knownBuildProblem(entry: EpisodeMap) {
   const known = checks.get(entry.id);
   return known?.revision === entry.mapRevision ? known.problem : undefined;
 }
@@ -86,7 +86,7 @@ function subscribe(listener: () => void) {
 
 // Rerenders when a check of one of these maps finishes, so knownBuildProblem
 // catches up.
-function useBuildChecks(entries: ProjectMap[]) {
+function useBuildChecks(entries: EpisodeMap[]) {
   useSyncExternalStore(
     subscribe,
     () =>

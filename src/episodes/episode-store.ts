@@ -1,12 +1,24 @@
 import {
   parseStoredMap,
-  type Project,
-  type ProjectMap,
-  type ProjectStore,
+  type Episode,
+  type EpisodeMap,
+  type EpisodeStore,
 } from "./episode-data";
 
 const databaseName = "wadsmith";
 const databaseVersion = 1;
+
+type SavedMap = Omit<EpisodeMap, "episodeId"> & { projectId: string };
+
+// Saved maps keep the field name from before episodes, so browsers that
+// already hold maps still find them.
+function saved({ episodeId, ...entry }: EpisodeMap): SavedMap {
+  return { ...entry, projectId: episodeId };
+}
+
+function loaded({ projectId, ...entry }: SavedMap): EpisodeMap {
+  return { ...entry, episodeId: projectId };
+}
 
 function requested<T>(request: IDBRequest<T>) {
   return new Promise<T>((resolve, reject) => {
@@ -48,7 +60,7 @@ function openDatabase() {
   });
 }
 
-async function openProjectStore(): Promise<ProjectStore> {
+async function openEpisodeStore(): Promise<EpisodeStore> {
   let database: IDBDatabase | null = null;
 
   const connect = async () => {
@@ -94,50 +106,50 @@ async function openProjectStore(): Promise<ProjectStore> {
 
   return {
     durable: true,
-    listProjects: async () =>
-      (await read<Project[]>("projects", (items) => items.getAll())).toSorted(
+    listEpisodes: async () =>
+      (await read<Episode[]>("projects", (items) => items.getAll())).toSorted(
         (a, b) => a.createdAt - b.createdAt,
       ),
-    listMaps: async (projectId) =>
+    listMaps: async (episodeId) =>
       (
-        await read<ProjectMap[]>("maps", (items) =>
-          items.index("projectId").getAll(projectId),
+        await read<SavedMap[]>("maps", (items) =>
+          items.index("projectId").getAll(episodeId),
         )
-      ).map(parseStoredMap),
+      ).map((entry) => parseStoredMap(loaded(entry))),
     getMap: async (id) => {
-      const entry = await read<ProjectMap | undefined>("maps", (items) =>
+      const entry = await read<SavedMap | undefined>("maps", (items) =>
         items.get(id),
       );
-      return entry ? parseStoredMap(entry) : null;
+      return entry ? parseStoredMap(loaded(entry)) : null;
     },
-    putProject: (project) =>
+    putEpisode: (episode) =>
       write(["projects"], (transaction) => {
-        transaction.objectStore("projects").put(project);
+        transaction.objectStore("projects").put(episode);
       }),
-    addProject: (project, maps) =>
+    addEpisode: (episode, maps) =>
       write(["projects", "maps"], (transaction) => {
-        transaction.objectStore("projects").put(project);
+        transaction.objectStore("projects").put(episode);
         const items = transaction.objectStore("maps");
-        for (const entry of maps) items.put(entry);
+        for (const entry of maps) items.put(saved(entry));
       }),
     putMap: (entry) =>
       write(["maps"], (transaction) => {
-        transaction.objectStore("maps").put(entry);
+        transaction.objectStore("maps").put(saved(entry));
       }),
-    countMaps: (projectId) =>
+    countMaps: (episodeId) =>
       read<number>("maps", (items) =>
-        items.index("projectId").count(projectId),
+        items.index("projectId").count(episodeId),
       ),
     // Each map passes through a slot no map can hold, since the slot index is
     // unique and two maps may trade places.
     moveMaps: (moves) =>
       write(["maps"], (transaction) => {
         const items = transaction.objectStore("maps");
-        const moved: ProjectMap[] = [];
+        const moved: SavedMap[] = [];
         let pending = moves.length;
         for (const move of moves) {
           const request = items.get(move.id) as IDBRequest<
-            ProjectMap | undefined
+            SavedMap | undefined
           >;
           request.addEventListener("success", () => {
             if (request.result)
@@ -152,19 +164,19 @@ async function openProjectStore(): Promise<ProjectStore> {
         }
       }),
     updateMap: async (id, change) => {
-      let updated: ProjectMap | null = null;
+      let updated: EpisodeMap | null = null;
       await write(["maps"], (transaction) => {
         const items = transaction.objectStore("maps");
-        const request = items.get(id) as IDBRequest<ProjectMap | undefined>;
+        const request = items.get(id) as IDBRequest<SavedMap | undefined>;
         request.addEventListener("success", () => {
           if (!request.result) return;
-          updated = change(request.result);
-          items.put(updated);
+          updated = change(loaded(request.result));
+          items.put(saved(updated));
         });
       });
       return updated;
     },
-    deleteProject: async (id) => {
+    deleteEpisode: async (id) => {
       const keys = await read<IDBValidKey[]>("maps", (items) =>
         items.index("projectId").getAllKeys(id),
       );
@@ -193,15 +205,15 @@ async function openProjectStore(): Promise<ProjectStore> {
   };
 }
 
-function createMemoryStore(): ProjectStore {
-  const projects = new Map<string, Project>();
-  const maps = new Map<string, ProjectMap>();
+function createMemoryStore(): EpisodeStore {
+  const episodes = new Map<string, Episode>();
+  const maps = new Map<string, EpisodeMap>();
   const settings = new Map<string, string>();
-  const store = (entry: ProjectMap) => {
+  const store = (entry: EpisodeMap) => {
     for (const other of maps.values()) {
       if (
         other.id !== entry.id &&
-        other.projectId === entry.projectId &&
+        other.episodeId === entry.episodeId &&
         other.slot === entry.slot
       ) {
         throw new DOMException("That slot is taken.", "ConstraintError");
@@ -211,26 +223,26 @@ function createMemoryStore(): ProjectStore {
   };
   return {
     durable: false,
-    listProjects: async () =>
-      [...projects.values()].toSorted((a, b) => a.createdAt - b.createdAt),
-    listMaps: async (projectId) =>
+    listEpisodes: async () =>
+      [...episodes.values()].toSorted((a, b) => a.createdAt - b.createdAt),
+    listMaps: async (episodeId) =>
       [...maps.values()]
-        .filter((entry) => entry.projectId === projectId)
+        .filter((entry) => entry.episodeId === episodeId)
         .map((entry) => parseStoredMap(structuredClone(entry))),
     getMap: async (id) => {
       const entry = maps.get(id);
       return entry ? parseStoredMap(structuredClone(entry)) : null;
     },
-    putProject: async (project) => {
-      projects.set(project.id, project);
+    putEpisode: async (episode) => {
+      episodes.set(episode.id, episode);
     },
-    addProject: async (project, entries) => {
-      projects.set(project.id, project);
+    addEpisode: async (episode, entries) => {
+      episodes.set(episode.id, episode);
       entries.forEach(store);
     },
     putMap: async (entry) => store(entry),
-    countMaps: async (projectId) =>
-      [...maps.values()].filter((entry) => entry.projectId === projectId)
+    countMaps: async (episodeId) =>
+      [...maps.values()].filter((entry) => entry.episodeId === episodeId)
         .length,
     moveMaps: async (moves) => {
       const moved = moves.flatMap(({ id, slot }) => {
@@ -247,10 +259,10 @@ function createMemoryStore(): ProjectStore {
       store(updated);
       return structuredClone(updated);
     },
-    deleteProject: async (id) => {
-      projects.delete(id);
+    deleteEpisode: async (id) => {
+      episodes.delete(id);
       for (const entry of maps.values()) {
-        if (entry.projectId === id) maps.delete(entry.id);
+        if (entry.episodeId === id) maps.delete(entry.id);
       }
     },
     deleteMap: async (id) => {
@@ -264,4 +276,4 @@ function createMemoryStore(): ProjectStore {
   };
 }
 
-export { createMemoryStore, openProjectStore };
+export { createMemoryStore, openEpisodeStore };

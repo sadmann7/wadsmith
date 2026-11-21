@@ -2,7 +2,7 @@ import { usePathname } from "next/navigation";
 
 import { CoopJoin } from "../engine/join-room";
 import { parseRoomCode } from "../engine/room";
-import { ProjectApp } from "../episodes/episode-app";
+import { EpisodeApp } from "../episodes/episode-app";
 import { DeviceNotice } from "./device-notice";
 
 function AppRoot() {
@@ -10,7 +10,7 @@ function AppRoot() {
   const code = joining ? parseRoomCode(decodeURIComponent(joining[1])) : null;
   return (
     <>
-      {code ? <CoopJoin code={code} /> : <ProjectApp />}
+      {code ? <CoopJoin code={code} /> : <EpisodeApp />}
       <DeviceNotice />
     </>
   );

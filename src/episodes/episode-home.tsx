@@ -27,8 +27,8 @@ import {
   mapName,
   mapStatus,
   maxNameLength,
-  type Project,
-  type ProjectMap,
+  type Episode,
+  type EpisodeMap,
 } from "./episode-data";
 import { AppShell, Crumb, type SidebarProps } from "./app-sidebar";
 import { Button, buttonVariants } from "../components/ui/button";
@@ -183,7 +183,7 @@ function MapRow({
   onDrop,
   onDragEnd,
 }: {
-  entry: ProjectMap;
+  entry: EpisodeMap;
   canDuplicate: boolean;
   canMoveUp: boolean;
   canMoveDown: boolean;
@@ -322,15 +322,15 @@ function MapRow({
 const importTypes = [".json", ".wad", ".zip", ".deh", ".bex"];
 const noFiles: File[] = [];
 
-function ProjectHome({
+function EpisodeHome({
   sidebar,
-  project,
+  episode,
   maps,
   message,
-  onRenameProject,
-  onDeleteProject,
-  onExportProject,
-  onImportProject,
+  onRenameEpisode,
+  onDeleteEpisode,
+  onExportEpisode,
+  onImportEpisode,
   onImportFiles,
   onBuildEpisode,
   onPlayEpisode,
@@ -342,34 +342,34 @@ function ProjectHome({
   onReorderMaps,
 }: {
   sidebar: SidebarProps;
-  project: Project;
-  maps: ProjectMap[];
+  episode: Episode;
+  maps: EpisodeMap[];
   message: string | null;
-  onRenameProject: (name: string) => void;
-  onDeleteProject: () => void;
-  onExportProject: () => void;
-  onImportProject: (file: File) => void;
+  onRenameEpisode: (name: string) => void;
+  onDeleteEpisode: () => void;
+  onExportEpisode: () => void;
+  onImportEpisode: (file: File) => void;
   onImportFiles: (files: File[]) => void;
   onBuildEpisode: () => void;
   onPlayEpisode: () => void;
-  onOpenMap: (entry: ProjectMap) => void;
+  onOpenMap: (entry: EpisodeMap) => void;
   onCreateMap: (details: MapDetails) => Promise<string | null>;
   onUpdateMap: (
-    entry: ProjectMap,
+    entry: EpisodeMap,
     details: MapDetails,
   ) => Promise<string | null>;
-  onDuplicateMap: (entry: ProjectMap) => void;
-  onDeleteMap: (entry: ProjectMap) => void;
+  onDuplicateMap: (entry: EpisodeMap) => void;
+  onDeleteMap: (entry: EpisodeMap) => void;
   onReorderMaps: (order: string[]) => void;
 }) {
   const [creatingMap, setCreatingMap] = useState(false);
-  const [editing, setEditing] = useState<ProjectMap | null>(null);
+  const [editing, setEditing] = useState<EpisodeMap | null>(null);
   const [renaming, setRenaming] = useState(false);
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const [dragged, setDragged] = useState<string | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
   const accepted = useRef(false);
-  const projectFile = useRef<HTMLInputElement>(null);
+  const episodeFile = useRef<HTMLInputElement>(null);
   const { durable } = sidebar;
   const sorted = bySlot(maps);
   const nextSlot = freeSlots(maps)[0];
@@ -394,10 +394,10 @@ function ProjectHome({
   return (
     <AppShell
       sidebar={sidebar}
-      crumbs={<Crumb>{project.name}</Crumb>}
+      crumbs={<Crumb>{episode.name}</Crumb>}
       actions={
         <>
-          <Button onClick={onExportProject}>
+          <Button onClick={onExportEpisode}>
             <Download size={14} aria-hidden="true" />
             <span className="max-[1000px]:sr-only">Back up</span>
           </Button>
@@ -413,19 +413,19 @@ function ProjectHome({
               <Ellipsis size={16} aria-hidden="true" />
             </MenuTrigger>
             <MenuContent align="end">
-              <MenuItem onSelect={() => projectFile.current?.click()}>
+              <MenuItem onSelect={() => episodeFile.current?.click()}>
                 Import episode backup
               </MenuItem>
               <MenuSeparator />
               <MenuItem
                 variant="destructive"
                 destructive
-                disabled={sidebar.projects.length === 1}
+                disabled={sidebar.episodes.length === 1}
                 onSelect={() =>
                   setConfirmation({
-                    title: `Delete ${project.name}?`,
+                    title: `Delete ${episode.name}?`,
                     body: `This removes the episode and its ${countLabel(maps.length)} from this browser.`,
-                    run: onDeleteProject,
+                    run: onDeleteEpisode,
                   })
                 }
               >
@@ -449,7 +449,7 @@ function ProjectHome({
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <h1 className="m-0 truncate text-4xl leading-tight font-bold">
-              {project.name}
+              {episode.name}
             </h1>
             <Button
               variant="ghost"
@@ -626,14 +626,14 @@ function ProjectHome({
         </FileInput>
       </main>
       <input
-        ref={projectFile}
+        ref={episodeFile}
         type="file"
         hidden
         accept=".json,application/json"
         aria-label="Import episode backup"
         onChange={(event) => {
           const file = event.target.files?.[0];
-          if (file) onImportProject(file);
+          if (file) onImportEpisode(file);
           event.target.value = "";
         }}
       />
@@ -654,10 +654,10 @@ function ProjectHome({
       ) : null}
       {renaming ? (
         <NameDialog
-          initial={project.name}
+          initial={episode.name}
           onClose={() => setRenaming(false)}
           onSubmit={(name) => {
-            onRenameProject(name);
+            onRenameEpisode(name);
             setRenaming(false);
           }}
         />
@@ -672,4 +672,4 @@ function ProjectHome({
   );
 }
 
-export { ProjectHome };
+export { EpisodeHome };

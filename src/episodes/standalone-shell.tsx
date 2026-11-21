@@ -3,19 +3,19 @@
 import { useEffect, useState, type ReactNode } from "react";
 
 import { AppShell } from "./app-sidebar";
-import type { Project } from "./episode-data";
-import { openProjectStore } from "./episode-store";
+import type { Episode } from "./episode-data";
+import { openEpisodeStore } from "./episode-store";
 
 function StandaloneShell({ children }: { children: ReactNode }) {
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [episodes, setEpisodes] = useState<Episode[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [durable, setDurable] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
-    openProjectStore()
+    openEpisodeStore()
       .then(async (store) => {
-        const listed = await store.listProjects();
+        const listed = await store.listEpisodes();
         const nextCounts = Object.fromEntries(
           await Promise.all(
             listed.map(
@@ -25,7 +25,7 @@ function StandaloneShell({ children }: { children: ReactNode }) {
           ),
         );
         if (cancelled) return;
-        setProjects(listed);
+        setEpisodes(listed);
         setCounts(nextCounts);
         setDurable(store.durable);
       })
@@ -38,7 +38,7 @@ function StandaloneShell({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AppShell sidebar={{ projects, counts, current: null, durable }}>
+    <AppShell sidebar={{ episodes, counts, current: null, durable }}>
       {children}
     </AppShell>
   );

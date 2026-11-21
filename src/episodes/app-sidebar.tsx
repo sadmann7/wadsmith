@@ -18,7 +18,7 @@ import { MapOutline } from "../components/map-outline";
 import { MapPlan } from "../components/map-plan";
 import { featuredMaps } from "../map/featured";
 import { blankMap } from "../map/starter-map";
-import { maxNameLength, type EpisodeStart, type Project } from "./episode-data";
+import { maxNameLength, type EpisodeStart, type Episode } from "./episode-data";
 import { pathOf, type Route } from "./routes";
 import { Button, buttonVariants } from "../components/ui/button";
 import { Field, FieldLabel } from "../components/ui/field";
@@ -157,12 +157,12 @@ function NewEpisodeDialog({
 }
 
 type SidebarProps = {
-  projects: Project[];
+  episodes: Episode[];
   counts: Record<string, number>;
   current: Route | null;
   durable: boolean;
   onNavigate?: (route: Route) => void;
-  onCreateProject?: (name: string, start: EpisodeStart) => void;
+  onCreateEpisode?: (name: string, start: EpisodeStart) => void;
 };
 
 const rowClass =
@@ -199,12 +199,12 @@ function SidebarLink({
 }
 
 function AppSidebar({
-  projects,
+  episodes,
   counts,
   current,
   durable,
   onNavigate,
-  onCreateProject,
+  onCreateEpisode,
 }: SidebarProps) {
   const [creating, setCreating] = useState(false);
   const currentEpisode =
@@ -237,7 +237,7 @@ function AppSidebar({
         <div className="grid gap-0.5">
           <div className="mb-1 flex h-6 items-center justify-between pr-1 pl-2 font-mono text-xs tracking-[0.08em] text-muted-foreground">
             EPISODES
-            {onCreateProject ? (
+            {onCreateEpisode ? (
               <button
                 type="button"
                 className="grid size-6 place-items-center rounded-[3px] border-0 bg-transparent p-0 text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -249,7 +249,7 @@ function AppSidebar({
               </button>
             ) : null}
           </div>
-          {projects.map((item) => {
+          {episodes.map((item) => {
             const active = item.id === currentEpisode;
             return (
               <SidebarLink
@@ -295,12 +295,12 @@ function AppSidebar({
           Source and licences
         </Link>
       </div>
-      {creating && onCreateProject ? (
+      {creating && onCreateEpisode ? (
         <NewEpisodeDialog
           durable={durable}
           onClose={() => setCreating(false)}
           onSubmit={(name, start) => {
-            onCreateProject(name, start);
+            onCreateEpisode(name, start);
             setCreating(false);
           }}
         />

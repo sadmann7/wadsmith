@@ -8,7 +8,7 @@ import {
   buildProblem,
   createMapEntry,
   createMapSaver,
-  createProject,
+  createEpisode,
   episodeMaps,
   freeSlots,
   isSlotConflict,
@@ -16,9 +16,9 @@ import {
   mapFromTemplate,
   mapStatus,
   parsePar,
-  parseProjectBackup,
-  prepareProjects,
-  serializeProject,
+  parseEpisodeBackup,
+  prepareEpisodes,
+  serializeEpisode,
   slotMoves,
 } from "./episode-data";
 import { createMemoryStore } from "./episode-store";
@@ -32,40 +32,40 @@ function stubLegacy(saved: string | null) {
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe("project storage", () => {
+describe("episode storage", () => {
   it("starts a new browser with the starter map open", async () => {
     stubLegacy(null);
     const store = createMemoryStore();
-    const ready = await prepareProjects(store);
-    expect(ready.projects).toHaveLength(1);
+    const ready = await prepareEpisodes(store);
+    expect(ready.episodes).toHaveLength(1);
     expect(ready.entry).toMatchObject({ slot: "MAP01", map: starterMap });
     expect(await store.getSetting(lastMapKey)).toBe(ready.entry?.id);
   });
 
-  it("creates one first project when tabs start together", async () => {
+  it("creates one first episode when tabs start together", async () => {
     stubLegacy(null);
     const store = createMemoryStore();
-    await Promise.all([prepareProjects(store), prepareProjects(store)]);
-    const projects = await store.listProjects();
-    expect(projects).toHaveLength(1);
-    expect(await store.listMaps(projects[0].id)).toHaveLength(1);
+    await Promise.all([prepareEpisodes(store), prepareEpisodes(store)]);
+    const episodes = await store.listEpisodes();
+    expect(episodes).toHaveLength(1);
+    expect(await store.listMaps(episodes[0].id)).toHaveLength(1);
   });
 
-  it("moves the old saved map into the first project", async () => {
+  it("moves the old saved map into the first episode", async () => {
     stubLegacy(serializeMap({ ...starterMap, name: "My old map" }));
-    const ready = await prepareProjects(createMemoryStore());
+    const ready = await prepareEpisodes(createMemoryStore());
     expect(ready.entry?.map.name).toBe("My old map");
   });
 
-  it("returns to Project Home when no map was left open", async () => {
+  it("returns to Episode Home when no map was left open", async () => {
     stubLegacy(null);
     const store = createMemoryStore();
-    const first = await prepareProjects(store);
+    const first = await prepareEpisodes(store);
     await store.setSetting(lastMapKey, null);
-    const again = await prepareProjects(store);
+    const again = await prepareEpisodes(store);
     expect(again.entry).toBeNull();
-    expect(again.projectId).toBe(first.projectId);
-    expect(again.projects).toHaveLength(1);
+    expect(again.episodeId).toBe(first.episodeId);
+    expect(again.episodes).toHaveLength(1);
   });
 
   it("keeps the newest edit and the stored details", async () => {
@@ -139,15 +139,15 @@ describe("project storage", () => {
     ).rejects.toSatisfy(isSlotConflict);
   });
 
-  it("creates the first project and map together", async () => {
+  it("creates the first episode and map together", async () => {
     stubLegacy(null);
     const store = createMemoryStore();
-    store.addProject = () => Promise.reject(new Error("full"));
-    await expect(prepareProjects(store)).rejects.toThrow("full");
-    expect(await store.listProjects()).toEqual([]);
+    store.addEpisode = () => Promise.reject(new Error("full"));
+    await expect(prepareEpisodes(store)).rejects.toThrow("full");
+    expect(await store.listEpisodes()).toEqual([]);
   });
 
-  it("marks an unreadable stored map instead of failing the project", async () => {
+  it("marks an unreadable stored map instead of failing the episode", async () => {
     const store = createMemoryStore();
     const entry = createMapEntry("p", "MAP01", starterMap);
     await store.putMap({
@@ -159,13 +159,13 @@ describe("project storage", () => {
     expect(mapStatus(listed).label).toBe("Can't open");
   });
 
-  it("deletes a project with its maps", async () => {
+  it("deletes an episode with its maps", async () => {
     const store = createMemoryStore();
-    const project = createProject("Ashfall");
-    await store.putProject(project);
-    await store.putMap(createMapEntry(project.id, "MAP01", starterMap));
-    await store.deleteProject(project.id);
-    expect(await store.listMaps(project.id)).toEqual([]);
+    const episode = createEpisode("Ashfall");
+    await store.putEpisode(episode);
+    await store.putMap(createMapEntry(episode.id, "MAP01", starterMap));
+    await store.deleteEpisode(episode.id);
+    expect(await store.listMaps(episode.id)).toEqual([]);
   });
 });
 
@@ -173,23 +173,23 @@ describe("first episode", () => {
   it("is called Episode 1, and keeps a name the player chose", async () => {
     stubLegacy(null);
     const store = createMemoryStore();
-    const ready = await prepareProjects(store);
-    expect(ready.projects[0].name).toBe("Episode 1");
-    await store.putProject({ ...ready.projects[0], name: "My project" });
-    expect((await prepareProjects(store)).projects[0].name).toBe("Episode 1");
-    await store.putProject({ ...ready.projects[0], name: "Ashfall" });
-    await store.putProject({
+    const ready = await prepareEpisodes(store);
+    expect(ready.episodes[0].name).toBe("Episode 1");
+    await store.putEpisode({ ...ready.episodes[0], name: "My project" });
+    expect((await prepareEpisodes(store)).episodes[0].name).toBe("Episode 1");
+    await store.putEpisode({ ...ready.episodes[0], name: "Ashfall" });
+    await store.putEpisode({
       id: "older",
       name: "My project",
-      createdAt: ready.projects[0].createdAt - 1,
+      createdAt: ready.episodes[0].createdAt - 1,
     });
-    const renamed = await prepareProjects(store);
-    expect(renamed.projects.map((project) => project.name)).toEqual([
+    const renamed = await prepareEpisodes(store);
+    expect(renamed.episodes.map((episode) => episode.name)).toEqual([
       "Episode 1",
       "Ashfall",
     ]);
-    await store.deleteProject("older");
-    expect((await prepareProjects(store)).projects[0].name).toBe("Ashfall");
+    await store.deleteEpisode("older");
+    expect((await prepareEpisodes(store)).episodes[0].name).toBe("Ashfall");
   });
 });
 
@@ -208,14 +208,14 @@ describe("episode order", () => {
 
   it("swaps two maps in one step", async () => {
     const store = createMemoryStore();
-    const project = createProject("Ashfall");
-    const a = createMapEntry(project.id, "MAP01", starterMap);
-    const b = createMapEntry(project.id, "MAP02", starterMap);
-    await store.addProject(project, [a, b]);
+    const episode = createEpisode("Ashfall");
+    const a = createMapEntry(episode.id, "MAP01", starterMap);
+    const b = createMapEntry(episode.id, "MAP02", starterMap);
+    await store.addEpisode(episode, [a, b]);
     await store.moveMaps(slotMoves([a, b], [b.id, a.id]));
     expect((await store.getMap(a.id))?.slot).toBe("MAP02");
     expect((await store.getMap(b.id))?.slot).toBe("MAP01");
-    expect(await store.countMaps(project.id)).toBe(2);
+    expect(await store.countMaps(episode.id)).toBe(2);
   });
 
   it("starts a new episode empty, with one map or with the featured maps", () => {
@@ -265,7 +265,7 @@ describe("episode order", () => {
   });
 });
 
-describe("project maps", () => {
+describe("episode maps", () => {
   it("offers only free slots", () => {
     const maps = [createMapEntry("p", "MAP01", starterMap)];
     expect(freeSlots(maps)[0]).toBe("MAP02");
@@ -292,31 +292,31 @@ describe("project maps", () => {
     expect(parsePar("soon")).toBeUndefined();
   });
 
-  it("round-trips a project backup with new ids", () => {
-    const project = createProject("Ashfall");
-    const entry = createMapEntry(project.id, "MAP03", starterMap, {
+  it("round-trips an episode backup with new ids", () => {
+    const episode = createEpisode("Ashfall");
+    const entry = createMapEntry(episode.id, "MAP03", starterMap, {
       description: "Hub",
       par: 135,
     });
-    const backup = parseProjectBackup(serializeProject(project, [entry]));
-    expect(backup.project.name).toBe("Ashfall");
-    expect(backup.project.id).not.toBe(project.id);
+    const backup = parseEpisodeBackup(serializeEpisode(episode, [entry]));
+    expect(backup.episode.name).toBe("Ashfall");
+    expect(backup.episode.id).not.toBe(episode.id);
     expect(backup.maps[0]).toMatchObject({
       slot: "MAP03",
       description: "Hub",
       par: 135,
       map: starterMap,
-      projectId: backup.project.id,
+      episodeId: backup.episode.id,
     });
     expect(backup.maps[0].id).not.toBe(entry.id);
   });
 
   it("rejects a backup with repeated slots", () => {
-    const project = createProject("Ashfall");
-    const entry = createMapEntry(project.id, "MAP01", starterMap);
-    const file = JSON.parse(serializeProject(project, [entry]));
+    const episode = createEpisode("Ashfall");
+    const entry = createMapEntry(episode.id, "MAP01", starterMap);
+    const file = JSON.parse(serializeEpisode(episode, [entry]));
     file.maps.push(file.maps[0]);
-    expect(() => parseProjectBackup(JSON.stringify(file))).toThrow("map slot");
+    expect(() => parseEpisodeBackup(JSON.stringify(file))).toThrow("map slot");
   });
 
   it("writes each episode map into its slot", () => {
