@@ -236,6 +236,13 @@
     background: var(--color-surface-hover);
   }
 
+  .select-item [data-slot="menu-shortcut"] {
+    margin-left: auto;
+    padding-left: 16px;
+    color: var(--color-fg-muted);
+    font: 11px var(--font-mono);
+  }
+
   .workspace {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 372px;
