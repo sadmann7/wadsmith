@@ -190,7 +190,7 @@ function MapDialog({
                         key={value}
                         type="button"
                         aria-pressed={source === value}
-                        className="rounded-[2px] border-0 bg-transparent px-2.5 py-1 text-sm text-fg-muted aria-pressed:bg-surface-raised aria-pressed:font-semibold aria-pressed:text-fg"
+                        className="rounded-[2px] border-0 bg-transparent px-2.5 py-1 text-sm text-fg-muted aria-pressed:bg-surface-raised aria-pressed:text-fg"
                         onClick={() => {
                           setSource(value);
                           if (value === "featured" && !name.trim()) {

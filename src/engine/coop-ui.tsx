@@ -111,7 +111,7 @@ function Choice<Value extends string | number>({
           aria-pressed={value === option.value}
           disabled={option.disabled}
           title={option.hint}
-          className="h-[26px] flex-1 rounded-[2px] border-0 bg-transparent px-3 text-sm text-fg-muted hover:text-fg disabled:opacity-40 aria-pressed:bg-surface-hover aria-pressed:font-semibold aria-pressed:text-fg"
+          className="h-[26px] flex-1 rounded-[2px] border-0 bg-transparent px-3 text-sm text-fg-muted hover:text-fg disabled:opacity-40 aria-pressed:bg-surface-hover aria-pressed:text-fg"
           onClick={() => onChange(option.value)}
         >
           {option.label}
