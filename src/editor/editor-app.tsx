@@ -21,15 +21,6 @@ import {
   SegmentedControlItem,
 } from "@ui-sdk/react/segmented-control";
 import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectGroupLabel,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@ui-sdk/react/select";
-import {
   Resizable,
   ResizableHandle,
   ResizablePanel,
@@ -37,12 +28,10 @@ import {
 import {
   CircleCheck,
   CircleX,
-  Expand,
   MousePointer2,
   PenLine,
   Play,
   Redo2,
-  Rows2,
   StickyNote,
   ToggleRight,
   TriangleAlert,
@@ -73,9 +62,7 @@ import {
   ThingInspector,
 } from "./inspector";
 import { MapCanvas } from "./map-canvas";
-import { SelectCheck } from "./select-check";
 import { NewMapPanel } from "./new-map-panel";
-import { thingIcons } from "./thing-icons";
 import {
   normalizeControlClick,
   pointOfTarget,
@@ -89,7 +76,7 @@ import {
 import type { EditMode, MapTool, MapViewStatus } from "./map-editor";
 import { PlayTogether, type HostedGame } from "../engine/play-together";
 import { GameView, type PlayerSpot } from "../engine/play-panel";
-import { thingCatalog, thingKinds } from "../map/catalog";
+import { thingCatalog } from "../map/catalog";
 import {
   addPlayerStarts,
   addNote,
@@ -268,14 +255,6 @@ function downloadWad(map: GameMap, slot: string, fileName: string) {
     "application/octet-stream",
   );
 }
-
-const thingGroups: { category: ThingCategory; label: string }[] = [
-  { category: "start", label: "Player starts" },
-  { category: "enemy", label: "Enemies" },
-  { category: "item", label: "Items" },
-  { category: "key", label: "Keys" },
-  { category: "decor", label: "Decoration" },
-];
 
 type AppProps = {
   initialMap: GameMap;
@@ -771,47 +750,6 @@ function App({
     </MenuContextTrigger>
   );
 
-  const thingPicker = (
-    <Select
-      value={thingKind}
-      items={thingKinds.map((value) => ({
-        value,
-        label: thingCatalog[value].label,
-      }))}
-      onValueChange={(next) => {
-        if (!next) return;
-        setThingKind(next as ThingKind);
-        setTool("thing");
-      }}
-    >
-      <SelectTrigger className="select-trigger" aria-label="Thing to place">
-        <SelectValue />
-        <span aria-hidden="true">▾</span>
-      </SelectTrigger>
-      <SelectContent className="select-content max-h-[min(var(--available-height),360px)]">
-        {thingGroups.map(({ category, label }) => (
-          <SelectGroup key={category}>
-            <SelectGroupLabel className="px-2 pt-2 pb-1 font-mono text-xs tracking-wide text-fg-muted uppercase">
-              {label}
-            </SelectGroupLabel>
-            {thingKinds
-              .filter((kind) => thingCatalog[kind].category === category)
-              .map((kind) => {
-                const { icon: Icon, color } = thingIcons[kind];
-                return (
-                  <SelectItem key={kind} value={kind} className="select-item">
-                    <Icon size={14} style={{ color }} aria-hidden="true" />
-                    {thingCatalog[kind].label}
-                    <SelectCheck />
-                  </SelectItem>
-                );
-              })}
-          </SelectGroup>
-        ))}
-      </SelectContent>
-    </Select>
-  );
-
   const sceneStatus = (
     <p className="scene-status" role="status">
       {tool === "thing"
@@ -896,7 +834,7 @@ function App({
         ...(thingRoom ? [thingRoom.name] : []),
       ].join(" · ")
     : "";
-  const placingThings = editMode === "things";
+  const placingThings = editMode === "things" || tool === "thing";
   const selectionTitle = selectedSwitch
     ? "Switch"
     : selectedThings.length > 1
@@ -919,7 +857,9 @@ function App({
       : thing
         ? thingMeta
         : placingThings
-          ? "Pick a thing, then click the map"
+          ? tool === "thing"
+            ? `Placing ${thingCatalog[thingKind].label}`
+            : "Pick a thing to place"
           : line
             ? `${line.back ? "Two-sided" : "One-sided"} · ${line.length} long · ${
                 line.back
@@ -1130,7 +1070,11 @@ function App({
             <Menu onAction={(action) => runMapAction(action as string)}>
               <MenuTrigger className="menu-trigger">Map</MenuTrigger>
               <MenuContent className="select-content">
-                <MenuItem value="check" className="select-item">
+                <MenuItem
+                  value="check"
+                  className="select-item"
+                  disabled={checks.length === 0}
+                >
                   Check map
                 </MenuItem>
                 <MenuItem
@@ -1195,28 +1139,32 @@ function App({
             >
               <Redo2 size={16} aria-hidden="true" />
             </button>
-            <button
-              type="button"
-              className="button border-transparent hover:bg-surface-hover"
-              title="Open map check"
-              aria-label={`Map check: ${mapStatus}`}
-              onClick={showMapCheck}
-            >
-              {checks.length === 0 ? (
+            {checks.length === 0 ? (
+              <span className="button border-transparent">
+                <span className="sr-only">Map check: </span>
                 <CircleCheck
                   size={15}
                   className="text-success"
                   aria-hidden="true"
                 />
-              ) : (
+                <span className="max-xl:sr-only">{mapStatus}</span>
+              </span>
+            ) : (
+              <button
+                type="button"
+                className="button border-transparent hover:bg-surface-hover"
+                title="Open map check"
+                aria-label={`Map check: ${mapStatus}`}
+                onClick={showMapCheck}
+              >
                 <TriangleAlert
                   size={15}
                   className={canPlay ? "text-warning" : "text-danger"}
                   aria-hidden="true"
                 />
-              )}
-              <span className="max-xl:sr-only">{mapStatus}</span>
-            </button>
+                <span className="max-xl:sr-only">{mapStatus}</span>
+              </button>
+            )}
             <button
               type="button"
               className="button"
@@ -1281,7 +1229,7 @@ function App({
                   }}
                   onPointerMove={({ clientX, clientY, target }) => {
                     mapPointer.current = (target as Element).closest(
-                      ".pane-actions, .map-overlay, .player-dock, [data-map-control]",
+                      ".map-overlay, .player-dock, [data-map-control]",
                     )
                       ? null
                       : { clientX, clientY };
@@ -1308,31 +1256,6 @@ function App({
                         </SegmentedControlItem>
                       ))}
                     </SegmentedControl>
-                    {visibleLayout === "scene" ? null : thingPicker}
-                  </div>
-                  <div className="pane-actions">
-                    <button
-                      type="button"
-                      className="icon-button"
-                      aria-label={
-                        visibleLayout === "split"
-                          ? "Maximize map"
-                          : "Split view"
-                      }
-                      title={
-                        visibleLayout === "split"
-                          ? "Maximize map"
-                          : "Split view"
-                      }
-                      disabled={narrow}
-                      onClick={() => togglePane("map")}
-                    >
-                      {visibleLayout === "split" ? (
-                        <Expand size={16} aria-hidden="true" />
-                      ) : (
-                        <Rows2 size={16} aria-hidden="true" />
-                      )}
-                    </button>
                   </div>
                   <MenuContextTrigger
                     controller={menu}
@@ -1426,18 +1349,7 @@ function App({
                   )}
                   {visibleLayout === "map" && showDock && !narrow ? (
                     <div className="player-dock">
-                      <div className="player-dock-bar">
-                        <span>Player view</span>
-                        <button
-                          type="button"
-                          className="dock-button"
-                          aria-label="Open 3D view"
-                          title="Open 3D view"
-                          onClick={() => changeLayout("scene")}
-                        >
-                          <Expand size={13} aria-hidden="true" />
-                        </button>
-                      </div>
+                      <div className="player-dock-bar">Player view</div>
                       <div className="scene-frame">{scene}</div>
                     </div>
                   ) : null}
@@ -1467,8 +1379,7 @@ function App({
                   </div>
                   <div className="scene-bar">
                     {sceneStatus}
-                    <div className="scene-actions">
-                      {visibleLayout === "scene" ? thingPicker : null}
+                    {visibleLayout === "scene" ? (
                       <button
                         type="button"
                         className="button"
@@ -1476,17 +1387,7 @@ function App({
                       >
                         Find on map
                       </button>
-                      <button
-                        type="button"
-                        className="button"
-                        disabled={narrow}
-                        onClick={() => togglePane("scene")}
-                      >
-                        {visibleLayout === "split"
-                          ? "Maximize 3D"
-                          : "Split view"}
-                      </button>
-                    </div>
+                    ) : null}
                   </div>
                 </section>
               </ResizablePanel>
@@ -1669,19 +1570,17 @@ function App({
               </section>
             ) : null}
 
-            <section
-              ref={mapCheck}
-              className="inspector-section map-check"
-              aria-label="Map check"
-              tabIndex={-1}
-            >
-              <h2>
-                Map check
-                <span>{checkSummary}</span>
-              </h2>
-              {checks.length === 0 ? (
-                <p className="muted">This map is ready to play.</p>
-              ) : (
+            {checks.length === 0 ? null : (
+              <section
+                ref={mapCheck}
+                className="inspector-section map-check"
+                aria-label="Map check"
+                tabIndex={-1}
+              >
+                <h2>
+                  Map check
+                  <span>{checkSummary}</span>
+                </h2>
                 <ul>
                   {checks.slice(0, 8).map((issue) => {
                     const { title, detail } = issueText(issue);
@@ -1736,8 +1635,8 @@ function App({
                     );
                   })}
                 </ul>
-              )}
-            </section>
+              </section>
+            )}
 
             <section className="inspector-section">
               <h2>Quick build</h2>
