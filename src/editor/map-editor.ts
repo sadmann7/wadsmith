@@ -41,7 +41,13 @@ import {
   wallNear,
   type RoomSide,
 } from "../map/edit";
-import { sectorAt, wallKey } from "../map/geometry";
+import {
+  holeAt,
+  loopsPath,
+  sectorAt,
+  sectorLoops,
+  wallKey,
+} from "../map/geometry";
 import {
   isDragging,
   isKeyboardMenu,
@@ -272,14 +278,13 @@ function connectingAttrs(state: MapEditorState) {
   };
 }
 
-function polygonPoints(state: MapEditorState, id: string) {
+function sectorPath(state: MapEditorState, id: string) {
   const sector = sectorById(state.map, id);
-  return (sector?.vertices ?? [])
-    .map((vertex) => {
-      const point = pointOf(state, vertex);
-      return `${point.x},${point.y}`;
-    })
-    .join(" ");
+  return loopsPath(
+    (sector ? sectorLoops(sector) : []).map((loop) =>
+      loop.map((vertex) => pointOf(state, vertex)),
+    ),
+  );
 }
 
 function draftPoints(state: MapEditorState) {
@@ -717,8 +722,10 @@ const mapEditor = definePrimitive({
           : wallTarget(wall.sector, wall.wall, point);
       }
       const room = sectorAt(state.map, at);
-      return room
-        ? { kind: "room", sector: room.id, point }
+      if (room) return { kind: "room", sector: room.id, point };
+      const hole = holeAt(state.map, at);
+      return hole
+        ? { kind: "hole", sector: hole.sector.id, index: hole.index, point }
         : { kind: "empty", point };
     };
 
@@ -1114,12 +1121,12 @@ const mapEditor = definePrimitive({
     sector: slot<{ value: string }>({
       props: { value: "string" },
       attrs: (state, { key }) => ({
-        points: polygonPoints(state, key),
+        d: sectorPath(state, key),
         "data-active": state.activeSector === key ? "" : undefined,
         "data-door": sectorById(state.map, key)?.door ? "" : undefined,
       }),
       live: live<MapEditorState, any, { value: string }>((state, { key }) => ({
-        points: polygonPoints(state, key),
+        d: sectorPath(state, key),
       })),
     }),
     wall: slot<{ value: string; from: string; to: string }>({
@@ -1288,7 +1295,7 @@ const mapEditor = definePrimitive({
 const parts = createParts(mapEditor, {
   root: "div",
   world: "div",
-  sector: "polygon",
+  sector: "path",
   wall: "line",
   draft: "polyline",
   handle: "button",

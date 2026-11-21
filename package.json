@@ -22,7 +22,6 @@
     "@ui-sdk/core": "0.1.0-beta.9",
     "@ui-sdk/react": "0.1.0-beta.9",
     "cn": "^0.5.2",
-    "earcut": "3.2.4",
     "lucide-react": "^1.74.0",
     "next": "16.4.6",
     "react": "^19.3.1",

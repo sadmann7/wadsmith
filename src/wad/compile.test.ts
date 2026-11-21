@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   addPlayerStarts,
+  addRoom,
   addRoomOnSide,
   addSwitch,
   addThing,
@@ -10,8 +11,11 @@ import {
   connectedCorners,
   duplicateThings,
   faceThings,
+  fillHole,
   freeWallAt,
   freeWallNear,
+  makePillar,
+  removeHole,
   removeSector,
   removeThings,
   setLineTarget,
@@ -33,7 +37,14 @@ import {
   viewOfTarget,
   wallTarget,
 } from "../editor/map-target";
-import { sectorAt, wallKey } from "../map/geometry";
+import {
+  containerOf,
+  interiorPoint,
+  pointInPolygon,
+  sectorAt,
+  wallKey,
+  wallOwners,
+} from "../map/geometry";
 import {
   fitLineAction,
   lineActionGroups,
@@ -54,11 +65,11 @@ import { buildChecks, checkMap, fixIssue, issueText } from "../map/checks";
 import { wadFileName } from "../editor/build-dialog";
 import { freedoomFlats, freedoomWalls } from "../map/freedoom-textures";
 import { wallUse } from "../map/textures";
-import { testMap } from "../map/test-map";
+import { islandMap, testMap } from "../map/test-map";
 import { parseMapFile, serializeMap } from "../map/storage";
 import type { GameMap, LineAction } from "../map/types";
 import { validateMap } from "../map/validate";
-import { buildLevel, compileLumps, compileMap } from "./compile";
+import { buildLevel, compileLumps, compileMap, toDoom } from "./compile";
 import { buildNodes, subsectorFlag } from "./nodes";
 
 const lShape: GameMap = {
@@ -226,6 +237,299 @@ describe("compileMap", () => {
       }
     }
     expect(found.size).toBe(buildLevel(testMap).lines.length);
+  });
+});
+
+// Which side of start -> end a point is on, as the engine reads it: the
+// front is on the right, where this is negative.
+function sideOf(
+  vertices: { x: number; y: number }[],
+  line: { start: number; end: number },
+  point: { x: number; y: number },
+) {
+  const start = vertices[line.start];
+  const end = vertices[line.end];
+  return (
+    (end.x - start.x) * (point.y - start.y) -
+    (end.y - start.y) * (point.x - start.x)
+  );
+}
+
+describe("rooms inside rooms", () => {
+  const pillar = makePillar(islandMap, "stage")!;
+
+  it("accepts a room inside another and finds it under the pointer", () => {
+    expect(validateMap(islandMap)).toEqual([]);
+    expect(sectorAt(islandMap, { x: 256, y: 256 })?.id).toBe("stage");
+    expect(sectorAt(islandMap, { x: 64, y: 64 })?.id).toBe("yard");
+    expect(containerOf(islandMap, islandMap.sectors[1])?.id).toBe("yard");
+    expect(containerOf(islandMap, islandMap.sectors[0])).toBeNull();
+  });
+
+  it("opens the inner room onto the outer one through every wall", () => {
+    const { vertices, lines } = buildLevel(islandMap);
+    expect(lines).toHaveLength(8);
+    const shared = lines.filter((line) => line.backSector !== null);
+    expect(shared).toHaveLength(4);
+    const inside = toDoom({ x: 256, y: 256 });
+    for (const line of shared) {
+      expect(line).toMatchObject({ frontSector: 1, backSector: 0 });
+      expect(sideOf(vertices, line, inside)).toBeLessThan(0);
+    }
+    expect(linesOf(islandMap).filter((item) => item.flags & 4)).toHaveLength(4);
+    expectConvexLeaves(islandMap);
+  });
+
+  it("turns an inner room into a pillar with walls facing the room", () => {
+    expect(pillar.sectors).toHaveLength(1);
+    expect(pillar.sectors[0].holes).toEqual([["e", "f", "g", "h"]]);
+    expect(validateMap(pillar)).toEqual([]);
+    expect(sectorAt(pillar, { x: 256, y: 256 })).toBeUndefined();
+    expect(sectorAt(pillar, { x: 64, y: 64 })?.id).toBe("yard");
+    const { vertices, lines } = buildLevel(pillar);
+    expect(lines).toHaveLength(8);
+    expect(lines.every((line) => line.backSector === null)).toBe(true);
+    const middle = toDoom({ x: 256, y: 256 });
+    for (const line of lines) {
+      const onPillar = [line.start, line.end].every(
+        (index) =>
+          vertices[index].x > 100 &&
+          vertices[index].x < 400 &&
+          Math.abs(vertices[index].y) > 100 &&
+          Math.abs(vertices[index].y) < 400,
+      );
+      const side = sideOf(vertices, line, middle);
+      if (onPillar) expect(side).toBeGreaterThan(0);
+      else expect(side).toBeLessThan(0);
+    }
+    expectConvexLeaves(pillar);
+    expect(parseMapFile(serializeMap(pillar))).toEqual(pillar);
+  });
+
+  it("turns a pillar back into a room or takes it away", () => {
+    const filled = fillHole(pillar, "yard", 0)!;
+    expect(filled.map.sectors).toHaveLength(2);
+    expect(filled.map.sectors[0].holes).toBeUndefined();
+    expect(filled.map.sectors[1]).toMatchObject({
+      id: filled.id,
+      vertices: ["e", "f", "g", "h"],
+      floor: 0,
+      ceiling: 128,
+    });
+    expect(validateMap(filled.map)).toEqual([]);
+    const gone = removeHole(pillar, "yard", 0);
+    expect(gone.sectors[0].holes).toBeUndefined();
+    expect(Object.keys(gone.vertices).toSorted()).toEqual(["a", "b", "c", "d"]);
+    expect(makePillar(islandMap, "yard")).toBeNull();
+  });
+
+  it("finds the wall of an inner room from either side", () => {
+    expect(wallNear(islandMap, { x: 256, y: 186 }, 14)).toEqual({
+      sector: "yard",
+      wall: wallKey("e", "f"),
+    });
+    expect(wallNear(islandMap, { x: 256, y: 198 }, 14)).toEqual({
+      sector: "stage",
+      wall: wallKey("e", "f"),
+    });
+  });
+
+  it("lets a room lean on a pillar and cover that side of it", () => {
+    const ledge = addRoom(pillar, [
+      { x: 192, y: 192 },
+      { x: 192, y: 64 },
+      { x: 320, y: 64 },
+      { x: 320, y: 192 },
+    ]);
+    expect(validateMap(ledge.map)).toEqual([]);
+    expect(
+      wallOwners(ledge.map)
+        .get(wallKey("e", "f"))
+        ?.map((sector) => sector.id),
+    ).toEqual([ledge.id]);
+    const { lines } = buildLevel(ledge.map);
+    expect(lines).toHaveLength(11);
+    expect(lines.find((line) => line.wall === wallKey("e", "f"))).toMatchObject(
+      { frontSector: 1, backSector: null },
+    );
+    expect(lines.filter((line) => line.backSector !== null)).toHaveLength(3);
+    expectConvexLeaves(ledge.map);
+    const pressed = addSwitch(
+      ledge.map,
+      freeWallAt(ledge.map, wallKey("e", "f"))!,
+      { x: 256, y: 192 },
+    );
+    expect(pressed.map.sectors[0].holes?.[0]).toHaveLength(6);
+    expect(pressed.map.sectors[1].vertices).toHaveLength(6);
+    expect(validateMap({ ...pressed.map, switches: [] })).toEqual([]);
+  });
+
+  it("makes a pillar out of one of two rooms side by side", () => {
+    const pair = addRoom(islandMap, [
+      { x: 320, y: 192 },
+      { x: 448, y: 192 },
+      { x: 448, y: 320 },
+      { x: 320, y: 320 },
+    ]);
+    expect(validateMap(pair.map)).toEqual([]);
+    const made = makePillar(pair.map, "stage")!;
+    expect(validateMap(made)).toEqual([]);
+    expect(() => compileMap(made)).not.toThrow();
+    expect(
+      wallOwners(made)
+        .get(wallKey("f", "g"))
+        ?.map((sector) => sector.id),
+    ).toEqual([pair.id]);
+  });
+
+  it("finds a point inside a notched room and keeps it in its yard", () => {
+    const notch = [
+      { x: 0, y: 0 },
+      { x: 26, y: 97 },
+      { x: 25, y: 0 },
+      { x: 10, y: 35 },
+      { x: 10, y: -35 },
+      { x: 26, y: -97 },
+    ];
+    expect(pointInPolygon(interiorPoint(notch), notch)).toBe(true);
+    const notched: GameMap = {
+      ...islandMap,
+      vertices: {
+        ...islandMap.vertices,
+        ...Object.fromEntries(
+          notch.map((point, index) => [
+            `n${index}`,
+            { x: point.x + 100, y: point.y + 100 },
+          ]),
+        ),
+        p1: { x: 112, y: 97 },
+        p2: { x: 118, y: 97 },
+        p3: { x: 118, y: 103 },
+        p4: { x: 112, y: 103 },
+      },
+      sectors: [
+        { ...islandMap.sectors[0], holes: [["p1", "p2", "p3", "p4"]] },
+        {
+          ...islandMap.sectors[1],
+          vertices: ["n0", "n1", "n2", "n3", "n4", "n5"],
+        },
+      ],
+    };
+    expect(validateMap(notched)).toEqual([]);
+    expect(containerOf(notched, notched.sectors[1])?.id).toBe("yard");
+    const { lines } = buildLevel(notched);
+    expect(lines.filter((line) => line.backSector !== null)).toHaveLength(6);
+  });
+
+  it("puts a switch on a pillar's wall", () => {
+    expect(wallNear(pillar, { x: 256, y: 190 }, 14)).toEqual({
+      sector: "yard",
+      wall: wallKey("e", "f"),
+    });
+    const free = freeWallAt(pillar, wallKey("e", "f"));
+    expect(free).toMatchObject({ sector: "yard" });
+    expect(freeWallAt(islandMap, wallKey("e", "f"))).toBeNull();
+    const added = addSwitch(pillar, free!, { x: 256, y: 192 });
+    expect(added.map.switches).toHaveLength(1);
+    expect(added.map.sectors[0].holes?.[0]).toHaveLength(6);
+    expect(added.map.sectors[0].vertices).toHaveLength(4);
+  });
+
+  it("keeps things out of pillars", () => {
+    const issues = validateMap({
+      ...pillar,
+      things: [
+        ...pillar.things,
+        { id: "imp-1", kind: "imp", x: 256, y: 256, angle: 0 },
+      ],
+    });
+    expect(issues.map((issue) => issue.id)).toContain("outside:imp-1");
+  });
+
+  it("lets a room sit inside a pillar, closed in by solid wall", () => {
+    const cell = addRoom(pillar, [
+      { x: 224, y: 224 },
+      { x: 288, y: 224 },
+      { x: 288, y: 288 },
+      { x: 224, y: 288 },
+    ]);
+    expect(validateMap(cell.map)).toEqual([]);
+    expect(containerOf(cell.map, cell.map.sectors[1])).toBeNull();
+    expect(sectorAt(cell.map, { x: 256, y: 256 })?.id).toBe(cell.id);
+    const { lines } = buildLevel(cell.map);
+    expect(lines).toHaveLength(12);
+    expect(lines.every((line) => line.backSector === null)).toBe(true);
+  });
+
+  it("rejects a room that only partly overlaps another", () => {
+    const map = {
+      ...islandMap,
+      vertices: {
+        ...islandMap.vertices,
+        f: { x: 600, y: 192 },
+        g: { x: 600, y: 320 },
+      },
+    };
+    expect(validateMap(map).map((issue) => issue.id)).toContain(
+      "overlap:yard:stage",
+    );
+  });
+
+  it("rejects two rooms on the same side of one wall", () => {
+    const leaning = {
+      ...islandMap,
+      sectors: [
+        islandMap.sectors[0],
+        { ...islandMap.sectors[1], vertices: ["a", "b", "g", "h"] },
+      ],
+    };
+    expect(validateMap(leaning).map((issue) => issue.id)).toContain(
+      `same-side:${wallKey("a", "b")}`,
+    );
+    const corner = {
+      ...islandMap,
+      sectors: [
+        islandMap.sectors[0],
+        { ...islandMap.sectors[1], vertices: ["a", "b", "c"] },
+      ],
+    };
+    expect(validateMap(corner).map((issue) => issue.id)).toContain(
+      `same-side:${wallKey("a", "b")}`,
+    );
+    expect(() => compileMap(corner)).toThrow("overlaps");
+  });
+
+  it("rejects a pillar outside its room and a room around a pillar", () => {
+    const outside: GameMap = {
+      ...pillar,
+      vertices: {
+        ...pillar.vertices,
+        e: { x: 600, y: 192 },
+        f: { x: 700, y: 192 },
+        g: { x: 700, y: 320 },
+        h: { x: 600, y: 320 },
+      },
+    };
+    expect(validateMap(outside).map((issue) => issue.id)).toContain(
+      "pillar-outside:yard",
+    );
+    const around = addRoom(pillar, [
+      { x: 128, y: 128 },
+      { x: 384, y: 128 },
+      { x: 384, y: 384 },
+      { x: 128, y: 384 },
+    ]);
+    expect(validateMap(around.map).map((issue) => issue.id)).toContain(
+      `pillar-inside:yard:${around.id}`,
+    );
+  });
+
+  it("refuses a pillar with a missing corner in a saved map", () => {
+    const broken = {
+      ...pillar,
+      sectors: [{ ...pillar.sectors[0], holes: [["e", "f", "zz"]] }],
+    };
+    expect(() => parseMapFile(serializeMap(broken))).toThrow("missing corner");
   });
 });
 

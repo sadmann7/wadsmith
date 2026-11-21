@@ -4,13 +4,13 @@ import { resolve } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { thingCatalog } from "../map/catalog";
-import { pointInPolygon, sectorPolygon } from "../map/geometry";
+import { sectorAt } from "../map/geometry";
 import { starterMap } from "../map/starter-map";
 import { parseMapFile, serializeMap } from "../map/storage";
 import { testMap } from "../map/test-map";
 import type { GameMap } from "../map/types";
 import { validateMap } from "../map/validate";
-import { compileEpisode, compileMap } from "./compile";
+import { buildLevel, compileEpisode, compileMap } from "./compile";
 import { decompileMap } from "./decompile";
 import { WadFileError } from "./inspect";
 import { readMaps, type DoomMap, type DoomSector } from "./read-map";
@@ -144,7 +144,7 @@ describe("decompileMap", () => {
     expect(parseMapFile(serializeMap(map))).toEqual(map);
   });
 
-  it("cuts a sector around a pillar into rooms without holes", () => {
+  it("keeps a pillar as a hole in its room", () => {
     const build = doomMap();
     const room = build.sector();
     box(build, room, [0, 0, 256, 256]);
@@ -160,14 +160,73 @@ describe("decompileMap", () => {
     build.map.things.push({ x: 32, y: 32, angle: 0, type: 1, flags: 7 });
 
     const { map, report } = decompileMap(build.map);
-    expect(report.splitSectors).toBe(1);
-    expect(map.sectors.length).toBeGreaterThan(1);
+    expect(report.splitSectors).toBe(0);
+    expect(map.sectors).toHaveLength(1);
+    expect(map.sectors[0].holes).toHaveLength(1);
     expect(validateMap(map)).toEqual([]);
+    expect(sectorAt(map, { x: 128, y: -128 })).toBeUndefined();
+    expect(sectorAt(map, { x: 32, y: -32 })?.id).toBe("s0");
+    expect(buildLevel(map).lines).toHaveLength(8);
+    expect(() => compileMap(map)).not.toThrow();
+    expect(parseMapFile(serializeMap(map))).toEqual(map);
+  });
+
+  it("keeps a room inside another as a room with open shared walls", () => {
+    const build = doomMap();
+    const hall = build.sector();
+    const island = build.sector({ floor: 32 });
+    box(build, hall, [0, 0, 256, 256]);
+    const inner = [
+      build.vertex(96, 96),
+      build.vertex(160, 96),
+      build.vertex(160, 160),
+      build.vertex(96, 160),
+    ];
+    inner.forEach((corner, index) =>
+      build.line(corner, inner[(index + 1) % 4], hall, island, {
+        special: 38,
+        tag: 0,
+      }),
+    );
+    build.map.things.push({ x: 32, y: 32, angle: 0, type: 1, flags: 7 });
+
+    const { map, report } = decompileMap(build.map);
+    expect(report.splitSectors).toBe(0);
+    expect(map.sectors).toHaveLength(2);
+    expect(map.sectors.every((sector) => !sector.holes)).toBe(true);
+    expect(sectorAt(map, { x: 128, y: -128 })?.id).toBe("s1");
+    expect(sectorAt(map, { x: 32, y: -32 })?.id).toBe("s0");
+    const { lines } = buildLevel(map);
+    expect(lines.filter((line) => line.backSector !== null)).toHaveLength(4);
+    // A walk-over line on the shared wall is reachable from both rooms.
     expect(
-      map.sectors.some((sector) =>
-        pointInPolygon({ x: 128, y: -128 }, sectorPolygon(map, sector)),
+      Object.values(map.lines ?? {}).filter(
+        (line) => line.action?.kind === "floor-lower",
       ),
-    ).toBe(false);
+    ).toHaveLength(4);
+  });
+
+  it("turns a closed sector inside a room into a pillar", () => {
+    const build = doomMap();
+    const hall = build.sector();
+    const block = build.sector({ ceiling: 0 });
+    box(build, hall, [0, 0, 256, 256]);
+    const inner = [
+      build.vertex(96, 96),
+      build.vertex(160, 96),
+      build.vertex(160, 160),
+      build.vertex(96, 160),
+    ];
+    inner.forEach((corner, index) =>
+      build.line(corner, inner[(index + 1) % 4], hall, block),
+    );
+    build.map.things.push({ x: 32, y: 32, angle: 0, type: 1, flags: 7 });
+
+    const { map, report } = decompileMap(build.map);
+    expect(report.solidSectors).toBe(1);
+    expect(map.sectors).toHaveLength(1);
+    expect(map.sectors[0].holes).toHaveLength(1);
+    expect(validateMap(map)).toEqual([]);
     expect(() => compileMap(map)).not.toThrow();
   });
 
@@ -502,8 +561,10 @@ describe.skipIf(!existsSync(freedoom))("Freedoom's maps", () => {
   it("convert into levels that pass every check and save", () => {
     expect(maps).toHaveLength(32);
     expect(maps.every((doom) => doom.title)).toBe(true);
+    let pillars = 0;
     for (const doom of maps) {
       const { map, report } = decompileMap(doom);
+      pillars += map.sectors.filter((sector) => sector.holes).length;
       expect(validateMap(map), doom.slot).toEqual([]);
       // A teleporter that only lands on a multiplayer-only spot has nowhere to go.
       expect(
@@ -516,6 +577,7 @@ describe.skipIf(!existsSync(freedoom))("Freedoom's maps", () => {
       expect(() => parseMapFile(serializeMap(map))).not.toThrow();
       expect(map.things.every((thing) => thingCatalog[thing.kind])).toBe(true);
     }
+    expect(pillars).toBeGreaterThan(0);
   }, 60_000);
 
   it("build into WADs again", () => {

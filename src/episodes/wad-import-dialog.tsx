@@ -232,7 +232,7 @@ function WadImportDialog({
         <DialogFooter className="justify-between">
           <p className="text-muted-foreground min-w-0">
             {split > 0
-              ? `${plural(split, "sector")} with pillars or holes become several rooms.`
+              ? `${plural(split, "sector")} made of separate areas become several rooms.`
               : "Each sector becomes a room."}
           </p>
           <Button

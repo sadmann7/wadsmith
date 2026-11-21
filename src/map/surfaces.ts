@@ -12,7 +12,7 @@ import {
   updateSector,
   updateSwitch,
 } from "./edit";
-import { sectorEdges, wallKey, wallOwners, wallPartTexture } from "./geometry";
+import { wallKey, wallOwners, wallPartTexture } from "./geometry";
 import type { GameMap, MapSwitch, Sector, Thing } from "./types";
 
 type WallPart = "middle" | "upper" | "lower";
@@ -108,10 +108,8 @@ function describeSurface(map: GameMap, key: string | null): SurfaceInfo | null {
   }
 
   if (surface.kind !== "wall") return null;
-  const owns = sectorEdges(sector).some(
-    ({ from, to }) => wallKey(from, to) === surface.wall,
-  );
-  if (!owns) return null;
+  const owners = wallOwners(map).get(surface.wall) ?? [];
+  if (!owners.includes(sector)) return null;
   const mapSwitch =
     map.switches.find((item) => wallKey(item.from, item.to) === surface.wall) ??
     null;
@@ -126,9 +124,7 @@ function describeSurface(map: GameMap, key: string | null): SurfaceInfo | null {
       paints: "switch",
     };
   }
-  const neighbor = wallOwners(map)
-    .get(surface.wall)
-    ?.find((item) => item !== sector);
+  const neighbor = owners.find((item) => item !== sector);
   if (neighbor?.door && surface.part === "upper") {
     return {
       ...empty,

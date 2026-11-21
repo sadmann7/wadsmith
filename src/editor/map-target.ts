@@ -1,7 +1,13 @@
 import * as React from "react";
 
 import { roomCenter, thingKeyPrefix, switchKeyPrefix } from "../map/edit";
-import { sectorAt, sectorEdges, wallKey, wallOwners } from "../map/geometry";
+import {
+  interiorPoint,
+  sectorAt,
+  sectorEdges,
+  wallKey,
+  wallOwners,
+} from "../map/geometry";
 import { parseSurface, surfaceKey } from "../map/surfaces";
 import type { GameMap, Point, Sector } from "../map/types";
 
@@ -14,6 +20,7 @@ type MapTarget = {
   | { kind: "corners"; ids: string[] }
   | { kind: "room"; sector: string }
   | { kind: "wall"; sector: string; wall: string }
+  | { kind: "hole"; sector: string; index: number }
   | { kind: "switch"; id: string }
   | { kind: "empty" }
 );
@@ -118,6 +125,7 @@ function targetExists(map: GameMap, target: MapTarget) {
   if (target.kind === "empty") return true;
   const room = map.sectors.find((sector) => sector.id === target.sector);
   if (!room || target.kind === "room") return Boolean(room);
+  if (target.kind === "hole") return room.holes?.[target.index] !== undefined;
   return sectorEdges(room).some(
     ({ from, to }) => wallKey(from, to) === target.wall,
   );
@@ -158,6 +166,11 @@ function wallTarget(sector: string, wall: string, point: Point | null) {
     point,
     surface: surfaceKey({ kind: "wall", sector, wall, part: "middle" }),
   };
+}
+
+function holeMiddle(map: GameMap, sector: string, index: number) {
+  const hole = map.sectors.find((item) => item.id === sector)?.holes?.[index];
+  return hole ? interiorPoint(hole.map((id) => map.vertices[id])) : null;
 }
 
 function wallMiddle(map: GameMap, wall: string): Point {
@@ -211,6 +224,9 @@ function pointOfTarget(map: GameMap, target: MapTarget): Point | null {
     const item = map.switches.find((entry) => entry.id === target.id);
     return item ? wallMiddle(map, wallKey(item.from, item.to)) : null;
   }
+  if (target.kind === "hole") {
+    return target.point ?? holeMiddle(map, target.sector, target.index);
+  }
   return target.point;
 }
 
@@ -226,6 +242,13 @@ function viewOfTarget(map: GameMap, target: MapTarget) {
     const room = thing ? sectorAt(map, thing) : null;
     return thing && room && !room.door
       ? { from: viewFrom(map, room, thing), at: { x: thing.x, y: thing.y } }
+      : null;
+  }
+  if (target.kind === "hole") {
+    const room = map.sectors.find((sector) => sector.id === target.sector);
+    const at = holeMiddle(map, target.sector, target.index);
+    return room && at && !room.door
+      ? { from: viewFrom(map, room, at), at }
       : null;
   }
   let wall: string | null = null;

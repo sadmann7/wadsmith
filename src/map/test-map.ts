@@ -87,4 +87,44 @@ const testMap: GameMap = {
   ],
 };
 
-export { testMap };
+// A yard with a raised stage drawn inside it, for rooms inside rooms.
+const islandMap: GameMap = {
+  vertices: {
+    a: { x: 0, y: 0 },
+    b: { x: 512, y: 0 },
+    c: { x: 512, y: 512 },
+    d: { x: 0, y: 512 },
+    e: { x: 192, y: 192 },
+    f: { x: 320, y: 192 },
+    g: { x: 320, y: 320 },
+    h: { x: 192, y: 320 },
+  },
+  sectors: [
+    {
+      id: "yard",
+      name: "Yard",
+      vertices: ["a", "b", "c", "d"],
+      floor: 0,
+      ceiling: 128,
+      light: 176,
+      floorTexture: "FLOOR4_8",
+      ceilingTexture: "CEIL3_5",
+      wallTexture: "STARTAN3",
+    },
+    {
+      id: "stage",
+      name: "Stage",
+      vertices: ["e", "f", "g", "h"],
+      floor: 32,
+      ceiling: 128,
+      light: 176,
+      floorTexture: "FLOOR4_8",
+      ceilingTexture: "CEIL3_5",
+      wallTexture: "STARTAN3",
+    },
+  ],
+  things: [{ id: "player-1", kind: "player", x: 64, y: 64, angle: 0 }],
+  switches: [],
+};
+
+export { islandMap, testMap };
