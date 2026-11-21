@@ -15,6 +15,7 @@ type ActionGroup =
   | "Floors"
   | "Ceilings"
   | "Lifts"
+  | "Crushers"
   | "Teleporters"
   | "Level";
 
@@ -190,6 +191,37 @@ const lineActions: Record<LineActionKind, ActionDefinition> = {
       walk: { once: 121, repeat: 120 },
     },
   },
+  crusher: {
+    label: "Crusher: start",
+    group: "Crushers",
+    triggers: {
+      switch: { once: 49 },
+      walk: { once: 25, repeat: 73 },
+    },
+  },
+  "crusher-fast": {
+    label: "Crusher: start fast",
+    group: "Crushers",
+    triggers: { walk: { once: 6, repeat: 77 } },
+  },
+  "crusher-silent": {
+    label: "Crusher: start silent",
+    group: "Crushers",
+    triggers: { walk: { once: 141 } },
+  },
+  "crusher-stop": {
+    label: "Crusher: stop",
+    group: "Crushers",
+    triggers: { walk: { once: 57, repeat: 74 } },
+  },
+  "floor-crush": {
+    label: "Crusher: raise floor and crush",
+    group: "Crushers",
+    triggers: {
+      switch: { once: 55, repeat: 65 },
+      walk: { once: 56, repeat: 94 },
+    },
+  },
   exit: {
     label: "End the level",
     group: "Level",
@@ -215,6 +247,7 @@ const actionGroups: ActionGroup[] = [
   "Floors",
   "Ceilings",
   "Lifts",
+  "Crushers",
   "Teleporters",
   "Level",
 ];
