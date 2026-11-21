@@ -57,6 +57,29 @@ const lineActions: Record<LineActionKind, ActionDefinition> = {
       walk: { once: 3, repeat: 75 },
     },
   },
+  "door-raise-fast": {
+    label: "Door: open fast, wait, close",
+    triggers: {
+      door: { repeat: 117 },
+      switch: { once: 111, repeat: 114 },
+      walk: { once: 108, repeat: 105 },
+    },
+  },
+  "door-open-fast": {
+    label: "Door: open fast and stay",
+    triggers: {
+      door: { once: 118 },
+      switch: { once: 112, repeat: 115 },
+      walk: { once: 109, repeat: 106 },
+    },
+  },
+  "door-close-fast": {
+    label: "Door: close fast",
+    triggers: {
+      switch: { once: 113, repeat: 116 },
+      walk: { once: 110, repeat: 107 },
+    },
+  },
   "floor-lower": {
     label: "Floor: lower to lowest",
     triggers: {
@@ -136,6 +159,23 @@ function lineSpecial(action: LineAction) {
 
 function lineUsesTag({ kind, trigger }: LineAction) {
   return kind !== "exit" && trigger !== "door";
+}
+
+function opensDoor(kind: LineActionKind) {
+  return (
+    kind === "door-raise" ||
+    kind === "door-open" ||
+    kind === "door-raise-fast" ||
+    kind === "door-open-fast"
+  );
+}
+
+function closesDoor(kind: LineActionKind) {
+  return kind === "door-raise" || kind === "door-raise-fast";
+}
+
+function isFast(kind: LineActionKind) {
+  return kind.endsWith("-fast");
 }
 
 // The engine ignores a press from a line's back and a teleporter crossed from
@@ -236,8 +276,10 @@ function describeLine(
 
 export {
   canRepeatChoice,
+  closesDoor,
   describeLine,
   fitLineAction,
+  isFast,
   isLineActionKind,
   keyColors,
   keysFor,
@@ -247,6 +289,7 @@ export {
   lineTriggers,
   lineUsesTag,
   newLineAction,
+  opensDoor,
   triggerLabels,
   triggersFor,
   usedFromFront,

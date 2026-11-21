@@ -10,9 +10,12 @@ import {
 import { freedoomFlats, freedoomWalls } from "../map/freedoom-textures";
 import { pointInPolygon, signedArea, wallKey } from "../map/geometry";
 import {
+  closesDoor,
+  isFast,
   lineActionKinds,
   lineActions,
   lineUsesTag,
+  opensDoor,
   usedFromFront,
 } from "../map/lines";
 import type {
@@ -82,6 +85,7 @@ const manualDoors: Record<number, boolean> = {
   118: false,
 };
 const keyedManualDoors = new Set([26, 27, 28, 32, 33, 34]);
+const fastManualDoors = new Set([117, 118]);
 
 const crushers = new Set([6, 25, 49, 73, 74, 77, 141, 57]);
 const stairs = new Set([7, 8, 100, 127]);
@@ -489,11 +493,13 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
 
   const doorCandidates = new Map<number, DoorSettings["opensBy"] | null>();
   const doorCloses = new Map<number, boolean>();
+  const doorFast = new Set<number>();
   for (const line of lines) {
     const closes = manualDoors[line.special];
     if (closes !== undefined && line.backSector !== null) {
       doorCandidates.set(line.backSector, "use");
       doorCloses.set(line.backSector, closes);
+      if (fastManualDoors.has(line.special)) doorFast.add(line.backSector);
     }
   }
   for (const line of lines) {
@@ -501,7 +507,7 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
     if (
       !action ||
       action.trigger === "door" ||
-      (action.kind !== "door-raise" && action.kind !== "door-open") ||
+      !opensDoor(action.kind) ||
       line.tag === 0
     ) {
       continue;
@@ -510,7 +516,8 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
       if (sector.tag !== line.tag || doorCandidates.get(index) === "use")
         return;
       doorCandidates.set(index, "switch");
-      doorCloses.set(index, action.kind === "door-raise");
+      doorCloses.set(index, closesDoor(action.kind));
+      if (isFast(action.kind)) doorFast.add(index);
     });
   }
 
@@ -631,6 +638,7 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
       door = {
         opensBy: doorCandidates.get(index)!,
         closes: doorCloses.get(index) ?? true,
+        ...(doorFast.has(index) ? { fast: true } : {}),
         texture,
       };
       ceiling = opened;

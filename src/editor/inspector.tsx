@@ -355,6 +355,11 @@ function DoorFields({
         checked={door.closes}
         onChange={(closes) => onChange({ ...door, closes })}
       />
+      <ToggleField
+        label="Opens fast"
+        checked={Boolean(door.fast)}
+        onChange={(fast) => onChange({ ...door, fast: fast || undefined })}
+      />
       <TextureField
         label="Door texture"
         value={door.texture}

@@ -130,41 +130,57 @@ describe.skipIf(!ready)("featured maps in the engine", () => {
   }
 });
 
-describe.skipIf(!ready)("fast lifts in the engine", () => {
-  it("lowers sooner than a lift", async () => {
+async function ticsToFinish(map: GameMap, label: string) {
+  const quiet: GameMap = {
+    ...map,
+    things: map.things.filter(
+      (thing) => thingCatalog[thing.kind].category !== "enemy",
+    ),
+  };
+  const press = pressesOf(quiet).find((item) => item.label.startsWith(label))!;
+  const game = await launch(press.map);
+  await waitForPlay(game);
+  const before = press.height(game);
+  const start = game.gameTic();
+  await pressUse(game);
+  await play(game, 6000, () => press.done(game, before));
+  expect(press.done(game, before)).toBe(true);
+  return game.gameTic() - start;
+}
+
+describe.skipIf(!ready)("fast actions in the engine", () => {
+  it("lowers a fast lift sooner than a lift", async () => {
     const featured = featuredMaps.find((item) =>
       Object.values(item.map.lines ?? {}).some(
         (line) => line.action?.kind === "lift",
       ),
     )!;
-    const lowering = async (kind: LineActionKind) => {
-      const map: GameMap = {
-        ...featured.map,
-        things: featured.map.things.filter(
-          (thing) => thingCatalog[thing.kind].category !== "enemy",
-        ),
-        lines: Object.fromEntries(
-          Object.entries(featured.map.lines ?? {}).map(([wall, line]) => [
-            wall,
-            line.action?.kind === "lift"
-              ? { ...line, action: { ...line.action, kind } }
-              : line,
-          ]),
-        ),
-      };
-      const press = pressesOf(map).find((item) =>
-        item.label.startsWith("pressing"),
-      )!;
-      const game = await launch(press.map);
-      await waitForPlay(game);
-      const before = press.height(game);
-      const start = game.gameTic();
-      await pressUse(game);
-      await play(game, 6000, () => press.done(game, before));
-      expect(press.done(game, before)).toBe(true);
-      return game.gameTic() - start;
-    };
-    expect(await lowering("lift-fast")).toBeLessThan(await lowering("lift"));
+    const lifts = (kind: LineActionKind): GameMap => ({
+      ...featured.map,
+      lines: Object.fromEntries(
+        Object.entries(featured.map.lines ?? {}).map(([wall, line]) => [
+          wall,
+          line.action?.kind === "lift"
+            ? { ...line, action: { ...line.action, kind } }
+            : line,
+        ]),
+      ),
+    });
+    expect(await ticsToFinish(lifts("lift-fast"), "pressing")).toBeLessThan(
+      await ticsToFinish(lifts("lift"), "pressing"),
+    );
+  }, 60_000);
+
+  it("opens a fast door sooner than a door", async () => {
+    const doors = (fast: boolean): GameMap => ({
+      ...starterMap,
+      sectors: starterMap.sectors.map((sector) =>
+        sector.door ? { ...sector, door: { ...sector.door, fast } } : sector,
+      ),
+    });
+    expect(await ticsToFinish(doors(true), "switch opens")).toBeLessThan(
+      await ticsToFinish(doors(false), "switch opens"),
+    );
   }, 60_000);
 });
 

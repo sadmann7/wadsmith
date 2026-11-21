@@ -10,7 +10,7 @@ import {
 } from "./geometry";
 import { appearsOn } from "./balance";
 import { isPlayerStart, keyThings, thingCatalog, thingKinds } from "./catalog";
-import { describeLine, lineUsesTag } from "./lines";
+import { describeLine, lineUsesTag, opensDoor } from "./lines";
 import type { GameMap, Point, Sector, ThingSkill } from "./types";
 
 type MapIssue = {
@@ -257,7 +257,7 @@ function lineOpensDoor(
   { action, line }: ReturnType<typeof activeLineActions>[number],
   door: Sector,
 ) {
-  if (action.kind !== "door-raise" && action.kind !== "door-open") return false;
+  if (!opensDoor(action.kind)) return false;
   const behind = line.back?.id === door.id;
   if (action.trigger === "door") return behind;
   return (

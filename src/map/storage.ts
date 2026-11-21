@@ -116,10 +116,16 @@ function parseDoor(value: unknown, label: string): DoorSettings {
   if (door.opensBy !== "use" && door.opensBy !== "switch") {
     fail(`${label} has an unknown opener.`);
   }
-  if (typeof door.closes !== "boolean") fail(`${label} is not valid.`);
+  if (
+    typeof door.closes !== "boolean" ||
+    (door.fast !== undefined && typeof door.fast !== "boolean")
+  ) {
+    fail(`${label} is not valid.`);
+  }
   return {
     opensBy: door.opensBy,
     closes: door.closes,
+    ...(door.fast ? { fast: true } : {}),
     texture: texture(door.texture, doorTextures, label),
   };
 }

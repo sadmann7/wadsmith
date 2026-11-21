@@ -127,6 +127,23 @@ describe("decompileMap", () => {
     }
   });
 
+  it("keeps fast doors fast", () => {
+    const fast: GameMap = {
+      ...starterMap,
+      sectors: starterMap.sectors.map((sector) =>
+        sector.door
+          ? { ...sector, door: { ...sector.door, fast: true } }
+          : sector,
+      ),
+    };
+    const [doom] = readMaps([{ name: "map.wad", data: compileMap(fast) }]);
+    const { map } = decompileMap(doom);
+    const doors = map.sectors.filter((sector) => sector.door);
+    expect(doors.length).toBeGreaterThan(1);
+    expect(doors.every((sector) => sector.door?.fast)).toBe(true);
+    expect(parseMapFile(serializeMap(map))).toEqual(map);
+  });
+
   it("cuts a sector around a pillar into rooms without holes", () => {
     const build = doomMap();
     const room = build.sector();

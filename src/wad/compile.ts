@@ -31,6 +31,10 @@ const specialDoorOpen = 31;
 const specialSwitchDoorRaise = 63;
 const specialSwitchDoorOpen = 61;
 const specialScrollLeft = 48;
+const specialFastDoorRaise = 117;
+const specialFastDoorOpen = 118;
+const specialSwitchFastDoorRaise = 114;
+const specialSwitchFastDoorOpen = 115;
 const thingSkillFlags: Record<ThingSkill, number> = {
   easy: 0x0001,
   medium: 0x0002,
@@ -223,7 +227,13 @@ function compileLumps(map: GameMap, slot = mapLumpName): Lump[] {
       const door = backSector.door;
       flags = lineTwoSided | (settings?.blocksAll ? lineBlocksPlayer : 0);
       if (door?.opensBy === "use") {
-        special = door.closes ? specialDoorRaise : specialDoorOpen;
+        special = door.fast
+          ? door.closes
+            ? specialFastDoorRaise
+            : specialFastDoorOpen
+          : door.closes
+            ? specialDoorRaise
+            : specialDoorOpen;
       }
       front = writeSide(
         line.frontSector,
@@ -258,9 +268,13 @@ function compileLumps(map: GameMap, slot = mapLumpName): Lump[] {
       if (item) flags |= lineLowerUnpegged;
       if (item && target?.door) {
         wired = true;
-        special = target.door.closes
-          ? specialSwitchDoorRaise
-          : specialSwitchDoorOpen;
+        special = target.door.fast
+          ? target.door.closes
+            ? specialSwitchFastDoorRaise
+            : specialSwitchFastDoorOpen
+          : target.door.closes
+            ? specialSwitchDoorRaise
+            : specialSwitchDoorOpen;
         tag = doorTag(target.id);
       }
       front = writeSide(
