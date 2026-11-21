@@ -1098,6 +1098,22 @@ describe("map check", () => {
     expect(wallUse(painted).get("BRICK1")).toBe(1);
   });
 
+  it("warns about a spawn spot level with a monster spawner", () => {
+    const spawner = addThing(testMap, "boss-shooter", { x: 64, y: 96 }).map;
+    const warned = (x: number, y: number) =>
+      checkMap(addThing(spawner, "spawn-spot", { x, y }).map).some((issue) =>
+        issue.id.startsWith("spawn-level"),
+      );
+    expect(warned(1088, 96)).toBe(true);
+    expect(warned(1088, 100)).toBe(true);
+    expect(warned(1088, -128)).toBe(false);
+  });
+
+  it("gives every thing its own Doom number", () => {
+    const numbers = thingKinds.map((kind) => thingCatalog[kind].doomType);
+    expect(new Set(numbers).size).toBe(numbers.length);
+  });
+
   it("knows every catalog texture is in Freedoom", () => {
     const flats: readonly string[] = freedoomFlats;
     const walls: readonly string[] = freedoomWalls;

@@ -19,6 +19,16 @@ const enemyStats: Partial<
   "lost-soul": { health: 100, threat: 15 },
   chaingunner: { health: 70, threat: 20 },
   "pain-elemental": { health: 400, threat: 40 },
+  "wolfenstein-ss": { health: 50, threat: 12 },
+  cacodemon: { health: 400, threat: 30 },
+  "hell-knight": { health: 500, threat: 35 },
+  "baron-of-hell": { health: 1000, threat: 50 },
+  arachnotron: { health: 500, threat: 40 },
+  revenant: { health: 300, threat: 40 },
+  mancubus: { health: 600, threat: 50 },
+  "arch-vile": { health: 700, threat: 80 },
+  "spider-mastermind": { health: 3000, threat: 150 },
+  cyberdemon: { health: 4000, threat: 200 },
 };
 
 const healing: Partial<Record<ThingKind, number>> = {
@@ -26,6 +36,11 @@ const healing: Partial<Record<ThingKind, number>> = {
   medikit: 25,
   "green-armor": 33,
   "blue-armor": 100,
+  "health-bonus": 1,
+  "armor-bonus": 1,
+  berserk: 100,
+  soulsphere: 100,
+  megasphere: 200,
 };
 
 const ammoDamage: Partial<Record<ThingKind, number>> = {
@@ -33,6 +48,17 @@ const ammoDamage: Partial<Record<ThingKind, number>> = {
   chaingun: 200,
   clip: 100,
   shells: 280,
+  "box-of-bullets": 500,
+  "box-of-shells": 1400,
+  "super-shotgun": 560,
+  rocket: 130,
+  "box-of-rockets": 650,
+  "rocket-launcher": 260,
+  cell: 440,
+  "cell-pack": 2200,
+  "plasma-gun": 880,
+  "bfg-9000": 880,
+  backpack: 950,
 };
 
 function appearsOn(skills: ThingSkill[] | undefined, skill: ThingSkill) {
@@ -69,8 +95,9 @@ function mapBalance(map: GameMap, skill: ThingSkill) {
     health: health.length,
     ammo: ammo.length,
     keys: keys.length,
-    keysNeeded: [...needed].filter((key) => !keys.includes(keyThings[key]))
-      .length,
+    keysNeeded: [...needed].filter(
+      (key) => !keyThings[key].some((kind) => keys.includes(kind)),
+    ).length,
     healthShort: Math.max(0, Math.ceil(healthGap / healthPerPickup)),
     ammoShort: Math.max(0, Math.ceil(damageGap / damagePerPickup)),
   };

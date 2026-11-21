@@ -1,4 +1,4 @@
-import { doorTrackTexture } from "../map/catalog";
+import { doorTrackTexture, thingCatalog } from "../map/catalog";
 import {
   sectorAt,
   sectorEdges,
@@ -399,10 +399,14 @@ function renderScene(
     const picture = assets.sprite(thing.kind);
     if (!picture) continue;
     const owner = sectorAt(map, thing);
-    const floor = owner?.floor ?? start.floor;
+    const { hangs } = thingCatalog[thing.kind];
+    const base =
+      hangs === undefined
+        ? (owner?.floor ?? start.floor)
+        : (owner?.ceiling ?? start.ceiling) - hangs;
     const scale = focal / distance;
     const left = width / 2 + side * scale - picture.leftOffset * scale;
-    const peak = horizon - (floor + picture.topOffset - eye) * scale;
+    const peak = horizon - (base + picture.topOffset - eye) * scale;
     const level = gameWallShade(owner?.light ?? start.light, distance);
     const id = isGhost
       ? 0
