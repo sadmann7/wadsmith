@@ -602,6 +602,17 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
 
     let door: DoorSettings | undefined;
     let ceiling = Math.max(source.ceiling, source.floor);
+    const lowest = Math.min(
+      ...[...neighbors[index]].map((other) => doom.sectors[other].ceiling),
+    );
+    const opened =
+      Number.isFinite(lowest) && lowest - doorOpenGap > source.floor
+        ? lowest - doorOpenGap
+        : source.floor + fallbackDoorHeight;
+    // A door the editor can't hold stays open, so the level can still be played.
+    if (doorCandidates.get(index) && source.ceiling <= source.floor) {
+      ceiling = opened;
+    }
     if (doors.has(index)) {
       const uppers = ownLines.map(
         (line) =>
@@ -623,13 +634,7 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
         closes: doorCloses.get(index) ?? true,
         texture,
       };
-      const lowest = Math.min(
-        ...[...neighbors[index]].map((other) => doom.sectors[other].ceiling),
-      );
-      ceiling =
-        Number.isFinite(lowest) && lowest - doorOpenGap > source.floor
-          ? lowest - doorOpenGap
-          : source.floor + fallbackDoorHeight;
+      ceiling = opened;
     }
 
     pieces[index].forEach((loop, part) => {
@@ -800,6 +805,35 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
       ...(enemy && source.flags & thingAmbush ? { ambush: true } : {}),
     });
   });
+
+  // Multiplayer spots are dropped, so a teleporter that only leads to one
+  // would go nowhere.
+  const landings = new Set(
+    things
+      .filter((thing) => thing.kind === "teleport-destination")
+      .flatMap((thing) =>
+        sectors
+          .filter(
+            (sector, at) =>
+              sector.tag !== undefined &&
+              pointInPolygon({ x: thing.x, y: -thing.y }, polygons[at]),
+          )
+          .map((sector) => sector.tag),
+      ),
+  );
+  for (const [key, entry] of Object.entries(settings)) {
+    const action = entry.action;
+    if (
+      (action?.kind !== "teleport" && action?.kind !== "teleport-monsters") ||
+      landings.has(action.tag)
+    ) {
+      continue;
+    }
+    delete entry.action;
+    if (Object.keys(entry).length === 0) delete settings[key];
+    const group = "Teleporters to multiplayer spots";
+    report.droppedActions[group] = (report.droppedActions[group] ?? 0) + 1;
+  }
 
   const used = new Set(sectors.flatMap((sector) => sector.vertices));
   const vertices = Object.fromEntries(
