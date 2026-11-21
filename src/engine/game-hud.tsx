@@ -374,7 +374,7 @@ function NoteForm({ onSave }: { onSave: (text: string) => void }) {
         aria-label="Note"
         maxLength={280}
         placeholder="What should change here?"
-        className="text-input min-w-0 flex-1"
+        className="input min-w-0 flex-1"
         value={text}
         onChange={(event) => setText(event.target.value)}
       />

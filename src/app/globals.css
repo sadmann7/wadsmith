@@ -13,7 +13,7 @@
   --color-surface-hover: oklch(0.304 0.013 72.4);
   --color-border: oklch(0.288 0.011 73.5);
   --color-border-strong: oklch(0.332 0.014 76.4);
-  --color-border-control: oklch(0.521 0.018 77);
+  --color-input: oklch(0.521 0.018 77);
   --color-fg: oklch(0.936 0.015 80.7);
   --color-fg-soft: oklch(0.857 0.018 81.3);
   --color-fg-muted: oklch(0.699 0.021 80.1);
@@ -21,6 +21,7 @@
   --color-accent: oklch(0.702 0.196 40.7);
   --color-accent-fg: oklch(0.161 0.024 47.1);
   --color-selection: oklch(0.702 0.196 40.7);
+  --color-ring: oklch(0.702 0.196 40.7);
   --color-danger: oklch(0.654 0.195 26.8);
   --color-danger-soft: oklch(0.253 0.059 25.3);
   --color-danger-soft-fg: oklch(0.908 0.048 24.5);
@@ -99,8 +100,19 @@
   }
 
   :focus-visible {
-    outline: 2px solid var(--color-selection);
+    outline: 2px solid var(--color-ring);
     outline-offset: 1px;
+  }
+
+  .number:has(:focus-visible),
+  .input-box:has(:focus-visible) {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 1px;
+  }
+
+  .number :focus-visible,
+  .input-box :focus-visible {
+    outline: none;
   }
 
   .app {
@@ -151,9 +163,9 @@
     justify-content: space-between;
     min-height: 30px;
     padding: 4px 10px;
-    border: 1px solid var(--color-border-control);
+    border: 1px solid var(--color-input);
     border-radius: 6px;
-    background: var(--color-surface-raised);
+    background: transparent;
     white-space: nowrap;
     cursor: default;
   }
@@ -708,16 +720,16 @@
     width: 100%;
   }
 
-  .text-input,
+  .input,
   .number {
     width: 100%;
     min-height: 30px;
-    border: 1px solid var(--color-border-control);
+    border: 1px solid var(--color-input);
     border-radius: 6px;
-    background: var(--color-canvas);
+    background: transparent;
   }
 
-  .text-input {
+  .input {
     padding: 4px 8px;
   }
 
@@ -729,7 +741,13 @@
 
   .number button {
     border: 0;
-    background: var(--color-surface-raised);
+    background: transparent;
+    color: var(--color-fg-muted);
+  }
+
+  .number button:hover:not(:disabled) {
+    background: var(--color-surface-hover);
+    color: var(--color-fg);
   }
 
   .number input {
@@ -1285,7 +1303,7 @@
     margin-top: 2px;
   }
 
-  .text-input,
+  .input,
   .number {
     border-radius: 3px;
   }

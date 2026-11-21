@@ -119,7 +119,7 @@ function MapDialog({
               <label className="field">
                 <span className="label">Name</span>
                 <Input
-                  className="text-input"
+                  className="input"
                   maxLength={maxNameLength}
                   value={name}
                   onValueChange={setName}
@@ -154,7 +154,7 @@ function MapDialog({
                 <label className="field">
                   <span className="label">Description</span>
                   <Input
-                    className="text-input"
+                    className="input"
                     maxLength={maxDescriptionLength}
                     value={description}
                     onValueChange={setDescription}
@@ -163,7 +163,7 @@ function MapDialog({
                 <label className="field">
                   <span className="label">Par time</span>
                   <Input
-                    className="text-input"
+                    className="input"
                     aria-invalid={parValue === undefined}
                     placeholder="2:15"
                     value={par}
