@@ -1,9 +1,12 @@
 import { isPlayerStart } from "./catalog";
 import {
-  pointInPolygon,
+  containerOf,
+  loopEdges,
+  pointInSector,
   sectorAt,
   sectorEdges,
   sectorPolygon,
+  sectorVertices,
   signedArea,
   wallKey,
   wallOwners,
@@ -246,12 +249,15 @@ function setRoomWalls(map: GameMap, id: string, wallTexture: string): GameMap {
   );
 }
 
-function pruneLines(map: GameMap, removed: string): GameMap {
+function pruneLines(map: GameMap, removed?: string): GameMap {
   const owners = wallOwners(map);
   const lines: Record<string, LineSettings | undefined> = {};
   for (const [wall, line] of Object.entries(map.lines ?? {})) {
     if (!owners.has(wall)) continue;
-    const sides = { ...line.sides, [removed]: undefined };
+    const sides = {
+      ...line.sides,
+      ...(removed ? { [removed]: undefined } : {}),
+    };
     lines[wall] = withoutUnset({
       ...line,
       sides: withoutUnset(sides),
@@ -352,14 +358,14 @@ function snapCorners(map: GameMap, ids: string[]): GameMap {
 
 function connectedCorners(map: GameMap, ids: string[]) {
   const rooms = map.sectors.filter((sector) =>
-    sector.vertices.some((vertex) => ids.includes(vertex)),
+    sectorVertices(sector).some((vertex) => ids.includes(vertex)),
   );
-  return [...new Set(rooms.flatMap((sector) => sector.vertices))];
+  return [...new Set(rooms.flatMap(sectorVertices))];
 }
 
 function removeSector(map: GameMap, id: string): GameMap {
   const sectors = map.sectors.filter((sector) => sector.id !== id);
-  const used = new Set(sectors.flatMap((sector) => sector.vertices));
+  const used = new Set(sectors.flatMap(sectorVertices));
   return pruneLines(
     {
       ...map,
@@ -423,7 +429,10 @@ function freeWalls(map: GameMap): FreeWall[] {
       sectorEdges(sector)
         .filter(({ from, to }) => {
           const key = wallKey(from, to);
-          return owners.get(key)?.length === 1 && !taken.has(key);
+          const owning = owners.get(key);
+          return (
+            owning?.length === 1 && owning[0] === sector && !taken.has(key)
+          );
         })
         .map(({ from, to }) => ({ sector: sector.id, from, to })),
     );
@@ -435,7 +444,11 @@ function freeWallAt(map: GameMap, wall: string) {
   );
 }
 
-function distanceToWall(map: GameMap, wall: FreeWall, point: Point) {
+function distanceToWall(
+  map: GameMap,
+  wall: { from: string; to: string },
+  point: Point,
+) {
   const a = map.vertices[wall.from];
   const b = map.vertices[wall.to];
   const dx = b.x - a.x;
@@ -467,17 +480,16 @@ function freeWallNear(map: GameMap, point: Point, reach: number) {
 function wallNear(map: GameMap, point: Point, reach: number) {
   let best: { sector: string; wall: string } | null = null;
   let bestDistance = reach;
-  for (const sector of map.sectors) {
-    const inside = pointInPolygon(point, sectorPolygon(map, sector));
-    for (const { from, to } of sectorEdges(sector)) {
-      const distance = distanceToWall(
-        map,
-        { sector: sector.id, from, to },
-        point,
-      );
+  const under = sectorAt(map, point);
+  for (const [wall, owners] of wallOwners(map)) {
+    const [from, to] = wall.split("|");
+    const distance = distanceToWall(map, { from, to }, point);
+    if (distance > bestDistance + 0.001) continue;
+    for (const sector of owners) {
+      const inside = sector === under;
       const isTie = Math.abs(distance - bestDistance) < 0.001;
       if (isTie ? inside || !best : distance < bestDistance) {
-        best = { sector: sector.id, wall: wallKey(from, to) };
+        best = { sector: sector.id, wall };
         bestDistance = distance;
       }
     }
@@ -545,18 +557,32 @@ function addSwitch(
             [wallKey(second, wall.to)]: remainder,
           })
         : map.lines,
+      // Every outline along the wall splits with it, so a pillar a room was
+      // drawn against keeps the same corners.
       sectors: map.sectors.map((sector) => {
-        if (sector.id !== wall.sector) return sector;
-        const loop = sector.vertices.flatMap((vertex, index) => {
-          const next = sector.vertices[(index + 1) % sector.vertices.length];
-          return vertex === wall.from && next === wall.to
-            ? [vertex, first, second]
-            : [vertex];
-        });
-        const painted = sector.wallOverrides?.[wallKey(wall.from, wall.to)];
+        if (
+          !sectorEdges(sector).some(
+            (edge) => wallKey(edge.from, edge.to) === key,
+          )
+        ) {
+          return sector;
+        }
+        const split = (loop: string[]) =>
+          loop.flatMap((vertex, index) => {
+            const next = loop[(index + 1) % loop.length];
+            if (vertex === wall.from && next === wall.to) {
+              return [vertex, first, second];
+            }
+            if (vertex === wall.to && next === wall.from) {
+              return [vertex, second, first];
+            }
+            return [vertex];
+          });
+        const painted = sector.wallOverrides?.[key];
         return {
           ...sector,
-          vertices: loop,
+          vertices: split(sector.vertices),
+          ...(sector.holes ? { holes: sector.holes.map(split) } : {}),
           wallOverrides: painted
             ? {
                 ...sector.wallOverrides,
@@ -663,8 +689,11 @@ function addRoomOnSide(
   const normal = sideNormals[side];
   const taken = new Map<string, number>();
   for (const other of map.sectors) {
-    if (other.id === sector.id) continue;
-    for (const edge of sectorEdges(other)) {
+    const edges =
+      other.id === sector.id
+        ? (other.holes ?? []).flatMap(loopEdges)
+        : sectorEdges(other);
+    for (const edge of edges) {
       taken.set([edge.from, edge.to].toSorted().join("|"), 1);
     }
   }
@@ -673,7 +702,7 @@ function addRoomOnSide(
   }
 
   let best: { from: string; to: string; score: number } | null = null;
-  for (const edge of sectorEdges(sector)) {
+  for (const edge of loopEdges(sector.vertices)) {
     if (taken.has([edge.from, edge.to].toSorted().join("|"))) continue;
     const a = map.vertices[edge.from];
     const b = map.vertices[edge.to];
@@ -714,14 +743,121 @@ function roomCenter(map: GameMap, sector: Sector): Point {
     x: polygon.reduce((sum, point) => sum + point.x, 0) / polygon.length,
     y: polygon.reduce((sum, point) => sum + point.y, 0) / polygon.length,
   };
-  if (pointInPolygon(average, polygon)) return snapPoint(average);
+  if (pointInSector(map, sector, average)) return snapPoint(average);
   for (let index = 0; index < polygon.length; index += 1) {
     const before = polygon[index];
     const after = polygon[(index + 2) % polygon.length];
     const middle = { x: (before.x + after.x) / 2, y: (before.y + after.y) / 2 };
-    if (pointInPolygon(middle, polygon)) return snapPoint(middle);
+    if (pointInSector(map, sector, middle)) return snapPoint(middle);
   }
   return snapPoint(polygon[0]);
+}
+
+function withHoles(sector: Sector, holes: string[][]): Sector {
+  const next: Sector = { ...sector, holes };
+  if (holes.length === 0) delete next.holes;
+  return next;
+}
+
+// Corners no outline uses any more go, and so do the switches and settings
+// on the walls that went with them.
+function pruneUnused(map: GameMap): GameMap {
+  const used = new Set(map.sectors.flatMap(sectorVertices));
+  const pruned = {
+    ...map,
+    vertices: Object.fromEntries(
+      Object.entries(map.vertices).filter(([vertex]) => used.has(vertex)),
+    ),
+  };
+  const owners = wallOwners(pruned);
+  return pruneLines({
+    ...pruned,
+    switches: map.switches.filter((item) =>
+      owners.has(wallKey(item.from, item.to)),
+    ),
+  });
+}
+
+// Takes a room out of the one around it and leaves its shape as solid wall.
+function makePillar(map: GameMap, id: string): GameMap | null {
+  const sector = map.sectors.find((item) => item.id === id);
+  const container = sector && containerOf(map, sector);
+  if (!sector || !container || sector.door || sector.holes?.length) return null;
+  const sectors = map.sectors
+    .filter((item) => item.id !== id)
+    .map((item) =>
+      item.id === container.id
+        ? withHoles(item, [...(item.holes ?? []), sector.vertices])
+        : item,
+    );
+  return pruneUnused(
+    pruneLines(
+      {
+        ...map,
+        sectors,
+        switches: map.switches
+          .filter((item) => item.sector !== id)
+          .map((item) => (item.door === id ? { ...item, door: null } : item)),
+      },
+      id,
+    ),
+  );
+}
+
+// Turns a pillar back into a room that matches the one around it.
+function fillHole(
+  map: GameMap,
+  id: string,
+  index: number,
+): { map: GameMap; id: string } | null {
+  const sector = map.sectors.find((item) => item.id === id);
+  const hole = sector?.holes?.[index];
+  if (!sector || !hole) return null;
+  const roomId = nextId(
+    "sector-",
+    map.sectors.map((item) => item.id),
+  );
+  return {
+    id: roomId,
+    map: {
+      ...map,
+      sectors: [
+        ...map.sectors.map((item) =>
+          item.id === id
+            ? withHoles(
+                item,
+                sector.holes!.filter((_, at) => at !== index),
+              )
+            : item,
+        ),
+        {
+          id: roomId,
+          vertices: hole,
+          ...roomDefaults(map.sectors.length + 1),
+          floor: sector.floor,
+          ceiling: sector.ceiling,
+          light: sector.light,
+          floorTexture: sector.floorTexture,
+          ceilingTexture: sector.ceilingTexture,
+          wallTexture: sector.wallTexture,
+        },
+      ],
+    },
+  };
+}
+
+function removeHole(map: GameMap, id: string, index: number): GameMap {
+  return pruneUnused({
+    ...map,
+    sectors: map.sectors.map((sector) =>
+      sector.id === id && sector.holes
+        ? withHoles(
+            sector,
+            sector.holes.filter((_, at) => at !== index),
+          )
+        : sector,
+    ),
+  });
 }
 
 export {
@@ -739,11 +875,14 @@ export {
   doorKeyPrefix,
   duplicateThings,
   faceThings,
+  fillHole,
   findVertexAt,
   freeWallAt,
   freeWallNear,
   gridSize,
+  makePillar,
   positionsOf,
+  removeHole,
   removeNote,
   removeSector,
   removeSwitch,

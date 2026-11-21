@@ -24,6 +24,7 @@ Maps save per browser address. The dev server now uses `localhost:3000`, so a ma
 
 - **Select:** drag corners and things, click a room to edit it, and drag empty space to pan.
 - **Draw room:** click corners, then click the first corner or press Enter. Reuse another room's corners to connect the two.
+- **Rooms inside rooms:** draw a room inside another for a platform, a pit or an island. Choose **Make pillar** on it to turn it into solid wall, and right-click a pillar to make it a room again or delete it.
 - **Place:** pick a thing and click inside a room.
 - **Switch:** click a solid wall to add a switch, then drag from it to a door.
 - **Doors:** draw a thin room between two rooms and turn on **Door** in the inspector. It can open with the use key or a switch, and close again or stay open.

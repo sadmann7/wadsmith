@@ -684,6 +684,7 @@
 
   .map-sector {
     fill: var(--color-map-sector);
+    fill-rule: evenodd;
   }
 
   .map-sector[data-active] {

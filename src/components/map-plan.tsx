@@ -1,6 +1,13 @@
 import * as React from "react";
 
-import { sectorAt, wallOwners } from "../map/geometry";
+import {
+  loopsPath,
+  paintOrder,
+  sectorAt,
+  sectorHoles,
+  sectorPolygon,
+  wallOwners,
+} from "../map/geometry";
 import { endsLevel, movesSector } from "../map/lines";
 import type { GameMap, Sector } from "../map/types";
 
@@ -79,11 +86,12 @@ function MapPlan({
     const kinds = sectorKinds(map);
     return {
       viewBox: `${left - pad} ${top - pad} ${width + pad * 2} ${height + pad * 2}`,
-      rooms: map.sectors.map((sector) => ({
+      rooms: paintOrder(map).map((sector) => ({
         id: sector.id,
-        points: sector.vertices
-          .map((id) => `${map.vertices[id].x},${map.vertices[id].y}`)
-          .join(" "),
+        path: loopsPath([
+          sectorPolygon(map, sector),
+          ...sectorHoles(map, sector),
+        ]),
         color: kindColors[kinds.get(sector.id) ?? "floor"],
       })),
       walls: [...wallOwners(map)]
@@ -103,7 +111,12 @@ function MapPlan({
       viewBox={viewBox}
     >
       {rooms.map((room) => (
-        <polygon key={room.id} points={room.points} fill={room.color} />
+        <path
+          key={room.id}
+          d={room.path}
+          fillRule="evenodd"
+          fill={room.color}
+        />
       ))}
       {walls.map(({ key, from, to }) => (
         <line

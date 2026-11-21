@@ -3,7 +3,7 @@ import * as React from "react";
 
 import { thingCatalog } from "../map/catalog";
 import { doorKeyPrefix, switchKeyPrefix, thingKeyPrefix } from "../map/edit";
-import { sectorEdges } from "../map/geometry";
+import { paintOrder, wallOwners } from "../map/geometry";
 import type { GameMap, Sector } from "../map/types";
 import {
   MapCamera,
@@ -33,19 +33,10 @@ const noSelection: string[] = [];
 const nowhere = { left: 0, top: 0, right: -1, bottom: -1 };
 
 function wallsOf(map: GameMap) {
-  const walls = new Map<
-    string,
-    { from: string; to: string; shared: boolean }
-  >();
-  for (const sector of map.sectors) {
-    for (const { from, to } of sectorEdges(sector)) {
-      const key = from < to ? `${from}|${to}` : `${to}|${from}`;
-      const wall = walls.get(key);
-      if (wall) wall.shared = true;
-      else walls.set(key, { from, to, shared: false });
-    }
-  }
-  return [...walls].map(([key, wall]) => ({ key, ...wall }));
+  return [...wallOwners(map)].map(([key, owners]) => {
+    const [from, to] = key.split("|");
+    return { key, from, to, shared: owners.length > 1 };
+  });
 }
 
 type Area = { left: number; top: number; right: number; bottom: number };
@@ -174,7 +165,7 @@ function MapCanvas({
   const shapes = React.useMemo(
     () => (
       <>
-        {map.sectors.map((sector) => (
+        {paintOrder(map).map((sector) => (
           <MapSector key={sector.id} value={sector.id} className="map-sector" />
         ))}
         {wallsOf(map).map((wall) => (

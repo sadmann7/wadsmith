@@ -28,6 +28,7 @@ type Sector = {
   id: string;
   name: string;
   vertices: string[];
+  holes?: string[][];
   floor: number;
   ceiling: number;
   light: number;

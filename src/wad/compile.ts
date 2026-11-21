@@ -1,6 +1,9 @@
 import { doorTrackTexture, sectorEffects, thingCatalog } from "../map/catalog";
 import {
-  sectorEdges,
+  loopEdges,
+  sectorContainers,
+  sectorLoops,
+  sectorVertices,
   signedArea,
   wallKey,
   wallPartTexture,
@@ -71,11 +74,11 @@ function toDoom(point: Point): Point {
   return { x: Math.round(point.x), y: -Math.round(point.y) };
 }
 
-function clockwiseLoop(map: GameMap, sector: Sector) {
-  const polygon = sector.vertices.map((id) => toDoom(map.vertices[id]));
-  return signedArea(polygon) > 0
-    ? { ...sector, vertices: sector.vertices.toReversed() }
-    : sector;
+// A room sits on the right of its outer walls as the engine reads them, and
+// on the right of a pillar's walls when they run the other way round.
+function orientLoop(map: GameMap, loop: string[], pillar: boolean) {
+  const area = signedArea(loop.map((id) => toDoom(map.vertices[id])));
+  return (pillar ? area < 0 : area > 0) ? loop.toReversed() : loop;
 }
 
 function writeBox(writer: LumpWriter, box: Box) {
@@ -84,57 +87,100 @@ function writeBox(writer: LumpWriter, box: Box) {
 
 type LevelLine = NodeLine & { wall: string };
 
+type WallSide = { sector: number; from: string; to: string; pillar: boolean };
+
 function buildLevel(map: GameMap) {
-  const used = new Set(map.sectors.flatMap((sector) => sector.vertices));
+  const used = new Set(map.sectors.flatMap(sectorVertices));
   const vertexIds = Object.keys(map.vertices).filter((id) => used.has(id));
   const vertexIndex = new Map(vertexIds.map((id, index) => [id, index]));
   const vertices = vertexIds.map((id) => toDoom(map.vertices[id]));
-  const sectors = map.sectors.map((sector) => clockwiseLoop(map, sector));
+  const { sectors } = map;
+  const indexOf = new Map(sectors.map((sector, index) => [sector.id, index]));
+  const containers = sectorContainers(map);
 
-  const owners = new Map<string, number>();
+  const sides = new Map<string, WallSide[]>();
   sectors.forEach((sector, index) => {
-    for (const edge of sectorEdges(sector)) {
-      const key = `${edge.from}>${edge.to}`;
-      if (owners.has(key)) {
-        throw new Error(`${sector.name} overlaps another room's wall.`);
+    sectorLoops(sector).forEach((loop, at) => {
+      for (const { from, to } of loopEdges(orientLoop(map, loop, at > 0))) {
+        const key = wallKey(from, to);
+        sides.set(key, [
+          ...(sides.get(key) ?? []),
+          { sector: index, from, to, pillar: at > 0 },
+        ]);
       }
-      owners.set(key, index);
-    }
+    });
   });
+
+  // A room drawn against a pillar covers that side of it, so the wall there
+  // is the room's alone.
+  const covers = (room: WallSide, pillar: WallSide) =>
+    pillar.pillar &&
+    containers.get(sectors[room.sector].id) === sectors[pillar.sector];
 
   const lines: LevelLine[] = [];
-  const done = new Set<string>();
-  sectors.forEach((sector, index) => {
-    for (const edge of sectorEdges(sector)) {
-      if (done.has(`${edge.from}>${edge.to}`)) continue;
-      const reverse = owners.get(`${edge.to}>${edge.from}`);
-      // The engine opens the sector behind a used line, so doors stay on the back.
-      if (sector.door && reverse !== undefined) {
-        if (sectors[reverse].door) {
-          throw new Error(`${sector.name} touches another door.`);
-        }
-        continue;
+  for (const [wall, listed] of sides) {
+    let list = listed;
+    let covered = false;
+    if (listed.length === 2) {
+      const [a, b] = listed;
+      if (covers(a, b)) {
+        list = [a];
+        covered = true;
+      } else if (covers(b, a)) {
+        list = [b];
+        covered = true;
       }
-      const wall = wallKey(edge.from, edge.to);
-      // A line's chosen front room builds it, so that room ends up in front.
-      if (
-        reverse !== undefined &&
-        !sectors[reverse].door &&
-        map.lines?.[wall]?.front === sectors[reverse].id
-      ) {
-        continue;
-      }
-      done.add(`${edge.from}>${edge.to}`);
-      done.add(`${edge.to}>${edge.from}`);
+    }
+    const [side, other] = list;
+    if (list.length > 2) {
+      throw new Error(
+        `${sectors[side.sector].name} shares a wall with two rooms.`,
+      );
+    }
+    if (other && other.from === side.from) {
+      throw new Error(
+        `${sectors[side.sector].name} overlaps another room's wall.`,
+      );
+    }
+    const start = vertexIndex.get(side.from)!;
+    const end = vertexIndex.get(side.to)!;
+    // A room drawn inside another opens onto it wherever no other room
+    // shares the wall.
+    const container =
+      side.pillar || covered ? null : containers.get(sectors[side.sector].id);
+    const behind =
+      other?.sector ?? (container ? indexOf.get(container.id)! : null);
+    if (behind === null) {
       lines.push({
-        start: vertexIndex.get(edge.from)!,
-        end: vertexIndex.get(edge.to)!,
-        frontSector: index,
-        backSector: reverse ?? null,
+        start,
+        end,
+        frontSector: side.sector,
+        backSector: null,
         wall,
       });
+      continue;
     }
-  });
+    const front = sectors[side.sector];
+    const back = sectors[behind];
+    if (front.door && back.door) {
+      throw new Error(`${front.name} touches another door.`);
+    }
+    // The engine opens the sector behind a used line, so doors stay on the
+    // back, and a line's chosen front room ends up in front.
+    const flipped =
+      front.door || (!back.door && map.lines?.[wall]?.front === back.id);
+    lines.push(
+      flipped
+        ? {
+            start: end,
+            end: start,
+            frontSector: behind,
+            backSector: side.sector,
+            wall,
+          }
+        : { start, end, frontSector: side.sector, backSector: behind, wall },
+    );
+  }
 
   return { vertices, sectors, lines };
 }
