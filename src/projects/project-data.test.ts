@@ -239,6 +239,21 @@ describe("episode order", () => {
   it("names a map with no exit", () => {
     expect(mapStatus(episodeMaps("p", "one")[0]).label).toBe("No exit yet");
   });
+
+  it("names a map that passes its checks but won't build", () => {
+    const [entry] = episodeMaps("p", "one");
+    const [room] = entry.map.sectors;
+    const overlapping = {
+      ...entry,
+      map: {
+        ...entry.map,
+        sectors: [...entry.map.sectors, { ...room, id: `${room.id}-copy` }],
+      },
+    };
+    const status = mapStatus(overlapping);
+    expect(status.kind).toBe("error");
+    expect(status.label).toBe("Won't build");
+  });
 });
 
 describe("project maps", () => {

@@ -20,7 +20,6 @@ import { App } from "../editor/editor-app";
 import { PlayTogether, type HostedGame } from "../engine/play-together";
 import { GameView, type Level } from "../engine/play-panel";
 import type { GameFiles, Skill } from "../engine/runtime";
-import { checkMap } from "../map/checks";
 import { featuredMaps, type FeaturedMap } from "../map/featured";
 import {
   MapFileError,
@@ -119,11 +118,7 @@ function download(name: string, data: BlobPart, type: string) {
 
 function blockedOf(ordered: ProjectMap[]) {
   return ordered
-    .filter(
-      (entry) =>
-        entry.broken ||
-        checkMap(entry.map).some((issue) => issue.severity === "error"),
-    )
+    .filter((entry) => mapStatus(entry).kind === "error")
     .map((entry) => entry.slot);
 }
 

@@ -3,6 +3,7 @@ import { checkMap } from "../map/checks";
 import { blankMap, starterMap } from "../map/starter-map";
 import { loadSavedMap, MapFileError, parseMap } from "../map/storage";
 import type { GameMap } from "../map/types";
+import { compileMap } from "../wad/compile";
 import { featuredMaps } from "../map/featured";
 
 type Project = { id: string; name: string; createdAt: number };
@@ -107,19 +108,32 @@ function mapName({ map }: ProjectMap) {
   return map.name ?? "Untitled map";
 }
 
+function buildProblem(map: GameMap) {
+  try {
+    compileMap(map);
+    return null;
+  } catch (error) {
+    return (error as Error).message;
+  }
+}
+
 function mapStatus(entry: ProjectMap) {
   if (entry.broken) return { kind: "error" as const, label: "Can't open" };
   const checks = checkMap(entry.map);
   const errors = checks.filter((issue) => issue.severity === "error").length;
   const warnings = checks.length - errors;
-  if (warnings === 1 && checks[0].id === "no-exit") {
-    return { kind: "warning" as const, label: "No exit yet" };
-  }
   if (errors > 0) {
     return {
       kind: "error" as const,
       label: `${errors} ${errors === 1 ? "error" : "errors"}`,
     };
+  }
+  const problem = buildProblem(entry.map);
+  if (problem) {
+    return { kind: "error" as const, label: "Won't build", detail: problem };
+  }
+  if (warnings === 1 && checks[0].id === "no-exit") {
+    return { kind: "warning" as const, label: "No exit yet" };
   }
   if (warnings > 0) {
     return {
