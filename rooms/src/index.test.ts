@@ -14,7 +14,12 @@ beforeAll(async () => {
     config: resolve(import.meta.dirname, "../wrangler.jsonc"),
     ip: "127.0.0.1",
     persist: false,
-    vars: { ROOM_IDLE_SECONDS: "2", ROOM_LIFETIME_SECONDS: "4" },
+    // A slow refill lets a flood trip the limit however slowly it arrives.
+    vars: {
+      ROOM_IDLE_SECONDS: "2",
+      ROOM_LIFETIME_SECONDS: "4",
+      ROOM_MESSAGES_PER_SECOND: "10",
+    },
     logLevel: "none",
     experimental: { disableExperimentalWarning: true },
   });

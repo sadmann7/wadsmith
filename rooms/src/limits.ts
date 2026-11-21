@@ -38,8 +38,8 @@ class ConnectionLimits {
   private readonly bytes: Budget;
   private dropped = 0;
 
-  constructor(now: number) {
-    this.messages = new Budget(300, 600, now);
+  constructor(now: number, messagesPerSecond = 300) {
+    this.messages = new Budget(messagesPerSecond, 600, now);
     this.bytes = new Budget(256 * 1024, 2 * maxTextBytes, now);
   }
 
