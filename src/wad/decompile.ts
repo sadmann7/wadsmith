@@ -543,25 +543,43 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
   }
 
   // A closed sector that nothing opens looks like solid wall, so it becomes
-  // empty space and its neighbors get plain walls.
-  const openedTags = new Set<number>();
-  const openedByUse = new Set<number>();
-  for (const line of lines) {
-    const action = actions.get(line.special);
-    if (!action || action.kind === "exit") continue;
-    if (action.trigger === "door") {
-      if (line.backSector !== null) openedByUse.add(line.backSector);
-    } else if (line.tag) {
-      openedTags.add(line.tag);
+  // empty space and its neighbors get plain walls. Nothing can walk over a
+  // line into solid wall, so each pass can close off more sectors.
+  const solid = new Set<number>();
+  for (let changed = true; changed;) {
+    changed = false;
+    const openedTags = new Set<number>();
+    const openedByUse = new Set<number>();
+    for (const line of lines) {
+      const action = actions.get(line.special);
+      if (!action || action.kind === "exit") continue;
+      if (action.trigger === "door") {
+        if (line.backSector !== null) openedByUse.add(line.backSector);
+      } else if (
+        line.tag &&
+        !(
+          action.trigger === "walk" &&
+          (line.backSector === null ||
+            solid.has(line.frontSector) ||
+            solid.has(line.backSector))
+        )
+      ) {
+        openedTags.add(line.tag);
+      }
     }
+    doom.sectors.forEach((sector, index) => {
+      if (solid.has(index) || doors.has(index)) return;
+      if (sector.ceiling > sector.floor) return;
+      if (sector.tag && openedTags.has(sector.tag)) return;
+      if (openedByUse.has(index)) return;
+      solid.add(index);
+      changed = true;
+    });
   }
-  doom.sectors.forEach((sector, index) => {
-    if (doors.has(index) || sector.ceiling > sector.floor) return;
-    if (sector.tag && openedTags.has(sector.tag)) return;
-    if (openedByUse.has(index)) return;
+  for (const index of solid) {
     if (pieces[index].length > 0) report.solidSectors += 1;
     pieces[index] = [];
-  });
+  }
 
   const ids = pieces.map((list, index) =>
     list.map((_, part) =>

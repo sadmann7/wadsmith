@@ -34,7 +34,12 @@ import {
   wallTarget,
 } from "../editor/map-target";
 import { sectorAt, wallKey } from "../map/geometry";
-import { fitLineAction, newLineAction, triggersFor } from "../map/lines";
+import {
+  fitLineAction,
+  lineActions,
+  newLineAction,
+  triggersFor,
+} from "../map/lines";
 import { mapBalance } from "../map/balance";
 import {
   ceilingTextures,
@@ -1189,6 +1194,17 @@ describe("map check", () => {
     expect(warned(1088, 96)).toBe(true);
     expect(warned(1088, 100)).toBe(true);
     expect(warned(1088, -128)).toBe(false);
+  });
+
+  it("gives every line action its own Doom specials", () => {
+    const specials = Object.values(lineActions).flatMap(({ triggers, keys }) =>
+      [
+        ...Object.values(triggers),
+        ...Object.values(keys ?? {}).flatMap((colors) => Object.values(colors)),
+      ].flatMap(({ once, repeat }) => [once, repeat]),
+    );
+    const defined = specials.filter((special) => special !== undefined);
+    expect(new Set(defined).size).toBe(defined.length);
   });
 
   it("gives every thing its own Doom number", () => {

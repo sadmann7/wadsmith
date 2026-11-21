@@ -104,6 +104,20 @@ function pressesOf(map: GameMap): Press[] {
         height: (game) => game.sectorFloor(target),
         done: (game, before) => game.sectorFloor(target) < before - 56,
       });
+    } else if (action.kind.startsWith("ceiling-lower")) {
+      presses.push({
+        label: `pressing lowers the ceiling of ${map.sectors[target].name}`,
+        map: placed,
+        height: (game) => game.sectorCeiling(target),
+        done: (game, before) => game.sectorCeiling(target) < before - 32,
+      });
+    } else if (action.kind.startsWith("floor-raise")) {
+      presses.push({
+        label: `pressing raises ${map.sectors[target].name}`,
+        map: placed,
+        height: (game) => game.sectorFloor(target),
+        done: (game, before) => game.sectorFloor(target) > before + 32,
+      });
     }
   }
   return presses;
@@ -182,6 +196,31 @@ describe.skipIf(!ready)("fast actions in the engine", () => {
       await ticsToFinish(doors(false), "switch opens"),
     );
   }, 60_000);
+});
+
+describe.skipIf(!ready)("floor and ceiling actions in the engine", () => {
+  const withLift = (kind: LineActionKind): GameMap => ({
+    ...starterMap,
+    lines: Object.fromEntries(
+      Object.entries(starterMap.lines ?? {}).map(([wall, line]) => [
+        wall,
+        line.action?.kind === "lift"
+          ? { ...line, action: { ...line.action, kind, repeat: false } }
+          : line,
+      ]),
+    ),
+  });
+
+  it.each<[LineActionKind, string]>([
+    ["ceiling-lower", "pressing lowers the ceiling"],
+    ["floor-raise-512", "pressing raises"],
+  ])(
+    "moves the sector a %s switch targets",
+    async (kind, label) => {
+      expect(await ticsToFinish(withLift(kind), label)).toBeGreaterThan(0);
+    },
+    30_000,
+  );
 });
 
 describe.skipIf(!ready)("an episode in the engine", () => {
