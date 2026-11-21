@@ -562,6 +562,7 @@ function WallMenu({
                 action: action
                   ? fitLineAction({ ...action, kind }, line.twoSided)
                   : newLineAction(line.twoSided, kind),
+                scrolls: undefined,
               }),
             );
           }}

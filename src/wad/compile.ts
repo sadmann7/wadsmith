@@ -30,6 +30,7 @@ const specialDoorRaise = 1;
 const specialDoorOpen = 31;
 const specialSwitchDoorRaise = 63;
 const specialSwitchDoorOpen = 61;
+const specialScrollLeft = 48;
 const thingSkillFlags: Record<ThingSkill, number> = {
   easy: 0x0001,
   medium: 0x0002,
@@ -273,6 +274,7 @@ function compileLumps(map: GameMap, slot = mapLumpName): Lump[] {
       special = lineSpecial(settings.action) ?? 0;
       tag = lineUsesTag(settings.action) ? settings.action.tag : 0;
     }
+    if (settings?.scrolls && special === 0) special = specialScrollLeft;
 
     linedefs
       .int16(line.start)

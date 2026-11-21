@@ -233,6 +233,39 @@ describe("decompileMap", () => {
     expect(parseMapFile(serializeMap(map))).toEqual(map);
   });
 
+  it("keeps scrolling walls on the side that scrolls", () => {
+    const build = doomMap();
+    const hall = build.sector();
+    const room = build.sector({ light: 200 });
+    const [a, b, c, d] = box(build, hall, [0, 0, 256, 256]);
+    build.map.lines.length = 0;
+    build.map.sides.length = 0;
+    const e = build.vertex(512, 256);
+    const f = build.vertex(512, 0);
+    build.line(a, b, hall, null, { special: 48 });
+    build.line(b, c, hall);
+    build.line(d, c, room, hall, { special: 48 });
+    build.line(d, a, hall);
+    build.line(c, e, room);
+    build.line(e, f, room);
+    build.line(f, d, room);
+    build.map.things.push({ x: 64, y: 64, angle: 0, type: 1, flags: 7 });
+
+    const { map, report } = decompileMap(build.map);
+    expect(report.droppedActions).toEqual({});
+    const scrolling = Object.values(map.lines ?? {}).filter(
+      (line) => line.scrolls,
+    );
+    expect(scrolling).toHaveLength(2);
+    expect(scrolling.find((line) => line.front)?.front).toBe("s1");
+    const [doom] = readMaps([{ name: "map.wad", data: compileMap(map) }]);
+    const lines = doom.lines.filter((item) => item.special === 48);
+    expect(lines).toHaveLength(2);
+    const open = lines.find((item) => item.back !== null)!;
+    expect(doom.sectors[doom.sides[open.front!].sector].light).toBe(200);
+    expect(parseMapFile(serializeMap(map))).toEqual(map);
+  });
+
   it("reports what the editor can't hold yet", () => {
     const build = doomMap();
     const room = build.sector({ special: 4 });
@@ -244,7 +277,7 @@ describe("decompileMap", () => {
     const f = build.vertex(512, 0);
     build.line(a, b, room, null, { middle: "BTSXWALL" });
     build.line(b, c, room);
-    build.line(c, d, room, next, { special: 48, middle: "MIDGRATE" });
+    build.line(c, d, room, next, { special: 49, middle: "MIDGRATE" });
     build.line(d, a, room);
     build.line(c, e, next);
     build.line(e, f, next);
@@ -262,7 +295,7 @@ describe("decompileMap", () => {
       droppedThings: { "Other things": 1 },
       multiplayerThings: 1,
       outsideThings: 1,
-      droppedActions: { "Scrolling walls": 1 },
+      droppedActions: { Crushers: 1 },
       droppedEffects: 1,
       seeThroughWalls: 1,
       replacedTextures: ["BTSXFLAT", "BTSXWALL"],
