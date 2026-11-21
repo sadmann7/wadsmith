@@ -291,7 +291,7 @@ type AppProps = {
   saveStatus: "saving" | "saved" | "failed" | "session";
   onSave: (map: GameMap) => void;
   watchExternal: (listener: (map: GameMap) => void) => () => void;
-  onOpenProjects: () => void;
+  onOpenEpisodes: () => void;
   navigation: ReactNode;
   onNewMap: () => void;
   onMapSettings: () => void;
@@ -323,7 +323,7 @@ function App({
   saveStatus,
   onSave,
   watchExternal,
-  onOpenProjects,
+  onOpenEpisodes,
   navigation,
   onNewMap,
   onMapSettings,
@@ -1005,7 +1005,7 @@ function App({
 
   const runFileAction = (action: string) => {
     if (action === "new") onNewMap();
-    else if (action === "projects") onOpenProjects();
+    else if (action === "episodes") onOpenEpisodes();
     else if (action === "settings") onMapSettings();
     else if (action === "open") fileInput.current?.click();
     else if (action === "save") {
@@ -1048,7 +1048,7 @@ function App({
             canAddMap={episode.canAddMap}
             onOpenMap={episode.onOpenMap}
             onAddMap={onNewMap}
-            onEpisodeHome={onOpenProjects}
+            onEpisodeHome={onOpenEpisodes}
           />
           <span className="separator" aria-hidden="true" />
           <div className="flex items-center gap-4">
@@ -1057,7 +1057,7 @@ function App({
                 File
               </MenuTrigger>
               <MenuContent>
-                <MenuItem value="projects">Episode home</MenuItem>
+                <MenuItem value="episodes">Episode home</MenuItem>
                 <MenuItem value="new">New map…</MenuItem>
                 <MenuItem value="settings">Map settings…</MenuItem>
                 <MenuItem value="open">Replace with map file…</MenuItem>

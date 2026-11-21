@@ -12,7 +12,7 @@ import {
   parsePar,
   templates,
   type MapTemplate,
-  type ProjectMap,
+  type EpisodeMap,
 } from "./episode-data";
 import { Button } from "../components/ui/button";
 import { Field, FieldItem, FieldLabel, Label } from "../components/ui/field";
@@ -51,8 +51,8 @@ function MapDialog({
   onSubmit,
   onClose,
 }: {
-  maps: ProjectMap[];
-  entry?: ProjectMap;
+  maps: EpisodeMap[];
+  entry?: EpisodeMap;
   onSubmit: (details: MapDetails) => Promise<string | null>;
   onClose: () => void;
 }) {

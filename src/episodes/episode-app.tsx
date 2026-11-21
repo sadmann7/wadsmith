@@ -38,33 +38,33 @@ import {
   bySlot,
   createMapEntry,
   createMapSaver,
-  createProject,
+  createEpisode,
   episodeMaps,
   freeSlots,
   isSlotConflict,
   lastMapKey,
-  lastProjectKey,
+  lastEpisodeKey,
   mapFromTemplate,
   mapName,
   mapStatus,
   maxBackupBytes,
-  parseProjectBackup,
-  prepareProjects,
-  serializeProject,
+  parseEpisodeBackup,
+  prepareEpisodes,
+  serializeEpisode,
   slotMoves,
-  type Project,
-  type ProjectMap,
-  type ProjectStore,
+  type Episode,
+  type EpisodeMap,
+  type EpisodeStore,
 } from "./episode-data";
 import { SidebarDrawer, type SidebarProps } from "./app-sidebar";
 import { checkBuild, knownBuildProblem, useBuildChecks } from "./build-checks";
 import { EpisodeBuildDialog } from "./episode-build-dialog";
 import { FeaturedMaps } from "./featured-maps";
-import { ProjectHome } from "./episode-home";
+import { EpisodeHome } from "./episode-home";
 import { WadImportDialog, type ImportedMap } from "./wad-import-dialog";
 import { WadPlayDialog } from "./wad-play-dialog";
 import { findEpisode, parseRoute, pathOf, type Route } from "./routes";
-import { createMemoryStore, openProjectStore } from "./episode-store";
+import { createMemoryStore, openEpisodeStore } from "./episode-store";
 import { Button } from "../components/ui/button";
 import {
   AlertDialog,
@@ -77,14 +77,14 @@ import { Alert } from "../components/ui/alert";
 
 type Session = {
   id: string;
-  projectId: string;
+  episodeId: string;
   initialMap: GameMap;
   saver: ReturnType<typeof createMapSaver>;
 };
 
 type SessionDetails = { name: string; slot: string; par: number | null };
 type SaveStatus = "saving" | "saved" | "failed";
-type HomeView = "projects" | "featured";
+type HomeView = "episodes" | "featured";
 
 const channelName = "wadsmith";
 const saveFailure = "Your browser couldn't save that change.";
@@ -94,16 +94,16 @@ let preparing: ReturnType<typeof openPreparedStore> | null = null;
 function viewOfPath(): HomeView {
   return parseRoute(location.pathname).kind === "featured"
     ? "featured"
-    : "projects";
+    : "episodes";
 }
 
-async function prepared(store: ProjectStore) {
-  return { store, ready: await prepareProjects(store) };
+async function prepared(store: EpisodeStore) {
+  return { store, ready: await prepareEpisodes(store) };
 }
 
 async function openPreparedStore() {
   try {
-    return await prepared(await openProjectStore());
+    return await prepared(await openEpisodeStore());
   } catch {
     return prepared(createMemoryStore());
   }
@@ -119,7 +119,7 @@ function download(name: string, data: BlobPart, type: string) {
 }
 
 function blockedOf(
-  ordered: ProjectMap[],
+  ordered: EpisodeMap[],
   problems: (string | null | undefined)[],
 ) {
   return ordered
@@ -129,7 +129,7 @@ function blockedOf(
     .map((entry) => entry.slot);
 }
 
-function levelsOf(ordered: ProjectMap[]): Level[] {
+function levelsOf(ordered: EpisodeMap[]): Level[] {
   return ordered.map((entry) => ({
     map: entry.map,
     title: mapName(entry),
@@ -138,7 +138,7 @@ function levelsOf(ordered: ProjectMap[]): Level[] {
   }));
 }
 
-async function episodeGame(list: ProjectMap[]) {
+async function episodeGame(list: EpisodeMap[]) {
   const ordered = bySlot(list);
   if (ordered.length === 0) return null;
   const problems = await Promise.all(
@@ -174,7 +174,7 @@ function coopEntry() {
   return Boolean((history.state as { coop?: boolean } | null)?.coop);
 }
 
-function detailsOf(entry: ProjectMap): SessionDetails {
+function detailsOf(entry: EpisodeMap): SessionDetails {
   return { name: mapName(entry), slot: entry.slot, par: entry.par };
 }
 
@@ -194,12 +194,12 @@ async function readGameFiles(picked: File[]) {
   return files.flat();
 }
 
-function ProjectApp() {
-  const [store, setStore] = useState<ProjectStore | null>(null);
-  const [projects, setProjects] = useState<Project[]>([]);
+function EpisodeApp() {
+  const [store, setStore] = useState<EpisodeStore | null>(null);
+  const [episodes, setEpisodes] = useState<Episode[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
-  const [projectId, setProjectId] = useState("");
-  const [maps, setMaps] = useState<ProjectMap[]>([]);
+  const [episodeId, setEpisodeId] = useState("");
+  const [maps, setMaps] = useState<EpisodeMap[]>([]);
   const [session, setSession] = useState<Session | null>(null);
   // Only the editor's map switcher shows them; the home page's rows check their own.
   useBuildChecks(session ? maps : []);
@@ -224,7 +224,7 @@ function ProjectApp() {
     hosted: HostedGame | null;
   } | null>(null);
   const [wadImport, setWadImport] = useState<{
-    projectId: string;
+    episodeId: string;
     fileName: string;
     maps: ImportedMap[];
     slots: string[];
@@ -249,7 +249,7 @@ function ProjectApp() {
   const [settles, setSettles] = useState(0);
   const channel = useRef<BroadcastChannel | null>(null);
   const sessionRef = useRef<Session | null>(null);
-  const projectIdRef = useRef("");
+  const episodeIdRef = useRef("");
   const refreshRun = useRef(0);
   const externalListeners = useRef(new Set<(map: GameMap) => void>());
 
@@ -257,39 +257,39 @@ function ProjectApp() {
     channel.current?.postMessage({ mapId });
   }, []);
 
-  const selectProject = useCallback((id: string) => {
-    projectIdRef.current = id;
-    setProjectId(id);
+  const selectEpisode = useCallback((id: string) => {
+    episodeIdRef.current = id;
+    setEpisodeId(id);
   }, []);
 
   const refresh = useCallback(
-    async (active: ProjectStore, id: string) => {
+    async (active: EpisodeStore, id: string) => {
       refreshRun.current += 1;
       const run = refreshRun.current;
-      const nextProjects = await active.listProjects();
-      const shown = nextProjects.some((item) => item.id === id)
+      const nextEpisodes = await active.listEpisodes();
+      const shown = nextEpisodes.some((item) => item.id === id)
         ? id
-        : nextProjects[0]?.id;
+        : nextEpisodes[0]?.id;
       const nextMaps = shown ? await active.listMaps(shown) : [];
       const nextCounts = Object.fromEntries(
         await Promise.all(
-          nextProjects.map(
+          nextEpisodes.map(
             async (item) => [item.id, await active.countMaps(item.id)] as const,
           ),
         ),
       );
       if (run !== refreshRun.current) return;
-      setProjects(nextProjects);
+      setEpisodes(nextEpisodes);
       setCounts(nextCounts);
       setMaps(nextMaps);
-      if (shown) selectProject(shown);
+      if (shown) selectEpisode(shown);
     },
-    [selectProject],
+    [selectEpisode],
   );
 
   const closeSession = useCallback(
-    async (active: ProjectStore, note: string | null = null) => {
-      const id = sessionRef.current?.projectId ?? projectIdRef.current;
+    async (active: EpisodeStore, note: string | null = null) => {
+      const id = sessionRef.current?.episodeId ?? episodeIdRef.current;
       sessionRef.current = null;
       setMapDialog(null);
       setBlockedLeave(null);
@@ -304,7 +304,7 @@ function ProjectApp() {
   );
 
   const startSession = useCallback(
-    (active: ProjectStore, entry: ProjectMap) => {
+    (active: EpisodeStore, entry: EpisodeMap) => {
       const saver = createMapSaver(active, entry, {
         onStatus: setSaveStatus,
         onSaved: (saved) => announce(saved.id),
@@ -313,7 +313,7 @@ function ProjectApp() {
       });
       const next = {
         id: entry.id,
-        projectId: entry.projectId,
+        episodeId: entry.episodeId,
         initialMap: entry.map,
         saver,
       };
@@ -323,9 +323,9 @@ function ProjectApp() {
       setSaveStatus("saved");
       setMapPlaying(false);
       setBuildingEpisode(null);
-      selectProject(entry.projectId);
+      selectEpisode(entry.episodeId);
     },
-    [announce, closeSession, selectProject],
+    [announce, closeSession, selectEpisode],
   );
 
   useEffect(() => {
@@ -352,14 +352,14 @@ function ProjectApp() {
         const found =
           named === null
             ? null
-            : findEpisode(await opened.listProjects(), named);
+            : findEpisode(await opened.listEpisodes(), named);
         const missing = named !== null && !found;
         const route =
           found && (parsed.kind === "episode" || parsed.kind === "map")
             ? { ...parsed, id: found.id }
             : parsed;
-        const wanted = found?.id ?? ready.projectId;
-        selectProject(wanted);
+        const wanted = found?.id ?? ready.episodeId;
+        selectEpisode(wanted);
         if (location.pathname === "/") setHomeId(wanted);
         await refresh(opened, wanted);
         if (stale()) return;
@@ -410,7 +410,7 @@ function ProjectApp() {
     return () => {
       cancelled = true;
     };
-  }, [refresh, selectProject, startSession]);
+  }, [refresh, selectEpisode, startSession]);
 
   useEffect(() => {
     if (!store?.durable || typeof BroadcastChannel === "undefined") return;
@@ -419,7 +419,7 @@ function ProjectApp() {
     const onMessage = async ({ data }: MessageEvent<{ mapId?: string }>) => {
       const active = sessionRef.current;
       if (!active) {
-        await refresh(store, projectIdRef.current);
+        await refresh(store, episodeIdRef.current);
         return;
       }
       if (data.mapId && data.mapId !== active.id) return;
@@ -457,7 +457,7 @@ function ProjectApp() {
     else setBlockedLeave(() => () => void next());
   };
 
-  const openMap = async (entry: ProjectMap) => {
+  const openMap = async (entry: EpisodeMap) => {
     if (!store) return;
     try {
       const latest = await store.getMap(entry.id);
@@ -466,10 +466,10 @@ function ProjectApp() {
         return;
       }
       await store.setSetting(lastMapKey, latest.id);
-      await store.setSetting(lastProjectKey, latest.projectId);
+      await store.setSetting(lastEpisodeKey, latest.episodeId);
       setMessage(null);
       startSession(store, latest);
-      await refresh(store, latest.projectId);
+      await refresh(store, latest.episodeId);
     } catch {
       setMessage(saveFailure);
     }
@@ -480,9 +480,9 @@ function ProjectApp() {
     setPlaying(null);
   };
 
-  const playEpisode = async (list: ProjectMap[]) => {
+  const playEpisode = async (list: EpisodeMap[]) => {
     const run = routeRun.current;
-    const projectAt = projectIdRef.current;
+    const episodeAt = episodeIdRef.current;
     const checking = "Checking that every map builds…";
     if (list.some((entry) => knownBuildProblem(entry) === undefined)) {
       setMessage(checking);
@@ -491,7 +491,7 @@ function ProjectApp() {
     if (!started) return;
     if (
       run !== routeRun.current ||
-      projectAt !== projectIdRef.current ||
+      episodeAt !== episodeIdRef.current ||
       sessionRef.current
     ) {
       setMessage((shown) => (shown === checking ? null : shown));
@@ -507,10 +507,10 @@ function ProjectApp() {
     if (!store) return;
     const found =
       target.kind === "episode" || target.kind === "map"
-        ? findEpisode(projects, target.id)
+        ? findEpisode(episodes, target.id)
         : null;
     const route = found ? { ...target, id: found.id } : target;
-    setHomeId(route.kind === "home" ? projectIdRef.current : null);
+    setHomeId(route.kind === "home" ? episodeIdRef.current : null);
     const run = ++routeRun.current;
     const current = () => run === routeRun.current;
     const play = route.kind !== "home" && Boolean(route.play);
@@ -522,7 +522,7 @@ function ProjectApp() {
       const active = sessionRef.current;
       if (
         route.kind === "map" &&
-        active?.projectId === route.id &&
+        active?.episodeId === route.id &&
         details?.slot === route.slot
       ) {
         setMapPlaying(play && playable(active.saver.map));
@@ -542,7 +542,7 @@ function ProjectApp() {
           );
           if (!current()) return;
           if (entry) {
-            setView("projects");
+            setView("episodes");
             await openMap(entry);
             if (
               current() &&
@@ -557,15 +557,15 @@ function ProjectApp() {
         }
         if (sessionRef.current) await closeSession(store);
         if (!current()) return;
-        setView(route.kind === "featured" ? "featured" : "projects");
+        setView(route.kind === "featured" ? "featured" : "episodes");
         if (route.kind === "featured") {
           setFeaturedId(knownFeatured(route.map));
           const entry = play ? soloFeatured(route.map) : null;
           if (entry) setPlaying({ entry, hosted: null });
         }
         if (route.kind === "episode" || route.kind === "map") {
-          selectProject(route.id);
-          void store.setSetting(lastProjectKey, route.id).catch(() => {});
+          selectEpisode(route.id);
+          void store.setSetting(lastEpisodeKey, route.id).catch(() => {});
           await refresh(store, route.id).catch(() => setMessage(saveFailure));
           if (route.kind === "episode" && play) {
             const list = await store.listMaps(route.id);
@@ -601,14 +601,14 @@ function ProjectApp() {
   }, []);
 
   const page: { key: string; route: Route } | null =
-    !store || !projectId
+    !store || !episodeId
       ? null
       : session && details
         ? {
             key: `map:${session.id}`,
             route: {
               kind: "map",
-              id: session.projectId,
+              id: session.episodeId,
               slot: details.slot,
               play: mapPlaying,
             },
@@ -623,11 +623,11 @@ function ProjectApp() {
               },
             }
           : {
-              key: `episode:${projectId}`,
+              key: `episode:${episodeId}`,
               route:
-                projectId === homeId && !episodePlay
+                episodeId === homeId && !episodePlay
                   ? { kind: "home" }
-                  : { kind: "episode", id: projectId, play: !!episodePlay },
+                  : { kind: "episode", id: episodeId, play: !!episodePlay },
             };
   const wantedPath = page ? pathOf(page.route) : null;
   const wantedPlay = page?.route.kind !== "home" && Boolean(page?.route.play);
@@ -678,7 +678,7 @@ function ProjectApp() {
     };
   }, []);
 
-  if (!store || projects.length === 0) {
+  if (!store || episodes.length === 0) {
     return message ? (
       <Alert variant="destructive" className="m-4" role="alert">
         {message}
@@ -690,7 +690,7 @@ function ProjectApp() {
     );
   }
 
-  const project = projects.find((item) => item.id === projectId) ?? projects[0];
+  const episode = episodes.find((item) => item.id === episodeId) ?? episodes[0];
 
   const attempt = async (run: () => Promise<void>) => {
     try {
@@ -702,21 +702,21 @@ function ProjectApp() {
   };
 
   const sidebar: SidebarProps = {
-    projects,
+    episodes,
     counts,
     current:
       session && details
-        ? { kind: "map", id: session.projectId, slot: details.slot }
+        ? { kind: "map", id: session.episodeId, slot: details.slot }
         : view === "featured"
           ? { kind: "featured" }
-          : { kind: "episode", id: project.id },
+          : { kind: "episode", id: episode.id },
     durable: store.durable,
     onNavigate: (route) => void routeTo(route),
-    onCreateProject: (name, start) => {
-      const created = createProject(name);
+    onCreateEpisode: (name, start) => {
+      const created = createEpisode(name);
       void attempt(async () => {
-        await store.addProject(created, episodeMaps(created.id, start));
-        await store.setSetting(lastProjectKey, created.id);
+        await store.addEpisode(created, episodeMaps(created.id, start));
+        await store.setSetting(lastEpisodeKey, created.id);
         await routeTo({ kind: "episode", id: created.id });
       });
     },
@@ -724,14 +724,14 @@ function ProjectApp() {
 
   const openCopy = (featured: FeaturedMap) =>
     void attempt(async () => {
-      const slots = freeSlots(await store.listMaps(project.id));
+      const slots = freeSlots(await store.listMaps(episode.id));
       const slot = slots.includes(featured.slot) ? featured.slot : slots[0];
       if (!slot) {
         setMessage("All 32 map slots are in use.");
         return;
       }
       const entry = createMapEntry(
-        project.id,
+        episode.id,
         slot,
         structuredClone(featured.map),
         { description: featured.blurb, par: featured.par },
@@ -742,7 +742,7 @@ function ProjectApp() {
 
   const createMap = async (form: MapDetails) => {
     const entry = createMapEntry(
-      project.id,
+      episode.id,
       form.slot,
       form.featured
         ? { ...structuredClone(form.featured.map), name: form.name }
@@ -752,7 +752,7 @@ function ProjectApp() {
     try {
       await store.putMap(entry);
     } catch (error) {
-      await refresh(store, project.id).catch(() => {});
+      await refresh(store, episode.id).catch(() => {});
       return problemOf(error, form.slot);
     }
     announce();
@@ -774,7 +774,7 @@ function ProjectApp() {
       if (!saved) return "This map no longer exists.";
       announce(id);
       if (sessionRef.current?.id === id) setDetails(detailsOf(saved));
-      else await refresh(store, saved.projectId);
+      else await refresh(store, saved.episodeId);
       return null;
     } catch (error) {
       return problemOf(error, form.slot);
@@ -805,7 +805,7 @@ function ProjectApp() {
 
   const importWadMaps = async (picked: File[]) => {
     const run = ++importRun.current;
-    const projectAt = project.id;
+    const episodeAt = episode.id;
     const label = picked.length === 1 ? picked[0].name : "those files";
     try {
       const files = (await readGameFiles(picked)).filter((file) =>
@@ -823,7 +823,7 @@ function ProjectApp() {
         if (run !== importRun.current) return;
         converted.push({ slot: doom.slot, ...decompileMap(doom) });
       }
-      const slots = freeSlots(await store.listMaps(projectAt));
+      const slots = freeSlots(await store.listMaps(episodeAt));
       if (run !== importRun.current) return;
       if (slots.length === 0) {
         setMessage("All 32 map slots are in use.");
@@ -831,7 +831,7 @@ function ProjectApp() {
       }
       setMessage(null);
       setWadImport({
-        projectId: projectAt,
+        episodeId: episodeAt,
         fileName:
           files.length === 1
             ? files[0].name
@@ -858,7 +858,7 @@ function ProjectApp() {
     try {
       for (const { map, slot } of picked) {
         await store.putMap(
-          createMapEntry(project.id, slot, {
+          createMapEntry(episode.id, slot, {
             ...map,
             name: `${base} ${map.name}`,
           }),
@@ -877,7 +877,7 @@ function ProjectApp() {
           : "Couldn't save the imported maps.",
       );
     }
-    await refresh(store, project.id);
+    await refresh(store, episode.id);
   };
 
   const importFiles = async (picked: File[]) => {
@@ -893,17 +893,17 @@ function ProjectApp() {
         throw new MapFileError("The file is too large.");
       }
       const map = parseMapFile(await file.text());
-      const latest = await store.listMaps(project.id);
+      const latest = await store.listMaps(episode.id);
       const slot = freeSlots(latest)[0];
       if (!slot) throw new MapFileError("All 32 map slots are in use.");
-      const entry = createMapEntry(project.id, slot, {
+      const entry = createMapEntry(episode.id, slot, {
         ...map,
         name: map.name ?? file.name.replace(/\.json$/i, ""),
       });
       await store.putMap(entry);
       announce();
       setMessage(`${mapName(entry)} was added as ${slot}.`);
-      await refresh(store, project.id);
+      await refresh(store, episode.id);
     } catch (error) {
       setMessage(
         error instanceof MapFileError
@@ -915,13 +915,13 @@ function ProjectApp() {
     }
   };
 
-  const importProject = async (file: File) => {
+  const importEpisode = async (file: File) => {
     let backup;
     try {
       if (file.size > maxBackupBytes) {
         throw new MapFileError("The file is too large.");
       }
-      backup = parseProjectBackup(await file.text());
+      backup = parseEpisodeBackup(await file.text());
     } catch (error) {
       setMessage(
         error instanceof MapFileError
@@ -930,10 +930,10 @@ function ProjectApp() {
       );
       return;
     }
-    const { project: imported, maps: importedMaps } = backup;
+    const { episode: imported, maps: importedMaps } = backup;
     await attempt(async () => {
-      await store.addProject(imported, importedMaps);
-      selectProject(imported.id);
+      await store.addEpisode(imported, importedMaps);
+      selectEpisode(imported.id);
       await refresh(store, imported.id);
       setMessage(`${imported.name} was imported.`);
     });
@@ -957,11 +957,11 @@ function ProjectApp() {
     }
   };
 
-  const exportProject = () => {
+  const exportEpisode = () => {
     const broken = maps.filter((entry) => entry.broken);
     download(
-      `${wadFileName(project.name.toLowerCase()).replace(/\.wad$/, "")}-backup.json`,
-      serializeProject(project, maps),
+      `${wadFileName(episode.name.toLowerCase()).replace(/\.wad$/, "")}-backup.json`,
+      serializeEpisode(episode, maps),
       "application/json",
     );
     setMessage(
@@ -974,7 +974,7 @@ function ProjectApp() {
   if (session && details) {
     const openDialog = (dialog: "new" | "settings") =>
       void whenSaved(() => {
-        void refresh(store, session.projectId)
+        void refresh(store, session.episodeId)
           .then(() => setMapDialog(dialog))
           .catch(() => setMessage(saveFailure));
       });
@@ -990,9 +990,9 @@ function ProjectApp() {
           saveStatus={store.durable ? saveStatus : "session"}
           onSave={onSave}
           watchExternal={watchExternal}
-          onOpenProjects={() =>
+          onOpenEpisodes={() =>
             void whenSaved(() => {
-              setView("projects");
+              setView("episodes");
               void closeSession(store);
             })
           }
@@ -1005,7 +1005,7 @@ function ProjectApp() {
             setCoopPlaying(next && hosted);
           }}
           episode={{
-            name: project.name,
+            name: episode.name,
             maps: bySlot(maps).map((entry) => ({
               id: entry.id,
               slot: entry.slot,
@@ -1179,7 +1179,7 @@ function ProjectApp() {
 
   return (
     <>
-      {wadImport?.projectId === project.id ? (
+      {wadImport?.episodeId === episode.id ? (
         <WadImportDialog
           fileName={wadImport.fileName}
           maps={wadImport.maps}
@@ -1188,9 +1188,9 @@ function ProjectApp() {
           onClose={() => setWadImport(null)}
         />
       ) : null}
-      {buildingEpisode === project.id ? (
+      {buildingEpisode === episode.id ? (
         <EpisodeBuildDialog
-          name={project.name}
+          name={episode.name}
           maps={bySlot(maps)}
           onBuild={buildEpisode}
           onOpenMap={(entry) => {
@@ -1200,37 +1200,37 @@ function ProjectApp() {
           onClose={() => setBuildingEpisode(null)}
         />
       ) : null}
-      <ProjectHome
+      <EpisodeHome
         sidebar={sidebar}
-        project={project}
+        episode={episode}
         maps={maps}
         message={message}
-        onRenameProject={(name) =>
+        onRenameEpisode={(name) =>
           void attempt(async () => {
-            await store.putProject({ ...project, name });
-            await refresh(store, projectIdRef.current);
+            await store.putEpisode({ ...episode, name });
+            await refresh(store, episodeIdRef.current);
           })
         }
-        onDeleteProject={() =>
+        onDeleteEpisode={() =>
           void attempt(async () => {
-            await store.deleteProject(project.id);
-            const [next] = await store.listProjects();
-            selectProject(next.id);
-            await store.setSetting(lastProjectKey, next.id);
+            await store.deleteEpisode(episode.id);
+            const [next] = await store.listEpisodes();
+            selectEpisode(next.id);
+            await store.setSetting(lastEpisodeKey, next.id);
             await refresh(store, next.id);
           })
         }
-        onExportProject={exportProject}
-        onImportProject={(file) => void importProject(file)}
+        onExportEpisode={exportEpisode}
+        onImportEpisode={(file) => void importEpisode(file)}
         onImportFiles={(files) => void importFiles(files)}
-        onBuildEpisode={() => setBuildingEpisode(project.id)}
+        onBuildEpisode={() => setBuildingEpisode(episode.id)}
         onPlayEpisode={() => void playEpisode(maps)}
         onOpenMap={(entry) => void openMap(entry)}
         onCreateMap={createMap}
         onUpdateMap={(entry, form) => updateMap(entry.id, form)}
         onDuplicateMap={(entry) =>
           void attempt(async () => {
-            const latest = await store.listMaps(entry.projectId);
+            const latest = await store.listMaps(entry.episodeId);
             const slot = freeSlots(latest)[0];
             if (!slot) {
               setMessage("All 32 map slots are in use.");
@@ -1238,7 +1238,7 @@ function ProjectApp() {
             }
             await store.putMap(
               createMapEntry(
-                entry.projectId,
+                entry.episodeId,
                 slot,
                 {
                   ...structuredClone(entry.map),
@@ -1247,20 +1247,20 @@ function ProjectApp() {
                 { description: entry.description, par: entry.par },
               ),
             );
-            await refresh(store, entry.projectId);
+            await refresh(store, entry.episodeId);
           })
         }
         onReorderMaps={(order) =>
           void attempt(async () => {
             await store.moveMaps(slotMoves(maps, order));
-            await refresh(store, projectIdRef.current);
+            await refresh(store, episodeIdRef.current);
           })
         }
         onDeleteMap={(entry) =>
           void attempt(async () => {
             await store.deleteMap(entry.id);
             announce(entry.id);
-            await refresh(store, entry.projectId);
+            await refresh(store, entry.episodeId);
           })
         }
       />
@@ -1268,4 +1268,4 @@ function ProjectApp() {
   );
 }
 
-export { ProjectApp };
+export { EpisodeApp };

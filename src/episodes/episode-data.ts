@@ -6,11 +6,11 @@ import type { GameMap } from "../map/types";
 import { compileMap } from "../wad/compile";
 import { featuredMaps } from "../map/featured";
 
-type Project = { id: string; name: string; createdAt: number };
+type Episode = { id: string; name: string; createdAt: number };
 
-type ProjectMap = {
+type EpisodeMap = {
   id: string;
-  projectId: string;
+  episodeId: string;
   slot: string;
   description: string;
   par: number | null;
@@ -26,21 +26,21 @@ type EpisodeStart = "empty" | "one" | "featured";
 
 type SlotMove = { id: string; slot: string };
 
-type ProjectStore = {
+type EpisodeStore = {
   durable: boolean;
-  listProjects(): Promise<Project[]>;
-  listMaps(projectId: string): Promise<ProjectMap[]>;
-  getMap(id: string): Promise<ProjectMap | null>;
-  putProject(project: Project): Promise<void>;
-  addProject(project: Project, maps: ProjectMap[]): Promise<void>;
-  putMap(entry: ProjectMap): Promise<void>;
-  countMaps(projectId: string): Promise<number>;
+  listEpisodes(): Promise<Episode[]>;
+  listMaps(episodeId: string): Promise<EpisodeMap[]>;
+  getMap(id: string): Promise<EpisodeMap | null>;
+  putEpisode(episode: Episode): Promise<void>;
+  addEpisode(episode: Episode, maps: EpisodeMap[]): Promise<void>;
+  putMap(entry: EpisodeMap): Promise<void>;
+  countMaps(episodeId: string): Promise<number>;
   moveMaps(moves: SlotMove[]): Promise<void>;
   updateMap(
     id: string,
-    change: (entry: ProjectMap) => ProjectMap,
-  ): Promise<ProjectMap | null>;
-  deleteProject(id: string): Promise<void>;
+    change: (entry: EpisodeMap) => EpisodeMap,
+  ): Promise<EpisodeMap | null>;
+  deleteEpisode(id: string): Promise<void>;
   deleteMap(id: string): Promise<void>;
   getSetting(key: string): Promise<string | null>;
   setSetting(key: string, value: string | null): Promise<void>;
@@ -52,10 +52,10 @@ const maxBackupBytes = 64 * 1024 * 1024;
 const maxNameLength = 80;
 const maxDescriptionLength = 160;
 const slotCount = 32;
-const firstProjectId = "first-project";
+const firstEpisodeId = "first-project";
 const firstMapId = "first-map";
 const lastMapKey = "lastMap";
-const lastProjectKey = "lastProject";
+const lastEpisodeKey = "lastProject";
 const firstEpisodeName = "Episode 1";
 const oldFirstNames = new Set(["My project", "My episode"]);
 const hubSides: RoomSide[] = ["north", "east", "south", "west"];
@@ -95,16 +95,16 @@ function newId() {
   );
 }
 
-function freeSlots(maps: ProjectMap[], keep?: string) {
+function freeSlots(maps: EpisodeMap[], keep?: string) {
   const used = new Set(maps.map((entry) => entry.slot));
   return mapSlots.filter((slot) => slot === keep || !used.has(slot));
 }
 
-function bySlot(maps: ProjectMap[]) {
+function bySlot(maps: EpisodeMap[]) {
   return maps.toSorted((a, b) => a.slot.localeCompare(b.slot));
 }
 
-function mapName({ map }: ProjectMap) {
+function mapName({ map }: EpisodeMap) {
   return map.name ?? "Untitled map";
 }
 
@@ -123,7 +123,7 @@ const checked = new Map<
 >();
 
 // Every edit to a saved map bumps its revision, and new maps get new ids.
-function checksOf(entry: ProjectMap) {
+function checksOf(entry: EpisodeMap) {
   const known = checked.get(entry.id);
   if (known?.revision === entry.mapRevision) return known.checks;
   const checks = checkMap(entry.map);
@@ -132,7 +132,7 @@ function checksOf(entry: ProjectMap) {
 }
 
 // A problem of undefined means the build hasn't been checked yet.
-function mapStatus(entry: ProjectMap, problem?: string | null) {
+function mapStatus(entry: EpisodeMap, problem?: string | null) {
   if (entry.broken) return { kind: "error" as const, label: "Can't open" };
   const checks = checksOf(entry);
   const errors = checks.filter((issue) => issue.severity === "error").length;
@@ -166,19 +166,19 @@ function newEpisodeId() {
   return Array.from(bytes, (byte) => (byte % 36).toString(36)).join("");
 }
 
-function createProject(name: string): Project {
+function createEpisode(name: string): Episode {
   return { id: newEpisodeId(), name, createdAt: Date.now() };
 }
 
 function createMapEntry(
-  projectId: string,
+  episodeId: string,
   slot: string,
   map: GameMap,
-  details: Partial<Pick<ProjectMap, "description" | "par">> = {},
-): ProjectMap {
+  details: Partial<Pick<EpisodeMap, "description" | "par">> = {},
+): EpisodeMap {
   return {
     id: newId(),
-    projectId,
+    episodeId,
     slot,
     description: details.description ?? "",
     par: details.par ?? null,
@@ -189,7 +189,7 @@ function createMapEntry(
 }
 
 // The episode keeps the slots it uses, and the maps take them in the new order.
-function slotMoves(maps: ProjectMap[], order: string[]): SlotMove[] {
+function slotMoves(maps: EpisodeMap[], order: string[]): SlotMove[] {
   const slots = bySlot(maps).map((entry) => entry.slot);
   return order
     .map((id, index) => ({ id, slot: slots[index] }))
@@ -198,15 +198,15 @@ function slotMoves(maps: ProjectMap[], order: string[]): SlotMove[] {
     );
 }
 
-function episodeMaps(projectId: string, start: EpisodeStart) {
+function episodeMaps(episodeId: string, start: EpisodeStart) {
   if (start === "empty") return [];
   if (start === "one") {
     return [
-      createMapEntry(projectId, mapSlots[0], mapFromTemplate("room", "Map 1")),
+      createMapEntry(episodeId, mapSlots[0], mapFromTemplate("room", "Map 1")),
     ];
   }
   return featuredMaps.map((featured, index) =>
-    createMapEntry(projectId, mapSlots[index], structuredClone(featured.map), {
+    createMapEntry(episodeId, mapSlots[index], structuredClone(featured.map), {
       description: featured.blurb,
       par: featured.par,
     }),
@@ -222,7 +222,7 @@ function mapFromTemplate(template: MapTemplate, name: string): GameMap {
   return { ...structuredClone(map), name };
 }
 
-function parseStoredMap(value: ProjectMap): ProjectMap {
+function parseStoredMap(value: EpisodeMap): EpisodeMap {
   try {
     return { ...value, map: parseMap(value.map), broken: undefined };
   } catch {
@@ -234,55 +234,55 @@ function parseStoredMap(value: ProjectMap): ProjectMap {
   }
 }
 
-// Fixed ids let tabs opened together create the same first project. The old
+// Fixed ids let tabs opened together create the same first episode. The old
 // single-map save stays in place as a backup after it is copied.
-async function prepareProjects(store: ProjectStore) {
-  const listed = await store.listProjects();
+async function prepareEpisodes(store: EpisodeStore) {
+  const listed = await store.listEpisodes();
   // Browsers from before the fixed id gave the first episode a random one.
-  const projects = await Promise.all(
-    listed.map(async (project, index) => {
-      if (index > 0 || !oldFirstNames.has(project.name)) return project;
-      const renamed = { ...project, name: firstEpisodeName };
-      await store.putProject(renamed);
+  const episodes = await Promise.all(
+    listed.map(async (episode, index) => {
+      if (index > 0 || !oldFirstNames.has(episode.name)) return episode;
+      const renamed = { ...episode, name: firstEpisodeName };
+      await store.putEpisode(renamed);
       return renamed;
     }),
   );
-  if (projects.length === 0) {
+  if (episodes.length === 0) {
     const saved = loadSavedMap();
-    const project = {
-      ...createProject(firstEpisodeName),
-      id: firstProjectId,
+    const episode = {
+      ...createEpisode(firstEpisodeName),
+      id: firstEpisodeId,
     };
     const entry = {
-      ...createMapEntry(project.id, mapSlots[0], saved ?? starterMap),
+      ...createMapEntry(episode.id, mapSlots[0], saved ?? starterMap),
       id: firstMapId,
     };
-    await store.addProject(project, [entry]);
-    await store.setSetting(lastProjectKey, project.id);
+    await store.addEpisode(episode, [entry]);
+    await store.setSetting(lastEpisodeKey, episode.id);
     await store.setSetting(lastMapKey, entry.id);
-    return { projects: [project], projectId: project.id, entry, created: true };
+    return { episodes: [episode], episodeId: episode.id, entry, created: true };
   }
-  const lastProject = await store.getSetting(lastProjectKey);
+  const lastEpisode = await store.getSetting(lastEpisodeKey);
   const lastMap = await store.getSetting(lastMapKey);
   const candidate = lastMap ? await store.getMap(lastMap) : null;
   const entry = candidate && !candidate.broken ? candidate : null;
-  const projectId =
-    entry?.projectId ??
-    projects.find((project) => project.id === lastProject)?.id ??
-    projects[0].id;
-  return { projects, projectId, entry, created: false };
+  const episodeId =
+    entry?.episodeId ??
+    episodes.find((episode) => episode.id === lastEpisode)?.id ??
+    episodes[0].id;
+  return { episodes, episodeId, entry, created: false };
 }
 
 function createMapSaver(
-  store: ProjectStore,
-  initial: ProjectMap,
+  store: EpisodeStore,
+  initial: EpisodeMap,
   {
     onStatus,
     onSaved = () => {},
     onMissing = () => {},
   }: {
     onStatus: (status: "saving" | "saved" | "failed") => void;
-    onSaved?: (entry: ProjectMap) => void;
+    onSaved?: (entry: EpisodeMap) => void;
     onMissing?: () => void;
   },
 ) {
@@ -342,7 +342,7 @@ function createMapSaver(
       latest = map;
       write(map);
     },
-    adopt(entry: ProjectMap) {
+    adopt(entry: EpisodeMap) {
       latest = entry.map;
       revision = entry.mapRevision;
       failed = false;
@@ -358,11 +358,11 @@ function createMapSaver(
   };
 }
 
-function serializeProject(project: Project, maps: ProjectMap[]) {
+function serializeEpisode(episode: Episode, maps: EpisodeMap[]) {
   return JSON.stringify({
     format: backupFormat,
     version: backupVersion,
-    project: { name: project.name },
+    project: { name: episode.name },
     maps: bySlot(maps)
       .filter((entry) => !entry.broken)
       .map(({ slot, description, par, map }) => ({
@@ -374,7 +374,7 @@ function serializeProject(project: Project, maps: ProjectMap[]) {
   });
 }
 
-function parseProjectBackup(text: string) {
+function parseEpisodeBackup(text: string) {
   if (text.length > maxBackupBytes) {
     throw new MapFileError("The file is too large.");
   }
@@ -395,7 +395,7 @@ function parseProjectBackup(text: string) {
   if (data.version !== backupVersion || !Array.isArray(data.maps)) {
     throw new MapFileError("This episode was saved by a different version.");
   }
-  const project = createProject(
+  const episode = createEpisode(
     typeof data.project?.name === "string" && data.project.name.trim()
       ? data.project.name.trim().slice(0, maxNameLength)
       : "Imported episode",
@@ -411,7 +411,7 @@ function parseProjectBackup(text: string) {
       Number.isInteger(value.par) && (value.par as number) > 0
         ? (value.par as number)
         : null;
-    return createMapEntry(project.id, slot, parseMap(value.map), {
+    return createMapEntry(episode.id, slot, parseMap(value.map), {
       par,
       description:
         typeof value.description === "string"
@@ -419,7 +419,7 @@ function parseProjectBackup(text: string) {
           : "",
     });
   });
-  return { project, maps };
+  return { episode, maps };
 }
 
 function formatPar(par: number | null) {
@@ -443,13 +443,13 @@ export {
   bySlot,
   createMapEntry,
   createMapSaver,
-  createProject,
+  createEpisode,
   episodeMaps,
   formatPar,
   freeSlots,
   isSlotConflict,
   lastMapKey,
-  lastProjectKey,
+  lastEpisodeKey,
   mapFromTemplate,
   mapName,
   mapSlots,
@@ -458,16 +458,16 @@ export {
   maxDescriptionLength,
   maxNameLength,
   parsePar,
-  parseProjectBackup,
+  parseEpisodeBackup,
   parseStoredMap,
-  prepareProjects,
-  serializeProject,
+  prepareEpisodes,
+  serializeEpisode,
   slotMoves,
   templates,
   type EpisodeStart,
   type MapTemplate,
-  type Project,
-  type ProjectMap,
-  type ProjectStore,
+  type Episode,
+  type EpisodeMap,
+  type EpisodeStore,
   type SlotMove,
 };
