@@ -19,7 +19,7 @@ function PlayerBadge({ peer, open = false }: { peer: number; open?: boolean }) {
       aria-hidden="true"
       className={`grid size-[22px] shrink-0 place-items-center rounded-full border-[1.5px] font-mono text-[11px] ${
         open
-          ? "border-dashed border-border-strong text-fg-disabled"
+          ? "border-dashed border-border-strong text-fg-muted"
           : (playerColors[peer - 1] ?? playerColors[0])
       }`}
     >

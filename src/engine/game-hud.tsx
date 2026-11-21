@@ -133,23 +133,13 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Vital({
-  label,
-  value,
-  accent,
-}: {
-  label: string;
-  value: ReactNode;
-  accent?: boolean;
-}) {
+function Vital({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div>
       <div className="font-mono text-[11px] text-fg-soft uppercase">
         {label}
       </div>
-      <div
-        className={`text-[44px] leading-none font-bold @max-2xl:text-2xl ${accent ? "text-accent" : ""}`}
-      >
+      <div className="text-[44px] leading-none font-bold @max-2xl:text-2xl">
         {value}
       </div>
     </div>
@@ -232,7 +222,7 @@ function Scoreboard({
                   </span>
                 ) : null}
                 {row.you ? (
-                  <span className="ml-2 font-mono text-[10px] text-accent uppercase">
+                  <span className="ml-2 font-mono text-[10px] text-fg-muted uppercase">
                     You
                   </span>
                 ) : null}
@@ -758,7 +748,6 @@ function GameHud({
             <Vital
               label={ammoName ?? "Ammo"}
               value={ammoName ? status.ammo : "-"}
-              accent
             />
             {/* Deathmatch hands every player every key. */}
             <div className={deathmatch ? "hidden" : "pb-1.5"}>
@@ -791,7 +780,7 @@ function GameHud({
             onClick={onOpenNote}
           >
             Leave a note
-            <kbd className="font-mono text-[11px] text-accent">N</kbd>
+            <kbd className="font-mono text-[11px] text-fg-muted">N</kbd>
           </button>
           <button
             type="button"
@@ -800,7 +789,7 @@ function GameHud({
             onClick={onEditSpot}
           >
             Edit this spot
-            <kbd className="font-mono text-[11px] text-accent">F2</kbd>
+            <kbd className="font-mono text-[11px] text-fg-muted">F2</kbd>
           </button>
         </div>
       </div>

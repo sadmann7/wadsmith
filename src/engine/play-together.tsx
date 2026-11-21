@@ -363,7 +363,7 @@ function Lobby({
           {open.map((peer) => (
             <li
               key={peer}
-              className="flex h-[44px] items-center gap-3 border-b border-border text-sm text-fg-disabled"
+              className="flex h-[44px] items-center gap-3 border-b border-border text-sm text-fg-muted"
             >
               <PlayerBadge peer={peer} open />
               Open slot

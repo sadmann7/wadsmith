@@ -48,7 +48,8 @@ function engineInfo(): EngineInfo | null {
 }
 
 const engineFiles = "/engine/";
-const linkClass = "text-accent underline-offset-4 hover:underline";
+const linkClass =
+  "text-fg underline decoration-fg-disabled underline-offset-4 hover:decoration-fg";
 
 function Section({
   title,

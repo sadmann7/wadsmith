@@ -29,7 +29,7 @@ function DeviceNotice() {
         id="device-notice-title"
         className="m-0 flex items-center gap-2 text-[15px] font-semibold"
       >
-        <Monitor size={16} aria-hidden="true" className="text-accent" />
+        <Monitor size={16} aria-hidden="true" className="text-fg-muted" />
         Best on a computer
       </h2>
       <p className="m-0 text-[13px] text-fg-soft">
