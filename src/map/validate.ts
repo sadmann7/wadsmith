@@ -343,8 +343,8 @@ function validateLines(map: GameMap, issues: MapIssue[], actions: LineActions) {
       add("line-walk", "nothing can walk over a solid wall.");
     }
     if (action.key) {
-      const kind = keyThings[action.key];
-      const keys = map.things.filter((thing) => thing.kind === kind);
+      const kinds = keyThings[action.key];
+      const keys = map.things.filter((thing) => kinds.includes(thing.kind));
       if (
         !skills.every((skill) =>
           keys.some((key) => appearsOn(key.skills, skill)),

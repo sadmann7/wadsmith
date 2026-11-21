@@ -40,7 +40,6 @@ type ImportReport = {
   innerLines: number;
   plainDoors: number;
   solidSectors: number;
-  skullKeys: number;
   backwardSwitches: number;
 };
 
@@ -80,45 +79,7 @@ const manualDoors: Record<number, boolean> = {
 };
 const keyedManualDoors = new Set([26, 27, 28, 32, 33, 34]);
 
-const thingNames: Record<number, string> = {
-  7: "Spider Mastermind",
-  9: "Shotgun guy",
-  16: "Cyberdemon",
-  64: "Arch-vile",
-  66: "Revenant",
-  67: "Mancubus",
-  68: "Arachnotron",
-  69: "Hell knight",
-  72: "Commander Keen",
-  84: "Wolfenstein SS",
-  88: "Boss brain",
-  89: "Boss shooter",
-  3003: "Baron of Hell",
-  3005: "Cacodemon",
-  14: "Teleport destination",
-  82: "Super shotgun",
-  2005: "Chainsaw",
-  2003: "Rocket launcher",
-  2004: "Plasma gun",
-  2006: "BFG 9000",
-  8: "Backpack",
-  17: "Cell pack",
-  2010: "Rocket",
-  2046: "Box of rockets",
-  2047: "Cell",
-  2048: "Box of bullets",
-  2049: "Box of shells",
-  2013: "Soulsphere",
-  2014: "Health bonus",
-  2015: "Armor bonus",
-  2022: "Invulnerability",
-  2023: "Berserk",
-  2024: "Partial invisibility",
-  2025: "Radiation suit",
-  2026: "Computer map",
-  2045: "Light amplification",
-  83: "Megasphere",
-};
+const thingNames: Record<number, string> = { 14: "Teleport destination" };
 
 const teleports = new Set([39, 97, 125, 126]);
 const crushers = new Set([6, 25, 49, 73, 74, 77, 141, 57]);
@@ -177,16 +138,9 @@ const effects = new Map(
     effect as SectorEffect,
   ]),
 );
-// Skull keys open the same doors as the keycards of their color.
-const skullKeys = new Map<number, ThingKind>([
-  [38, "red-key"],
-  [39, "yellow-key"],
-  [40, "blue-key"],
-]);
-const thingKindOf = new Map<number, ThingKind>([
-  ...thingKinds.map((kind) => [thingCatalog[kind].doomType, kind] as const),
-  ...skullKeys,
-]);
+const thingKindOf = new Map<number, ThingKind>(
+  thingKinds.map((kind) => [thingCatalog[kind].doomType, kind]),
+);
 const walls = new Set<string>(freedoomWalls);
 const flats = new Set<string>(freedoomFlats);
 
@@ -478,7 +432,6 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
     innerLines: 0,
     plainDoors: 0,
     solidSectors: 0,
-    skullKeys: 0,
     backwardSwitches: 0,
   };
   const replaced = new Set<string>();
@@ -854,9 +807,8 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
   const things: Thing[] = [];
   doom.things.forEach((source, index) => {
     const kind = thingKindOf.get(source.type);
-    if (skullKeys.has(source.type)) report.skullKeys += 1;
     if (!kind) {
-      const label = thingNames[source.type] ?? "Decorations and other things";
+      const label = thingNames[source.type] ?? "Other things";
       report.droppedThings[label] = (report.droppedThings[label] ?? 0) + 1;
       return;
     }

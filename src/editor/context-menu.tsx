@@ -229,7 +229,10 @@ function SubMenu({
           <ChevronRight size={14} />
         </MenuItemIcon>
       </MenuSubTrigger>
-      <MenuSubContent className={`${contentClass} w-44`} sideOffset={4}>
+      <MenuSubContent
+        className={`${contentClass} max-h-(--available-height) w-44 overflow-y-auto`}
+        sideOffset={4}
+      >
         {children}
       </MenuSubContent>
     </MenuSub>

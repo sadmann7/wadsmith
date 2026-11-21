@@ -28,6 +28,26 @@ function mapWarnings(map: GameMap): CheckedIssue[] {
       });
     }
   }
+  // A spawner's cube flies for the time its climb takes, so a spot nearly
+  // level with the spawner gets its monsters short of it, or never.
+  const spawners = map.things.filter((thing) => thing.kind === "boss-shooter");
+  for (const spot of map.things) {
+    if (spot.kind !== "spawn-spot") continue;
+    const level = spawners.some(
+      (spawner) =>
+        Math.abs(spot.y - spawner.y) * 16 <= Math.abs(spot.x - spawner.x),
+    );
+    if (level) {
+      warnings.push({
+        id: `spawn-level:${spot.id}`,
+        severity: "warning",
+        message: "Spawn spot level with the spawner",
+        detail:
+          "Its monsters land short of it or never arrive. Move it up or down.",
+        target: spot.id,
+      });
+    }
+  }
   const balance = mapBalance(map, "medium");
   if (balance.healthShort > 0) {
     warnings.push({

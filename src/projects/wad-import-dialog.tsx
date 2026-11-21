@@ -119,13 +119,6 @@ function losses(reports: ImportReport[]) {
         "Switches and doors on open walls that now work only from the other side.",
     });
   }
-  const skullKeys = sum(reports, (report) => report.skullKeys);
-  if (skullKeys > 0) {
-    rows.push({
-      label: plural(skullKeys, "skull key"),
-      detail: "Became keycards of the same color, which open the same doors.",
-    });
-  }
   return rows;
 }
 
