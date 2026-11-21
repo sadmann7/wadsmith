@@ -7,9 +7,8 @@ import {
 } from "@ui-sdk/core";
 import { useShortcut } from "@ui-sdk/react/shortcuts";
 import {
-  SegmentedControl,
-  SegmentedControlIndicator,
-  SegmentedControlItem,
+  SegmentedControl as SegmentedControlPrimitive,
+  SegmentedControlItem as SegmentedControlItemPrimitive,
 } from "@ui-sdk/react/segmented-control";
 import {
   Resizable,
@@ -125,6 +124,10 @@ import {
   MenuSeparator,
   MenuTrigger,
 } from "../components/ui/menu";
+import {
+  SegmentedControl,
+  SegmentedControlItem,
+} from "../components/ui/segmented-control";
 
 const modeHints: Record<EditMode, string> = {
   vertices:
@@ -1226,14 +1229,14 @@ function App({
         </header>
 
         <main className="workspace">
-          <SegmentedControl
+          <SegmentedControlPrimitive
             aria-label="Mode"
             className="tool-rail"
             value={railMode}
             onValueChange={(next) => chooseMode(next as RailMode)}
           >
             {railModes.map(({ value, label, shortcut: key, icon: Icon }) => (
-              <SegmentedControlItem
+              <SegmentedControlItemPrimitive
                 key={value}
                 value={value}
                 aria-keyshortcuts={editorShortcuts[key].keys}
@@ -1242,17 +1245,16 @@ function App({
               >
                 <Icon size={18} aria-hidden="true" />
                 <span>{label}</span>
-              </SegmentedControlItem>
+              </SegmentedControlItemPrimitive>
             ))}
-          </SegmentedControl>
+          </SegmentedControlPrimitive>
           <div className="views" data-layout={visibleLayout}>
             <SegmentedControl
               aria-label="Main view"
-              className="segments view-switch"
+              className="absolute! top-3 right-3 z-5"
               value={visibleLayout}
               onValueChange={(next) => changeLayout(next as ViewLayout)}
             >
-              <SegmentedControlIndicator className="segments-indicator" />
               <SegmentedControlItem value="map">Map</SegmentedControlItem>
               <SegmentedControlItem value="split" disabled={narrow}>
                 Split
@@ -1660,7 +1662,9 @@ function App({
                     }
                   />
                 ) : (
-                  <p className="muted">Click a room or thing on the map.</p>
+                  <p className="text-muted-foreground">
+                    Click a room or thing on the map.
+                  </p>
                 )}
               </section>
             )}

@@ -1,11 +1,4 @@
 import {
-  Slider,
-  SliderControl,
-  SliderIndicator,
-  SliderThumb,
-  SliderTrack,
-} from "@ui-sdk/react/slider";
-import {
   ArrowLeft,
   ArrowRight,
   Crosshair,
@@ -36,6 +29,7 @@ import {
 } from "./runtime";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
+import { Slider } from "../components/ui/slider";
 
 type SoundSettings = { volume: number; muted: boolean };
 
@@ -487,7 +481,8 @@ function GameTopBar({
           <SoundIcon size={15} aria-hidden="true" />
         </button>
         <Slider
-          className="slider w-24 justify-center max-[640px]:hidden"
+          label="Volume"
+          className="w-24 justify-center max-[640px]:hidden"
           data-game-control=""
           value={sound.volume}
           min={0}
@@ -497,14 +492,7 @@ function GameTopBar({
             onSoundChange({ volume: volume as number, muted: false })
           }
           onPointerUp={onControlUsed}
-        >
-          <SliderControl className="slider-control">
-            <SliderTrack className="slider-track">
-              <SliderIndicator className="slider-indicator" />
-              <SliderThumb className="slider-thumb" aria-label="Volume" />
-            </SliderTrack>
-          </SliderControl>
-        </Slider>
+        />
         {coop ? null : (
           <>
             <button

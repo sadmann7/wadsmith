@@ -1,12 +1,4 @@
-import {
-  Dialog,
-  DialogBackdrop,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from "@ui-sdk/react/dialog";
-import { Play, X } from "lucide-react";
+import { Play } from "lucide-react";
 import { useState } from "react";
 
 import { skillNames } from "../engine/coop";
@@ -24,6 +16,16 @@ import {
   SelectValue,
 } from "../components/ui/select";
 import { FieldItem, Label } from "../components/ui/field";
+import {
+  Dialog,
+  DialogBackdrop,
+  DialogCloseButton,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../components/ui/dialog";
 
 const complevelNames: Record<Complevel, string> = {
   vanilla: "Vanilla",
@@ -64,14 +66,12 @@ function WadPlayDialog({
         if (!open) onClose();
       }}
     >
-      <DialogBackdrop className="fixed inset-0 z-40 bg-scrim" />
-      <DialogContent className="fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-32px)] w-[520px] max-w-[calc(100vw-32px)] -translate-1/2 flex-col rounded-[4px] border border-input bg-card outline-none">
-        <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border px-5">
+      <DialogBackdrop />
+      <DialogContent className="w-[520px]">
+        <DialogHeader>
           <div className="flex min-w-0 items-baseline gap-2.5">
-            <DialogTitle className="block shrink-0 font-sans text-xl font-semibold tracking-normal text-foreground normal-case">
-              Play WAD
-            </DialogTitle>
-            <DialogDescription className="truncate font-mono text-xs text-muted-foreground">
+            <DialogTitle>Play WAD</DialogTitle>
+            <DialogDescription>
               {title} · {summary.maps.length}{" "}
               {summary.maps.length === 1 ? "map" : "maps"}
               {patches > 0
@@ -79,13 +79,8 @@ function WadPlayDialog({
                 : ""}
             </DialogDescription>
           </div>
-          <DialogClose
-            aria-label="Close"
-            className="border-0 bg-transparent p-1 text-muted-foreground hover:text-foreground"
-          >
-            <X size={16} aria-hidden="true" />
-          </DialogClose>
-        </header>
+          <DialogCloseButton />
+        </DialogHeader>
         <div className="grid min-h-0 gap-4 overflow-y-auto p-5">
           <FieldItem>
             <Label>Compatibility</Label>
@@ -144,8 +139,8 @@ function WadPlayDialog({
             </FieldItem>
           </div>
         </div>
-        <footer className="flex items-center justify-between gap-3 border-t border-border px-5 py-3">
-          <p className="muted min-w-0">
+        <DialogFooter className="justify-between">
+          <p className="text-muted-foreground min-w-0">
             Anything the WAD doesn&apos;t replace comes from Freedoom.
           </p>
           <Button
@@ -166,7 +161,7 @@ function WadPlayDialog({
             <Play size={14} aria-hidden="true" />
             Play
           </Button>
-        </footer>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

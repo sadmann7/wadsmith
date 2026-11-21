@@ -72,10 +72,10 @@ function SurfacePanel({
 }) {
   const usesFlats = info.paints === "floor" || info.paints === "ceiling";
   return (
-    <div className="stack">
+    <div className="flex flex-col gap-2.5">
       <p className="thing-name">{info.label}</p>
       {info.height !== null ? (
-        <p className="muted">
+        <p className="text-muted-foreground">
           Height {info.height}. Drag it in the view, or press Page Up or Page
           Down.
         </p>

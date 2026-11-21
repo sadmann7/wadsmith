@@ -1,19 +1,12 @@
 import Link from "next/link";
 import {
-  Dialog,
-  DialogBackdrop,
-  DialogClose,
-  DialogContent,
-  DialogTitle,
-} from "@ui-sdk/react/dialog";
-import {
   Drawer,
   DrawerBackdrop,
   DrawerContent,
   DrawerTitle,
   DrawerTrigger,
 } from "@ui-sdk/react/drawer";
-import { PanelLeft, Plus, Star, X } from "lucide-react";
+import { PanelLeft, Plus, Star } from "lucide-react";
 import {
   useState,
   type FormEvent,
@@ -25,12 +18,20 @@ import { MapOutline } from "../editor/map-outline";
 import { MapPlan } from "../editor/map-plan";
 import { featuredMaps } from "../map/featured";
 import { blankMap } from "../map/starter-map";
-import { dialogClass, titleClass } from "./map-dialog";
 import { maxNameLength, type EpisodeStart, type Project } from "./project-data";
 import { pathOf, type Route } from "./routes";
 import { Button, buttonVariants } from "../components/ui/button";
 import { Field, FieldLabel } from "../components/ui/field";
 import { Input } from "../components/ui/input";
+import {
+  Dialog,
+  DialogBackdrop,
+  DialogCloseButton,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../components/ui/dialog";
 
 const starts: { value: EpisodeStart; label: string; detail: string }[] = [
   { value: "empty", label: "Empty", detail: "No maps yet" },
@@ -90,18 +91,13 @@ function NewEpisodeDialog({
         if (!open) onClose();
       }}
     >
-      <DialogBackdrop className="fixed inset-0 z-40 bg-scrim" />
-      <DialogContent className={dialogClass}>
+      <DialogBackdrop />
+      <DialogContent className="w-[600px]">
         <form onSubmit={submit} className="flex min-h-0 flex-col">
-          <header className="flex h-14 shrink-0 items-center justify-between border-b border-border px-5">
-            <DialogTitle className={titleClass}>New episode</DialogTitle>
-            <DialogClose
-              aria-label="Close"
-              className="border-0 bg-transparent p-1 text-muted-foreground hover:text-foreground"
-            >
-              <X size={16} aria-hidden="true" />
-            </DialogClose>
-          </header>
+          <DialogHeader>
+            <DialogTitle>New episode</DialogTitle>
+            <DialogCloseButton />
+          </DialogHeader>
           <div className="grid min-h-0 gap-5 overflow-y-auto p-5">
             <Field>
               <FieldLabel>Name</FieldLabel>
@@ -138,7 +134,7 @@ function NewEpisodeDialog({
               </div>
             </fieldset>
           </div>
-          <footer className="flex items-center justify-end gap-2 border-t border-border px-5 py-3.5">
+          <DialogFooter className="justify-end">
             <p className="m-0 mr-auto text-sm text-muted-foreground">
               {durable
                 ? "Saved in this browser."
@@ -153,7 +149,7 @@ function NewEpisodeDialog({
             >
               Create episode
             </Button>
-          </footer>
+          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>

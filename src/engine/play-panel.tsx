@@ -37,6 +37,7 @@ import {
   type Skill,
 } from "./runtime";
 import { hostPeer, type RoomPlayer } from "./room";
+import { Alert } from "../components/ui/alert";
 
 type SoundSettings = { volume: number; muted: boolean };
 
@@ -702,9 +703,13 @@ function GameSession({
             </p>
           ) : null}
           {error ? (
-            <p className="notice absolute inset-x-4 top-20 z-20" role="alert">
+            <Alert
+              variant="destructive"
+              className="absolute inset-x-4 top-20 z-20"
+              role="alert"
+            >
               {error}
-            </p>
+            </Alert>
           ) : (
             <canvas
               ref={canvasRef}

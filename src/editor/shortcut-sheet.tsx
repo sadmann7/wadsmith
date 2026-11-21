@@ -1,14 +1,14 @@
 import { ariaKeyshortcuts, formatShortcut } from "@ui-sdk/core";
+
+import { editorShortcuts } from "./shortcuts";
 import {
   Dialog,
   DialogBackdrop,
-  DialogClose,
+  DialogCloseButton,
   DialogContent,
+  DialogHeader,
   DialogTitle,
-} from "@ui-sdk/react/dialog";
-import { X } from "lucide-react";
-
-import { editorShortcuts } from "./shortcuts";
+} from "../components/ui/dialog";
 
 type Key = { text: string; spoken?: string };
 type Shortcut = { keys: Key[]; does: string };
@@ -118,19 +118,12 @@ function ShortcutSheet({ onClose }: { onClose: () => void }) {
         if (!open) onClose();
       }}
     >
-      <DialogBackdrop className="fixed inset-0 z-40 bg-scrim" />
-      <DialogContent className="fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-32px)] w-[680px] max-w-[calc(100vw-32px)] -translate-1/2 flex-col rounded-[4px] border border-input bg-card outline-none">
-        <header className="flex h-14 shrink-0 items-center justify-between border-b border-border px-5">
-          <DialogTitle className="block font-sans text-xl font-semibold tracking-normal text-foreground normal-case">
-            Keyboard shortcuts
-          </DialogTitle>
-          <DialogClose
-            aria-label="Close"
-            className="border-0 bg-transparent p-1 text-muted-foreground hover:text-foreground"
-          >
-            <X size={16} aria-hidden="true" />
-          </DialogClose>
-        </header>
+      <DialogBackdrop />
+      <DialogContent className="w-[680px]">
+        <DialogHeader>
+          <DialogTitle>Keyboard shortcuts</DialogTitle>
+          <DialogCloseButton />
+        </DialogHeader>
         <div className="grid min-h-0 grid-cols-2 gap-x-8 gap-y-6 overflow-y-auto p-5 max-[640px]:grid-cols-1">
           {groups().map((group) => (
             <section key={group.title} className="grid content-start gap-2">

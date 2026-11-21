@@ -12,6 +12,7 @@ import {
 import { AppShell, type SidebarProps } from "./app-sidebar";
 import { formatPar } from "./project-data";
 import { Button } from "../components/ui/button";
+import { Alert } from "../components/ui/alert";
 
 const modes: Record<FeaturedMode, { label: string; dot: string }> = {
   single: { label: "Single player", dot: "bg-info" },
@@ -154,11 +155,7 @@ function FeaturedMaps({
             </div>
           </div>
         </div>
-        {message ? (
-          <p className="notice m-0" role="status">
-            {message}
-          </p>
-        ) : null}
+        {message ? <Alert role="status">{message}</Alert> : null}
         {selected ? (
           <section
             aria-label={selected.title}

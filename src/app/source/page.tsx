@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { Metadata } from "next";
 
 import { StandaloneShell } from "@/projects/standalone-shell";
+import { Alert } from "@/components/ui/alert";
 
 export const metadata: Metadata = {
   title: "Source and licences",
@@ -153,9 +154,9 @@ export default function SourcePage() {
             </Section>
           </>
         ) : (
-          <p className="notice m-0" role="status">
+          <Alert role="status">
             The engine hasn&apos;t been built here. Run pnpm setup:engine.
-          </p>
+          </Alert>
         )}
       </main>
     </StandaloneShell>
