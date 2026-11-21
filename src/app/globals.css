@@ -648,9 +648,13 @@
 
   .notice {
     padding: 10px;
-    border: 1px solid var(--color-accent);
+    border: 1px solid var(--color-border-strong);
     border-radius: 6px;
     overflow-wrap: anywhere;
+  }
+
+  .notice[role="alert"] {
+    border-color: var(--color-danger);
   }
 
   .card {
@@ -667,7 +671,7 @@
   }
 
   .issues {
-    border-color: var(--color-accent);
+    border-color: var(--color-danger);
   }
 
   .issues ul {
@@ -1016,11 +1020,6 @@
     background: var(--color-surface-raised);
     color: var(--color-fg);
     font-weight: 600;
-  }
-
-  .edit-modes button[data-checked] kbd,
-  .edit-modes button[aria-checked="true"] kbd {
-    color: var(--color-accent);
   }
 
   .pane-actions {
