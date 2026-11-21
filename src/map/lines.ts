@@ -86,6 +86,13 @@ const lineActions: Record<LineActionKind, ActionDefinition> = {
       walk: { once: 10, repeat: 88 },
     },
   },
+  "lift-fast": {
+    label: "Lift: fast lower, wait, raise",
+    triggers: {
+      switch: { once: 122, repeat: 123 },
+      walk: { once: 121, repeat: 120 },
+    },
+  },
   exit: {
     label: "End the level",
     triggers: { switch: { once: 11 }, walk: { once: 52 } },

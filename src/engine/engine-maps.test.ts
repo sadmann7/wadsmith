@@ -4,7 +4,7 @@ import { thingCatalog } from "../map/catalog";
 import { featuredMaps } from "../map/featured";
 import { pointInPolygon, wallKey, wallOwners } from "../map/geometry";
 import { starterMap } from "../map/starter-map";
-import type { GameMap } from "../map/types";
+import type { GameMap, LineActionKind } from "../map/types";
 import { compileEpisode } from "../wad/compile";
 import { doomKeys, type DoomGame } from "./runtime";
 import {
@@ -90,7 +90,7 @@ function pressesOf(map: GameMap): Press[] {
         height: (game) => game.sectorFloor(target),
         done: (game, before) => game.sectorFloor(target) > before,
       });
-    } else if (action.kind === "lift") {
+    } else if (action.kind === "lift" || action.kind === "lift-fast") {
       presses.push({
         label: `pressing ${wall} lowers ${map.sectors[target].name}`,
         map: placed,
@@ -128,6 +128,44 @@ describe.skipIf(!ready)("featured maps in the engine", () => {
       }, 30_000);
     }
   }
+});
+
+describe.skipIf(!ready)("fast lifts in the engine", () => {
+  it("lowers sooner than a lift", async () => {
+    const featured = featuredMaps.find((item) =>
+      Object.values(item.map.lines ?? {}).some(
+        (line) => line.action?.kind === "lift",
+      ),
+    )!;
+    const lowering = async (kind: LineActionKind) => {
+      const map: GameMap = {
+        ...featured.map,
+        things: featured.map.things.filter(
+          (thing) => thingCatalog[thing.kind].category !== "enemy",
+        ),
+        lines: Object.fromEntries(
+          Object.entries(featured.map.lines ?? {}).map(([wall, line]) => [
+            wall,
+            line.action?.kind === "lift"
+              ? { ...line, action: { ...line.action, kind } }
+              : line,
+          ]),
+        ),
+      };
+      const press = pressesOf(map).find((item) =>
+        item.label.startsWith("pressing"),
+      )!;
+      const game = await launch(press.map);
+      await waitForPlay(game);
+      const before = press.height(game);
+      const start = game.gameTic();
+      await pressUse(game);
+      await play(game, 6000, () => press.done(game, before));
+      expect(press.done(game, before)).toBe(true);
+      return game.gameTic() - start;
+    };
+    expect(await lowering("lift-fast")).toBeLessThan(await lowering("lift"));
+  }, 60_000);
 });
 
 describe.skipIf(!ready)("an episode in the engine", () => {

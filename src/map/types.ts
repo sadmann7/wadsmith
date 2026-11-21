@@ -41,6 +41,7 @@ type LineActionKind =
   | "floor-raise"
   | "floor-raise-next"
   | "lift"
+  | "lift-fast"
   | "exit"
   | "teleport"
   | "teleport-monsters";
