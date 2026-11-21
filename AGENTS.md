@@ -33,7 +33,7 @@ UI SDK parts render no styles. The shared controls in `src/components/ui` style 
 
 Wadsmith is a Doom map editor built with Next.js, Tailwind CSS and UI SDK. It compiles maps to real WAD files and plays them in Woof, built for WebAssembly and run in its vanilla Doom compatibility mode.
 
-- `src/app`: Next.js routes, metadata images and global styles. Read the guides in `node_modules/next/dist/docs/` before changing Next.js code. The color tokens in `globals.css` use shadcn/ui role names, and `colors.test.ts` checks their contrast.
+- `src/app`: Next.js routes, metadata images and global styles. The color tokens in `globals.css` use shadcn/ui role names, and `colors.test.ts` checks their contrast.
 - `src/components/ui`: shared controls built on UI SDK with Tailwind, such as `Button`, `Input`, `Field`, `Select`, `Menu` and `Dialog`. New UI uses these instead of new classes in `globals.css`. `src/components` also holds pieces several areas share, like `MapPlan`.
 - `src/lib`: small helpers, like `cn`, shadcn's `clsx` and `tailwind-merge` helper, extended to class names that are functions of a part's state.
 - `src/episodes`: the app shell, routes, episode pages, featured maps and the dialogs around them. Saved data still says "project" (the IndexedDB stores, a map's `projectId` and the backup format) so existing browsers and backups keep working.
