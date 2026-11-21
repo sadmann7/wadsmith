@@ -10,7 +10,7 @@ import {
 } from "./geometry";
 import { appearsOn } from "./balance";
 import { isPlayerStart, keyThings, thingCatalog, thingKinds } from "./catalog";
-import { describeLine, lineUsesTag, opensDoor } from "./lines";
+import { describeLine, lineUsesTag, movesSector, opensDoor } from "./lines";
 import type { GameMap, Point, Sector, ThingSkill } from "./types";
 
 type MapIssue = {
@@ -405,7 +405,7 @@ function inspectMap(map: GameMap) {
   const openedTags = () =>
     (opened ??= new Set(
       lineActions()
-        .filter(({ action }) => action.kind !== "exit" && action.tag > 0)
+        .filter(({ action }) => movesSector(action.kind) && action.tag > 0)
         .map(({ action }) => action.tag),
     ));
   for (const sector of map.sectors) {

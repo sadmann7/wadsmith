@@ -15,6 +15,7 @@ import {
   lineActionKinds,
   lineActions,
   lineUsesTag,
+  movesSector,
   opensDoor,
   usedFromFront,
 } from "../map/lines";
@@ -87,15 +88,10 @@ const manualDoors: Record<number, boolean> = {
 const keyedManualDoors = new Set([26, 27, 28, 32, 33, 34]);
 const fastManualDoors = new Set([117, 118]);
 
-const lights = new Set([12, 13, 17, 35, 79, 80, 81, 104, 138, 139]);
-const secretExits = new Set([51, 124]);
 const specialScrollLeft = 48;
 
 function actionGroup(special: number) {
-  if (lights.has(special)) return "Light changes";
-  if (secretExits.has(special)) return "Secret exits";
-  if (special > 141) return "Boom and later actions";
-  return "Other floor, ceiling and door actions";
+  return special > 141 ? "Boom and later actions" : "Other actions";
 }
 
 function actionTable() {
@@ -548,7 +544,7 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
     const openedByUse = new Set<number>();
     for (const line of lines) {
       const action = actions.get(line.special);
-      if (!action || action.kind === "exit") continue;
+      if (!action || !movesSector(action.kind)) continue;
       if (action.trigger === "door") {
         if (line.backSector !== null) openedByUse.add(line.backSector);
       } else if (

@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 
 import { sectorAt, wallOwners } from "../map/geometry";
+import { endsLevel, movesSector } from "../map/lines";
 import type { GameMap, Sector } from "../map/types";
 
 type SectorKind =
@@ -28,13 +29,13 @@ function sectorKinds(map: GameMap) {
   const lines = Object.entries(map.lines ?? {});
   const moved = new Set(
     lines.flatMap(([, line]) =>
-      line.action && line.action.kind !== "exit" ? [line.action.tag] : [],
+      line.action && movesSector(line.action.kind) ? [line.action.tag] : [],
     ),
   );
   const owners = wallOwners(map);
   const exits = new Set(
     lines.flatMap(([wall, line]) =>
-      line.action?.kind === "exit"
+      line.action && endsLevel(line.action.kind)
         ? (owners.get(wall) ?? []).map((sector) => sector.id)
         : [],
     ),

@@ -76,7 +76,7 @@ function pressesOf(map: GameMap): Press[] {
           .sector
       : owners.get(wall)!.find((sector) => sector.tag !== action.tag)!.id;
     const placed = facingWall(map, from, to, room);
-    if (action.kind === "exit") {
+    if (action.kind === "exit" || action.kind === "exit-secret") {
       presses.push({
         label: "exit switch ends the level",
         map: placed,
@@ -238,6 +238,23 @@ describe.skipIf(!ready)("floor and ceiling actions in the engine", () => {
     },
     30_000,
   );
+});
+
+describe.skipIf(!ready)("a secret exit in the engine", () => {
+  it("ends the level", async () => {
+    const secret: GameMap = {
+      ...starterMap,
+      lines: Object.fromEntries(
+        Object.entries(starterMap.lines ?? {}).map(([wall, line]) => [
+          wall,
+          line.action?.kind === "exit"
+            ? { ...line, action: { ...line.action, kind: "exit-secret" } }
+            : line,
+        ]),
+      ),
+    };
+    expect(await ticsToFinish(secret, "exit switch")).toBeGreaterThan(0);
+  }, 30_000);
 });
 
 describe.skipIf(!ready)("an episode in the engine", () => {
