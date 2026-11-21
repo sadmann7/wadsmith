@@ -9,7 +9,7 @@ import {
 } from "react";
 
 import type { GameMap, Point } from "../map/types";
-import { compileEpisode, compileMap } from "../wad/compile";
+import { compileEpisode, compileMap, type Lump } from "../wad/compile";
 import type { NetworkState } from "./doom-worker";
 import { startGameClient, type GameClient } from "./game-client";
 import { EndGameConfirm, GameHud, GameTopBar, type ScoreRow } from "./game-hud";
@@ -138,6 +138,7 @@ type Level = {
   title: string;
   slot: string;
   par: number | null;
+  lumps?: Lump[] | null;
 };
 
 type GameSessionProps = Omit<Level, "map"> & {
@@ -276,6 +277,7 @@ function GameSession({
                 episode.map((entry, index) => ({
                   slot: `MAP${String(index + 1).padStart(2, "0")}`,
                   map: entry.map,
+                  lumps: entry.lumps,
                 })),
               )
             : map && compileMap(map));

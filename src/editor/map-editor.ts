@@ -167,6 +167,19 @@ function agentHeights(floor: number, ceiling: number) {
   return heights;
 }
 
+const sectorIndexes = new WeakMap<GameMap, Map<string, Sector>>();
+
+// Maps are replaced on every edit, never changed in place, so an index built
+// for one stays right for as long as it's in use.
+function sectorById(map: GameMap, id: string) {
+  let index = sectorIndexes.get(map);
+  if (!index) {
+    index = new Map(map.sectors.map((sector) => [sector.id, sector]));
+    sectorIndexes.set(map, index);
+  }
+  return index.get(id);
+}
+
 function pointOf(state: MapEditorState, key: string): Point {
   const base = state.positions[key] ?? { x: 0, y: 0 };
   const { moving } = state;
@@ -185,8 +198,7 @@ function portPoint(state: MapEditorState, key: string): Point {
     return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
   }
   const id = key.slice(doorKeyPrefix.length);
-  const vertices =
-    state.map.sectors.find((sector) => sector.id === id)?.vertices ?? [];
+  const vertices = sectorById(state.map, id)?.vertices ?? [];
   const points = vertices.map((vertex) => pointOf(state, vertex));
   const count = points.length || 1;
   return {
@@ -216,9 +228,9 @@ function spansAt(points: Point[], y: number) {
 // covers, so an L-shaped room doesn't label the room tucked into its corner.
 function labelPoint(state: MapEditorState, id: string): Point {
   const center = portPoint(state, `${doorKeyPrefix}${id}`);
-  const points = (
-    state.map.sectors.find((sector) => sector.id === id)?.vertices ?? []
-  ).map((key) => pointOf(state, key));
+  const points = (sectorById(state.map, id)?.vertices ?? []).map((key) =>
+    pointOf(state, key),
+  );
   const y =
     Math.min(...points.map((point) => point.y)) +
     labelInset / state.viewport.zoom;
@@ -257,7 +269,7 @@ function connectingAttrs(state: MapEditorState) {
 }
 
 function polygonPoints(state: MapEditorState, id: string) {
-  const sector = state.map.sectors.find((item) => item.id === id);
+  const sector = sectorById(state.map, id);
   return (sector?.vertices ?? [])
     .map((vertex) => {
       const point = pointOf(state, vertex);
@@ -1089,9 +1101,7 @@ const mapEditor = definePrimitive({
       attrs: (state, { key }) => ({
         points: polygonPoints(state, key),
         "data-active": state.activeSector === key ? "" : undefined,
-        "data-door": state.map.sectors.find((sector) => sector.id === key)?.door
-          ? ""
-          : undefined,
+        "data-door": sectorById(state.map, key)?.door ? "" : undefined,
       }),
       live: live<MapEditorState, any, { value: string }>((state, { key }) => ({
         points: polygonPoints(state, key),

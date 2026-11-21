@@ -153,24 +153,48 @@ function buildNodes(sourceVertices: Point[], lines: NodeLine[]): BspResult {
   };
 
   const choosePartition = (segs: Seg[], tolerance: number) => {
-    let best: { partition: Partition; score: number } | null = null;
+    let best: { partition: Partition; score: number; rank: number } | null =
+      null;
     const tried = new Set<string>();
     const count = segs.length;
     const startX = new Float64Array(count);
     const startY = new Float64Array(count);
     const endX = new Float64Array(count);
     const endY = new Float64Array(count);
+    const segLine = new Int32Array(count);
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
     segs.forEach((seg, index) => {
       startX[index] = vertices[seg.start].x;
       startY[index] = vertices[seg.start].y;
       endX[index] = vertices[seg.end].x;
       endY[index] = vertices[seg.end].y;
+      segLine[index] = seg.line;
+      minX = Math.min(minX, startX[index], endX[index]);
+      minY = Math.min(minY, startY[index], endY[index]);
+      maxX = Math.max(maxX, startX[index], endX[index]);
+      maxY = Math.max(maxY, startY[index], endY[index]);
     });
+    const center = { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
+    const candidates: { partition: Partition; rank: number; reach: number }[] =
+      [];
     for (const seg of segs) {
       const key = `${seg.line}:${seg.side}`;
       if (tried.has(key)) continue;
       tried.add(key);
       const partition = partitionOf(seg);
+      candidates.push({
+        partition,
+        rank: candidates.length,
+        reach: Math.abs(distance(partition, center)),
+      });
+    }
+    // Lines through the middle tend to score well, and an early low score
+    // prunes more of the rest. Ties still go to the first line in seg order.
+    candidates.sort((a, b) => a.reach - b.reach);
+    for (const { partition, rank } of candidates) {
       const { x, y, dx, dy, length } = partition;
       let left = 0;
       let right = 0;
@@ -182,7 +206,7 @@ function buildNodes(sourceVertices: Point[], lines: NodeLine[]): BspResult {
           (dx * (startY[index] - y) - dy * (startX[index] - x)) / length;
         const b = (dx * (endY[index] - y) - dy * (endX[index] - x)) / length;
         if (
-          segs[index].line === partition.line ||
+          segLine[index] === partition.line ||
           (Math.abs(a) <= tolerance && Math.abs(b) <= tolerance)
         ) {
           const dot =
@@ -197,12 +221,23 @@ function buildNodes(sourceVertices: Point[], lines: NodeLine[]): BspResult {
         const bound =
           splits * 8 +
           Math.max(0, Math.abs(left - right) - (count - index - 1));
-        if (best && bound >= best.score) break;
+        if (
+          best &&
+          (bound > best.score || (bound === best.score && rank > best.rank))
+        ) {
+          break;
+        }
       }
       if (index < count) continue;
       if (left + splits === 0 || right + splits === 0) continue;
       const score = splits * 8 + Math.abs(left - right);
-      if (!best || score < best.score) best = { partition, score };
+      if (
+        !best ||
+        score < best.score ||
+        (score === best.score && rank < best.rank)
+      ) {
+        best = { partition, score, rank };
+      }
     }
     return best?.partition ?? null;
   };

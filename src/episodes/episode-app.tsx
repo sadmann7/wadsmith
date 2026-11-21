@@ -57,7 +57,12 @@ import {
   type EpisodeStore,
 } from "./episode-data";
 import { SidebarDrawer, type SidebarProps } from "./app-sidebar";
-import { checkBuild, knownBuildProblem, useBuildChecks } from "./build-checks";
+import {
+  checkBuild,
+  knownBuildProblem,
+  knownLumps,
+  useBuildChecks,
+} from "./build-checks";
 import { EpisodeBuildDialog } from "./episode-build-dialog";
 import { FeaturedMaps } from "./featured-maps";
 import { EpisodeHome } from "./episode-home";
@@ -135,6 +140,7 @@ function levelsOf(ordered: EpisodeMap[]): Level[] {
     title: mapName(entry),
     slot: entry.slot,
     par: entry.par,
+    lumps: knownLumps(entry),
   }));
 }
 
@@ -947,7 +953,9 @@ function EpisodeApp() {
     try {
       download(
         fileName,
-        compileEpisode(ordered).slice().buffer,
+        compileEpisode(
+          ordered.map((entry) => ({ ...entry, lumps: knownLumps(entry) })),
+        ).slice().buffer,
         "application/octet-stream",
       );
       setBuildingEpisode(null);
