@@ -411,7 +411,7 @@ function SectorInspector({
         <label className="field">
           <span className="label">Name</span>
           <Input
-            className="text-input"
+            className="input"
             maxLength={80}
             value={sector.name}
             onValueChange={(name) => onChange({ name })}
@@ -817,7 +817,7 @@ function CompactNumber({
           if (next !== null) onChange(Math.round(next));
         }}
       >
-        <NumberInputGroup className="flex h-8 items-center rounded-[2px] border border-border-control bg-canvas px-2">
+        <NumberInputGroup className="input-box flex h-8 items-center rounded-[2px] border border-input px-2">
           <NumberInputControl
             aria-label={label}
             className="w-full min-w-0 border-0 bg-transparent font-mono text-xs tabular-nums outline-none"
@@ -926,7 +926,7 @@ function PlaceThings({
   );
   return (
     <InspectorSection title="Place a thing">
-      <label className="flex h-8 items-center gap-2 rounded-[2px] border border-border-control bg-canvas px-2">
+      <label className="input-box flex h-8 items-center gap-2 rounded-[2px] border border-input px-2">
         <Search size={14} className="text-fg-muted" aria-hidden="true" />
         <Input
           aria-label="Search things"
@@ -1075,7 +1075,7 @@ function ThingFields({
           {enemies.length > 0 ? (
             <label className="flex items-center gap-2">
               <Checkbox
-                className="flex size-4 items-center justify-center rounded-[2px] border border-border-control bg-canvas p-0 text-accent-fg aria-checked:border-accent aria-checked:bg-accent"
+                className="flex size-4 items-center justify-center rounded-[2px] border border-input bg-transparent p-0 text-accent-fg aria-checked:border-accent aria-checked:bg-accent"
                 checked={enemies.every((thing) => thing.ambush)}
                 onCheckedChange={(checked) =>
                   onChange((thing) =>

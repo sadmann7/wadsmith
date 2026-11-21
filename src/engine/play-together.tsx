@@ -127,7 +127,7 @@ function Setup({
       <label className="grid">
         <FieldLabel>Your name</FieldLabel>
         <input
-          className="text-input"
+          className="input"
           maxLength={maxNameLength}
           placeholder="Player 1"
           value={settings.name}
@@ -266,7 +266,7 @@ function Lobby({
       <div className="grid gap-1.5">
         <div className="flex gap-2">
           <input
-            className="text-input min-w-0 flex-1 font-mono text-xs"
+            className="input min-w-0 flex-1 font-mono text-xs"
             aria-label="Invite link"
             readOnly
             value={link}

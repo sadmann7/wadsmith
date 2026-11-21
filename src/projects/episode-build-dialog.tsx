@@ -74,7 +74,7 @@ function EpisodeBuildDialog({
             <label className="field">
               <span className="label">File name</span>
               <Input
-                className="text-input"
+                className="input"
                 value={fileName}
                 onValueChange={setFileName}
               />

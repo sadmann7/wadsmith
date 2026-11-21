@@ -188,7 +188,7 @@ function TexturePicker({
             </ToggleGroup>
           </nav>
           <div className="flex min-h-0 flex-col gap-3 p-4">
-            <label className="flex h-[34px] shrink-0 items-center gap-2 rounded-[2px] border border-border-control bg-canvas px-2.5">
+            <label className="input-box flex h-[34px] shrink-0 items-center gap-2 rounded-[2px] border border-input px-2.5">
               <Search size={14} className="text-fg-muted" aria-hidden="true" />
               <Input
                 ref={searchInput}

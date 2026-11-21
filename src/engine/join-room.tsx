@@ -261,7 +261,7 @@ function Invite({
         <label className="grid">
           <FieldLabel>Your name</FieldLabel>
           <input
-            className="text-input"
+            className="input"
             maxLength={maxNameLength}
             autoFocus
             value={name}

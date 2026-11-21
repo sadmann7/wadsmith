@@ -104,7 +104,7 @@ function NewEpisodeDialog({
             <label className="field">
               <span className="label">Name</span>
               <Input
-                className="text-input"
+                className="input"
                 maxLength={maxNameLength}
                 value={name}
                 onValueChange={setName}
