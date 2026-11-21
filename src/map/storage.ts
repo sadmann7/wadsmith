@@ -228,6 +228,7 @@ function parseLine(value: unknown, sectors: Sector[]): LineSettings {
       "upperFixed",
       "lowerFixed",
       "hidden",
+      "scrolls",
     ] as const
   ).flatMap((flag) => {
     if (line[flag] === undefined) return [];

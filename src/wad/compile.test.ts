@@ -1140,6 +1140,29 @@ describe("map check", () => {
     expect(() => parseMapFile(serializeMap(removed))).not.toThrow();
   });
 
+  it("scrolls a wall's texture unless its line has an action", () => {
+    const special = (map: GameMap) => {
+      const index = buildLevel(map).lines.findIndex(
+        (line) => line.wall === "v3|v4",
+      );
+      const lines = compileLumps(map).find((lump) => lump.name === "LINEDEFS")!;
+      return new DataView(lines.data.buffer, lines.data.byteOffset).getUint16(
+        index * 14 + 6,
+        true,
+      );
+    };
+    const scrolling = updateLine(testMap, "v3|v4", { scrolls: true });
+    expect(special(scrolling)).toBe(48);
+    expect(
+      special(
+        updateLine(scrolling, "v3|v4", {
+          action: newLineAction(true, "floor-lower"),
+        }),
+      ),
+    ).not.toBe(48);
+    expect(parseMapFile(serializeMap(scrolling))).toEqual(scrolling);
+  });
+
   it("warns about a spawn spot level with a monster spawner", () => {
     const spawner = addThing(testMap, "boss-shooter", { x: 64, y: 96 }).map;
     const warned = (x: number, y: number) =>

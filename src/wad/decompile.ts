@@ -87,14 +87,13 @@ const crushers = new Set([6, 25, 49, 73, 74, 77, 141, 57]);
 const stairs = new Set([7, 8, 100, 127]);
 const lights = new Set([12, 13, 17, 35, 79, 80, 81, 104, 138, 139]);
 const secretExits = new Set([51, 124]);
-const scrollers = new Set([48]);
+const specialScrollLeft = 48;
 
 function actionGroup(special: number) {
   if (crushers.has(special)) return "Crushers";
   if (stairs.has(special)) return "Stairs";
   if (lights.has(special)) return "Light changes";
   if (secretExits.has(special)) return "Secret exits";
-  if (scrollers.has(special)) return "Scrolling walls";
   if (special > 141) return "Boom and later actions";
   return "Other floor, ceiling and door actions";
 }
@@ -679,7 +678,9 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
     const entry: LineSettings = {};
     const sides: Record<string, LineSide> = {};
 
-    if (line.special !== 0) {
+    if (line.special === specialScrollLeft) {
+      entry.scrolls = true;
+    } else if (line.special !== 0) {
       const action = actions.get(line.special);
       const intoDoor = line.backSector !== null && doors.has(line.backSector);
       const automatic =
@@ -726,7 +727,7 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
         if (Object.keys(value).length > 0) sides[id] = value;
       }
       if (line.flags & lineBlocksAll) entry.blocksAll = true;
-      if (entry.action && usedFromFront(entry.action)) {
+      if (entry.scrolls || (entry.action && usedFromFront(entry.action))) {
         entry.front = kept[0].id;
       }
     } else {

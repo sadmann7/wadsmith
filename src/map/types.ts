@@ -70,6 +70,7 @@ type LineSettings = {
   upperFixed?: boolean;
   lowerFixed?: boolean;
   hidden?: boolean;
+  scrolls?: boolean;
   action?: LineAction;
   sides?: Record<string, LineSide>;
   front?: string;
