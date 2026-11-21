@@ -1,5 +1,5 @@
 import { Check, Copy, Lock, Play, Plus, TriangleAlert } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import * as React from "react";
 
 import { deathmatchStarts } from "../map/catalog";
 import type { GameMap } from "../map/types";
@@ -75,7 +75,7 @@ function CheckRow({
   icon: "done" | "todo" | "lock";
   title: string;
   detail?: string;
-  action?: ReactNode;
+  action?: React.ReactNode;
 }) {
   const Icon = { done: Check, todo: TriangleAlert, lock: Lock }[icon];
   const color = {
@@ -249,7 +249,7 @@ function Lobby({
   lost: boolean;
   onRemove: (peer: number) => void;
 }) {
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = React.useState(false);
   const link = inviteLink(code);
   const open = Array.from(
     { length: Math.max(0, max - players.length) },
@@ -386,7 +386,7 @@ function PlayTogether({
   onStart: (game: HostedGame) => void;
   onClose: () => void;
 }) {
-  const [settings, setSettings] = useState<Settings>(() => {
+  const [settings, setSettings] = React.useState<Settings>(() => {
     const mode =
       initialMode ??
       (coopPlayers(map) > 1 || deathmatchSpots(map) < deathmatchStarts
@@ -399,23 +399,23 @@ function PlayTogether({
       name: loadName(),
     };
   });
-  const [code, setCode] = useState<string | null>(null);
-  const [players, setPlayers] = useState<RoomPlayer[]>([]);
-  const [links, setLinks] = useState<Record<number, LinkState>>({});
-  const [lost, setLost] = useState(false);
-  const roomRef = useRef<HostRoom | null>(null);
-  const linksRef = useRef<PeerLinks | null>(null);
-  const relayRef = useRef(packetRelay());
-  const handedOff = useRef(false);
-  const gameRef = useRef<CoopGame | null>(null);
-  const hostRef = useRef({ name: "Player 1", players: 2 });
+  const [code, setCode] = React.useState<string | null>(null);
+  const [players, setPlayers] = React.useState<RoomPlayer[]>([]);
+  const [links, setLinks] = React.useState<Record<number, LinkState>>({});
+  const [lost, setLost] = React.useState(false);
+  const roomRef = React.useRef<HostRoom | null>(null);
+  const linksRef = React.useRef<PeerLinks | null>(null);
+  const relayRef = React.useRef(packetRelay());
+  const handedOff = React.useRef(false);
+  const gameRef = React.useRef<CoopGame | null>(null);
+  const hostRef = React.useRef({ name: "Player 1", players: 2 });
 
   const ready =
     settings.mode === "coop"
       ? coopPlayers(map) >= settings.players
       : deathmatchSpots(map) >= deathmatchStarts;
 
-  useEffect(() => {
+  React.useEffect(() => {
     const game = gameRef.current;
     if (!code || !game) return;
     const direct = peerLinks({

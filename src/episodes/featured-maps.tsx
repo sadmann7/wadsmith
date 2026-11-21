@@ -1,5 +1,5 @@
 import { Copy, FolderOpen, Play, Users } from "lucide-react";
-import { useRef, useState } from "react";
+import * as React from "react";
 
 import { MapPlan } from "../components/map-plan";
 import { fragLimit } from "../engine/runtime";
@@ -92,8 +92,8 @@ function FeaturedMaps({
   onOpenCopy: (entry: FeaturedMap) => void;
   onPlayWad: (files: File[]) => void;
 }) {
-  const [filter, setFilter] = useState<Filter>("all");
-  const wadInput = useRef<HTMLInputElement>(null);
+  const [filter, setFilter] = React.useState<Filter>("all");
+  const wadInput = React.useRef<HTMLInputElement>(null);
   const shown = featuredMaps.filter(
     (entry) => filter === "all" || entry.mode === filter,
   );

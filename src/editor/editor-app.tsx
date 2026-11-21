@@ -28,16 +28,7 @@ import {
   Users,
   Waypoints,
 } from "lucide-react";
-import {
-  useCallback,
-  useEffect,
-  useEffectEvent,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-  type ReactNode,
-} from "react";
+import * as React from "react";
 
 import { agent } from "./agent";
 import { BuildDialog } from "./build-dialog";
@@ -289,7 +280,7 @@ type AppProps = {
   onSave: (map: GameMap) => void;
   watchExternal: (listener: (map: GameMap) => void) => () => void;
   onOpenEpisodes: () => void;
-  navigation: ReactNode;
+  navigation: React.ReactNode;
   onNewMap: () => void;
   onMapSettings: () => void;
   playing: boolean;
@@ -328,75 +319,79 @@ function App({
   onPlayingChange,
   episode,
 }: AppProps) {
-  const [map, setMap] = useState(initialMap);
-  const [tool, setTool] = useState<MapTool>("select");
-  const [thingKind, setThingKind] = useState<ThingKind>("imp");
-  const [activeSector, setActiveSector] = useState<string | null>("sector-3");
-  const [selection, setSelection] = useState<string[]>([]);
-  const [game, setGame] = useState<PlayedGame | null>(() =>
+  const [map, setMap] = React.useState(initialMap);
+  const [tool, setTool] = React.useState<MapTool>("select");
+  const [thingKind, setThingKind] = React.useState<ThingKind>("imp");
+  const [activeSector, setActiveSector] = React.useState<string | null>(
+    "sector-3",
+  );
+  const [selection, setSelection] = React.useState<string[]>([]);
+  const [game, setGame] = React.useState<PlayedGame | null>(() =>
     playing ? { map: initialMap, coop: null } : null,
   );
-  const [followed, setFollowed] = useState(playing);
-  const [coopLobby, setCoopLobby] = useState(false);
+  const [followed, setFollowed] = React.useState(playing);
+  const [coopLobby, setCoopLobby] = React.useState(false);
   if (followed !== playing) {
     setFollowed(playing);
     setGame(playing ? (game ?? { map, coop: null }) : null);
   }
   const hosted = game?.coop ?? null;
-  useEffect(() => () => hosted?.close(), [hosted]);
-  const [mapVersion, setMapVersion] = useState(0);
-  const [fileError, setFileError] = useState<string | null>(null);
-  const [welcomed, setWelcomed] = useState(loadWelcomed);
-  const playButton = useRef<HTMLButtonElement>(null);
-  const fileInput = useRef<HTMLInputElement>(null);
-  const [agentLog, setAgentLog] = useState("");
-  const [, setHistoryVersion] = useState(0);
-  const [initialLayout] = useState(loadLayout);
-  const [layout, setLayout] = useState(initialLayout.view);
-  const [findCameraRequest, setFindCameraRequest] = useState(0);
-  const [fitRequest, setFitRequest] = useState(0);
-  const [focusRequest, setFocusRequest] = useState<{
+  React.useEffect(() => () => hosted?.close(), [hosted]);
+  const [mapVersion, setMapVersion] = React.useState(0);
+  const [fileError, setFileError] = React.useState<string | null>(null);
+  const [welcomed, setWelcomed] = React.useState(loadWelcomed);
+  const playButton = React.useRef<HTMLButtonElement>(null);
+  const fileInput = React.useRef<HTMLInputElement>(null);
+  const [agentLog, setAgentLog] = React.useState("");
+  const [, setHistoryVersion] = React.useState(0);
+  const [initialLayout] = React.useState(loadLayout);
+  const [layout, setLayout] = React.useState(initialLayout.view);
+  const [findCameraRequest, setFindCameraRequest] = React.useState(0);
+  const [fitRequest, setFitRequest] = React.useState(0);
+  const [focusRequest, setFocusRequest] = React.useState<{
     id: number;
     point: Point;
   } | null>(null);
-  const [drawRequest, setDrawRequest] = useState<{
+  const [drawRequest, setDrawRequest] = React.useState<{
     id: number;
     point: Point;
   } | null>(null);
-  const [menu] = useState(() => createMenuController());
-  const [menuTarget, setMenuTarget] = useState<MapTarget | null>(null);
-  const menuTargetRef = useRef<MapTarget | null>(null);
-  const menuOpen = useRef(false);
-  const [contextMenuOpen, setContextMenuOpen] = useState(false);
-  const [building, setBuilding] = useState(false);
-  const [showShortcuts, setShowShortcuts] = useState(false);
-  const [draftCorners, setDraftCorners] = useState(0);
-  const [showDock, setShowDock] = useState(initialLayout.dock);
-  const [editMode, setEditMode] = useState<EditMode>("vertices");
-  const pointerStatus = useRef<HTMLSpanElement>(null);
-  const zoomStatus = useRef<HTMLSpanElement>(null);
-  const mapCheck = useRef<HTMLElement>(null);
-  const splitSizes = useRef(initialLayout.sizes);
-  const hoveredPane = useRef<SinglePane | null>(null);
-  const mapPointer = useRef<{ clientX: number; clientY: number } | null>(null);
-  const [lookAtRequest, setLookAtRequest] = useState<{
+  const [menu] = React.useState(() => createMenuController());
+  const [menuTarget, setMenuTarget] = React.useState<MapTarget | null>(null);
+  const menuTargetRef = React.useRef<MapTarget | null>(null);
+  const menuOpen = React.useRef(false);
+  const [contextMenuOpen, setContextMenuOpen] = React.useState(false);
+  const [building, setBuilding] = React.useState(false);
+  const [showShortcuts, setShowShortcuts] = React.useState(false);
+  const [draftCorners, setDraftCorners] = React.useState(0);
+  const [showDock, setShowDock] = React.useState(initialLayout.dock);
+  const [editMode, setEditMode] = React.useState<EditMode>("vertices");
+  const pointerStatus = React.useRef<HTMLSpanElement>(null);
+  const zoomStatus = React.useRef<HTMLSpanElement>(null);
+  const mapCheck = React.useRef<HTMLElement>(null);
+  const splitSizes = React.useRef(initialLayout.sizes);
+  const hoveredPane = React.useRef<SinglePane | null>(null);
+  const mapPointer = React.useRef<{ clientX: number; clientY: number } | null>(
+    null,
+  );
+  const [lookAtRequest, setLookAtRequest] = React.useState<{
     id: number;
     clientX: number;
     clientY: number;
   } | null>(null);
-  const narrow = useSyncExternalStore(subscribeNarrow, isNarrow);
+  const narrow = React.useSyncExternalStore(subscribeNarrow, isNarrow);
   const visibleLayout = narrow && layout === "split" ? "map" : layout;
-  const [surface, setSurface] = useState<string | null>(null);
-  const [assets, setAssets] = useState(createFlatAssets);
-  const [drafts] = useState(createDraftChannel);
-  const [camera] = useState(() => new SceneCamera(initialMap));
-  const [history] = useState(() =>
+  const [surface, setSurface] = React.useState<string | null>(null);
+  const [assets, setAssets] = React.useState(createFlatAssets);
+  const [drafts] = React.useState(createDraftChannel);
+  const [camera] = React.useState(() => new SceneCamera(initialMap));
+  const [history] = React.useState(() =>
     createUndoStack(initialMap, { limit: 200, groupDelay: 500 }),
   );
 
-  const issues = useMemo(() => validateMap(map), [map]);
+  const issues = React.useMemo(() => validateMap(map), [map]);
   const canPlay = issues.length === 0;
-  const checks = useMemo(() => checkMap(map), [map]);
+  const checks = React.useMemo(() => checkMap(map), [map]);
   const liveHealth: MapHealth = checks.some(
     (issue) => issue.severity === "error",
   )
@@ -422,7 +417,7 @@ function App({
     checks.length === 0
       ? "Ready"
       : `${checks.length} ${checks.length === 1 ? "problem" : "problems"}`;
-  const callouts = useMemo(
+  const callouts = React.useMemo(
     () =>
       issues.slice(0, 5).flatMap((issue) => {
         const target = issue.target ? targetForIssue(map, issue.target) : null;
@@ -449,7 +444,7 @@ function App({
   );
   const doors = map.sectors.filter((item) => item.door);
 
-  const showMap = useCallback(
+  const showMap = React.useCallback(
     (next: GameMap) => {
       setMap(next);
       onSave(next);
@@ -463,7 +458,7 @@ function App({
     showMap(next);
   };
 
-  const restore = useCallback(
+  const restore = React.useCallback(
     (next: GameMap | undefined) => {
       if (!next) return;
       showMap(next);
@@ -497,7 +492,7 @@ function App({
   );
 
   // The registry skips key repeats, and holding mod+Z should keep stepping back.
-  const onHeldKey = useEffectEvent((event: KeyboardEvent) => {
+  const onHeldKey = React.useEffectEvent((event: KeyboardEvent) => {
     if (
       !event.repeat ||
       !notTyping() ||
@@ -517,7 +512,7 @@ function App({
     }
   });
 
-  useEffect(() => {
+  React.useEffect(() => {
     window.addEventListener("keydown", onHeldKey);
     return () => window.removeEventListener("keydown", onHeldKey);
   }, []);
@@ -527,7 +522,7 @@ function App({
     shortcut("help"),
   );
 
-  useEffect(() => {
+  React.useEffect(() => {
     let active = true;
     loadIwad()
       .then((bytes) => {
@@ -539,16 +534,16 @@ function App({
     };
   }, []);
 
-  const surfaceInfo = useMemo(
+  const surfaceInfo = React.useMemo(
     () => describeSurface(map, surface),
     [map, surface],
   );
 
-  useEffect(() => {
+  React.useEffect(() => {
     camera.sync(map);
   }, [camera, map]);
 
-  const changeLayout = useCallback(
+  const changeLayout = React.useCallback(
     (next: ViewLayout) => {
       setLayout(next);
       saveLayout(next, splitSizes.current, showDock);
@@ -561,7 +556,7 @@ function App({
     [showDock],
   );
 
-  const chooseMode = useCallback(
+  const chooseMode = React.useCallback(
     (mode: RailMode) => {
       if (mode === "draw") {
         if (visibleLayout !== "scene") setTool("draw");
@@ -573,7 +568,7 @@ function App({
     [visibleLayout],
   );
 
-  const togglePane = useCallback(
+  const togglePane = React.useCallback(
     (pane: SinglePane) => {
       if (narrow) return;
       changeLayout(visibleLayout === "split" ? pane : "split");
@@ -638,7 +633,7 @@ function App({
     setFindCameraRequest((request) => request + 1);
   };
 
-  const sceneSelection = useMemo(() => {
+  const sceneSelection = React.useMemo(() => {
     if (surfaceInfo) return surface;
     const key = selection[0];
     if (key?.startsWith(thingKeyPrefix)) return key;
@@ -659,7 +654,7 @@ function App({
       ? surfaceKey({ kind: "floor", sector: activeSector })
       : null;
   }, [activeSector, map.switches, selection, surface, surfaceInfo]);
-  const sceneInfo = useMemo(
+  const sceneInfo = React.useMemo(
     () => describeSurface(map, sceneSelection),
     [map, sceneSelection],
   );
@@ -799,7 +794,7 @@ function App({
     </p>
   );
 
-  useEffect(
+  React.useEffect(
     () =>
       watchExternal((next) => {
         history.record(next);
@@ -811,7 +806,7 @@ function App({
     [history, watchExternal],
   );
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (menuOpen.current && menuTarget && !targetExists(map, menuTarget)) {
       menu.close();
     }
@@ -828,7 +823,7 @@ function App({
     }
   };
 
-  const lineCount = useMemo(() => wallOwners(map).size, [map]);
+  const lineCount = React.useMemo(() => wallOwners(map).size, [map]);
 
   const showMapCheck = () => {
     mapCheck.current?.scrollIntoView({ block: "nearest" });

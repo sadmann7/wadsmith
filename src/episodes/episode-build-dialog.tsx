@@ -1,5 +1,5 @@
 import { CircleCheck, CircleX, Loader, TriangleAlert } from "lucide-react";
-import { useState } from "react";
+import * as React from "react";
 
 import { wadFileName } from "../editor/build-dialog";
 import { knownBuildProblem, useBuildChecks } from "./build-checks";
@@ -41,10 +41,10 @@ function EpisodeBuildDialog({
   onOpenMap: (entry: EpisodeMap) => void;
   onClose: () => void;
 }) {
-  const [fileName, setFileName] = useState(() =>
+  const [fileName, setFileName] = React.useState(() =>
     wadFileName(name.toLowerCase()),
   );
-  const [buildError, setBuildError] = useState<string | null>(null);
+  const [buildError, setBuildError] = React.useState<string | null>(null);
   useBuildChecks(maps);
   const rows = maps.map((entry) => ({
     entry,

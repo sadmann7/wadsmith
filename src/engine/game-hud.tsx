@@ -11,7 +11,7 @@ import {
   Volume2,
   VolumeX,
 } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import * as React from "react";
 
 import { MapOutline } from "../components/map-outline";
 import { MapPlan } from "../components/map-plan";
@@ -129,7 +129,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Vital({ label, value }: { label: string; value: ReactNode }) {
+function Vital({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
       <div className="font-mono text-xs text-foreground uppercase">{label}</div>
@@ -322,8 +322,8 @@ function BetweenLevels({
 }
 
 function StallBanner({ names, since }: { names: string[]; since: number }) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
+  const [now, setNow] = React.useState(() => Date.now());
+  React.useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, []);
@@ -354,7 +354,7 @@ function StallBanner({ names, since }: { names: string[]; since: number }) {
 }
 
 function NoteForm({ onSave }: { onSave: (text: string) => void }) {
-  const [text, setText] = useState("");
+  const [text, setText] = React.useState("");
   return (
     <form
       aria-label="Leave a note"
@@ -813,10 +813,10 @@ function EndGameConfirm({
   onKeepPlaying: () => void;
   onEndGame: () => void;
 }) {
-  const keepPlaying = useRef<HTMLButtonElement>(null);
+  const keepPlaying = React.useRef<HTMLButtonElement>(null);
   const list = new Intl.ListFormat("en").format(names);
 
-  useEffect(() => keepPlaying.current?.focus(), []);
+  React.useEffect(() => keepPlaying.current?.focus(), []);
 
   return (
     <section

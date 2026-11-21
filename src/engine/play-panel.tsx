@@ -1,12 +1,5 @@
 import { createLocalStorage } from "@ui-sdk/core";
-import {
-  useEffect,
-  useEffectEvent,
-  useReducer,
-  useRef,
-  useState,
-  type PointerEvent as ReactPointerEvent,
-} from "react";
+import * as React from "react";
 
 import type { GameMap, Point } from "../map/types";
 import { compileEpisode, compileMap, type Lump } from "../wad/compile";
@@ -187,69 +180,69 @@ function GameSession({
   skill,
 }: GameSessionProps) {
   const canEdit = !coop && !episode && Boolean(map && onAddNote && onEditSpot);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const gameRef = useRef<GameClient | null>(null);
-  const heldKeys = useRef(new HeldKeys());
-  const mouseFire = useRef(new MouseFire());
-  const soundRef = useRef(sound);
-  const noteTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const leaveGame = useEffectEvent(onExit);
-  const [status, setStatus] = useState<GameStatus | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [audioUnavailable, setAudioUnavailable] = useState(false);
-  const [showHelp, setShowHelp] = useState(true);
-  const [noteSpot, setNoteSpot] = useState<Point | null>(null);
-  const [noteSaved, setNoteSaved] = useState(false);
-  const [finished, setFinished] = useState(false);
-  const [levelIndex, setLevelIndex] = useState(0);
-  const [between, setBetween] = useState<GameStatus | null>(null);
-  const advanceTimer = useRef<ReturnType<typeof setInterval>>(undefined);
+  const canvasRef = React.useRef<HTMLCanvasElement>(null);
+  const gameRef = React.useRef<GameClient | null>(null);
+  const heldKeys = React.useRef(new HeldKeys());
+  const mouseFire = React.useRef(new MouseFire());
+  const soundRef = React.useRef(sound);
+  const noteTimer = React.useRef<ReturnType<typeof setTimeout>>(undefined);
+  const leaveGame = React.useEffectEvent(onExit);
+  const [status, setStatus] = React.useState<GameStatus | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+  const [audioUnavailable, setAudioUnavailable] = React.useState(false);
+  const [showHelp, setShowHelp] = React.useState(true);
+  const [noteSpot, setNoteSpot] = React.useState<Point | null>(null);
+  const [noteSaved, setNoteSaved] = React.useState(false);
+  const [finished, setFinished] = React.useState(false);
+  const [levelIndex, setLevelIndex] = React.useState(0);
+  const [between, setBetween] = React.useState<GameStatus | null>(null);
+  const advanceTimer = React.useRef<ReturnType<typeof setInterval>>(undefined);
   const level = episode?.[levelIndex] ?? {
     map,
     title,
     slot: files && status ? `MAP${String(status.map).padStart(2, "0")}` : slot,
     par,
   };
-  const [network, setNetwork] = useState<NetworkState | null>(null);
-  const [coopBegan, setCoopBegan] = useState(false);
-  const [scoresOpen, setScoresOpen] = useState(false);
-  const [confirmingExit, setConfirmingExit] = useState(false);
-  const [stall, setStall] = useState<{ peers: number[]; since: number }>({
+  const [network, setNetwork] = React.useState<NetworkState | null>(null);
+  const [coopBegan, setCoopBegan] = React.useState(false);
+  const [scoresOpen, setScoresOpen] = React.useState(false);
+  const [confirmingExit, setConfirmingExit] = React.useState(false);
+  const [stall, setStall] = React.useState<{ peers: number[]; since: number }>({
     peers: [],
     since: 0,
   });
-  const [capture, updateCapture] = useReducer(
+  const [capture, updateCapture] = React.useReducer(
     nextMouseCapture,
     initialMouseCapture,
   );
-  const captureRef = useRef(capture);
-  const wantsLock = useRef(false);
-  const lockPending = useRef(false);
-  const expectingRelease = useRef(false);
-  const recaptureAfterNote = useRef(false);
-  const lockTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const captureRef = React.useRef(capture);
+  const wantsLock = React.useRef(false);
+  const lockPending = React.useRef(false);
+  const expectingRelease = React.useRef(false);
+  const recaptureAfterNote = React.useRef(false);
+  const lockTimer = React.useRef<ReturnType<typeof setTimeout>>(undefined);
   const gameHeld = noteSpot !== null || holdsGame(capture);
-  const gameHeldRef = useRef(gameHeld);
+  const gameHeldRef = React.useRef(gameHeld);
   const { width, height } = screenSize(screen);
   const coopStarted = coopBegan && status?.inLevel;
 
-  useEffect(() => {
+  React.useEffect(() => {
     captureRef.current = capture;
   }, [capture]);
 
-  useEffect(() => {
+  React.useEffect(() => {
     gameHeldRef.current = gameHeld;
     gameRef.current?.setHeld(gameHeld);
   }, [gameHeld]);
 
-  useEffect(() => {
+  React.useEffect(() => {
     soundRef.current = sound;
     gameRef.current?.setSound(sound);
   }, [sound]);
 
-  useEffect(() => () => clearTimeout(noteTimer.current), []);
+  React.useEffect(() => () => clearTimeout(noteTimer.current), []);
 
-  useEffect(() => {
+  React.useEffect(() => {
     let stopped = false;
     let client: GameClient | null = null;
     let reachedLevel = false;
@@ -392,7 +385,7 @@ function GameSession({
     };
   }, [map, files, episode, screen, width, height, coop, skill]);
 
-  useEffect(() => () => clearInterval(advanceTimer.current), []);
+  React.useEffect(() => () => clearInterval(advanceTimer.current), []);
 
   // Doom's tally and story screens move on when a player presses use.
   const nextLevel = () => {
@@ -409,7 +402,7 @@ function GameSession({
     if (heldKeys.current.press(source, key)) gameRef.current?.key(true, key);
   };
 
-  const releaseKey = useEffectEvent((source: string) => {
+  const releaseKey = React.useEffectEvent((source: string) => {
     const key = heldKeys.current.release(source);
     if (key !== null) gameRef.current?.key(false, key);
   });
@@ -422,7 +415,7 @@ function GameSession({
 
   const focusGame = () => canvasRef.current?.focus();
 
-  const syncFire = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+  const syncFire = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const firing = mouseFire.current.update(
       capture,
       event.buttons,
@@ -440,20 +433,20 @@ function GameSession({
     pressKey(mouseFireSource, keysByCode.Space);
   };
 
-  const releaseMouse = useEffectEvent(() => {
+  const releaseMouse = React.useEffectEvent(() => {
     if (document.pointerLockElement !== canvasRef.current) return;
     expectingRelease.current = true;
     document.exitPointerLock();
   });
 
-  const cancelCapture = useEffectEvent(() => {
+  const cancelCapture = React.useEffectEvent(() => {
     clearTimeout(lockTimer.current);
     lockPending.current = false;
     wantsLock.current = false;
     updateCapture("cancelled");
   });
 
-  useEffect(() => {
+  React.useEffect(() => {
     const onChange = () => {
       const canvas = canvasRef.current;
       if (canvas && document.pointerLockElement === canvas) {
@@ -504,7 +497,7 @@ function GameSession({
     else lock();
   };
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (!finished && !error && !between) return;
     cancelCapture();
     releaseMouse();
@@ -555,7 +548,7 @@ function GameSession({
     requestAnimationFrame(focusGame);
   };
 
-  const onShortcut = useEffectEvent((event: KeyboardEvent) => {
+  const onShortcut = React.useEffectEvent((event: KeyboardEvent) => {
     if (showExitConfirm) {
       if (event.code === "Escape" && !event.repeat) {
         event.preventDefault();
@@ -583,7 +576,7 @@ function GameSession({
     }
   });
 
-  useEffect(() => {
+  React.useEffect(() => {
     window.addEventListener("keydown", onShortcut);
     return () => window.removeEventListener("keydown", onShortcut);
   }, []);
@@ -862,13 +855,13 @@ function GameView({
   exit?: GameExit;
   skill?: Skill;
 }) {
-  const stageRef = useRef<HTMLElement>(null);
-  const [run, setRun] = useState(0);
-  const [fullscreen, setFullscreen] = useState(false);
-  const [sound, setSound] = useState(loadSound);
-  const [screen, setScreen] = useState(loadScreen);
+  const stageRef = React.useRef<HTMLElement>(null);
+  const [run, setRun] = React.useState(0);
+  const [fullscreen, setFullscreen] = React.useState(false);
+  const [sound, setSound] = React.useState(loadSound);
+  const [screen, setScreen] = React.useState(loadScreen);
 
-  useEffect(() => {
+  React.useEffect(() => {
     const update = () => setFullscreen(Boolean(document.fullscreenElement));
     document.addEventListener("fullscreenchange", update);
     return () => {

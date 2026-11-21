@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from "react";
+import * as React from "react";
 
 import { wallOwners } from "../map/geometry";
 import type { GameMap } from "../map/types";
@@ -16,9 +16,9 @@ function MapOutline({
   label?: string;
   solidColor?: string;
   openColor?: string;
-  children?: (size: number) => ReactNode;
+  children?: (size: number) => React.ReactNode;
 }) {
-  const { walls, box } = useMemo(() => {
+  const { walls, box } = React.useMemo(() => {
     const points = Object.values(map.vertices);
     const xs = points.map((point) => point.x);
     const ys = points.map((point) => point.y);

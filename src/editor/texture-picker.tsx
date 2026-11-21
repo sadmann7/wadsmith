@@ -1,6 +1,6 @@
 import { Toggle, ToggleGroup } from "@ui-sdk/react/toggle";
 import { Search } from "lucide-react";
-import { useMemo, useRef, useState, type KeyboardEvent } from "react";
+import * as React from "react";
 
 import { freedoomFlats, freedoomWalls } from "../map/freedoom-textures";
 import type { TextureUse } from "../map/textures";
@@ -89,19 +89,19 @@ function TexturePicker({
   onApply: (name: string) => void;
   onClose: () => void;
 }) {
-  const categories = useMemo(
+  const categories = React.useMemo(
     () => categoriesFor(kind, common, use),
     [common, kind, use],
   );
-  const [category, setCategory] = useState("all");
-  const [query, setQuery] = useState("");
-  const [chosen, setChosen] = useState(value);
-  const [shown, setShown] = useState(() => {
+  const [category, setCategory] = React.useState("all");
+  const [query, setQuery] = React.useState("");
+  const [chosen, setChosen] = React.useState(value);
+  const [shown, setShown] = React.useState(() => {
     const index = categories[0].names.indexOf(value);
     return Math.ceil((Math.max(index, 0) + 1) / pageSize) * pageSize;
   });
-  const grid = useRef<HTMLDivElement>(null);
-  const searchInput = useRef<HTMLInputElement>(null);
+  const grid = React.useRef<HTMLDivElement>(null);
+  const searchInput = React.useRef<HTMLInputElement>(null);
   const search = query.trim().toUpperCase();
   const active =
     categories.find((item) => item.id === category) ?? categories[0];
@@ -118,7 +118,7 @@ function TexturePicker({
     onClose();
   };
 
-  const onSearchKey = (event: KeyboardEvent<HTMLInputElement>) => {
+  const onSearchKey = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (!firstResult) return;
     if (event.key === "ArrowDown") {
       event.preventDefault();

@@ -7,12 +7,7 @@ import {
   DrawerTrigger,
 } from "@ui-sdk/react/drawer";
 import { PanelLeft, Plus, Star } from "lucide-react";
-import {
-  useState,
-  type FormEvent,
-  type MouseEvent,
-  type ReactNode,
-} from "react";
+import * as React from "react";
 
 import { MapOutline } from "../components/map-outline";
 import { MapPlan } from "../components/map-plan";
@@ -92,9 +87,9 @@ function NewEpisodeDialog({
   onSubmit: (name: string, start: EpisodeStart) => void;
   onClose: () => void;
 }) {
-  const [name, setName] = useState("");
-  const [start, setStart] = useState<EpisodeStart>("one");
-  const submit = (event: FormEvent) => {
+  const [name, setName] = React.useState("");
+  const [start, setStart] = React.useState<EpisodeStart>("one");
+  const submit = (event: React.FormEvent) => {
     event.preventDefault();
     if (name.trim()) onSubmit(name.trim(), start);
   };
@@ -196,9 +191,9 @@ function SidebarLink({
   route: Route;
   current: boolean;
   onNavigate?: (route: Route) => void;
-  children: ReactNode;
+  children: React.ReactNode;
 }) {
-  const follow = (event: MouseEvent<HTMLAnchorElement>) => {
+  const follow = (event: React.MouseEvent<HTMLAnchorElement>) => {
     if (!onNavigate || event.metaKey || event.ctrlKey || event.shiftKey) {
       return;
     }
@@ -225,7 +220,7 @@ function AppSidebar({
   onNavigate,
   onCreateEpisode,
 }: SidebarProps) {
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = React.useState(false);
   const currentEpisode =
     current?.kind === "episode" || current?.kind === "map" ? current.id : null;
   return (
@@ -332,7 +327,7 @@ function SidebarDrawer({
   className = "",
   ...props
 }: SidebarProps & { className?: string }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = React.useState(false);
   const navigate = props.onNavigate
     ? (route: Route) => {
         setOpen(false);
@@ -368,9 +363,9 @@ function AppShell({
   children,
 }: {
   sidebar: SidebarProps;
-  crumbs?: ReactNode;
-  actions?: ReactNode;
-  children: ReactNode;
+  crumbs?: React.ReactNode;
+  actions?: React.ReactNode;
+  children: React.ReactNode;
 }) {
   // A page without crumbs or actions keeps the bar only for the phone drawer.
   const bare = !crumbs && !actions;
@@ -414,7 +409,7 @@ function AppShell({
   );
 }
 
-function Crumb({ children }: { children: ReactNode }) {
+function Crumb({ children }: { children: React.ReactNode }) {
   return <span className="truncate text-foreground">{children}</span>;
 }
 

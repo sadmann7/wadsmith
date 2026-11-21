@@ -1,4 +1,4 @@
-import type { MouseEvent as ReactMouseEvent } from "react";
+import * as React from "react";
 
 import { roomCenter, thingKeyPrefix, switchKeyPrefix } from "../map/edit";
 import { sectorAt, sectorEdges, wallKey, wallOwners } from "../map/geometry";
@@ -41,7 +41,7 @@ function isDragging(event: MouseEvent) {
 }
 
 // The menu reads button 2 as a pointer press and anything else as the keyboard.
-function normalizeControlClick(event: ReactMouseEvent) {
+function normalizeControlClick(event: React.MouseEvent) {
   const { nativeEvent } = event;
   if (nativeEvent.button !== 0 || !isSecondaryPress(nativeEvent)) return;
   event.preventDefault();

@@ -1,5 +1,5 @@
 import { Radio, RadioGroup } from "@ui-sdk/react/radio";
-import { useEffect, useRef } from "react";
+import * as React from "react";
 
 import type { SurfaceInfo } from "../map/surfaces";
 import { gameWallShade, type Picture, type SceneAssets } from "../wad/assets";
@@ -23,9 +23,9 @@ function TextureSwatch({
   whole?: boolean;
   className?: string;
 }) {
-  const ref = useRef<HTMLCanvasElement>(null);
+  const ref = React.useRef<HTMLCanvasElement>(null);
 
-  useEffect(() => {
+  React.useEffect(() => {
     const context = ref.current?.getContext("2d");
     if (!context) return;
     const image = context.createImageData(swatchSize, swatchSize);

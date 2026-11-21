@@ -1,6 +1,6 @@
 import { Checkbox, CheckboxIndicator } from "@ui-sdk/react/checkbox";
 import { Check } from "lucide-react";
-import { useState } from "react";
+import * as React from "react";
 
 import type { GameMap } from "../map/types";
 import type { ImportReport } from "../wad/decompile";
@@ -129,7 +129,7 @@ function WadImportDialog({
   onImport: (picked: { map: GameMap; slot: string }[]) => void;
   onClose: () => void;
 }) {
-  const [picked, setPicked] = useState(() =>
+  const [picked, setPicked] = React.useState(() =>
     maps.slice(0, slots.length).map((entry) => entry.slot),
   );
   const chosen = maps.filter((entry) => picked.includes(entry.slot));
