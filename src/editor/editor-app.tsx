@@ -14,6 +14,7 @@ import {
   MenuSeparator,
   MenuTrigger,
 } from "@ui-sdk/react/menu";
+import { useShortcut } from "@ui-sdk/react/shortcuts";
 import {
   SegmentedControl,
   SegmentedControlIndicator,
@@ -52,6 +53,7 @@ import {
 import {
   useCallback,
   useEffect,
+  useEffectEvent,
   useMemo,
   useRef,
   useState,
@@ -62,6 +64,7 @@ import {
 import { agent } from "../agent";
 import { BuildDialog } from "./build-dialog";
 import { ShortcutSheet } from "./shortcut-sheet";
+import { editorShortcuts, type EditorShortcut } from "./shortcuts";
 import { MapContextMenu } from "./context-menu";
 import {
   LineInspector,
@@ -222,12 +225,30 @@ function createDraftChannel() {
   return { subscribe, publish };
 }
 
-function ignoresShortcuts(target: EventTarget | null) {
-  return (
-    target instanceof HTMLElement &&
-    (target.isContentEditable ||
-      /^(INPUT|TEXTAREA)$/.test(target.tagName) ||
-      target.closest('[role="dialog"]') !== null)
+const listRoles = '[role="combobox"], [role="listbox"], [role="menu"]';
+
+function shortcut(name: EditorShortcut, when?: () => boolean) {
+  return {
+    description: editorShortcuts[name].description,
+    when: () => !document.querySelector(".game-stage") && (when?.() ?? true),
+  };
+}
+
+// Letters belong to typeahead in open lists, and to walking in the 3D view.
+function mapKeys() {
+  return !document.activeElement?.closest(listRoles);
+}
+
+function modeKeys() {
+  return mapKeys() && !document.activeElement?.closest(".scene");
+}
+
+function notTyping() {
+  const focused = document.activeElement;
+  return !(
+    focused instanceof HTMLElement &&
+    (focused.isContentEditable ||
+      /^(INPUT|TEXTAREA|SELECT)$/.test(focused.tagName))
   );
 }
 
@@ -450,72 +471,58 @@ function App({
   const undo = () => restore(history.undo());
   const redo = () => restore(history.redo());
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (
-        ignoresShortcuts(event.target) ||
-        document.querySelector(".game-stage")
-      ) {
-        return;
-      }
-      if (matchesShortcut(event, "mod+shift+z")) {
-        event.preventDefault();
-        restore(history.redo());
-      } else if (matchesShortcut(event, "mod+z")) {
-        event.preventDefault();
-        restore(history.undo());
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [history, restore]);
+  const selectedThingIds = selection
+    .filter((key) => key.startsWith(thingKeyPrefix))
+    .map((key) => key.slice(thingKeyPrefix.length));
+
+  const duplicateSelection = () => {
+    const copies = duplicateThings(map, selectedThingIds);
+    if (copies.ids.length === 0) return;
+    history.record(copies.map);
+    showMap(copies.map);
+    setSurface(null);
+    setActiveSector(null);
+    setSelection(copies.ids.map((id) => `${thingKeyPrefix}${id}`));
+  };
+
+  useShortcut(editorShortcuts.undo.keys, undo, shortcut("undo", notTyping));
+  useShortcut(editorShortcuts.redo.keys, redo, shortcut("redo", notTyping));
+  useShortcut(
+    editorShortcuts.duplicate.keys,
+    duplicateSelection,
+    shortcut("duplicate", () => notTyping() && selectedThingIds.length > 0),
+  );
+
+  // The registry skips key repeats, and holding mod+Z should keep stepping back.
+  const onHeldKey = useEffectEvent((event: KeyboardEvent) => {
+    if (
+      !event.repeat ||
+      !notTyping() ||
+      document.activeElement?.closest('[role="dialog"]') ||
+      document.querySelector(".game-stage")
+    ) {
+      return;
+    }
+    if (matchesShortcut(event, editorShortcuts.redo.keys)) {
+      event.preventDefault();
+      redo();
+    } else if (matchesShortcut(event, editorShortcuts.undo.keys)) {
+      event.preventDefault();
+      undo();
+    } else if (matchesShortcut(event, editorShortcuts.duplicate.keys)) {
+      event.preventDefault();
+    }
+  });
 
   useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (
-        event.key !== "?" ||
-        event.repeat ||
-        event.ctrlKey ||
-        event.metaKey ||
-        ignoresShortcuts(event.target) ||
-        (event.target as Element).closest?.(
-          '[role="combobox"], [role="listbox"], [role="menu"]',
-        ) ||
-        document.querySelector(".game-stage")
-      ) {
-        return;
-      }
-      event.preventDefault();
-      setShowShortcuts(true);
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    window.addEventListener("keydown", onHeldKey);
+    return () => window.removeEventListener("keydown", onHeldKey);
   }, []);
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (
-        !matchesShortcut(event, "mod+d") ||
-        ignoresShortcuts(event.target) ||
-        document.querySelector(".game-stage")
-      ) {
-        return;
-      }
-      const ids = selection
-        .filter((key) => key.startsWith(thingKeyPrefix))
-        .map((key) => key.slice(thingKeyPrefix.length));
-      const copies = duplicateThings(map, ids);
-      if (copies.ids.length === 0) return;
-      event.preventDefault();
-      history.record(copies.map);
-      showMap(copies.map);
-      setSurface(null);
-      setActiveSector(null);
-      setSelection(copies.ids.map((id) => `${thingKeyPrefix}${id}`));
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [history, map, selection, showMap]);
+  useShortcut(
+    editorShortcuts.help.keys,
+    () => setShowShortcuts(true),
+    shortcut("help"),
+  );
 
   useEffect(() => {
     let active = true;
@@ -559,57 +566,52 @@ function App({
     [changeLayout, narrow, visibleLayout],
   );
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (
-        !["m", "c", "v", "l", "s", "t"].includes(event.key.toLowerCase()) ||
-        event.repeat ||
-        event.defaultPrevented ||
-        event.ctrlKey ||
-        event.metaKey ||
-        event.altKey ||
-        ignoresShortcuts(event.target) ||
-        (event.target as Element).closest?.(
-          '[role="combobox"], [role="listbox"], [role="menu"]',
-        ) ||
-        document.querySelector(".game-stage")
-      ) {
-        return;
-      }
-      const shortcut = event.key.toLowerCase();
-      const mode = editModes.find(
-        (item) => item.key.toLowerCase() === shortcut,
-      );
-      if (mode) {
-        // These letters belong to walking while the 3D view has focus.
-        if ((event.target as Element).closest?.(".scene")) return;
-        event.preventDefault();
-        setEditMode(mode.value);
-        return;
-      }
-      if (shortcut === "c") {
-        const pointer = mapPointer.current;
-        if (!pointer) return;
-        event.preventDefault();
-        setLookAtRequest((request) => ({
-          ...pointer,
-          id: (request?.id ?? 0) + 1,
-        }));
-        return;
-      }
+  useShortcut(
+    editorShortcuts.vertices.keys,
+    () => setEditMode("vertices"),
+    shortcut("vertices", modeKeys),
+  );
+  useShortcut(
+    editorShortcuts.lines.keys,
+    () => setEditMode("lines"),
+    shortcut("lines", modeKeys),
+  );
+  useShortcut(
+    editorShortcuts.sectors.keys,
+    () => setEditMode("sectors"),
+    shortcut("sectors", modeKeys),
+  );
+  useShortcut(
+    editorShortcuts.things.keys,
+    () => setEditMode("things"),
+    shortcut("things", modeKeys),
+  );
+  useShortcut(
+    editorShortcuts.look.keys,
+    () => {
+      const pointer = mapPointer.current;
+      if (!pointer) return;
+      setLookAtRequest((request) => ({
+        ...pointer,
+        id: (request?.id ?? 0) + 1,
+      }));
+    },
+    shortcut("look", mapKeys),
+  );
+  useShortcut(
+    editorShortcuts.pane.keys,
+    (event) => {
       const focused = (event.target as Element).closest?.<HTMLElement>(
         "[data-pane]",
       )?.dataset.pane as SinglePane | undefined;
-      const pane =
+      togglePane(
         hoveredPane.current ??
-        focused ??
-        (visibleLayout === "scene" ? "scene" : "map");
-      event.preventDefault();
-      togglePane(pane);
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [togglePane, visibleLayout]);
+          focused ??
+          (visibleLayout === "scene" ? "scene" : "map"),
+      );
+    },
+    shortcut("pane", mapKeys),
+  );
 
   const findCameraOnMap = () => {
     if (visibleLayout === "scene") changeLayout(narrow ? "map" : "split");
@@ -1077,6 +1079,7 @@ function App({
                 <MenuItem
                   value="undo"
                   className="select-item"
+                  shortcut={editorShortcuts.undo.keys}
                   disabled={!history.canUndo()}
                 >
                   Undo
@@ -1084,6 +1087,7 @@ function App({
                 <MenuItem
                   value="redo"
                   className="select-item"
+                  shortcut={editorShortcuts.redo.keys}
                   disabled={!history.canRedo()}
                 >
                   Redo
@@ -1114,11 +1118,12 @@ function App({
                   Find camera on map
                 </MenuItem>
                 <MenuSeparator className="menu-separator" />
-                <MenuItem value="shortcuts" className="select-item">
+                <MenuItem
+                  value="shortcuts"
+                  className="select-item"
+                  shortcut={editorShortcuts.help.keys}
+                >
                   Keyboard shortcuts
-                  <kbd className="ml-auto pl-4 font-mono text-[11px] text-fg-muted">
-                    ?
-                  </kbd>
                 </MenuItem>
               </MenuContent>
             </Menu>

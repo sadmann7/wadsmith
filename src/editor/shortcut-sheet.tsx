@@ -8,6 +8,8 @@ import {
 } from "@ui-sdk/react/dialog";
 import { X } from "lucide-react";
 
+import { editorShortcuts } from "./shortcuts";
+
 type Key = { text: string; spoken?: string };
 type Shortcut = { keys: Key[]; does: string };
 
@@ -24,27 +26,34 @@ function chord(shortcut: string): Key {
 
 const backspace = key("⌫", "Backspace");
 
+type TableEntry = (typeof editorShortcuts)[keyof typeof editorShortcuts];
+
+function tableRows(include: (item: TableEntry) => boolean): Shortcut[] {
+  return Object.values(editorShortcuts)
+    .filter(include)
+    .map((item) => ({ keys: [chord(item.keys)], does: item.description }));
+}
+
 function groups(): { title: string; items: Shortcut[] }[] {
   return [
     {
+      title: "Editor",
+      items: tableRows((item) => !("area" in item)),
+    },
+    {
       title: "Map",
       items: [
-        {
-          keys: ["V", "L", "S", "T"].map((letter) => key(letter)),
-          does: "Edit vertices, lines, sectors or things",
-        },
+        ...tableRows((item) => "area" in item),
         {
           keys: [key("Arrows")],
           does: "Nudge the selection, with Shift for 8 steps",
         },
         { keys: [key("Shift-click")], does: "Add to the selection" },
         { keys: [backspace], does: "Delete the selection" },
-        { keys: [chord("mod+d")], does: "Duplicate the selected things" },
-        { keys: [chord("mod+z")], does: "Undo" },
-        { keys: [chord("mod+shift+z")], does: "Redo" },
         { keys: [key("+"), key("−", "minus")], does: "Zoom in or out" },
         { keys: [key("0")], does: "Reset the zoom" },
         { keys: [key("C")], does: "Wire the focused switch to a door" },
+        { keys: [chord("shift+F10")], does: "Open the menu for the selection" },
       ],
     },
     {
@@ -53,18 +62,6 @@ function groups(): { title: string; items: Shortcut[] }[] {
         { keys: [key("Enter")], does: "Close the room" },
         { keys: [backspace], does: "Remove the last corner" },
         { keys: [key("Esc")], does: "Throw away the corners so far" },
-      ],
-    },
-    {
-      title: "Anywhere in the editor",
-      items: [
-        {
-          keys: [key("M")],
-          does: "Maximise the pane under the pointer, or split again",
-        },
-        { keys: [key("C")], does: "Point the 3D camera at the pointer" },
-        { keys: [chord("shift+F10")], does: "Open the menu for the selection" },
-        { keys: [key("?")], does: "Show these shortcuts" },
       ],
     },
     {
@@ -137,7 +134,7 @@ function ShortcutSheet({ onClose }: { onClose: () => void }) {
         <div className="grid min-h-0 grid-cols-2 gap-x-8 gap-y-6 overflow-y-auto p-5 max-[640px]:grid-cols-1">
           {groups().map((group) => (
             <section key={group.title} className="grid content-start gap-2">
-              <h3 className="m-0 font-mono text-[11px] font-normal tracking-wide text-fg-muted uppercase">
+              <h3 className="m-0 font-mono text-xs font-normal tracking-wide text-fg-muted uppercase">
                 {group.title}
               </h3>
               <dl className="m-0 grid gap-1.5">
@@ -146,19 +143,19 @@ function ShortcutSheet({ onClose }: { onClose: () => void }) {
                     key={item.does}
                     className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-3"
                   >
-                    <dt className="text-[13px] text-fg-soft">{item.does}</dt>
+                    <dt className="text-sm text-fg-soft">{item.does}</dt>
                     <dd className="m-0 flex items-baseline gap-1">
                       {item.keys.map((entry, index) => (
                         <span key={entry.text} className="flex gap-1">
                           {index > 0 ? (
-                            <span className="text-[11px] text-fg-muted">
+                            <span className="text-xs text-fg-muted">
                               <span aria-hidden="true">/</span>
                               <span className="sr-only">or</span>
                             </span>
                           ) : null}
                           <kbd
                             aria-label={entry.spoken}
-                            className="rounded-[3px] border border-border-strong px-1.5 font-mono text-[11px] text-fg"
+                            className="rounded-[3px] border border-border-strong px-1.5 font-mono text-xs text-fg"
                           >
                             {entry.text}
                           </kbd>
