@@ -233,6 +233,76 @@ describe("decompileMap", () => {
     expect(parseMapFile(serializeMap(map))).toEqual(map);
   });
 
+  it("keeps a door it can't hold open as a doorway", () => {
+    const build = doomMap();
+    const rooms = [
+      build.sector(),
+      build.sector({ ceiling: 0 }),
+      build.sector({ ceiling: 0 }),
+      build.sector(),
+    ];
+    const xs = [0, 256, 288, 320, 576];
+    const top = xs.map((x) => build.vertex(x, 128));
+    const bottom = xs.map((x) => build.vertex(x, 0));
+    build.line(bottom[0], top[0], rooms[0]);
+    build.line(top[4], bottom[4], rooms[3]);
+    rooms.forEach((room, index) => {
+      build.line(top[index], top[index + 1], room);
+      build.line(bottom[index + 1], bottom[index], room);
+    });
+    build.line(top[1], bottom[1], rooms[0], rooms[1], { special: 1 });
+    build.line(top[2], bottom[2], rooms[1], rooms[2]);
+    build.line(bottom[3], top[3], rooms[3], rooms[2], { special: 1 });
+    build.map.things.push({ x: 64, y: 64, angle: 0, type: 1, flags: 7 });
+
+    const { map, report } = decompileMap(build.map);
+    expect(report.plainDoors).toBe(1);
+    expect(
+      map.sectors.find((sector) => sector.id === "s1")?.door,
+    ).toBeDefined();
+    const plain = map.sectors.find((sector) => sector.id === "s2")!;
+    expect(plain.door).toBeUndefined();
+    expect(plain.ceiling).toBeGreaterThan(plain.floor);
+    expect(validateMap(map)).toEqual([]);
+  });
+
+  it("drops a teleporter that only leads to a multiplayer spot", () => {
+    const teleporter = (flags: number) => {
+      const build = doomMap();
+      const hall = build.sector();
+      const pad = build.sector({ tag: 5 });
+      const [a, b, c, d] = box(build, hall, [0, 0, 256, 256]);
+      build.map.lines.length = 0;
+      build.map.sides.length = 0;
+      const e = build.vertex(512, 256);
+      const f = build.vertex(512, 0);
+      build.line(a, b, hall);
+      build.line(b, c, hall);
+      build.line(c, d, hall, pad, { special: 97, tag: 5 });
+      build.line(d, a, hall);
+      build.line(c, e, pad);
+      build.line(e, f, pad);
+      build.line(f, d, pad);
+      build.map.things.push(
+        { x: 64, y: 64, angle: 0, type: 1, flags: 7 },
+        { x: 384, y: 128, angle: 0, type: 14, flags },
+      );
+      return decompileMap(build.map);
+    };
+    const solo = teleporter(7);
+    expect(
+      Object.values(solo.map.lines ?? {}).some((line) => line.action),
+    ).toBe(true);
+    const { map, report } = teleporter(7 | 16);
+    expect(Object.values(map.lines ?? {}).some((line) => line.action)).toBe(
+      false,
+    );
+    expect(report.droppedActions).toEqual({
+      "Teleporters to multiplayer spots": 1,
+    });
+    expect(validateMap(map)).toEqual([]);
+  });
+
   it("keeps scrolling walls on the side that scrolls", () => {
     const build = doomMap();
     const hall = build.sector();
@@ -384,17 +454,12 @@ describe.skipIf(!existsSync(freedoom))("Freedoom's maps", () => {
     ]);
   });
 
-  it("convert into rooms that keep their shape and save", () => {
+  it("convert into levels that pass every check and save", () => {
     expect(maps).toHaveLength(32);
     expect(maps.every((doom) => doom.title)).toBe(true);
     for (const doom of maps) {
       const { map } = decompileMap(doom);
-      const kinds = new Set(
-        validateMap(map).map((issue) => issue.id.split(":")[0]),
-      );
-      for (const kind of ["twist", "repeat", "cross", "overlap", "shared"]) {
-        expect(kinds.has(kind), `${doom.slot} ${kind}`).toBe(false);
-      }
+      expect(validateMap(map), doom.slot).toEqual([]);
       expect(() => parseMapFile(serializeMap(map))).not.toThrow();
       expect(map.things.every((thing) => thingCatalog[thing.kind])).toBe(true);
     }

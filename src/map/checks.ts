@@ -3,7 +3,7 @@ import { deathmatchStarts, thingCatalog } from "./catalog";
 import { removeSwitch, removeThings, updateLine, updateSector } from "./edit";
 import { fitLineAction, triggersFor } from "./lines";
 import type { GameMap, KeyColor } from "./types";
-import { activeLineActions, validateMap, type MapIssue } from "./validate";
+import { activeLineActions, inspectMap, type MapIssue } from "./validate";
 
 type CheckedIssue = MapIssue & { severity: "error" | "warning" };
 
@@ -197,11 +197,10 @@ function buildChecks(map: GameMap) {
 }
 
 function checkMap(map: GameMap): CheckedIssue[] {
+  const { errors, warnings } = inspectMap(map);
   return [
-    ...validateMap(map).map((issue) => ({
-      ...issue,
-      severity: "error" as const,
-    })),
+    ...errors.map((issue) => ({ ...issue, severity: "error" as const })),
+    ...warnings.map((issue) => ({ ...issue, severity: "warning" as const })),
     ...mapWarnings(map),
   ];
 }

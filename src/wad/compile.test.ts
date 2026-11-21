@@ -279,10 +279,11 @@ describe("validateMap", () => {
     expect(issues.map((issue) => issue.id)).toContain("door-unwired:sector-4");
   });
 
-  it("rejects a door the player can't fit through", () => {
+  it("warns about a door the player can't fit through", () => {
     const low = updateSectorCeiling(testMap, "sector-2", 32);
-    expect(validateMap(low).map((issue) => issue.id)).toContain(
-      "door-low:sector-4",
+    expect(validateMap(low)).toEqual([]);
+    expect(checkMap(low)).toContainEqual(
+      expect.objectContaining({ id: "door-low:sector-4", severity: "warning" }),
     );
   });
 
@@ -878,10 +879,19 @@ describe("thing settings", () => {
     );
   });
 
-  it("rejects a thing inside a closed door", () => {
-    const map = updateThing(testMap, "imp-1", { x: 504, y: 160 });
+  it("rejects a player start inside a closed door", () => {
+    const start = testMap.things.find((thing) => thing.kind === "player")!;
+    const map = updateThing(testMap, start.id, { x: 504, y: 160 });
     expect(validateMap(map).map((issue) => issue.id)).toContain(
-      "in-door:imp-1",
+      `in-door:${start.id}`,
+    );
+  });
+
+  it("warns about a monster waiting inside a closed door", () => {
+    const map = updateThing(testMap, "imp-1", { x: 504, y: 160 });
+    expect(validateMap(map)).toEqual([]);
+    expect(checkMap(map)).toContainEqual(
+      expect.objectContaining({ id: "in-door:imp-1", severity: "warning" }),
     );
   });
 

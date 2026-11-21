@@ -110,7 +110,7 @@ function losses(reports: ImportReport[]) {
     rows.push({
       label: plural(plainDoors, "door"),
       detail:
-        "Doors that touch another door, or that were cut around a pillar, stay closed rooms. Give them height to open them.",
+        "Doors that touch another door, or that were cut around a pillar, stay open as doorways.",
     });
   }
   return rows;

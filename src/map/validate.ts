@@ -269,12 +269,17 @@ function lineOpensDoor(
 
 type LineActions = ReturnType<typeof activeLineActions>;
 
-function validateDoors(map: GameMap, issues: MapIssue[], actions: LineActions) {
+function validateDoors(
+  map: GameMap,
+  issues: MapIssue[],
+  warnings: MapIssue[],
+  actions: LineActions,
+) {
   const owners = wallOwners(map);
   for (const sector of map.sectors) {
     if (!sector.door) continue;
-    const add = (kind: string, message: string) =>
-      issues.push({
+    const add = (kind: string, message: string, list = issues) =>
+      list.push({
         id: `${kind}:${sector.id}`,
         message: `${sector.name}: ${message}`,
         target: sector.id,
@@ -295,7 +300,11 @@ function validateDoors(map: GameMap, issues: MapIssue[], actions: LineActions) {
       doorClearance -
       sector.floor;
     if (opening < playerHeight) {
-      add("door-low", "the rooms beside it are too low for the door to open.");
+      add(
+        "door-low",
+        "the rooms beside it are too low for the door to open.",
+        warnings,
+      );
     }
     if (
       sector.door.opensBy === "switch" &&
@@ -383,8 +392,10 @@ function validateLines(map: GameMap, issues: MapIssue[], actions: LineActions) {
   }
 }
 
-function validateMap(map: GameMap): MapIssue[] {
+// Warnings are legal in Doom but likely mistakes, so they don't block a build.
+function inspectMap(map: GameMap) {
   const issues: MapIssue[] = [];
+  const warnings: MapIssue[] = [];
   if (map.sectors.length === 0) {
     issues.push({ id: "empty", message: "Draw at least one room." });
   }
@@ -402,7 +413,7 @@ function validateMap(map: GameMap): MapIssue[] {
   }
   if (issues.length === 0) {
     validateNeighbors(map, issues);
-    validateDoors(map, issues, lineActions());
+    validateDoors(map, issues, warnings, lineActions());
     validateLines(map, issues, lineActions());
   }
   for (const [id, point] of Object.entries(map.vertices)) {
@@ -435,7 +446,7 @@ function validateMap(map: GameMap): MapIssue[] {
     for (const thing of map.things) {
       const room = sectorAt(map, thing);
       if (room?.door) {
-        issues.push({
+        (isPlayerStart(thing.kind) ? issues : warnings).push({
           id: `in-door:${thing.id}`,
           message: `${thing.id} is inside a closed door.`,
           target: thing.id,
@@ -450,7 +461,11 @@ function validateMap(map: GameMap): MapIssue[] {
       }
     }
   }
-  return issues;
+  return { errors: issues, warnings };
 }
 
-export { activeLineActions, validateMap, type MapIssue };
+function validateMap(map: GameMap): MapIssue[] {
+  return inspectMap(map).errors;
+}
+
+export { activeLineActions, inspectMap, validateMap, type MapIssue };
