@@ -24,7 +24,7 @@ UI SDK parts render no styles. The shared controls in `src/components/ui` style 
 
 - Import React as `import * as React from "react"`, and a UI SDK part as a namespace named after it, like `import * as DialogPrimitive from "@ui-sdk/react/dialog"`. `src/components/ui` follows this; the rest of the app still uses named React imports until it moves over.
 - A part's props are `React.ComponentProps<typeof DialogPrimitive.DialogContent>`. Pass `className` through `cn` without narrowing it: a part takes a string or a function of its state, and `cn` keeps either.
-- `cn` merges with `tailwind-merge`, so the class a caller passes beats the component's own. Never reach for `!`.
+- `cn` resolves conflicting Tailwind classes, so the class a caller passes beats the component's own. Never reach for `!`.
 - Style state from the part's `data-slot` and state attributes, like `data-open:` or `data-checked:`, and the CSS variables its docs list, never from inline styles or generated ids.
 - `globals.css` declares `@layer ui-sdk;` before Tailwind, so UI SDK's own CSS stays below every app style. Keep it first.
 - Use the UI SDK component before writing a `role` by hand. A `div` with `role="menu"`, `"dialog"`, `"listbox"`, `"switch"` or `"slider"` is almost always a bug.
@@ -35,7 +35,7 @@ Wadsmith is a Doom map editor built with Next.js, Tailwind CSS and UI SDK. It co
 
 - `src/app`: Next.js routes, metadata images and global styles. The color tokens in `globals.css` use shadcn/ui role names, and `colors.test.ts` checks their contrast.
 - `src/components/ui`: shared controls built on UI SDK with Tailwind, such as `Button`, `Input`, `Field`, `Select`, `Menu` and `Dialog`. New UI uses these instead of new classes in `globals.css`. `src/components` also holds pieces several areas share, like `MapPlan`.
-- `src/lib`: small helpers, like `cn`, shadcn's `clsx` and `tailwind-merge` helper, extended to class names that are functions of a part's state.
+- `src/lib`: small helpers, like `cn`, which wraps shadcn's `cn` package so it also takes class names that are functions of a part's state.
 - `src/episodes`: the app shell, routes, episode pages, featured maps and the dialogs around them. Saved data still says "project" (the IndexedDB stores, a map's `projectId` and the backup format) so existing browsers and backups keep working.
 - `src/map`: the map model, edits and validation. No UI code.
 - `src/wad`: the WAD compiler, including the BSP and blockmap builders.
