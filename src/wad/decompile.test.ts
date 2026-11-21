@@ -248,7 +248,7 @@ describe("decompileMap", () => {
     build.line(f, d, next);
     build.map.things.push(
       { x: 32, y: 32, angle: 0, type: 1, flags: 7 },
-      { x: 64, y: 64, angle: 0, type: 3005, flags: 7 },
+      { x: 64, y: 64, angle: 0, type: 14, flags: 7 },
       { x: 96, y: 96, angle: 0, type: 38, flags: 7 },
       { x: 128, y: 128, angle: 0, type: 3001, flags: 7 | 16 },
       { x: 2000, y: 2000, angle: 0, type: 3001, flags: 7 },
@@ -256,8 +256,7 @@ describe("decompileMap", () => {
 
     const { map, report } = decompileMap(build.map);
     expect(report).toMatchObject({
-      droppedThings: { Cacodemon: 1 },
-      skullKeys: 1,
+      droppedThings: { "Teleport destination": 1 },
       multiplayerThings: 1,
       outsideThings: 1,
       droppedActions: { Teleporters: 1 },
@@ -265,7 +264,7 @@ describe("decompileMap", () => {
       seeThroughWalls: 1,
       replacedTextures: ["BTSXFLAT", "BTSXWALL"],
     });
-    expect(kinds(map)).toEqual(["player", "red-key"]);
+    expect(kinds(map)).toEqual(["player", "red-skull-key"]);
     expect(parseMapFile(serializeMap(map))).toEqual(map);
   });
 });

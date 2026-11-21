@@ -252,8 +252,9 @@ describe.skipIf(!existsSync(wadPath))("readWadAssets", () => {
     expect(imp.height).toBeGreaterThan(30);
     expect(imp.opaque.includes(0)).toBe(true);
     expect(wad.sprite("player")).not.toBeNull();
+    const unseen = ["dead-lost-soul", "boss-shooter", "spawn-spot"];
     for (const kind of thingKinds) {
-      expect(wad.sprite(kind), kind).not.toBeNull();
+      expect(wad.sprite(kind) === null, kind).toBe(unseen.includes(kind));
     }
     expect(wad.shades[256 * 31 + 100]).not.toBe(wad.shades[100]);
   });

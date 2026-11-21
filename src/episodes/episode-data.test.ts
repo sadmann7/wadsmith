@@ -5,6 +5,7 @@ import { serializeMap } from "../map/storage";
 import { validateMap } from "../map/validate";
 import { compileEpisode } from "../wad/compile";
 import {
+  buildProblem,
   createMapEntry,
   createMapSaver,
   createProject,
@@ -231,13 +232,21 @@ describe("episode order", () => {
       "MAP05",
       "MAP06",
     ]);
-    expect(featured.every((entry) => mapStatus(entry).kind !== "error")).toBe(
-      true,
-    );
+    expect(
+      featured.every(
+        (entry) => mapStatus(entry, buildProblem(entry.map)).kind !== "error",
+      ),
+    ).toBe(true);
   });
 
   it("names a map with no exit", () => {
-    expect(mapStatus(episodeMaps("p", "one")[0]).label).toBe("No exit yet");
+    expect(mapStatus(episodeMaps("p", "one")[0], null).label).toBe(
+      "No exit yet",
+    );
+  });
+
+  it("holds a map whose build hasn't been checked", () => {
+    expect(mapStatus(episodeMaps("p", "one")[0]).kind).toBe("checking");
   });
 
   it("names a map that passes its checks but won't build", () => {
@@ -250,7 +259,7 @@ describe("episode order", () => {
         sectors: [...entry.map.sectors, { ...room, id: `${room.id}-copy` }],
       },
     };
-    const status = mapStatus(overlapping);
+    const status = mapStatus(overlapping, buildProblem(overlapping.map));
     expect(status.kind).toBe("error");
     expect(status.label).toBe("Won't build");
   });

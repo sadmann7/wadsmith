@@ -155,20 +155,51 @@ function buildNodes(sourceVertices: Point[], lines: NodeLine[]): BspResult {
   const choosePartition = (segs: Seg[], tolerance: number) => {
     let best: { partition: Partition; score: number } | null = null;
     const tried = new Set<string>();
+    const count = segs.length;
+    const startX = new Float64Array(count);
+    const startY = new Float64Array(count);
+    const endX = new Float64Array(count);
+    const endY = new Float64Array(count);
+    segs.forEach((seg, index) => {
+      startX[index] = vertices[seg.start].x;
+      startY[index] = vertices[seg.start].y;
+      endX[index] = vertices[seg.end].x;
+      endY[index] = vertices[seg.end].y;
+    });
     for (const seg of segs) {
       const key = `${seg.line}:${seg.side}`;
       if (tried.has(key)) continue;
       tried.add(key);
       const partition = partitionOf(seg);
+      const { x, y, dx, dy, length } = partition;
       let left = 0;
       let right = 0;
       let splits = 0;
-      for (const other of segs) {
-        const { kind } = classify(partition, other, tolerance);
-        if (kind === "left") left += 1;
-        else if (kind === "right") right += 1;
+      let index = 0;
+      // Matches classify, without its allocations, for every pair of segs.
+      for (; index < count; index++) {
+        const a =
+          (dx * (startY[index] - y) - dy * (startX[index] - x)) / length;
+        const b = (dx * (endY[index] - y) - dy * (endX[index] - x)) / length;
+        if (
+          segs[index].line === partition.line ||
+          (Math.abs(a) <= tolerance && Math.abs(b) <= tolerance)
+        ) {
+          const dot =
+            (endX[index] - startX[index]) * dx +
+            (endY[index] - startY[index]) * dy;
+          if (dot >= 0) right += 1;
+          else left += 1;
+        } else if (a >= -tolerance && b >= -tolerance) left += 1;
+        else if (a <= tolerance && b <= tolerance) right += 1;
         else splits += 1;
+        // The lowest score the remaining segs could still bring it to.
+        const bound =
+          splits * 8 +
+          Math.max(0, Math.abs(left - right) - (count - index - 1));
+        if (best && bound >= best.score) break;
       }
+      if (index < count) continue;
       if (left + splits === 0 || right + splits === 0) continue;
       const score = splits * 8 + Math.abs(left - right);
       if (!best || score < best.score) best = { partition, score };

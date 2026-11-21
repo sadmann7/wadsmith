@@ -14,9 +14,10 @@ import {
   Route,
   Upload,
 } from "lucide-react";
-import { useMemo, useRef, useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 
 import { MapPlan } from "../components/map-plan";
+import { knownBuildProblem, useBuildChecks } from "./build-checks";
 import { MapDialog } from "./map-dialog";
 import type { MapDetails } from "./map-dialog";
 import {
@@ -61,6 +62,7 @@ const statusDots = {
   ready: "bg-success",
   warning: "bg-warning",
   error: "bg-destructive",
+  checking: "bg-muted-foreground",
 };
 
 function formatEdited(time: number) {
@@ -197,7 +199,8 @@ function MapRow({
   onDrop: () => void;
   onDragEnd: () => void;
 }) {
-  const status = useMemo(() => mapStatus(entry), [entry]);
+  useBuildChecks([entry]);
+  const status = mapStatus(entry, knownBuildProblem(entry));
   const name = mapName(entry);
   return (
     <tr

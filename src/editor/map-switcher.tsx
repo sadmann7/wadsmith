@@ -9,7 +9,7 @@ import {
   MenuTrigger,
 } from "../components/ui/menu";
 
-type MapHealth = "ready" | "warning" | "error";
+type MapHealth = "ready" | "warning" | "error" | "checking";
 
 type EpisodeEntry = {
   id: string;
@@ -22,12 +22,14 @@ const healthDots: Record<MapHealth, string> = {
   ready: "bg-success",
   warning: "bg-warning",
   error: "bg-destructive",
+  checking: "bg-muted-foreground",
 };
 
 const healthLabels: Record<MapHealth, string> = {
   ready: "playable",
   warning: "has warnings",
   error: "has errors",
+  checking: "being checked",
 };
 
 function MapSwitcher({

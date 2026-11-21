@@ -184,7 +184,7 @@ describe("map files", () => {
     [
       "an unknown thing",
       fileWith((map) => {
-        map.things[0].kind = "cyberdemon";
+        map.things[0].kind = "dragon";
       }),
       "unknown kind",
     ],

@@ -22,35 +22,130 @@ type Lump = { offset: number; size: number };
 const shadeLevels = 32;
 const flatSize = 64;
 
-const spriteLumps: Record<ThingKind, string> = {
-  player: "PLAYA1",
-  "player-2": "PLAYA1",
-  "player-3": "PLAYA1",
-  "player-4": "PLAYA1",
-  "deathmatch-start": "PLAYA1",
-  imp: "TROOA1",
-  zombieman: "POSSA1",
-  "shotgun-guy": "SPOSA1",
-  demon: "SARGA1",
-  spectre: "SARGA1",
-  "lost-soul": "SKULA1",
-  chaingunner: "CPOSA1",
-  "pain-elemental": "PAINA1",
-  shotgun: "SHOTA0",
-  chaingun: "MGUNA0",
-  clip: "CLIPA0",
-  shells: "SHELA0",
-  stimpack: "STIMA0",
-  medikit: "MEDIA0",
-  "green-armor": "ARM1A0",
-  "blue-armor": "ARM2A0",
-  "blue-key": "BKEYA0",
-  "yellow-key": "YKEYA0",
-  "red-key": "RKEYA0",
-  barrel: "BAR1A0",
-  lamp: "COLUA0",
-  "tech-column": "ELECA0",
-  "red-torch": "TREDA0",
+// A sprite's name and frame, matched to its first lump facing front.
+const spriteFrames: Record<ThingKind, string | null> = {
+  player: "PLAYA",
+  "player-2": "PLAYA",
+  "player-3": "PLAYA",
+  "player-4": "PLAYA",
+  "deathmatch-start": "PLAYA",
+  imp: "TROOA",
+  zombieman: "POSSA",
+  "shotgun-guy": "SPOSA",
+  demon: "SARGA",
+  spectre: "SARGA",
+  "lost-soul": "SKULA",
+  chaingunner: "CPOSA",
+  "pain-elemental": "PAINA",
+  shotgun: "SHOTA",
+  chaingun: "MGUNA",
+  clip: "CLIPA",
+  shells: "SHELA",
+  stimpack: "STIMA",
+  medikit: "MEDIA",
+  "green-armor": "ARM1A",
+  "blue-armor": "ARM2A",
+  "blue-key": "BKEYA",
+  "yellow-key": "YKEYA",
+  "red-key": "RKEYA",
+  barrel: "BAR1A",
+  lamp: "COLUA",
+  "tech-column": "ELECA",
+  "red-torch": "TREDA",
+  cacodemon: "HEADA",
+  "hell-knight": "BOS2A",
+  "baron-of-hell": "BOSSA",
+  arachnotron: "BSPIA",
+  revenant: "SKELA",
+  mancubus: "FATTA",
+  "arch-vile": "VILEA",
+  "spider-mastermind": "SPIDA",
+  cyberdemon: "CYBRA",
+  "wolfenstein-ss": "SSWVA",
+  "commander-keen": "KEENA",
+  "boss-brain": "BBRNA",
+  chainsaw: "CSAWA",
+  "super-shotgun": "SGN2A",
+  "rocket-launcher": "LAUNA",
+  "plasma-gun": "PLASA",
+  "bfg-9000": "BFUGA",
+  "box-of-bullets": "AMMOA",
+  "box-of-shells": "SBOXA",
+  rocket: "ROCKA",
+  "box-of-rockets": "BROKA",
+  cell: "CELLA",
+  "cell-pack": "CELPA",
+  backpack: "BPAKA",
+  "health-bonus": "BON1A",
+  soulsphere: "SOULA",
+  megasphere: "MEGAA",
+  "armor-bonus": "BON2A",
+  invulnerability: "PINVA",
+  berserk: "PSTRA",
+  "partial-invisibility": "PINSA",
+  "radiation-suit": "SUITA",
+  "computer-map": "PMAPA",
+  "light-amplification": "PVISA",
+  "blue-skull-key": "BSKUA",
+  "yellow-skull-key": "YSKUA",
+  "red-skull-key": "RSKUA",
+  "burning-barrel": "FCANA",
+  "tall-tech-lamp": "TLMPA",
+  "short-tech-lamp": "TLP2A",
+  candle: "CANDA",
+  candelabra: "CBRAA",
+  "tall-blue-torch": "TBLUA",
+  "tall-green-torch": "TGRNA",
+  "short-blue-torch": "SMBTA",
+  "short-green-torch": "SMGTA",
+  "short-red-torch": "SMRTA",
+  "tall-green-pillar": "COL1A",
+  "short-green-pillar": "COL2A",
+  "tall-red-pillar": "COL3A",
+  "short-red-pillar": "COL4A",
+  "heart-pillar": "COL5A",
+  "skull-pillar": "COL6A",
+  "brown-stump": "SMITA",
+  "burnt-tree": "TRE1A",
+  "big-tree": "TRE2A",
+  "evil-eye": "CEYEA",
+  "floating-skulls": "FSKUA",
+  "bloody-mess": "PLAYW",
+  "bloody-mess-2": "PLAYW",
+  "dead-player": "PLAYN",
+  "dead-zombieman": "POSSL",
+  "dead-shotgun-guy": "SPOSL",
+  "dead-imp": "TROOM",
+  "dead-demon": "SARGN",
+  "dead-cacodemon": "HEADL",
+  "dead-lost-soul": null,
+  "pool-of-blood": "POB1A",
+  "impaled-human": "POL1A",
+  "twitching-impaled-human": "POL6A",
+  "skull-on-pole": "POL4A",
+  "skulls-on-pole": "POL2A",
+  "pile-of-skulls": "POL3A",
+  "hanging-victim-twitching": "GOR1A",
+  "hanging-victim-arms-out": "GOR2A",
+  "hanging-victim-one-leg": "GOR3A",
+  "hanging-legs": "GOR4A",
+  "hanging-leg": "GOR5A",
+  "hanging-victim-arms-out-2": "GOR2A",
+  "hanging-legs-2": "GOR4A",
+  "hanging-victim-one-leg-2": "GOR3A",
+  "hanging-leg-2": "GOR5A",
+  "hanging-victim-twitching-2": "GOR1A",
+  "hanging-victim-guts": "HDB1A",
+  "hanging-victim-guts-brain": "HDB2A",
+  "hanging-torso-looking-down": "HDB3A",
+  "hanging-torso-open-skull": "HDB4A",
+  "hanging-torso-looking-up": "HDB5A",
+  "hanging-torso-brain-removed": "HDB6A",
+  "pool-of-blood-and-flesh": "POL5A",
+  "pool-of-blood-2": "POB2A",
+  "pool-of-brains": "BRS1A",
+  "boss-shooter": null,
+  "spawn-spot": null,
 };
 
 function lightStart(light: number, contrast: number) {
@@ -101,6 +196,23 @@ function readName(bytes: Uint8Array, offset: number) {
     name += String.fromCharCode(bytes[offset + index]);
   }
   return name.toUpperCase();
+}
+
+// Monster lumps can hold two frames in one name, like BSPIA1D1.
+function spriteLump(lumps: Map<string, Lump>, frame: string) {
+  for (const [name, lump] of lumps) {
+    if (name.length < 6) continue;
+    if (name.startsWith(frame) && "01".includes(name[5])) return lump;
+    if (
+      name.length === 8 &&
+      name.startsWith(frame.slice(0, 4)) &&
+      name[6] === frame[4] &&
+      "01".includes(name[7])
+    ) {
+      return lump;
+    }
+  }
+  return undefined;
 }
 
 function readWadAssets(bytes: Uint8Array): SceneAssets {
@@ -240,7 +352,8 @@ function readWadAssets(bytes: Uint8Array): SceneAssets {
     sprite(kind) {
       const cached = spriteCache.get(kind);
       if (cached !== undefined) return cached;
-      const lump = lumps.get(spriteLumps[kind]);
+      const frame = spriteFrames[kind];
+      const lump = frame === null ? undefined : spriteLump(lumps, frame);
       let picture: Picture | null = null;
       if (lump) {
         picture = createPicture(
@@ -298,14 +411,18 @@ function createFlatAssets(): SceneAssets {
     colors.push(color);
   }
   const thingIndexes = new Map<ThingKind, number>();
+  const hexIndexes = new Map<string, number>();
   for (const kind of thingKinds) {
     const hex = thingCatalog[kind].color;
-    thingIndexes.set(kind, colors.length);
-    colors.push([
-      Number.parseInt(hex.slice(1, 3), 16),
-      Number.parseInt(hex.slice(3, 5), 16),
-      Number.parseInt(hex.slice(5, 7), 16),
-    ]);
+    if (!hexIndexes.has(hex)) {
+      hexIndexes.set(hex, colors.length);
+      colors.push([
+        Number.parseInt(hex.slice(1, 3), 16),
+        Number.parseInt(hex.slice(3, 5), 16),
+        Number.parseInt(hex.slice(5, 7), 16),
+      ]);
+    }
+    thingIndexes.set(kind, hexIndexes.get(hex)!);
   }
 
   const shades = new Uint32Array(shadeLevels * 256);
