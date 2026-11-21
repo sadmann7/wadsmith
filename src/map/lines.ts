@@ -16,6 +16,7 @@ type ActionGroup =
   | "Ceilings"
   | "Lifts"
   | "Crushers"
+  | "Stairs"
   | "Teleporters"
   | "Level";
 
@@ -222,6 +223,16 @@ const lineActions: Record<LineActionKind, ActionDefinition> = {
       walk: { once: 56, repeat: 94 },
     },
   },
+  stairs: {
+    label: "Stairs: build up by 8",
+    group: "Stairs",
+    triggers: { switch: { once: 7 }, walk: { once: 8 } },
+  },
+  "stairs-fast": {
+    label: "Stairs: build up fast by 16",
+    group: "Stairs",
+    triggers: { switch: { once: 127 }, walk: { once: 100 } },
+  },
   exit: {
     label: "End the level",
     group: "Level",
@@ -248,6 +259,7 @@ const actionGroups: ActionGroup[] = [
   "Ceilings",
   "Lifts",
   "Crushers",
+  "Stairs",
   "Teleporters",
   "Level",
 ];
