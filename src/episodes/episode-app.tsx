@@ -848,6 +848,28 @@ function EpisodeApp() {
     }
   };
 
+  const openFreedoom = async () => {
+    const run = ++wadRun.current;
+    setMessage("Loading Freedoom…");
+    try {
+      const data = await loadIwad();
+      if (run !== wadRun.current) return;
+      const { maps, complevel } = inspectWads([
+        { name: "freedoom2.wad", data },
+      ]);
+      setMessage(null);
+      setWadPick({
+        title: "Freedoom: Phase 2",
+        summary: { wads: [], dehacked: [], maps, complevel, declared: false },
+      });
+    } catch {
+      if (run !== wadRun.current) return;
+      setMessage(
+        "Couldn't load Freedoom. Check your connection and try again.",
+      );
+    }
+  };
+
   const importWadMaps = async (picked: File[]) => {
     const run = ++importRun.current;
     const episodeAt = episode.id;
@@ -1190,6 +1212,10 @@ function EpisodeApp() {
           onPlayTogether={setLobby}
           onOpenCopy={openCopy}
           onPlayWad={(files) => void openWads(files)}
+          onPlayFreedoom={() => void openFreedoom()}
+          onOpenFreedoom={() =>
+            sidebar.onCreateEpisode?.("Freedoom", "freedoom")
+          }
           selectedId={featuredId}
           onSelect={setFeaturedId}
         />

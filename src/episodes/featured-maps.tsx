@@ -80,6 +80,8 @@ function FeaturedMaps({
   onPlayTogether,
   onOpenCopy,
   onPlayWad,
+  onPlayFreedoom,
+  onOpenFreedoom,
   selectedId,
   onSelect,
 }: {
@@ -91,6 +93,8 @@ function FeaturedMaps({
   onPlayTogether: (entry: FeaturedMap) => void;
   onOpenCopy: (entry: FeaturedMap) => void;
   onPlayWad: (files: File[]) => void;
+  onPlayFreedoom: () => void;
+  onOpenFreedoom: () => void;
 }) {
   const [filter, setFilter] = React.useState<Filter>("all");
   const wadInput = React.useRef<HTMLInputElement>(null);
@@ -231,6 +235,32 @@ function FeaturedMaps({
             </li>
           ))}
         </ul>
+        <section
+          aria-label="Freedoom: Phase 2"
+          className="flex flex-wrap items-center justify-between gap-5 rounded-[6px] border border-border bg-card p-6 max-[760px]:p-5"
+        >
+          <div className="grid max-w-[640px] min-w-0 gap-2">
+            <div className="font-mono text-xs tracking-wide text-foreground uppercase">
+              Freedoom · 32 levels
+            </div>
+            <h2 className="m-0 text-2xl font-bold">Freedoom: Phase 2</h2>
+            <p className="m-0 text-base text-muted-foreground">
+              The free Doom II replacement Wadsmith plays on, made by the
+              Freedoom project. Play it through, or open it as an episode to see
+              how each level is built.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={onOpenFreedoom}>
+              <Copy size={14} aria-hidden="true" />
+              Open as an episode
+            </Button>
+            <Button variant="primary" onClick={onPlayFreedoom}>
+              <Play size={14} aria-hidden="true" />
+              Play
+            </Button>
+          </div>
+        </section>
       </main>
     </AppShell>
   );

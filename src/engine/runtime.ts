@@ -536,8 +536,7 @@ async function startDoom({
     doomModule.callMain([
       "-iwad",
       "/freedoom2.wad",
-      "-file",
-      ...wadPaths,
+      ...(wadPaths.length > 0 ? ["-file", ...wadPaths] : []),
       ...(patchPaths.length > 0 ? ["-deh", ...patchPaths] : []),
       "-warp",
       String(warp),
