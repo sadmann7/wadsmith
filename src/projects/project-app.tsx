@@ -48,7 +48,6 @@ import {
   lastProjectKey,
   mapFromTemplate,
   mapName,
-  mapSlots,
   mapStatus,
   maxBackupBytes,
   parseProjectBackup,
@@ -60,6 +59,7 @@ import {
   type ProjectStore,
 } from "./project-data";
 import { SidebarDrawer, type SidebarProps } from "./app-sidebar";
+import { EpisodeBuildDialog } from "./episode-build-dialog";
 import { FeaturedMaps } from "./featured-maps";
 import { ProjectHome } from "./project-home";
 import { parseRoute, pathOf, type Route } from "./routes";
@@ -179,6 +179,7 @@ function ProjectApp() {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("saved");
   const [message, setMessage] = useState<string | null>(null);
   const [mapDialog, setMapDialog] = useState<"new" | "settings" | null>(null);
+  const [buildingEpisode, setBuildingEpisode] = useState<string | null>(null);
   const [blockedLeave, setBlockedLeave] = useState<(() => void) | null>(null);
   const [view, setView] = useState(viewOfPath);
   const [featuredId, setFeaturedId] = useState(() => {
@@ -275,6 +276,7 @@ function ProjectApp() {
       setDetails(detailsOf(entry));
       setSaveStatus("saved");
       setMapPlaying(false);
+      setBuildingEpisode(null);
       selectProject(entry.projectId);
     },
     [announce, closeSession, selectProject],
@@ -419,6 +421,7 @@ function ProjectApp() {
     const play = route.kind !== "home" && Boolean(route.play);
     playPushed.current = play;
     setMessage(null);
+    setBuildingEpisode(null);
     if (fromHistory) settling.current = true;
     try {
       const active = sessionRef.current;
@@ -727,33 +730,20 @@ function ProjectApp() {
     });
   };
 
-  const blockedSlots = (ordered: ProjectMap[], verb: string) => {
-    const blocked = blockedOf(ordered);
-    if (blocked.length === 0) return false;
-    setMessage(`Fix ${blocked.join(", ")} before ${verb}.`);
-    return true;
-  };
-
-  const buildEpisode = () => {
+  const buildEpisode = (fileName: string) => {
     const ordered = bySlot(maps);
-    if (blockedSlots(ordered, "building")) return;
+    if (blockedOf(ordered).length > 0)
+      return "Fix the maps listed above first.";
     try {
       download(
-        wadFileName(project.name.toLowerCase()),
+        fileName,
         compileEpisode(ordered).slice().buffer,
         "application/octet-stream",
       );
-      const last = mapSlots.indexOf(ordered.at(-1)!.slot);
-      const gaps = mapSlots
-        .slice(0, last)
-        .filter((slot) => !ordered.some((entry) => entry.slot === slot));
-      setMessage(
-        gaps.length > 0
-          ? `Built. ${gaps.join(", ")} will use Freedoom's own levels.`
-          : null,
-      );
+      setBuildingEpisode(null);
+      return null;
     } catch (error) {
-      setMessage(`Couldn't build the episode. ${(error as Error).message}`);
+      return `Couldn't build the episode. ${(error as Error).message}`;
     }
   };
 
@@ -961,67 +951,84 @@ function ProjectApp() {
   }
 
   return (
-    <ProjectHome
-      sidebar={sidebar}
-      project={project}
-      maps={maps}
-      message={message}
-      onRenameProject={(name) =>
-        void attempt(async () => {
-          await store.putProject({ ...project, name });
-          await refresh(store, projectIdRef.current);
-        })
-      }
-      onDeleteProject={() =>
-        void attempt(async () => {
-          await store.deleteProject(project.id);
-          const [next] = await store.listProjects();
-          selectProject(next.id);
-          await store.setSetting(lastProjectKey, next.id);
-          await refresh(store, next.id);
-        })
-      }
-      onExportProject={exportProject}
-      onImportProject={(file) => void importProject(file)}
-      onImportMap={(file) => void importMap(file)}
-      onBuildEpisode={buildEpisode}
-      onPlayEpisode={() => playEpisode(maps)}
-      onOpenMap={(entry) => void openMap(entry)}
-      onCreateMap={createMap}
-      onUpdateMap={(entry, form) => updateMap(entry.id, form)}
-      onDuplicateMap={(entry) =>
-        void attempt(async () => {
-          const latest = await store.listMaps(entry.projectId);
-          const slot = freeSlots(latest)[0];
-          if (!slot) {
-            setMessage("All 32 map slots are in use.");
-            return;
-          }
-          await store.putMap(
-            createMapEntry(
-              entry.projectId,
-              slot,
-              { ...structuredClone(entry.map), name: `${mapName(entry)} copy` },
-              { description: entry.description, par: entry.par },
-            ),
-          );
-          await refresh(store, entry.projectId);
-        })
-      }
-      onReorderMaps={(order) =>
-        void attempt(async () => {
-          await store.moveMaps(slotMoves(maps, order));
-          await refresh(store, projectIdRef.current);
-        })
-      }
-      onDeleteMap={(entry) =>
-        void attempt(async () => {
-          await store.deleteMap(entry.id);
-          announce(entry.id);
-          await refresh(store, entry.projectId);
-        })
-      }
-    />
+    <>
+      {buildingEpisode === project.id ? (
+        <EpisodeBuildDialog
+          name={project.name}
+          maps={bySlot(maps)}
+          onBuild={buildEpisode}
+          onOpenMap={(entry) => {
+            setBuildingEpisode(null);
+            void openMap(entry);
+          }}
+          onClose={() => setBuildingEpisode(null)}
+        />
+      ) : null}
+      <ProjectHome
+        sidebar={sidebar}
+        project={project}
+        maps={maps}
+        message={message}
+        onRenameProject={(name) =>
+          void attempt(async () => {
+            await store.putProject({ ...project, name });
+            await refresh(store, projectIdRef.current);
+          })
+        }
+        onDeleteProject={() =>
+          void attempt(async () => {
+            await store.deleteProject(project.id);
+            const [next] = await store.listProjects();
+            selectProject(next.id);
+            await store.setSetting(lastProjectKey, next.id);
+            await refresh(store, next.id);
+          })
+        }
+        onExportProject={exportProject}
+        onImportProject={(file) => void importProject(file)}
+        onImportMap={(file) => void importMap(file)}
+        onBuildEpisode={() => setBuildingEpisode(project.id)}
+        onPlayEpisode={() => playEpisode(maps)}
+        onOpenMap={(entry) => void openMap(entry)}
+        onCreateMap={createMap}
+        onUpdateMap={(entry, form) => updateMap(entry.id, form)}
+        onDuplicateMap={(entry) =>
+          void attempt(async () => {
+            const latest = await store.listMaps(entry.projectId);
+            const slot = freeSlots(latest)[0];
+            if (!slot) {
+              setMessage("All 32 map slots are in use.");
+              return;
+            }
+            await store.putMap(
+              createMapEntry(
+                entry.projectId,
+                slot,
+                {
+                  ...structuredClone(entry.map),
+                  name: `${mapName(entry)} copy`,
+                },
+                { description: entry.description, par: entry.par },
+              ),
+            );
+            await refresh(store, entry.projectId);
+          })
+        }
+        onReorderMaps={(order) =>
+          void attempt(async () => {
+            await store.moveMaps(slotMoves(maps, order));
+            await refresh(store, projectIdRef.current);
+          })
+        }
+        onDeleteMap={(entry) =>
+          void attempt(async () => {
+            await store.deleteMap(entry.id);
+            announce(entry.id);
+            await refresh(store, entry.projectId);
+          })
+        }
+      />
+    </>
   );
 }
 
