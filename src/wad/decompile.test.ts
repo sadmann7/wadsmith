@@ -364,7 +364,7 @@ describe("decompileMap", () => {
     const f = build.vertex(512, 0);
     build.line(a, b, room, null, { middle: "BTSXWALL" });
     build.line(b, c, room);
-    build.line(c, d, room, next, { special: 7, middle: "MIDGRATE" });
+    build.line(c, d, room, next, { special: 12, middle: "MIDGRATE" });
     build.line(d, a, room);
     build.line(c, e, next);
     build.line(e, f, next);
@@ -382,7 +382,7 @@ describe("decompileMap", () => {
       droppedThings: { "Other things": 1 },
       multiplayerThings: 1,
       outsideThings: 1,
-      droppedActions: { Stairs: 1 },
+      droppedActions: { "Light changes": 1 },
       droppedEffects: 1,
       seeThroughWalls: 1,
       replacedTextures: ["BTSXFLAT", "BTSXWALL"],

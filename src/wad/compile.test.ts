@@ -1209,6 +1209,7 @@ describe("map check", () => {
       "Ceilings",
       "Lifts",
       "Crushers",
+      "Stairs",
       "Teleporters",
       "Level",
     ]);

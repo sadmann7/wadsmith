@@ -58,6 +58,8 @@ type LineActionKind =
   | "crusher-silent"
   | "crusher-stop"
   | "floor-crush"
+  | "stairs"
+  | "stairs-fast"
   | "lift"
   | "lift-fast"
   | "exit"

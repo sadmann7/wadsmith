@@ -87,13 +87,11 @@ const manualDoors: Record<number, boolean> = {
 const keyedManualDoors = new Set([26, 27, 28, 32, 33, 34]);
 const fastManualDoors = new Set([117, 118]);
 
-const stairs = new Set([7, 8, 100, 127]);
 const lights = new Set([12, 13, 17, 35, 79, 80, 81, 104, 138, 139]);
 const secretExits = new Set([51, 124]);
 const specialScrollLeft = 48;
 
 function actionGroup(special: number) {
-  if (stairs.has(special)) return "Stairs";
   if (lights.has(special)) return "Light changes";
   if (secretExits.has(special)) return "Secret exits";
   if (special > 141) return "Boom and later actions";

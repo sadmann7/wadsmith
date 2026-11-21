@@ -114,6 +114,13 @@ function pressesOf(map: GameMap): Press[] {
         height: (game) => game.sectorCeiling(target),
         done: (game, before) => game.sectorCeiling(target) < before - 32,
       });
+    } else if (action.kind.startsWith("stairs")) {
+      presses.push({
+        label: `pressing builds stairs from ${map.sectors[target].name}`,
+        map: placed,
+        height: (game) => game.sectorFloor(target),
+        done: (game, before) => game.sectorFloor(target) > before,
+      });
     } else if (
       action.kind.startsWith("floor-raise") ||
       action.kind === "floor-crush"
@@ -221,6 +228,8 @@ describe.skipIf(!ready)("floor and ceiling actions in the engine", () => {
     ["ceiling-lower", "pressing lowers the ceiling"],
     ["crusher", "pressing lowers the ceiling"],
     ["floor-crush", "pressing raises"],
+    ["stairs", "pressing builds stairs"],
+    ["stairs-fast", "pressing builds stairs"],
     ["floor-raise-512", "pressing raises"],
   ])(
     "moves the sector a %s switch targets",
