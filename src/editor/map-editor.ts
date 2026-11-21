@@ -63,7 +63,11 @@ import type {
 
 type MapTool = "select" | "draw" | "thing" | "switch";
 type EditMode = "vertices" | "lines" | "sectors" | "things";
-type MapViewStatus = { pointer: Point | null; zoom: number };
+type MapViewStatus = {
+  pointer: Point | null;
+  zoom: number;
+  view: { left: number; top: number; right: number; bottom: number };
+};
 
 type MapChangeReason =
   | "drag"
@@ -743,16 +747,26 @@ const mapEditor = definePrimitive({
           }),
         );
         let pointerAt: Point | null = null;
-        const reportView = () =>
+        const reportView = () => {
+          const { x, y, zoom } = store.get().viewport;
           context.options().onViewChange?.({
             pointer: pointerAt,
-            zoom: store.get().viewport.zoom,
+            zoom,
+            view: {
+              left: -x / zoom,
+              top: -y / zoom,
+              right: (element.clientWidth - x) / zoom,
+              bottom: (element.clientHeight - y) / zoom,
+            },
           });
+        };
         reportPointer = (point) => {
           pointerAt = point;
           reportView();
         };
         const stopView = store.subscribe(reportView);
+        const resized = new ResizeObserver(reportView);
+        resized.observe(element);
         // A hidden pane has no size to fit until it is first shown.
         const observer = new ResizeObserver(() => {
           if (element.clientWidth === 0 || element.clientHeight === 0) return;
@@ -766,6 +780,7 @@ const mapEditor = definePrimitive({
         return () => {
           stopCamera?.();
           stopView();
+          resized.disconnect();
           observer.disconnect();
         };
       },

@@ -771,6 +771,18 @@
     );
   }
 
+  .map[data-far] .map-thing,
+  .map[data-far] .map-port {
+    width: 8px;
+    height: 8px;
+    border: 0;
+    border-radius: 50%;
+  }
+
+  .map[data-far] .map-thing {
+    background: var(--thing-color);
+  }
+
   .map[data-mode="things"] .map-label {
     z-index: auto;
   }
