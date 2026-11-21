@@ -102,6 +102,51 @@ const lineActions: Record<LineActionKind, ActionDefinition> = {
       walk: { once: 119, repeat: 128 },
     },
   },
+  "floor-raise-next-fast": {
+    label: "Floor: raise fast to next floor",
+    triggers: {
+      switch: { once: 131, repeat: 132 },
+      walk: { once: 130, repeat: 129 },
+    },
+  },
+  "floor-raise-24": {
+    label: "Floor: raise by 24",
+    triggers: { walk: { once: 58, repeat: 92 } },
+  },
+  "floor-raise-texture": {
+    label: "Floor: raise by its shortest lower wall",
+    triggers: { walk: { once: 30, repeat: 96 } },
+  },
+  "floor-raise-512": {
+    label: "Floor: raise by 512",
+    triggers: { switch: { once: 140 } },
+  },
+  "floor-lower-highest": {
+    label: "Floor: lower to highest nearby floor",
+    triggers: {
+      switch: { once: 102, repeat: 45 },
+      walk: { once: 19, repeat: 83 },
+    },
+  },
+  "floor-lower-fast": {
+    label: "Floor: lower fast to 8 above nearby floor",
+    triggers: {
+      switch: { once: 71, repeat: 70 },
+      walk: { once: 36, repeat: 98 },
+    },
+  },
+  "ceiling-lower": {
+    label: "Ceiling: lower to floor",
+    triggers: { switch: { once: 41, repeat: 43 } },
+  },
+  "ceiling-lower-8": {
+    label: "Ceiling: lower to 8 above floor",
+    triggers: { walk: { once: 44, repeat: 72 } },
+  },
+  "ceiling-raise": {
+    label: "Ceiling: raise to highest, floor: lower to lowest",
+    triggers: { walk: { once: 40 } },
+  },
   lift: {
     label: "Lift: lower, wait, raise",
     triggers: {
