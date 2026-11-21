@@ -3,7 +3,7 @@ import { createLocalStorage } from "@ui-sdk/core";
 import { deathmatchStarts } from "../map/catalog";
 import type { GameMap } from "../map/types";
 import type { LinkState } from "./peer-link";
-import { tabTransport } from "./room";
+import { formatRoomCode, tabTransport } from "./room";
 import { socketTransport } from "./room-socket";
 import { fragLimit, type NetworkMode, type Skill } from "./runtime";
 
@@ -26,7 +26,7 @@ function openTransport(code: string) {
 }
 
 function inviteLink(code: string) {
-  return `${location.origin}/join/${code}`;
+  return `${location.origin}/join/${formatRoomCode(code)}`;
 }
 
 function loadName() {

@@ -1,5 +1,13 @@
+import Link from "next/link";
 import { LogOut, RefreshCw, Timer, Users, WifiOff } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 
 import {
   appVersion,
@@ -13,7 +21,6 @@ import {
   skillNames,
   stallRelay,
 } from "./coop";
-import { StandaloneShell } from "../projects/standalone-shell";
 import {
   CardHeading,
   CoopCard,
@@ -46,23 +53,50 @@ type JoinState =
   | { step: "getting"; peer: number; progress: number }
   | { step: "waiting"; peer: number; game: CoopGame }
   | { step: "playing"; peer: number; game: CoopGame }
-  | { step: "ended"; reason: Refusal | Ending | "left" };
+  | { step: "ended"; reason: Refusal | Ending | "left" | "quit" };
 
 function backHome() {
   location.assign("/");
+}
+
+function GuestShell({ children }: { children: ReactNode }) {
+  return (
+    <div className="grid min-h-dvh grid-rows-[auto_1fr_auto] bg-canvas text-fg">
+      <header className="flex h-12 items-center px-5">
+        <Link
+          href="/"
+          className="text-[17px] font-bold tracking-[0.12em] text-accent no-underline"
+        >
+          WADSMITH
+        </Link>
+      </header>
+      <main className="grid place-items-center p-4">
+        <div className="grid w-[min(420px,100%)] gap-4">{children}</div>
+      </main>
+      <footer className="flex flex-wrap justify-center gap-x-4 gap-y-1 px-5 py-4 text-xs text-fg-muted">
+        <span>Doom maps, built and played in your browser.</span>
+        <Link
+          href="/source"
+          className="text-fg-muted underline underline-offset-4"
+        >
+          Source and licences
+        </Link>
+      </footer>
+    </div>
+  );
 }
 
 function Ended({
   reason,
   info,
 }: {
-  reason: Refusal | Ending | "left";
+  reason: Refusal | Ending | "left" | "quit";
   info: RoomInfo | null;
 }) {
   const host = info?.host ?? "The host";
   const back = (
-    <button type="button" className="button" onClick={backHome}>
-      Back to Wadsmith
+    <button type="button" className="button primary" onClick={backHome}>
+      Make your own map
     </button>
   );
   if (reason === "full") {
@@ -159,16 +193,39 @@ function Ended({
       </StatusCard>
     );
   }
+  if (reason === "quit") {
+    return (
+      <StatusCard
+        icon={LogOut}
+        tone="info"
+        title="You left the game"
+        actions={back}
+      >
+        <p className="m-0">
+          A running game can&apos;t be rejoined. Ask {host} to open a new room.
+        </p>
+      </StatusCard>
+    );
+  }
   return (
     <StatusCard
       icon={LogOut}
       tone="info"
-      title="You left the game"
-      actions={back}
+      title="You left the room"
+      actions={
+        <>
+          <button
+            type="button"
+            className="button"
+            onClick={() => location.reload()}
+          >
+            Join again
+          </button>
+          {back}
+        </>
+      }
     >
-      <p className="m-0">
-        Open the invite link again to rejoin while the room is open.
-      </p>
+      <p className="m-0">You can join again while the room is open.</p>
     </StatusCard>
   );
 }
@@ -424,7 +481,10 @@ function CoopJoin({ code }: { code: string }) {
   const leave = () => {
     roomRef.current?.leave();
     linksRef.current?.closeAll();
-    setState({ step: "ended", reason: "left" });
+    setState({
+      step: "ended",
+      reason: state.step === "playing" ? "quit" : "left",
+    });
   };
 
   if (state.step === "playing" && playing) {
@@ -441,67 +501,69 @@ function CoopJoin({ code }: { code: string }) {
   }
 
   return (
-    <StandaloneShell crumb="Join a game">
-      <main className="grid min-h-full place-items-center p-4">
-        <div className="w-[min(420px,100%)]">
-          {state.step === "finding" ? (
-            <p className="m-0 text-center text-sm text-fg-muted" role="status">
-              {!state.slow
-                ? "Finding the room…"
-                : roomsUrl
-                  ? "Still looking for this room. Check the link, and that the host still has the room open."
-                  : "Still looking for this room. The host's tab has to stay open in this browser."}
-            </p>
-          ) : null}
-          {(state.step === "invite" || state.step === "joining") && info ? (
-            <Invite
-              code={code}
-              info={{ ...info, players }}
-              joining={state.step === "joining"}
-              onJoin={(name) => {
-                saveName(name);
-                setState({ step: "joining" });
-                roomRef.current?.join(name);
-              }}
-            />
-          ) : null}
-          {state.step === "getting" && info ? (
-            <CoopCard
-              label={`Getting ${info.title}`}
-              map={info.map}
-              footer={
-                <>
-                  <span />
-                  <button type="button" className="button" onClick={leave}>
-                    Cancel
-                  </button>
-                </>
-              }
-            >
-              <CardHeading
-                eyebrow={`${modeNames[info.mode]} · ${skillNames[info.skill]} · ${info.title}`}
-                title={
-                  <h1 className="m-0 text-2xl font-bold">Getting the map</h1>
-                }
-                detail={`Building the level on your computer so it matches ${info.host}'s.`}
-              />
-              <Progress label="Map file" value={state.progress} />
-            </CoopCard>
-          ) : null}
-          {state.step === "waiting" && info ? (
-            <Waiting
-              info={info}
-              players={players}
-              peer={state.peer}
-              onLeave={leave}
-            />
-          ) : null}
-          {state.step === "ended" ? (
-            <Ended reason={state.reason} info={info} />
+    <GuestShell>
+      {state.step === "finding" ? (
+        <div className="grid justify-items-center gap-3 text-center">
+          <h1 className="sr-only">Join a game</h1>
+          <p className="m-0 text-sm text-fg-muted" role="status">
+            {!state.slow
+              ? "Finding the room…"
+              : roomsUrl
+                ? "Still looking for this room. Check the link, and that the host still has the room open."
+                : "Still looking for this room. The host's tab has to stay open in this browser."}
+          </p>
+          {state.slow ? (
+            <button type="button" className="button" onClick={backHome}>
+              Stop looking
+            </button>
           ) : null}
         </div>
-      </main>
-    </StandaloneShell>
+      ) : null}
+      {(state.step === "invite" || state.step === "joining") && info ? (
+        <Invite
+          code={code}
+          info={{ ...info, players }}
+          joining={state.step === "joining"}
+          onJoin={(name) => {
+            saveName(name);
+            setState({ step: "joining" });
+            roomRef.current?.join(name);
+          }}
+        />
+      ) : null}
+      {state.step === "getting" && info ? (
+        <CoopCard
+          label={`Getting ${info.title}`}
+          map={info.map}
+          footer={
+            <>
+              <span />
+              <button type="button" className="button" onClick={leave}>
+                Cancel
+              </button>
+            </>
+          }
+        >
+          <CardHeading
+            eyebrow={`${modeNames[info.mode]} · ${skillNames[info.skill]} · ${info.title}`}
+            title={<h1 className="m-0 text-2xl font-bold">Getting the map</h1>}
+            detail={`Building the level on your computer so it matches ${info.host}'s.`}
+          />
+          <Progress label="Map file" value={state.progress} />
+        </CoopCard>
+      ) : null}
+      {state.step === "waiting" && info ? (
+        <Waiting
+          info={info}
+          players={players}
+          peer={state.peer}
+          onLeave={leave}
+        />
+      ) : null}
+      {state.step === "ended" ? (
+        <Ended reason={state.reason} info={info} />
+      ) : null}
+    </GuestShell>
   );
 }
 
