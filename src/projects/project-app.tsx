@@ -1026,7 +1026,7 @@ function ProjectApp() {
               <AlertDialogTitle className={titleClass}>
                 Your latest changes aren't saved
               </AlertDialogTitle>
-              <AlertDialogDescription className="m-0 text-fg-muted">
+              <AlertDialogDescription className="m-0 text-muted-foreground">
                 Your browser couldn't store them. Download the map to keep a
                 copy before you leave.
               </AlertDialogDescription>

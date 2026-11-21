@@ -57,7 +57,7 @@ type Confirmation = { title: string; body: string; run: () => void };
 const statusDots = {
   ready: "bg-success",
   warning: "bg-warning",
-  error: "bg-danger",
+  error: "bg-destructive",
 };
 
 function formatEdited(time: number) {
@@ -146,7 +146,7 @@ function ConfirmDialog({
         <AlertDialogTitle className={titleClass}>
           {confirmation.title}
         </AlertDialogTitle>
-        <AlertDialogDescription className="m-0 text-fg-muted">
+        <AlertDialogDescription className="m-0 text-muted-foreground">
           {confirmation.body}
         </AlertDialogDescription>
         <div className="flex justify-end gap-2">
@@ -155,7 +155,7 @@ function ConfirmDialog({
           </button>
           <button
             type="button"
-            className="button border-danger text-danger"
+            className="button border-destructive text-destructive"
             onClick={() => {
               confirmation.run();
               onClose();
@@ -208,7 +208,7 @@ function MapRow({
     <tr
       draggable
       data-map={entry.id}
-      className={`group h-24 border-b border-border hover:bg-surface-raised ${dragging ? "opacity-40" : ""} ${dropBefore ? "shadow-[inset_0_2px_0_var(--color-accent)]" : ""}`}
+      className={`group h-24 border-b border-border hover:bg-muted ${dragging ? "opacity-40" : ""} ${dropBefore ? "shadow-[inset_0_2px_0_var(--color-primary)]" : ""}`}
       onDragStart={(event) => {
         event.dataTransfer.effectAllowed = "move";
         event.dataTransfer.setData("text/plain", entry.id);
@@ -233,26 +233,26 @@ function MapRow({
         }
       }}
     >
-      <td className="w-6 text-fg-disabled group-hover:text-fg-muted">
+      <td className="w-6 text-muted-foreground/60 group-hover:text-muted-foreground">
         <GripVertical size={14} aria-hidden="true" className="cursor-grab" />
       </td>
       <td className="font-mono text-xs">{entry.slot}</td>
       <td className="max-[900px]:hidden">
         <MapPlan
           map={entry.map}
-          className="h-[76px] w-[128px] rounded-[2px] border border-border-strong bg-canvas"
+          className="h-[76px] w-[128px] rounded-[2px] border border-input bg-background"
         />
       </td>
       <td className="max-w-0 pr-4 pl-6 max-[900px]:pl-0">
         <button
           type="button"
           disabled={entry.broken}
-          className="block max-w-full truncate border-0 bg-transparent p-0 text-left text-[17px] font-semibold text-fg"
+          className="block max-w-full truncate border-0 bg-transparent p-0 text-left text-[17px] font-semibold text-foreground"
           onClick={onOpen}
         >
           {name}
         </button>
-        <div className="truncate text-sm text-fg-muted">
+        <div className="truncate text-sm text-muted-foreground">
           {entry.description}
         </div>
       </td>
@@ -263,7 +263,9 @@ function MapRow({
         {entry.map.things.length}
       </td>
       <td className="text-right font-mono text-sm">
-        {formatPar(entry.par) || <span className="text-fg-muted">—</span>}
+        {formatPar(entry.par) || (
+          <span className="text-muted-foreground">—</span>
+        )}
       </td>
       <td className="pl-4">
         <span
@@ -277,7 +279,7 @@ function MapRow({
           {status.label}
         </span>
       </td>
-      <td className="text-sm whitespace-nowrap text-fg-muted max-[900px]:hidden">
+      <td className="text-sm whitespace-nowrap text-muted-foreground max-[900px]:hidden">
         {formatEdited(entry.editedAt)}
       </td>
       <td>
@@ -327,7 +329,7 @@ function MapRow({
             </MenuItem>
             <MenuSeparator className="menu-separator" />
             <MenuItem
-              className="select-item data-[highlighted]:bg-danger/15"
+              className="select-item data-[highlighted]:bg-destructive/15"
               destructive
               onSelect={onDelete}
             >
@@ -447,7 +449,7 @@ function ProjectHome({
               </MenuItem>
               <MenuSeparator className="menu-separator" />
               <MenuItem
-                className="select-item data-[highlighted]:bg-danger/15"
+                className="select-item data-[highlighted]:bg-destructive/15"
                 destructive
                 disabled={sidebar.projects.length === 1}
                 onSelect={() =>
@@ -490,7 +492,7 @@ function ProjectHome({
               <Pencil size={15} aria-hidden="true" />
             </button>
           </div>
-          <p className="m-0 mt-1 font-mono text-xs text-fg-muted">
+          <p className="m-0 mt-1 font-mono text-xs text-muted-foreground">
             {[
               countLabel(maps.length),
               range,
@@ -514,7 +516,7 @@ function ProjectHome({
           </p>
         ) : null}
         {sorted.length > 1 ? (
-          <p className="m-0 flex items-center gap-2.5 rounded-[3px] border border-border bg-surface px-3 py-2.5 text-sm text-fg-soft">
+          <p className="m-0 flex items-center gap-2.5 rounded-[3px] border border-border bg-card px-3 py-2.5 text-sm text-foreground">
             <Route size={15} aria-hidden="true" className="text-info" />
             Maps play in slot order, and an exit takes everyone to the next
             slot. Drag a row to change the order.
@@ -542,11 +544,11 @@ function ProjectHome({
             }
           }}
         >
-          <FileInputDropzone className="group relative flex flex-col gap-5 rounded-[6px] outline-2 outline-offset-4 outline-transparent data-[dragging]:outline-accent data-[dragging]:outline-dashed">
+          <FileInputDropzone className="group relative flex flex-col gap-5 rounded-[6px] outline-2 outline-offset-4 outline-transparent data-[dragging]:outline-primary data-[dragging]:outline-dashed">
             {sorted.length > 0 ? (
               <table className="w-full border-collapse text-left">
                 <thead>
-                  <tr className="h-8 border-b border-border font-mono text-xs tracking-wide text-fg-muted [&>th]:font-normal">
+                  <tr className="h-8 border-b border-border font-mono text-xs tracking-wide text-muted-foreground [&>th]:font-normal">
                     <th className="w-6">
                       <span className="sr-only">Order</span>
                     </th>
@@ -620,34 +622,36 @@ function ProjectHome({
                 </tbody>
               </table>
             ) : (
-              <p className="m-0 text-fg-muted">This episode has no maps yet.</p>
+              <p className="m-0 text-muted-foreground">
+                This episode has no maps yet.
+              </p>
             )}
             <div
-              className={`flex flex-wrap items-center gap-x-2 gap-y-1 px-6 ${dragged !== null && dropIndex === sorted.length ? "shadow-[inset_0_2px_0_var(--color-accent)]" : ""}`}
+              className={`flex flex-wrap items-center gap-x-2 gap-y-1 px-6 ${dragged !== null && dropIndex === sorted.length ? "shadow-[inset_0_2px_0_var(--color-primary)]" : ""}`}
             >
               {nextSlot ? (
                 <>
                   <button
                     type="button"
-                    className="flex items-center gap-2 border-0 bg-transparent p-0 text-sm font-semibold text-accent hover:underline"
+                    className="flex items-center gap-2 border-0 bg-transparent p-0 text-sm font-semibold text-primary hover:underline"
                     onClick={() => setCreatingMap(true)}
                   >
                     <Plus size={14} aria-hidden="true" />
                     Add a map in {nextSlot}
                   </button>
-                  <FileInputTrigger className="border-0 bg-transparent p-0 text-sm text-fg-muted hover:text-fg hover:underline">
+                  <FileInputTrigger className="border-0 bg-transparent p-0 text-sm text-muted-foreground hover:text-foreground hover:underline">
                     or import a map file or WAD
                   </FileInputTrigger>
                 </>
               ) : (
-                <p className="m-0 text-sm text-fg-muted">
+                <p className="m-0 text-sm text-muted-foreground">
                   All 32 map slots are in use.
                 </p>
               )}
             </div>
             <div
               aria-hidden="true"
-              className="pointer-events-none absolute inset-0 hidden items-center justify-center gap-2 rounded-[6px] bg-canvas/95 text-sm font-semibold text-accent group-data-[dragging]:flex"
+              className="pointer-events-none absolute inset-0 hidden items-center justify-center gap-2 rounded-[6px] bg-background/95 text-sm font-semibold text-primary group-data-[dragging]:flex"
             >
               <Upload size={16} />
               Drop a map file, WAD or zip to import it

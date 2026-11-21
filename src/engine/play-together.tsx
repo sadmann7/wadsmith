@@ -49,9 +49,9 @@ import {
 import type { NetworkMode, Skill } from "./runtime";
 
 const dialogClass =
-  "fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-32px)] w-[480px] max-w-[calc(100vw-32px)] -translate-1/2 flex-col overflow-hidden rounded-[6px] border border-border-strong bg-surface outline-none";
+  "fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-32px)] w-[480px] max-w-[calc(100vw-32px)] -translate-1/2 flex-col overflow-hidden rounded-[6px] border border-input bg-card outline-none";
 const titleClass =
-  "m-0 block font-sans text-2xl font-bold tracking-normal text-fg normal-case";
+  "m-0 block font-sans text-2xl font-bold tracking-normal text-foreground normal-case";
 
 type HostedGame = { session: CoopSession; close: () => void };
 
@@ -83,7 +83,7 @@ function CheckRow({
   const color = {
     done: "text-success",
     todo: "text-warning",
-    lock: "text-fg-muted",
+    lock: "text-muted-foreground",
   }[icon];
   return (
     <li className="flex min-h-[44px] items-center gap-3 border-b border-border py-2">
@@ -91,11 +91,11 @@ function CheckRow({
         <Icon size={16} aria-hidden="true" className={color} />
       </span>
       <span className="grid min-w-0 flex-1 gap-0.5">
-        <span className={`text-sm ${icon === "lock" ? "text-fg-soft" : ""}`}>
+        <span className={`text-sm ${icon === "lock" ? "text-foreground" : ""}`}>
           {title}
         </span>
         {detail ? (
-          <span className="text-sm text-fg-muted">{detail}</span>
+          <span className="text-sm text-muted-foreground">{detail}</span>
         ) : null}
       </span>
       {action}
@@ -147,7 +147,7 @@ function Setup({
           }))}
           onChange={(mode) => onChange({ ...settings, mode })}
         />
-        <p className="m-0 mt-1.5 text-sm text-fg-muted">
+        <p className="m-0 mt-1.5 text-sm text-muted-foreground">
           {modeHelp[settings.mode]}
         </p>
       </div>
@@ -289,7 +289,7 @@ function Lobby({
             {copied ? "Copied" : "Copy link"}
           </button>
         </div>
-        <p className="m-0 text-sm text-fg-muted">
+        <p className="m-0 text-sm text-muted-foreground">
           {roomsUrl
             ? "Anyone with the link can join until you start."
             : "Opens in other tabs of this browser until you start."}
@@ -320,13 +320,13 @@ function Lobby({
               <span className="min-w-0 flex-1 truncate text-sm font-semibold">
                 {player.name}
                 {player.peer === hostPeer ? (
-                  <span className="ml-2 font-mono text-xs font-normal tracking-[0.06em] text-fg-muted">
+                  <span className="ml-2 font-mono text-xs font-normal tracking-[0.06em] text-muted-foreground">
                     YOU · HOST
                   </span>
                 ) : null}
               </span>
               {player.peer !== hostPeer ? (
-                <span className="font-mono text-xs text-fg-muted">
+                <span className="font-mono text-xs text-muted-foreground">
                   {[
                     links[player.peer] ? linkLabels[links[player.peer]] : null,
                     player.ping === null ? null : `${player.ping} ms`,
@@ -336,7 +336,7 @@ function Lobby({
                 </span>
               ) : null}
               {player.ready ? (
-                <span className="flex items-center gap-1.5 text-sm text-fg-soft">
+                <span className="flex items-center gap-1.5 text-sm text-foreground">
                   <span
                     aria-hidden="true"
                     className="size-1.5 rounded-full bg-success"
@@ -351,7 +351,7 @@ function Lobby({
               {player.peer !== hostPeer ? (
                 <button
                   type="button"
-                  className="border-0 bg-transparent p-0 text-sm text-fg-muted hover:text-danger"
+                  className="border-0 bg-transparent p-0 text-sm text-muted-foreground hover:text-destructive"
                   aria-label={`Remove ${player.name}`}
                   onClick={() => onRemove(player.peer)}
                 >
@@ -363,7 +363,7 @@ function Lobby({
           {open.map((peer) => (
             <li
               key={peer}
-              className="flex h-[44px] items-center gap-3 border-b border-border text-sm text-fg-muted"
+              className="flex h-[44px] items-center gap-3 border-b border-border text-sm text-muted-foreground"
             >
               <PlayerBadge peer={peer} open />
               Open slot
@@ -570,7 +570,7 @@ function PlayTogether({
           )}
         </div>
         <footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 px-6 pt-[18px] pb-5">
-          <span className="text-sm text-fg-muted" role="status">
+          <span className="text-sm text-muted-foreground" role="status">
             {code
               ? statusOf(players, settings.players)
               : "You get a link to share next."}

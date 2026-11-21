@@ -225,7 +225,7 @@ function TextureField({
           type="button"
           aria-label={`Browse ${label.toLowerCase()} textures`}
           title="Browse textures"
-          className="size-12 cursor-pointer rounded-[3px] border-0 bg-transparent p-0 outline-offset-1 hover:outline-2 hover:outline-accent"
+          className="size-12 cursor-pointer rounded-[3px] border-0 bg-transparent p-0 outline-offset-1 hover:outline-2 hover:outline-primary"
           onClick={() => setBrowsing(true)}
         >
           {swatch}
@@ -827,7 +827,9 @@ function CompactNumber({
             className="w-full min-w-0 border-0 bg-transparent font-mono text-xs tabular-nums outline-none"
           />
           {suffix ? (
-            <span className="font-mono text-xs text-fg-muted">{suffix}</span>
+            <span className="font-mono text-xs text-muted-foreground">
+              {suffix}
+            </span>
           ) : null}
         </NumberInputGroup>
       </NumberInput>
@@ -852,7 +854,7 @@ function Meter({
         <span className="label">{label}</span>
         <span className="font-mono text-xs">{value}</span>
       </div>
-      <div className="h-1 bg-surface-raised">
+      <div className="h-1 bg-muted">
         <div
           className="h-full"
           style={{ width: `${Math.min(1, fill) * 100}%`, background: color }}
@@ -931,7 +933,11 @@ function PlaceThings({
   return (
     <InspectorSection title="Place a thing">
       <label className="input-box flex h-8 items-center gap-2 rounded-[2px] border border-input px-2">
-        <Search size={14} className="text-fg-muted" aria-hidden="true" />
+        <Search
+          size={14}
+          className="text-muted-foreground"
+          aria-hidden="true"
+        />
         <Input
           aria-label="Search things"
           placeholder="Search things"
@@ -964,12 +970,12 @@ function PlaceThings({
                 type="button"
                 aria-pressed={active}
                 title={thingCatalog[item].label}
-                className="grid h-[58px] min-w-0 content-center justify-items-center gap-1 rounded-[2px] border-0 bg-surface-raised px-1 text-xs text-fg-muted hover:text-fg aria-pressed:bg-accent/15 aria-pressed:text-fg"
+                className="grid h-[58px] min-w-0 content-center justify-items-center gap-1 rounded-[2px] border-0 bg-muted px-1 text-xs text-muted-foreground hover:text-foreground aria-pressed:bg-primary/15 aria-pressed:text-foreground"
                 onClick={() => onPick(item)}
               >
                 <Icon
                   size={18}
-                  style={{ color: active ? "var(--color-accent)" : color }}
+                  style={{ color: active ? "var(--color-primary)" : color }}
                   aria-hidden="true"
                 />
                 <span className="w-full truncate text-center">
@@ -1057,7 +1063,7 @@ function ThingFields({
           <ToggleGroup
             aria-label="Difficulties"
             multiple
-            className="grid grid-cols-3 gap-0.5 rounded-[3px] bg-canvas p-0.5"
+            className="grid grid-cols-3 gap-0.5 rounded-[3px] bg-background p-0.5"
             value={pressed}
             onValueChange={(next) => {
               const changed = allSkills.find(
@@ -1070,7 +1076,7 @@ function ThingFields({
               <Toggle
                 key={skill}
                 value={skill}
-                className="h-[26px] rounded-[2px] border-0 bg-transparent text-fg-muted aria-pressed:bg-surface-raised aria-pressed:text-fg"
+                className="h-[26px] rounded-[2px] border-0 bg-transparent text-muted-foreground aria-pressed:bg-muted aria-pressed:text-foreground aria-pressed:ring-1 aria-pressed:ring-input aria-pressed:ring-inset"
               >
                 {skillLabels[skill]}
               </Toggle>
@@ -1079,7 +1085,7 @@ function ThingFields({
           {enemies.length > 0 ? (
             <label className="flex items-center gap-2">
               <Checkbox
-                className="flex size-4 items-center justify-center rounded-[2px] border border-input bg-transparent p-0 text-accent-fg aria-checked:border-accent aria-checked:bg-accent"
+                className="flex size-4 items-center justify-center rounded-[2px] border border-input bg-transparent p-0 text-primary-foreground aria-checked:border-primary aria-checked:bg-primary"
                 checked={enemies.every((thing) => thing.ambush)}
                 onCheckedChange={(checked) =>
                   onChange((thing) =>

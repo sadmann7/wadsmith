@@ -1198,14 +1198,14 @@ function App({
             ) : (
               <button
                 type="button"
-                className="button border-transparent hover:bg-surface-hover"
+                className="button border-transparent hover:bg-accent"
                 title="Open map check"
                 aria-label={`Map check: ${mapStatus}`}
                 onClick={showMapCheck}
               >
                 <TriangleAlert
                   size={15}
-                  className={canPlay ? "text-warning" : "text-danger"}
+                  className={canPlay ? "text-warning" : "text-destructive"}
                   aria-hidden="true"
                 />
                 <span className="max-xl:sr-only">{mapStatus}</span>
@@ -1351,15 +1351,15 @@ function App({
                   {welcomed ? null : (
                     <section
                       aria-labelledby="welcome-title"
-                      className="absolute bottom-3 left-3 z-4 grid max-w-[min(380px,calc(100%-24px))] gap-3 rounded-[3px] border border-border bg-surface p-4 shadow-lg"
+                      className="absolute bottom-3 left-3 z-4 grid max-w-[min(380px,calc(100%-24px))] gap-3 rounded-[3px] border border-border bg-card p-4 shadow-lg"
                     >
                       <h2
                         id="welcome-title"
-                        className="text-base font-semibold text-fg"
+                        className="text-base font-semibold text-foreground"
                       >
                         Welcome to Wadsmith
                       </h2>
-                      <p className="text-sm text-fg-muted">
+                      <p className="text-sm text-muted-foreground">
                         Build Doom maps in your browser and play them on the
                         spot. This starter map is ready, so play it, then change
                         anything and play again.
@@ -1458,7 +1458,7 @@ function App({
                           size={14}
                           className={
                             issue.severity === "error"
-                              ? "text-danger"
+                              ? "text-destructive"
                               : "text-warning"
                           }
                           aria-hidden="true"
@@ -1469,7 +1469,7 @@ function App({
                         <div className="min-w-0">
                           <div>{title}</div>
                           {detail ? (
-                            <div className="truncate font-mono text-xs text-fg-muted">
+                            <div className="truncate font-mono text-xs text-muted-foreground">
                               {detail}
                             </div>
                           ) : null}
@@ -1477,7 +1477,7 @@ function App({
                         {fixed ? (
                           <button
                             type="button"
-                            className="border-0 bg-transparent p-0 text-accent"
+                            className="border-0 bg-transparent p-0 text-primary"
                             aria-label={`Fix: ${title}`}
                             onClick={() => commit(fixed)}
                           >
@@ -1486,7 +1486,7 @@ function App({
                         ) : target ? (
                           <button
                             type="button"
-                            className="border-0 bg-transparent p-0 text-fg-muted hover:text-fg"
+                            className="border-0 bg-transparent p-0 text-muted-foreground hover:text-foreground"
                             aria-label={`Show: ${title}`}
                             onClick={() => showTarget(target)}
                           >
@@ -1716,7 +1716,7 @@ function App({
                       </span>
                       <button
                         type="button"
-                        className="self-start border-0 bg-transparent p-0 text-fg-muted hover:text-fg"
+                        className="self-start border-0 bg-transparent p-0 text-muted-foreground hover:text-foreground"
                         aria-label={`Show note: ${note.text}`}
                         onClick={() =>
                           showTarget({ kind: "empty", point: note })
@@ -1726,7 +1726,7 @@ function App({
                       </button>
                       <button
                         type="button"
-                        className="self-start border-0 bg-transparent p-0 text-fg-muted hover:text-danger"
+                        className="self-start border-0 bg-transparent p-0 text-muted-foreground hover:text-destructive"
                         aria-label={`Delete note: ${note.text}`}
                         onClick={() => commit(removeNote(map, note.id))}
                       >

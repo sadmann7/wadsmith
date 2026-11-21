@@ -21,7 +21,7 @@ type EpisodeEntry = {
 const healthDots: Record<MapHealth, string> = {
   ready: "bg-success",
   warning: "bg-warning",
-  error: "bg-danger",
+  error: "bg-destructive",
 };
 
 const healthLabels: Record<MapHealth, string> = {
@@ -52,12 +52,15 @@ function MapSwitcher({
     <nav aria-label="Breadcrumb" className="map-title min-w-0 gap-2">
       <button
         type="button"
-        className="min-w-0 truncate border-0 bg-transparent p-0 text-sm text-fg-muted hover:text-fg max-lg:hidden"
+        className="min-w-0 truncate border-0 bg-transparent p-0 text-sm text-muted-foreground hover:text-foreground max-lg:hidden"
         onClick={onEpisodeHome}
       >
         {episodeName}
       </button>
-      <span aria-hidden="true" className="text-fg-disabled max-lg:hidden">
+      <span
+        aria-hidden="true"
+        className="text-muted-foreground/60 max-lg:hidden"
+      >
         /
       </span>
       <Menu
@@ -69,10 +72,10 @@ function MapSwitcher({
         }}
       >
         <MenuTrigger
-          className="flex min-w-[120px] items-center gap-2 rounded-[3px] border-0 bg-transparent px-2 py-1 text-fg hover:bg-surface-raised aria-expanded:bg-surface-raised"
+          className="flex min-w-[120px] items-center gap-2 rounded-[3px] border-0 bg-transparent px-2 py-1 text-foreground hover:bg-muted aria-expanded:bg-muted"
           aria-label={`Switch map, now ${current?.slot ?? ""} ${current?.name ?? ""}`}
         >
-          <span className="flex-none font-mono text-xs text-fg-muted">
+          <span className="flex-none font-mono text-xs text-muted-foreground">
             {current?.slot}
           </span>
           <strong className="max-w-[240px] min-w-0 truncate text-base font-semibold">
@@ -81,12 +84,12 @@ function MapSwitcher({
           <ChevronDown
             size={14}
             aria-hidden="true"
-            className="shrink-0 text-fg-muted"
+            className="shrink-0 text-muted-foreground"
           />
         </MenuTrigger>
         <MenuContent className="select-content min-w-[300px]" align="center">
           <MenuGroup>
-            <MenuGroupLabel className="px-2 pt-1 pb-1.5 font-mono text-xs tracking-wide text-fg-muted uppercase">
+            <MenuGroupLabel className="px-2 pt-1 pb-1.5 font-mono text-xs tracking-wide text-muted-foreground uppercase">
               {episodeName} · {maps.length} {maps.length === 1 ? "map" : "maps"}
             </MenuGroupLabel>
             {maps.map((entry) => (
@@ -95,9 +98,9 @@ function MapSwitcher({
                 value={entry.id}
                 aria-current={entry.id === currentId ? "page" : undefined}
                 aria-label={`${entry.slot} ${entry.name}, ${healthLabels[entry.health]}`}
-                className="select-item gap-3 aria-[current=page]:bg-surface-hover aria-[current=page]:font-semibold"
+                className="select-item gap-3 aria-[current=page]:bg-accent aria-[current=page]:font-semibold"
               >
-                <span className="font-mono text-xs text-fg-muted">
+                <span className="font-mono text-xs text-muted-foreground">
                   {entry.slot}
                 </span>
                 <span className="min-w-0 flex-1 truncate">{entry.name}</span>
@@ -114,14 +117,18 @@ function MapSwitcher({
             className="select-item gap-3"
             disabled={!canAddMap}
           >
-            <Plus size={14} aria-hidden="true" className="text-fg-muted" />
+            <Plus
+              size={14}
+              aria-hidden="true"
+              className="text-muted-foreground"
+            />
             Add a map
           </MenuItem>
           <MenuItem value="home" className="select-item gap-3">
             <LayoutList
               size={14}
               aria-hidden="true"
-              className="text-fg-muted"
+              className="text-muted-foreground"
             />
             Episode home
           </MenuItem>

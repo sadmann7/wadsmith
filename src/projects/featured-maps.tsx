@@ -15,7 +15,7 @@ import { formatPar } from "./project-data";
 const modes: Record<FeaturedMode, { label: string; dot: string }> = {
   single: { label: "Single player", dot: "bg-info" },
   coop: { label: "Co-op", dot: "bg-success" },
-  deathmatch: { label: "Deathmatch", dot: "bg-danger" },
+  deathmatch: { label: "Deathmatch", dot: "bg-destructive" },
 };
 
 type Filter = FeaturedMode | "all";
@@ -45,7 +45,7 @@ function enemiesOf(entry: FeaturedMap) {
 function ModeLine({ entry }: { entry: FeaturedMap }) {
   const mode = modes[entry.mode];
   return (
-    <div className="flex items-center gap-1.5 font-mono text-xs tracking-wide text-fg-soft uppercase">
+    <div className="flex items-center gap-1.5 font-mono text-xs tracking-wide text-foreground uppercase">
       <span
         className={`size-1.5 rounded-full ${mode.dot}`}
         aria-hidden="true"
@@ -111,7 +111,7 @@ function FeaturedMaps({
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="min-w-0">
             <h1 className="m-0 text-4xl font-bold">Featured maps</h1>
-            <p className="m-0 mt-1 text-base text-fg-muted">
+            <p className="m-0 mt-1 text-base text-muted-foreground">
               {countWords[featuredMaps.length] ?? featuredMaps.length} maps made
               in Wadsmith. Play one, bring friends, or open a copy to see how
               it&apos;s built.
@@ -141,14 +141,14 @@ function FeaturedMaps({
             <div
               role="group"
               aria-label="Show"
-              className="flex rounded-[3px] border border-border bg-surface p-0.5"
+              className="flex rounded-[3px] border border-input bg-card p-0.5"
             >
               {filters.map((item) => (
                 <button
                   key={item}
                   type="button"
                   aria-pressed={filter === item}
-                  className="rounded-[2px] border-0 bg-transparent px-3 py-1.5 text-sm text-fg-muted aria-pressed:bg-surface-raised aria-pressed:text-fg"
+                  className="rounded-[2px] border-0 bg-transparent px-3 py-1.5 text-sm text-muted-foreground aria-pressed:bg-muted aria-pressed:text-foreground aria-pressed:ring-1 aria-pressed:ring-input aria-pressed:ring-inset"
                   onClick={() => setFilter(item)}
                 >
                   {item === "all" ? "All" : modes[item].label}
@@ -165,7 +165,7 @@ function FeaturedMaps({
         {selected ? (
           <section
             aria-label={selected.title}
-            className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] overflow-hidden rounded-[6px] border border-border bg-surface max-[900px]:grid-cols-1"
+            className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] overflow-hidden rounded-[6px] border border-border bg-card max-[900px]:grid-cols-1"
           >
             <MapPlan
               map={selected.map}
@@ -175,8 +175,8 @@ function FeaturedMaps({
             <div className="flex flex-col justify-center gap-3 p-8 max-[760px]:p-5">
               <ModeLine entry={selected} />
               <h2 className="m-0 text-4xl font-bold">{selected.title}</h2>
-              <p className="m-0 text-base text-fg-soft">{selected.blurb}</p>
-              <p className="m-0 pt-3 font-mono text-xs text-fg-muted">
+              <p className="m-0 text-base text-foreground">{selected.blurb}</p>
+              <p className="m-0 pt-3 font-mono text-xs text-muted-foreground">
                 {detailsOf(selected)}
               </p>
               <div className="flex flex-wrap gap-2">
@@ -221,7 +221,7 @@ function FeaturedMaps({
               <button
                 type="button"
                 aria-pressed={entry.id === selected?.id}
-                className="grid h-full w-full grid-rows-[auto_1fr] gap-0 overflow-hidden rounded-[6px] border border-border bg-surface p-0 text-left text-fg hover:border-border-strong aria-pressed:border-accent"
+                className="grid h-full w-full grid-rows-[auto_1fr] gap-0 overflow-hidden rounded-[6px] border border-input bg-card p-0 text-left text-foreground hover:border-input aria-pressed:border-primary"
                 onClick={() => onSelect(entry.id)}
               >
                 <MapPlan
@@ -232,7 +232,7 @@ function FeaturedMaps({
                   <span className="truncate text-base font-semibold">
                     {entry.title}
                   </span>
-                  <span className="truncate font-mono text-xs text-fg-muted uppercase">
+                  <span className="truncate font-mono text-xs text-muted-foreground uppercase">
                     {cardLine(entry)}
                   </span>
                 </span>

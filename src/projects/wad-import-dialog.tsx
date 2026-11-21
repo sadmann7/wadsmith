@@ -159,26 +159,26 @@ function WadImportDialog({
       }}
     >
       <DialogBackdrop className="fixed inset-0 z-40 bg-scrim" />
-      <DialogContent className="fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-32px)] w-[600px] max-w-[calc(100vw-32px)] -translate-1/2 flex-col rounded-[4px] border border-border-strong bg-surface outline-none">
+      <DialogContent className="fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-32px)] w-[600px] max-w-[calc(100vw-32px)] -translate-1/2 flex-col rounded-[4px] border border-input bg-card outline-none">
         <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border px-5">
           <div className="flex min-w-0 items-baseline gap-2.5">
-            <DialogTitle className="block shrink-0 font-sans text-xl font-semibold tracking-normal text-fg normal-case">
+            <DialogTitle className="block shrink-0 font-sans text-xl font-semibold tracking-normal text-foreground normal-case">
               Import maps
             </DialogTitle>
-            <DialogDescription className="truncate font-mono text-xs text-fg-muted">
+            <DialogDescription className="truncate font-mono text-xs text-muted-foreground">
               {fileName} · {plural(maps.length, "map")}
             </DialogDescription>
           </div>
           <DialogClose
             aria-label="Close"
-            className="border-0 bg-transparent p-1 text-fg-muted hover:text-fg"
+            className="border-0 bg-transparent p-1 text-muted-foreground hover:text-foreground"
           >
             <X size={16} aria-hidden="true" />
           </DialogClose>
         </header>
         <div className="grid min-h-0 gap-5 overflow-y-auto p-5">
           <section aria-label="Maps to import" className="grid gap-2">
-            <h3 className="m-0 flex justify-between font-mono text-xs font-normal text-fg-muted">
+            <h3 className="m-0 flex justify-between font-mono text-xs font-normal text-muted-foreground">
               <span>MAPS</span>
               <span>
                 {picked.length} of {plural(slots.length, "free slot")}
@@ -192,7 +192,7 @@ function WadImportDialog({
                   <li key={entry.slot}>
                     <label className="grid cursor-pointer grid-cols-[16px_48px_minmax(0,1fr)_auto] items-center gap-2.5 text-sm has-[[data-disabled]]:cursor-default has-[[data-disabled]]:opacity-50">
                       <Checkbox
-                        className="flex size-4 items-center justify-center rounded-[2px] border border-input bg-transparent p-0 text-accent-fg aria-checked:border-accent aria-checked:bg-accent"
+                        className="flex size-4 items-center justify-center rounded-[2px] border border-input bg-transparent p-0 text-primary-foreground aria-checked:border-primary aria-checked:bg-primary"
                         checked={on}
                         disabled={full}
                         onCheckedChange={(checked) =>
@@ -213,14 +213,14 @@ function WadImportDialog({
                           <Check size={12} aria-hidden="true" />
                         </CheckboxIndicator>
                       </Checkbox>
-                      <span className="font-mono text-xs text-fg-muted">
+                      <span className="font-mono text-xs text-muted-foreground">
                         {entry.slot}
                       </span>
-                      <span className="min-w-0 truncate text-fg-muted">
+                      <span className="min-w-0 truncate text-muted-foreground">
                         {plural(entry.report.rooms, "room")} ·{" "}
                         {plural(entry.map.things.length, "thing")}
                       </span>
-                      <span className="font-mono text-xs text-fg-muted">
+                      <span className="font-mono text-xs text-muted-foreground">
                         {on ? `→ ${target(entry)}` : ""}
                       </span>
                     </label>
@@ -231,7 +231,7 @@ function WadImportDialog({
           </section>
           {rows.length > 0 ? (
             <section aria-label="Left out" className="grid gap-2">
-              <h3 className="m-0 font-mono text-xs font-normal text-fg-muted">
+              <h3 className="m-0 font-mono text-xs font-normal text-muted-foreground">
                 LEFT OUT OR CHANGED
               </h3>
               <dl className="m-0 grid gap-2">
@@ -240,8 +240,8 @@ function WadImportDialog({
                     key={row.label}
                     className="grid grid-cols-[140px_minmax(0,1fr)] gap-3 text-sm"
                   >
-                    <dt className="text-fg">{row.label}</dt>
-                    <dd className="m-0 text-fg-muted">{row.detail}</dd>
+                    <dt className="text-foreground">{row.label}</dt>
+                    <dd className="m-0 text-muted-foreground">{row.detail}</dd>
                   </div>
                 ))}
               </dl>

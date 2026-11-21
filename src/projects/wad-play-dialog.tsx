@@ -63,13 +63,13 @@ function WadPlayDialog({
       }}
     >
       <DialogBackdrop className="fixed inset-0 z-40 bg-scrim" />
-      <DialogContent className="fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-32px)] w-[520px] max-w-[calc(100vw-32px)] -translate-1/2 flex-col rounded-[4px] border border-border-strong bg-surface outline-none">
+      <DialogContent className="fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-32px)] w-[520px] max-w-[calc(100vw-32px)] -translate-1/2 flex-col rounded-[4px] border border-input bg-card outline-none">
         <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border px-5">
           <div className="flex min-w-0 items-baseline gap-2.5">
-            <DialogTitle className="block shrink-0 font-sans text-xl font-semibold tracking-normal text-fg normal-case">
+            <DialogTitle className="block shrink-0 font-sans text-xl font-semibold tracking-normal text-foreground normal-case">
               Play WAD
             </DialogTitle>
-            <DialogDescription className="truncate font-mono text-xs text-fg-muted">
+            <DialogDescription className="truncate font-mono text-xs text-muted-foreground">
               {title} · {summary.maps.length}{" "}
               {summary.maps.length === 1 ? "map" : "maps"}
               {patches > 0
@@ -79,7 +79,7 @@ function WadPlayDialog({
           </div>
           <DialogClose
             aria-label="Close"
-            className="border-0 bg-transparent p-1 text-fg-muted hover:text-fg"
+            className="border-0 bg-transparent p-1 text-muted-foreground hover:text-foreground"
           >
             <X size={16} aria-hidden="true" />
           </DialogClose>
@@ -95,7 +95,7 @@ function WadPlayDialog({
               )}
               onChange={setComplevel}
             />
-            <p className="m-0 text-xs text-fg-muted">
+            <p className="m-0 text-xs text-muted-foreground">
               {complevelHelp[complevel]}{" "}
               {complevel === summary.complevel
                 ? summary.declared

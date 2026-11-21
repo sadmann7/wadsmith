@@ -695,7 +695,7 @@ function GameSession({
           ) : null}
           {coop && !error && !finished && !coopStarted ? (
             <p
-              className="absolute inset-x-4 top-1/2 z-20 m-0 -translate-y-1/2 text-center font-mono text-sm text-fg-soft"
+              className="absolute inset-x-4 top-1/2 z-20 m-0 -translate-y-1/2 text-center font-mono text-sm text-foreground"
               role="status"
             >
               {coopWaiting(coop, network)}
