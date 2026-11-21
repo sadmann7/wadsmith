@@ -110,6 +110,15 @@ function buildLevel(map: GameMap) {
         }
         continue;
       }
+      const wall = wallKey(edge.from, edge.to);
+      // A line's chosen front room builds it, so that room ends up in front.
+      if (
+        reverse !== undefined &&
+        !sectors[reverse].door &&
+        map.lines?.[wall]?.front === sectors[reverse].id
+      ) {
+        continue;
+      }
       done.add(`${edge.from}>${edge.to}`);
       done.add(`${edge.to}>${edge.from}`);
       lines.push({
@@ -117,7 +126,7 @@ function buildLevel(map: GameMap) {
         end: vertexIndex.get(edge.to)!,
         frontSector: index,
         backSector: reverse ?? null,
-        wall: wallKey(edge.from, edge.to),
+        wall,
       });
     }
   });

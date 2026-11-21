@@ -40,6 +40,7 @@ import {
   Layers,
   Link,
   Map,
+  MapPin,
   Orbit,
   Package,
   Pill,
@@ -221,6 +222,10 @@ const thingIcons: Record<ThingKind, { icon: LucideIcon; color: string }> = {
   "pool-of-brains": { icon: Brain, color: "var(--color-thing-decor)" },
   "boss-shooter": { icon: Tornado, color: "var(--color-thing-decor)" },
   "spawn-spot": { icon: Wind, color: "var(--color-thing-decor)" },
+  "teleport-destination": {
+    icon: MapPin,
+    color: "var(--color-thing-decor)",
+  },
 };
 
 export { thingIcons };

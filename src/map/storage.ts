@@ -251,6 +251,17 @@ function parseLine(value: unknown, sectors: Sector[]): LineSettings {
             }),
           ),
         }),
+    ...(line.front === undefined
+      ? {}
+      : {
+          front: (() => {
+            const front = id(line.front, label);
+            if (!sectors.some((item) => item.id === front)) {
+              fail(`${label} points at something missing.`);
+            }
+            return front;
+          })(),
+        }),
   };
 }
 

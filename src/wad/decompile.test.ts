@@ -220,13 +220,16 @@ describe("decompileMap", () => {
     build.line(f, d, hall);
     build.map.things.push({ x: 192, y: 64, angle: 0, type: 1, flags: 7 });
 
-    const { map, report } = decompileMap(build.map);
-    expect(report.backwardSwitches).toBe(0);
-    expect(map.sectors.map((sector) => sector.id)).toEqual(["s1", "s0"]);
+    const { map } = decompileMap(build.map);
+    expect(map.sectors.map((sector) => sector.id)).toEqual(["s0", "s1"]);
+    expect(
+      Object.values(map.lines ?? {}).find((line) => line.action),
+    ).toMatchObject({
+      front: "s1",
+    });
     const [doom] = readMaps([{ name: "map.wad", data: compileMap(map) }]);
     const line = doom.lines.find((item) => item.special === 62)!;
-    expect(doom.sides[line.front!].sector).toBe(0);
-    expect(doom.sectors[0].tag).toBe(0);
+    expect(doom.sectors[doom.sides[line.front!].sector].tag).toBe(0);
     expect(parseMapFile(serializeMap(map))).toEqual(map);
   });
 
@@ -241,14 +244,14 @@ describe("decompileMap", () => {
     const f = build.vertex(512, 0);
     build.line(a, b, room, null, { middle: "BTSXWALL" });
     build.line(b, c, room);
-    build.line(c, d, room, next, { special: 97, tag: 3, middle: "MIDGRATE" });
+    build.line(c, d, room, next, { special: 48, middle: "MIDGRATE" });
     build.line(d, a, room);
     build.line(c, e, next);
     build.line(e, f, next);
     build.line(f, d, next);
     build.map.things.push(
       { x: 32, y: 32, angle: 0, type: 1, flags: 7 },
-      { x: 64, y: 64, angle: 0, type: 14, flags: 7 },
+      { x: 64, y: 64, angle: 0, type: 32000, flags: 7 },
       { x: 96, y: 96, angle: 0, type: 38, flags: 7 },
       { x: 128, y: 128, angle: 0, type: 3001, flags: 7 | 16 },
       { x: 2000, y: 2000, angle: 0, type: 3001, flags: 7 },
@@ -256,10 +259,10 @@ describe("decompileMap", () => {
 
     const { map, report } = decompileMap(build.map);
     expect(report).toMatchObject({
-      droppedThings: { "Teleport destination": 1 },
+      droppedThings: { "Other things": 1 },
       multiplayerThings: 1,
       outsideThings: 1,
-      droppedActions: { Teleporters: 1 },
+      droppedActions: { "Scrolling walls": 1 },
       droppedEffects: 1,
       seeThroughWalls: 1,
       replacedTextures: ["BTSXFLAT", "BTSXWALL"],

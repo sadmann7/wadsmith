@@ -355,9 +355,30 @@ function validateLines(map: GameMap, issues: MapIssue[], actions: LineActions) {
     }
     if (!lineUsesTag(action)) continue;
     if (!action.tag) {
-      add("line-target", "choose the sector this action moves.");
+      add(
+        "line-target",
+        action.kind === "teleport" || action.kind === "teleport-monsters"
+          ? "choose where it teleports to."
+          : "choose the sector this action moves.",
+      );
     } else if (!map.sectors.some((sector) => sector.tag === action.tag)) {
       add("line-tag", "the sector this action moves no longer has its tag.");
+    } else if (
+      (action.kind === "teleport" || action.kind === "teleport-monsters") &&
+      !map.sectors.some(
+        (sector) =>
+          sector.tag === action.tag &&
+          map.things.some(
+            (thing) =>
+              thing.kind === "teleport-destination" &&
+              pointInPolygon(thing, sectorPolygon(map, sector)),
+          ),
+      )
+    ) {
+      add(
+        "line-teleport",
+        "place a teleport destination in the sector it teleports to.",
+      );
     }
   }
 }

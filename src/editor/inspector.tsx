@@ -32,6 +32,7 @@ import {
   newLineAction,
   triggerLabels,
   triggersFor,
+  usedFromFront,
 } from "../map/lines";
 import { describeSurface, surfaceKey, type WallPart } from "../map/surfaces";
 import type {
@@ -650,10 +651,16 @@ function LineInspector({
                   value: "none",
                   label: opensDoor ? "From door settings" : "Nothing",
                 },
-                ...lineActionKinds.map((value) => ({
-                  value,
-                  label: lineActions[value].label,
-                })),
+                ...lineActionKinds
+                  .filter(
+                    (value) =>
+                      value === action?.kind ||
+                      triggersFor(value, twoSided).length > 0,
+                  )
+                  .map((value) => ({
+                    value,
+                    label: lineActions[value].label,
+                  })),
               ]}
               onChange={(kind) => {
                 if (!isLineActionKind(kind)) {
@@ -676,7 +683,10 @@ function LineInspector({
                   <ChoiceField
                     label="Trigger"
                     value={action.trigger}
-                    items={triggersFor(action.kind, twoSided).map((value) => ({
+                    items={(triggersFor(action.kind, twoSided).length > 0
+                      ? triggersFor(action.kind, twoSided)
+                      : [action.trigger]
+                    ).map((value) => ({
                       value,
                       label: triggerLabels[value],
                     }))}
@@ -704,7 +714,7 @@ function LineInspector({
                 </div>
                 {lineUsesTag(action) ? (
                   <ChoiceField
-                    label="Moves sector"
+                    label={lineActions[action.kind].target ?? "Moves sector"}
                     value={target?.id ?? "none"}
                     items={[
                       { value: "none", label: "Choose a sector" },
@@ -725,11 +735,16 @@ function LineInspector({
                     onChange={(repeat) => changeAction({ repeat })}
                   />
                 ) : null}
-                {twoSided &&
-                (action.trigger === "door" || action.trigger === "switch") ? (
-                  <p className="text-muted-foreground">
-                    Press it from the front side.
-                  </p>
+                {back && !front.door && !back.door && usedFromFront(action) ? (
+                  <ChoiceField
+                    label="Works from"
+                    value={front.id}
+                    items={[front, back].map((item) => ({
+                      value: item.id,
+                      label: item.name,
+                    }))}
+                    onChange={(next) => onLineChange({ front: next })}
+                  />
                 ) : null}
               </>
             ) : null}

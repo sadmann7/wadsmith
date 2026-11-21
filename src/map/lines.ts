@@ -12,6 +12,7 @@ type Specials = { once?: number; repeat?: number };
 
 type ActionDefinition = {
   label: string;
+  target?: string;
   triggers: Partial<Record<LineTrigger, Specials>>;
   keys?: Partial<Record<LineTrigger, Record<KeyColor, Specials>>>;
 };
@@ -89,6 +90,16 @@ const lineActions: Record<LineActionKind, ActionDefinition> = {
     label: "End the level",
     triggers: { switch: { once: 11 }, walk: { once: 52 } },
   },
+  teleport: {
+    label: "Teleport",
+    target: "Teleports to",
+    triggers: { walk: { once: 39, repeat: 97 } },
+  },
+  "teleport-monsters": {
+    label: "Teleport monsters only",
+    target: "Teleports to",
+    triggers: { walk: { once: 125, repeat: 126 } },
+  },
 };
 
 const lineActionKinds = Object.keys(lineActions) as LineActionKind[];
@@ -120,6 +131,17 @@ function lineUsesTag({ kind, trigger }: LineAction) {
   return kind !== "exit" && trigger !== "door";
 }
 
+// The engine ignores a press from a line's back and a teleporter crossed from
+// its back.
+function usedFromFront({ kind, trigger }: LineAction) {
+  return (
+    trigger === "door" ||
+    trigger === "switch" ||
+    kind === "teleport" ||
+    kind === "teleport-monsters"
+  );
+}
+
 function canRepeatChoice(action: LineAction) {
   const specials = specialsOf(action);
   return specials?.once !== undefined && specials.repeat !== undefined;
@@ -140,9 +162,12 @@ function keysFor(kind: LineActionKind, trigger: LineTrigger) {
 
 function fitLineAction(action: LineAction, twoSided: boolean): LineAction {
   const triggers = triggersFor(action.kind, twoSided);
+  // With no trigger the line allows, the action keeps one of its own, so it
+  // still saves and the map check can point at it.
   const trigger = triggers.includes(action.trigger)
     ? action.trigger
-    : triggers[0];
+    : (triggers[0] ??
+      (Object.keys(lineActions[action.kind].triggers)[0] as LineTrigger));
   const key = keysFor(action.kind, trigger).includes(action.key as KeyColor)
     ? action.key
     : undefined;
@@ -163,8 +188,13 @@ function newLineAction(twoSided: boolean, kind: LineActionKind): LineAction {
   );
 }
 
-function frontOwner(owners: Sector[]) {
-  return owners.find((sector) => !sector.door) ?? owners[0];
+// The engine only uses a switch or a teleporter from the line's front side.
+function frontOwner(owners: Sector[], front?: string) {
+  return (
+    owners.find((sector) => sector.id === front && !sector.door) ??
+    owners.find((sector) => !sector.door) ??
+    owners[0]
+  );
 }
 
 function describeLine(
@@ -174,7 +204,7 @@ function describeLine(
   entries = [...wallOwners(map)],
 ) {
   const owners = entries.find(([key]) => key === wall)?.[1] ?? [];
-  const front = frontOwner(owners);
+  const front = frontOwner(owners, map.lines?.[wall]?.front);
   const back = owners.find((sector) => sector !== front) ?? null;
   const [from, to] = wall.split("|").map((id) => map.vertices[id]);
   const mapSwitch =
@@ -212,4 +242,5 @@ export {
   newLineAction,
   triggerLabels,
   triggersFor,
+  usedFromFront,
 };

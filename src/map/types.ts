@@ -41,7 +41,9 @@ type LineActionKind =
   | "floor-raise"
   | "floor-raise-next"
   | "lift"
-  | "exit";
+  | "exit"
+  | "teleport"
+  | "teleport-monsters";
 
 type LineTrigger = "door" | "switch" | "walk" | "shoot";
 
@@ -70,6 +72,7 @@ type LineSettings = {
   hidden?: boolean;
   action?: LineAction;
   sides?: Record<string, LineSide>;
+  front?: string;
 };
 
 type ThingKind =
@@ -194,7 +197,8 @@ type ThingKind =
   | "pool-of-blood-2"
   | "pool-of-brains"
   | "boss-shooter"
-  | "spawn-spot";
+  | "spawn-spot"
+  | "teleport-destination";
 
 type ThingCategory = "start" | "enemy" | "item" | "key" | "decor";
 

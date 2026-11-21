@@ -1,7 +1,7 @@
 import { mapBalance } from "./balance";
 import { deathmatchStarts, thingCatalog } from "./catalog";
 import { removeSwitch, removeThings, updateLine, updateSector } from "./edit";
-import { fitLineAction } from "./lines";
+import { fitLineAction, triggersFor } from "./lines";
 import type { GameMap, KeyColor } from "./types";
 import { activeLineActions, validateMap, type MapIssue } from "./validate";
 
@@ -239,9 +239,13 @@ function fixIssue(map: GameMap, { id, target }: MapIssue): GameMap | null {
   }
   if (kind === "line-door" || kind === "line-walk") {
     const action = map.lines?.[target]?.action;
-    return action
-      ? updateLine(map, target, { action: fitLineAction(action, false) })
-      : null;
+    if (!action) return null;
+    return updateLine(map, target, {
+      action:
+        triggersFor(action.kind, false).length > 0
+          ? fitLineAction(action, false)
+          : undefined,
+    });
   }
   return null;
 }

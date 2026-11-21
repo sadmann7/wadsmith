@@ -113,6 +113,50 @@ describe.skipIf(!ready)("doors and line actions in the engine", () => {
     expect(game.sectorCeiling(doorIndex)).toBe(92);
   }, 30_000);
 
+  it("teleports a player who crosses the line from its front", async () => {
+    const teleporter = (front: string) =>
+      playerAt(
+        updateLine(
+          setLineTarget(
+            updateLine(
+              addThing(testMap, "teleport-destination", { x: 864, y: 32 }).map,
+              "v3|v4",
+              {
+                action: {
+                  kind: "teleport",
+                  trigger: "walk",
+                  repeat: true,
+                  tag: 0,
+                },
+              },
+            ),
+            "v3|v4",
+            "sector-3",
+          ),
+          "v3|v4",
+          { front },
+        ),
+        340,
+        160,
+        0,
+      );
+    const across = async (map: GameMap) => {
+      const game = await launch(map);
+      await waitForPlay(game);
+      game.key(true, doomKeys.up);
+      await play(game, 3000, () => game.status().x > 420);
+      game.key(false, doomKeys.up);
+      const { x, y } = game.status();
+      game.stop();
+      return { x, y };
+    };
+    expect(await across(teleporter("sector-1"))).toMatchObject({
+      x: 864,
+      y: -32,
+    });
+    expect((await across(teleporter("sector-2"))).x).toBeLessThan(512);
+  }, 30_000);
+
   it("runs a press-switch line on a solid wall", async () => {
     const map = playerAt(withDoorAction("v1|v15", "switch"), 80, 40, 90);
     const game = await launch(map);

@@ -34,7 +34,7 @@ import {
   wallTarget,
 } from "../editor/map-target";
 import { sectorAt, wallKey } from "../map/geometry";
-import { fitLineAction, triggersFor } from "../map/lines";
+import { fitLineAction, newLineAction, triggersFor } from "../map/lines";
 import { mapBalance } from "../map/balance";
 import {
   ceilingTextures,
@@ -1096,6 +1096,38 @@ describe("map check", () => {
       upper: "BRICK1",
     });
     expect(wallUse(painted).get("BRICK1")).toBe(1);
+  });
+
+  it("keeps a teleporter on a solid wall loadable and offers to remove it", () => {
+    const map = updateLine(testMap, "v1|v15", {
+      action: newLineAction(false, "teleport"),
+    });
+    expect(() => parseMapFile(serializeMap(map))).not.toThrow();
+    const issue = validateMap(map).find((item) =>
+      item.id.startsWith("line-walk"),
+    )!;
+    expect(issue).toBeDefined();
+    expect(fixIssue(map, issue)?.lines?.["v1|v15"]?.action).toBeUndefined();
+  });
+
+  it("builds a line from the room chosen as its front", () => {
+    const front = (map: GameMap) => {
+      const { lines, sectors } = buildLevel(map);
+      return sectors[lines.find((line) => line.wall === "v3|v4")!.frontSector]
+        .id;
+    };
+    expect(front(updateLine(testMap, "v3|v4", { front: "sector-2" }))).toBe(
+      "sector-2",
+    );
+    expect(front(updateLine(testMap, "v3|v4", { front: "sector-1" }))).toBe(
+      "sector-1",
+    );
+    const removed = removeSector(
+      updateLine(testMap, "v3|v4", { front: "sector-2" }),
+      "sector-2",
+    );
+    expect(removed.lines?.["v3|v4"]?.front).toBeUndefined();
+    expect(() => parseMapFile(serializeMap(removed))).not.toThrow();
   });
 
   it("warns about a spawn spot level with a monster spawner", () => {
