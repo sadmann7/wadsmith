@@ -22,7 +22,7 @@ const otherUtilities: Record<string, RegExp> = {
   text: /^(?:xs|sm|base|lg|xl|\dxl|left|center|right|inherit|input|\[\d+px\])$/,
   border:
     /^(?:[tblrxy](?:-\d+)?|\d+|\[[\d.]+px\]|solid|dashed|dotted|transparent|collapse|box)$/,
-  outline: /^(?:none|transparent|offset-\d+)$/,
+  outline: /^(?:none|transparent|offset-\d+|solid|dashed|dotted|double)$/,
   from: /^$/,
 };
 

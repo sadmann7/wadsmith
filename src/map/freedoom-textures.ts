@@ -164,6 +164,7 @@ const freedoomFlats = [
   "FWATER2",
   "FWATER3",
   "FWATER4",
+  "F_SKY1",
   "GATE1",
   "GATE2",
   "GATE3",

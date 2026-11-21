@@ -11,7 +11,7 @@ import {
 import { appearsOn } from "./balance";
 import { isPlayerStart, keyThings, thingCatalog, thingKinds } from "./catalog";
 import { describeLine, lineUsesTag } from "./lines";
-import type { GameMap, Sector, ThingSkill } from "./types";
+import type { GameMap, Point, Sector, ThingSkill } from "./types";
 
 type MapIssue = {
   id: string;
@@ -26,11 +26,83 @@ const heightLimit = 32767;
 const doorClearance = 4;
 const playerHeight = 56;
 
+const gridSize = 256;
+const maxCells = 4096;
+
+type Box = { left: number; top: number; right: number; bottom: number };
+
+function boxOf(points: Point[]): Box {
+  return {
+    left: Math.min(...points.map((point) => point.x)),
+    right: Math.max(...points.map((point) => point.x)),
+    top: Math.min(...points.map((point) => point.y)),
+    bottom: Math.max(...points.map((point) => point.y)),
+  };
+}
+
+// Imported maps have thousands of walls, so each wall or room is only
+// compared with the ones whose bounds meet its own.
+function nearby(boxes: Box[]) {
+  const span = (box: Box) => ({
+    left: Math.floor(box.left / gridSize),
+    right: Math.floor(box.right / gridSize),
+    top: Math.floor(box.top / gridSize),
+    bottom: Math.floor(box.bottom / gridSize),
+  });
+  // A box over too many cells, like a far-off corner's wall, meets every box.
+  const wide = (box: Box) => {
+    const cells = span(box);
+    return (
+      (cells.right - cells.left + 1) * (cells.bottom - cells.top + 1) > maxCells
+    );
+  };
+  const cellsOf = (box: Box) => {
+    const cells = span(box);
+    const keys: string[] = [];
+    for (let x = cells.left; x <= cells.right; x += 1) {
+      for (let y = cells.top; y <= cells.bottom; y += 1) keys.push(`${x},${y}`);
+    }
+    return keys;
+  };
+  const cells = new Map<string, number[]>();
+  const wideBoxes: number[] = [];
+  boxes.forEach((box, index) => {
+    if (wide(box)) {
+      wideBoxes.push(index);
+      return;
+    }
+    for (const key of cellsOf(box)) {
+      cells.set(key, [...(cells.get(key) ?? []), index]);
+    }
+  });
+  const meets = (a: Box, b: Box) =>
+    a.left <= b.right &&
+    a.right >= b.left &&
+    a.top <= b.bottom &&
+    a.bottom >= b.top;
+  return (index: number) => {
+    const box = boxes[index];
+    const candidates = wide(box)
+      ? boxes.keys()
+      : [...cellsOf(box).flatMap((key) => cells.get(key) ?? []), ...wideBoxes];
+    const found = new Set<number>();
+    for (const other of candidates) {
+      if (other !== index && meets(boxes[other], box)) found.add(other);
+    }
+    return [...found].toSorted((a, b) => a - b);
+  };
+}
+
 function edgeKey(a: string, b: string) {
   return a < b ? `${a}|${b}` : `${b}|${a}`;
 }
 
-function validateSector(map: GameMap, sector: Sector, issues: MapIssue[]) {
+function validateSector(
+  map: GameMap,
+  sector: Sector,
+  issues: MapIssue[],
+  openedTags: () => Set<number>,
+) {
   const add = (kind: string, message: string) =>
     issues.push({
       id: `${kind}:${sector.id}`,
@@ -54,7 +126,12 @@ function validateSector(map: GameMap, sector: Sector, issues: MapIssue[]) {
   if (Math.abs(signedArea(polygon)) < 1) {
     add("area", "has no area.");
   }
-  if (!sector.door && sector.ceiling <= sector.floor) {
+  // A closed room is fine when a line action opens it, like a lowering pillar.
+  const opens =
+    sector.ceiling === sector.floor &&
+    sector.tag !== undefined &&
+    openedTags().has(sector.tag);
+  if (!sector.door && sector.ceiling <= sector.floor && !opens) {
     add("height", "ceiling must be above the floor.");
   }
   if (
@@ -107,8 +184,14 @@ function validateNeighbors(map: GameMap, issues: MapIssue[]) {
     const [from, to] = key.split("|");
     return { key, from, to };
   });
+  const nearWalls = nearby(
+    walls.map((wall) =>
+      boxOf([map.vertices[wall.from], map.vertices[wall.to]]),
+    ),
+  );
   for (let i = 0; i < walls.length; i += 1) {
-    for (let j = i + 1; j < walls.length; j += 1) {
+    for (const j of nearWalls(i)) {
+      if (j <= i) continue;
       const a = walls[i];
       const b = walls[j];
       if (
@@ -137,10 +220,12 @@ function validateNeighbors(map: GameMap, issues: MapIssue[]) {
     }
   }
 
-  for (const sector of map.sectors) {
+  const nearSectors = nearby(
+    map.sectors.map((sector) => boxOf(sectorPolygon(map, sector))),
+  );
+  for (const [index, sector] of map.sectors.entries()) {
     const polygon = sectorPolygon(map, sector);
-    for (const other of map.sectors) {
-      if (other === sector) continue;
+    for (const other of nearSectors(index).map((near) => map.sectors[near])) {
       const shared = new Set(sector.vertices);
       const inside = other.vertices.some(
         (id) => !shared.has(id) && pointInPolygon(map.vertices[id], polygon),
@@ -158,10 +243,11 @@ function validateNeighbors(map: GameMap, issues: MapIssue[]) {
 
 function activeLineActions(map: GameMap) {
   const owners = wallOwners(map);
+  const entries = [...owners];
   return Object.entries(map.lines ?? {}).flatMap(([wall, { action }]) => {
     const owner = owners.get(wall)?.[0];
     if (!action || !owner) return [];
-    const line = describeLine(map, wall, owner.id);
+    const line = describeLine(map, wall, owner.id, entries);
     return line.wiredSwitch ? [] : [{ wall, action, line }];
   });
 }
@@ -181,9 +267,10 @@ function lineOpensDoor(
   );
 }
 
-function validateDoors(map: GameMap, issues: MapIssue[]) {
+type LineActions = ReturnType<typeof activeLineActions>;
+
+function validateDoors(map: GameMap, issues: MapIssue[], actions: LineActions) {
   const owners = wallOwners(map);
-  const actions = activeLineActions(map);
   for (const sector of map.sectors) {
     if (!sector.door) continue;
     const add = (kind: string, message: string) =>
@@ -242,8 +329,8 @@ function validateDoors(map: GameMap, issues: MapIssue[]) {
   }
 }
 
-function validateLines(map: GameMap, issues: MapIssue[]) {
-  for (const { wall, action, line } of activeLineActions(map)) {
+function validateLines(map: GameMap, issues: MapIssue[], actions: LineActions) {
+  for (const { wall, action, line } of actions) {
     const add = (kind: string, message: string) =>
       issues.push({
         id: `${kind}:${wall}`,
@@ -280,13 +367,22 @@ function validateMap(map: GameMap): MapIssue[] {
   if (map.sectors.length === 0) {
     issues.push({ id: "empty", message: "Draw at least one room." });
   }
+  let actions: LineActions | undefined;
+  const lineActions = () => (actions ??= activeLineActions(map));
+  let opened: Set<number> | undefined;
+  const openedTags = () =>
+    (opened ??= new Set(
+      lineActions()
+        .filter(({ action }) => action.kind !== "exit" && action.tag > 0)
+        .map(({ action }) => action.tag),
+    ));
   for (const sector of map.sectors) {
-    validateSector(map, sector, issues);
+    validateSector(map, sector, issues, openedTags);
   }
   if (issues.length === 0) {
     validateNeighbors(map, issues);
-    validateDoors(map, issues);
-    validateLines(map, issues);
+    validateDoors(map, issues, lineActions());
+    validateLines(map, issues, lineActions());
   }
   for (const [id, point] of Object.entries(map.vertices)) {
     if (

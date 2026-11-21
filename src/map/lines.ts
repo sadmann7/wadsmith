@@ -167,8 +167,12 @@ function frontOwner(owners: Sector[]) {
   return owners.find((sector) => !sector.door) ?? owners[0];
 }
 
-function describeLine(map: GameMap, wall: string, sectorId: string) {
-  const entries = [...wallOwners(map)];
+function describeLine(
+  map: GameMap,
+  wall: string,
+  sectorId: string,
+  entries = [...wallOwners(map)],
+) {
   const owners = entries.find(([key]) => key === wall)?.[1] ?? [];
   const front = frontOwner(owners);
   const back = owners.find((sector) => sector !== front) ?? null;

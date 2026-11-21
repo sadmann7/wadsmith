@@ -11,6 +11,11 @@ import {
   DialogContent,
   DialogTitle,
 } from "@ui-sdk/react/dialog";
+import {
+  FileInput,
+  FileInputDropzone,
+  FileInputTrigger,
+} from "@ui-sdk/react/file-input";
 import { Input } from "@ui-sdk/react/input";
 import {
   Menu,
@@ -28,6 +33,7 @@ import {
   Play,
   Plus,
   Route,
+  Upload,
 } from "lucide-react";
 import { useMemo, useRef, useState, type FormEvent } from "react";
 
@@ -334,6 +340,9 @@ function MapRow({
   );
 }
 
+const importTypes = [".json", ".wad", ".zip", ".deh", ".bex"];
+const noFiles: File[] = [];
+
 function ProjectHome({
   sidebar,
   project,
@@ -343,7 +352,7 @@ function ProjectHome({
   onDeleteProject,
   onExportProject,
   onImportProject,
-  onImportMap,
+  onImportFiles,
   onBuildEpisode,
   onPlayEpisode,
   onOpenMap,
@@ -361,7 +370,7 @@ function ProjectHome({
   onDeleteProject: () => void;
   onExportProject: () => void;
   onImportProject: (file: File) => void;
-  onImportMap: (file: File) => void;
+  onImportFiles: (files: File[]) => void;
   onBuildEpisode: () => void;
   onPlayEpisode: () => void;
   onOpenMap: (entry: ProjectMap) => void;
@@ -380,7 +389,7 @@ function ProjectHome({
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const [dragged, setDragged] = useState<string | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
-  const mapFile = useRef<HTMLInputElement>(null);
+  const accepted = useRef(false);
   const projectFile = useRef<HTMLInputElement>(null);
   const { durable } = sidebar;
   const sorted = bySlot(maps);
@@ -511,121 +520,141 @@ function ProjectHome({
             slot. Drag a row to change the order.
           </p>
         ) : null}
-        {sorted.length > 0 ? (
-          <table className="w-full border-collapse text-left">
-            <thead>
-              <tr className="h-8 border-b border-border font-mono text-xs tracking-wide text-fg-muted [&>th]:font-normal">
-                <th className="w-6">
-                  <span className="sr-only">Order</span>
-                </th>
-                <th className="w-16">SLOT</th>
-                <th className="w-36 max-[900px]:hidden">
-                  <span className="sr-only">Preview</span>
-                </th>
-                <th className="pl-6 max-[900px]:pl-0">MAP</th>
-                <th className="w-20 text-right max-[700px]:hidden">SECTORS</th>
-                <th className="w-20 text-right max-[700px]:hidden">THINGS</th>
-                <th className="w-16 text-right">PAR</th>
-                <th className="w-32 pl-4">STATUS</th>
-                <th className="w-24 max-[900px]:hidden">EDITED</th>
-                <th className="w-10">
-                  <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody
-              onDragLeave={(event) => {
-                if (
-                  !event.currentTarget.contains(event.relatedTarget as Node)
-                ) {
-                  setDropIndex(null);
-                }
-              }}
-            >
-              {sorted.map((entry, index) => (
-                <MapRow
-                  key={entry.id}
-                  entry={entry}
-                  canDuplicate={Boolean(nextSlot)}
-                  canMoveUp={index > 0}
-                  canMoveDown={index < sorted.length - 1}
-                  dragging={dragged === entry.id}
-                  dropBefore={
-                    dragged !== null &&
-                    dropIndex === index &&
-                    dragged !== entry.id
-                  }
-                  onOpen={() => onOpenMap(entry)}
-                  onSettings={() => setEditing(entry)}
-                  onDuplicate={() => onDuplicateMap(entry)}
-                  onDelete={() =>
-                    setConfirmation({
-                      title: `Delete ${mapName(entry)}?`,
-                      body: `${entry.slot} is removed from this browser. Back up the episode first if you might need it.`,
-                      run: () => onDeleteMap(entry),
-                    })
-                  }
-                  onMove={(step) =>
-                    reorder(entry.id, step < 0 ? index - 1 : index + 2)
-                  }
-                  onDragStart={() => setDragged(entry.id)}
-                  onDragOver={(after) =>
-                    setDropIndex(after ? index + 1 : index)
-                  }
-                  onDrop={() => {
-                    if (dragged && dropIndex !== null) {
-                      reorder(dragged, dropIndex);
-                    }
-                    endDrag();
-                  }}
-                  onDragEnd={endDrag}
-                />
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <p className="m-0 text-fg-muted">This episode has no maps yet.</p>
-        )}
-        <div
-          className={`flex flex-wrap items-center gap-x-2 gap-y-1 px-6 ${dragged !== null && dropIndex === sorted.length ? "shadow-[inset_0_2px_0_var(--color-accent)]" : ""}`}
+        <FileInput
+          multiple
+          accept={importTypes}
+          disabled={!nextSlot}
+          value={noFiles}
+          onValueChange={(_, details) => {
+            const { added } = details;
+            details.cancel();
+            if (added.length === 0) return;
+            accepted.current = true;
+            queueMicrotask(() => {
+              accepted.current = false;
+            });
+            onImportFiles(added);
+          }}
+          // A drop with a WAD and its readme leaves the readme out quietly.
+          onReject={(rejected) => {
+            if (!accepted.current) {
+              onImportFiles(rejected.map((item) => item.file));
+            }
+          }}
         >
-          {nextSlot ? (
-            <>
-              <button
-                type="button"
-                className="flex items-center gap-2 border-0 bg-transparent p-0 text-sm font-semibold text-accent hover:underline"
-                onClick={() => setCreatingMap(true)}
-              >
-                <Plus size={14} aria-hidden="true" />
-                Add a map in {nextSlot}
-              </button>
-              <button
-                type="button"
-                className="border-0 bg-transparent p-0 text-sm text-fg-muted hover:text-fg hover:underline"
-                onClick={() => mapFile.current?.click()}
-              >
-                or import a map file
-              </button>
-            </>
-          ) : (
-            <p className="m-0 text-sm text-fg-muted">
-              All 32 map slots are in use.
-            </p>
-          )}
-        </div>
+          <FileInputDropzone className="group relative flex flex-col gap-5 rounded-[6px] outline-2 outline-offset-4 outline-transparent data-[dragging]:outline-accent data-[dragging]:outline-dashed">
+            {sorted.length > 0 ? (
+              <table className="w-full border-collapse text-left">
+                <thead>
+                  <tr className="h-8 border-b border-border font-mono text-xs tracking-wide text-fg-muted [&>th]:font-normal">
+                    <th className="w-6">
+                      <span className="sr-only">Order</span>
+                    </th>
+                    <th className="w-16">SLOT</th>
+                    <th className="w-36 max-[900px]:hidden">
+                      <span className="sr-only">Preview</span>
+                    </th>
+                    <th className="pl-6 max-[900px]:pl-0">MAP</th>
+                    <th className="w-20 text-right max-[700px]:hidden">
+                      SECTORS
+                    </th>
+                    <th className="w-20 text-right max-[700px]:hidden">
+                      THINGS
+                    </th>
+                    <th className="w-16 text-right">PAR</th>
+                    <th className="w-32 pl-4">STATUS</th>
+                    <th className="w-24 max-[900px]:hidden">EDITED</th>
+                    <th className="w-10">
+                      <span className="sr-only">Actions</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody
+                  onDragLeave={(event) => {
+                    if (
+                      !event.currentTarget.contains(event.relatedTarget as Node)
+                    ) {
+                      setDropIndex(null);
+                    }
+                  }}
+                >
+                  {sorted.map((entry, index) => (
+                    <MapRow
+                      key={entry.id}
+                      entry={entry}
+                      canDuplicate={Boolean(nextSlot)}
+                      canMoveUp={index > 0}
+                      canMoveDown={index < sorted.length - 1}
+                      dragging={dragged === entry.id}
+                      dropBefore={
+                        dragged !== null &&
+                        dropIndex === index &&
+                        dragged !== entry.id
+                      }
+                      onOpen={() => onOpenMap(entry)}
+                      onSettings={() => setEditing(entry)}
+                      onDuplicate={() => onDuplicateMap(entry)}
+                      onDelete={() =>
+                        setConfirmation({
+                          title: `Delete ${mapName(entry)}?`,
+                          body: `${entry.slot} is removed from this browser. Back up the episode first if you might need it.`,
+                          run: () => onDeleteMap(entry),
+                        })
+                      }
+                      onMove={(step) =>
+                        reorder(entry.id, step < 0 ? index - 1 : index + 2)
+                      }
+                      onDragStart={() => setDragged(entry.id)}
+                      onDragOver={(after) =>
+                        setDropIndex(after ? index + 1 : index)
+                      }
+                      onDrop={() => {
+                        if (dragged && dropIndex !== null) {
+                          reorder(dragged, dropIndex);
+                        }
+                        endDrag();
+                      }}
+                      onDragEnd={endDrag}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <p className="m-0 text-fg-muted">This episode has no maps yet.</p>
+            )}
+            <div
+              className={`flex flex-wrap items-center gap-x-2 gap-y-1 px-6 ${dragged !== null && dropIndex === sorted.length ? "shadow-[inset_0_2px_0_var(--color-accent)]" : ""}`}
+            >
+              {nextSlot ? (
+                <>
+                  <button
+                    type="button"
+                    className="flex items-center gap-2 border-0 bg-transparent p-0 text-sm font-semibold text-accent hover:underline"
+                    onClick={() => setCreatingMap(true)}
+                  >
+                    <Plus size={14} aria-hidden="true" />
+                    Add a map in {nextSlot}
+                  </button>
+                  <FileInputTrigger className="border-0 bg-transparent p-0 text-sm text-fg-muted hover:text-fg hover:underline">
+                    or import a map file or WAD
+                  </FileInputTrigger>
+                </>
+              ) : (
+                <p className="m-0 text-sm text-fg-muted">
+                  All 32 map slots are in use.
+                </p>
+              )}
+            </div>
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 hidden items-center justify-center gap-2 rounded-[6px] bg-canvas/95 text-sm font-semibold text-accent group-data-[dragging]:flex"
+            >
+              <Upload size={16} />
+              Drop a map file, WAD or zip to import it
+            </div>
+          </FileInputDropzone>
+        </FileInput>
       </main>
-      <input
-        ref={mapFile}
-        type="file"
-        hidden
-        accept=".json,application/json"
-        aria-label="Import map file"
-        onChange={(event) => {
-          const file = event.target.files?.[0];
-          if (file) onImportMap(file);
-          event.target.value = "";
-        }}
-      />
       <input
         ref={projectFile}
         type="file"

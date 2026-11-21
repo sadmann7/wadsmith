@@ -39,6 +39,7 @@ type BspResult = {
 };
 
 type Partition = {
+  line: number;
   x: number;
   y: number;
   dx: number;
@@ -48,6 +49,9 @@ type Partition = {
 
 const subsectorFlag = 0x8000;
 const onLineTolerance = 0.75;
+// A wall shorter than the tolerance can look like it lies on a nearby line,
+// so a step that finds no partition tries again with exact sides.
+const exactTolerance = 0.001;
 
 // Positive is left of the partition, which is the engine's back child.
 function distance(partition: Partition, point: Point) {
@@ -82,36 +86,73 @@ function buildNodes(sourceVertices: Point[], lines: NodeLine[]): BspResult {
     const target = vertices[seg.side === 0 ? line.end : line.start];
     const dx = target.x - origin.x;
     const dy = target.y - origin.y;
-    return { x: origin.x, y: origin.y, dx, dy, length: Math.hypot(dx, dy) };
+    return {
+      line: seg.line,
+      x: origin.x,
+      y: origin.y,
+      dx,
+      dy,
+      length: Math.hypot(dx, dy),
+    };
   };
 
-  const classify = (partition: Partition, seg: Seg) => {
+  const classify = (
+    partition: Partition,
+    seg: Seg,
+    tolerance = onLineTolerance,
+  ) => {
     const start = vertices[seg.start];
     const end = vertices[seg.end];
     const a = distance(partition, start);
     const b = distance(partition, end);
-    if (Math.abs(a) <= onLineTolerance && Math.abs(b) <= onLineTolerance) {
+    // Split points are rounded, so pieces of a line can drift off it.
+    if (
+      seg.line === partition.line ||
+      (Math.abs(a) <= tolerance && Math.abs(b) <= tolerance)
+    ) {
       const dot =
         (end.x - start.x) * partition.dx + (end.y - start.y) * partition.dy;
       return { kind: dot >= 0 ? "right" : "left", a, b } as const;
     }
-    if (a >= -onLineTolerance && b >= -onLineTolerance) {
+    if (a >= -tolerance && b >= -tolerance) {
       return { kind: "left", a, b } as const;
     }
-    if (a <= onLineTolerance && b <= onLineTolerance) {
+    if (a <= tolerance && b <= tolerance) {
       return { kind: "right", a, b } as const;
     }
     return { kind: "split", a, b } as const;
   };
 
-  const isLeaf = (segs: Seg[]) =>
-    segs.every((seg) => seg.sector === segs[0].sector) &&
+  const isConvex = (segs: Seg[]) =>
     segs.every((seg) => {
       const partition = partitionOf(seg);
       return segs.every((other) => classify(partition, other).kind === "right");
     });
 
-  const choosePartition = (segs: Seg[]) => {
+  const isLeaf = (segs: Seg[]) =>
+    segs.every((seg) => seg.sector === segs[0].sector) && isConvex(segs);
+
+  // Rounded split points can lay one sector's wall over another's, leaving a
+  // convex area with no width between them. The sector with the most wall
+  // goes first, because the engine gives a subsector its first seg's sector.
+  const leadingSector = (segs: Seg[]) => {
+    const lengths = new Map<number, number>();
+    for (const seg of segs) {
+      const start = vertices[seg.start];
+      const end = vertices[seg.end];
+      lengths.set(
+        seg.sector,
+        (lengths.get(seg.sector) ?? 0) +
+          Math.hypot(end.x - start.x, end.y - start.y),
+      );
+    }
+    const [lead] = [...lengths].toSorted((a, b) => b[1] - a[1])[0];
+    return segs.toSorted(
+      (a, b) => Number(b.sector === lead) - Number(a.sector === lead),
+    );
+  };
+
+  const choosePartition = (segs: Seg[], tolerance: number) => {
     let best: { partition: Partition; score: number } | null = null;
     const tried = new Set<string>();
     for (const seg of segs) {
@@ -123,7 +164,7 @@ function buildNodes(sourceVertices: Point[], lines: NodeLine[]): BspResult {
       let right = 0;
       let splits = 0;
       for (const other of segs) {
-        const { kind } = classify(partition, other);
+        const { kind } = classify(partition, other, tolerance);
         if (kind === "left") left += 1;
         else if (kind === "right") right += 1;
         else splits += 1;
@@ -135,11 +176,11 @@ function buildNodes(sourceVertices: Point[], lines: NodeLine[]): BspResult {
     return best?.partition ?? null;
   };
 
-  const splitSegs = (partition: Partition, segs: Seg[]) => {
+  const splitSegs = (partition: Partition, segs: Seg[], tolerance: number) => {
     const right: Seg[] = [];
     const left: Seg[] = [];
     for (const seg of segs) {
-      const { kind, a, b } = classify(partition, seg);
+      const { kind, a, b } = classify(partition, seg, tolerance);
       if (kind === "right") {
         right.push(seg);
         continue;
@@ -188,16 +229,23 @@ function buildNodes(sourceVertices: Point[], lines: NodeLine[]): BspResult {
 
   const build = (segs: Seg[]): { child: number; box: Box } => {
     const box = boxOf(segs);
-    const partition = isLeaf(segs) ? null : choosePartition(segs);
-    if (!partition) {
-      if (!isLeaf(segs)) {
+    const leaf = isLeaf(segs);
+    let tolerance = onLineTolerance;
+    let partition = leaf ? null : choosePartition(segs, tolerance);
+    if (!leaf && !partition) {
+      tolerance = exactTolerance;
+      partition = choosePartition(segs, tolerance);
+    }
+    const split = partition && splitSegs(partition, segs, tolerance);
+    if (!partition || !split || !split.right.length || !split.left.length) {
+      if (!leaf && !isConvex(segs)) {
         throw new Error("The map could not be split into convex areas.");
       }
       subsectors.push({ count: segs.length, first: orderedSegs.length });
-      orderedSegs.push(...segs);
+      orderedSegs.push(...(leaf ? segs : leadingSector(segs)));
       return { child: (subsectors.length - 1) | subsectorFlag, box };
     }
-    const { right, left } = splitSegs(partition, segs);
+    const { right, left } = split;
     const rightChild = build(right);
     const leftChild = build(left);
     nodes.push({
