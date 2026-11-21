@@ -260,7 +260,10 @@ function MapRow({
         {formatPar(entry.par) || <span className="text-fg-muted">—</span>}
       </td>
       <td className="pl-4">
-        <span className="flex items-center gap-2 text-sm whitespace-nowrap">
+        <span
+          className="flex items-center gap-2 text-sm whitespace-nowrap"
+          title={"detail" in status ? status.detail : undefined}
+        >
           <span
             aria-hidden="true"
             className={`size-1.5 rounded-full ${statusDots[status.kind]}`}

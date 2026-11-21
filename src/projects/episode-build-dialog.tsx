@@ -107,12 +107,19 @@ function EpisodeBuildDialog({
                     <span className="font-mono text-xs text-fg-muted">
                       {entry.slot}
                     </span>
-                    <span className="min-w-0 truncate">
-                      {mapName(entry)}
-                      <span className="ml-2 font-mono text-xs text-fg-muted">
-                        {status.label}
-                        {entry.broken ? " · delete it to build" : ""}
+                    <span className="min-w-0">
+                      <span className="block truncate">
+                        {mapName(entry)}
+                        <span className="ml-2 font-mono text-xs text-fg-muted">
+                          {status.label}
+                          {entry.broken ? " · delete it to build" : ""}
+                        </span>
                       </span>
+                      {"detail" in status ? (
+                        <span className="block text-xs text-fg-muted">
+                          {status.detail}
+                        </span>
+                      ) : null}
                     </span>
                     {status.kind === "error" && !entry.broken ? (
                       <button
