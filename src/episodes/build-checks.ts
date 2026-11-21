@@ -2,7 +2,7 @@ import { useEffect, useSyncExternalStore } from "react";
 
 import type { GameMap } from "../map/types";
 import type { BuildCheckRequest, BuildCheckResult } from "./build-worker";
-import { buildProblem, type ProjectMap } from "./project-data";
+import { buildProblem, type ProjectMap } from "./episode-data";
 
 type Check = {
   revision: number;

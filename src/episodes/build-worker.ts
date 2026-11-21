@@ -1,5 +1,5 @@
 import type { GameMap } from "../map/types";
-import { buildProblem } from "./project-data";
+import { buildProblem } from "./episode-data";
 
 type BuildCheckRequest = { id: number; map: GameMap };
 type BuildCheckResult = { id: number; problem: string | null };

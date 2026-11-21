@@ -20,8 +20,8 @@ import {
   prepareProjects,
   serializeProject,
   slotMoves,
-} from "./project-data";
-import { createMemoryStore } from "./project-store";
+} from "./episode-data";
+import { createMemoryStore } from "./episode-store";
 
 function stubLegacy(saved: string | null) {
   vi.stubGlobal("localStorage", {

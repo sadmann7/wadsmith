@@ -3,8 +3,8 @@
 import { useEffect, useState, type ReactNode } from "react";
 
 import { AppShell } from "./app-sidebar";
-import type { Project } from "./project-data";
-import { openProjectStore } from "./project-store";
+import type { Project } from "./episode-data";
+import { openProjectStore } from "./episode-store";
 
 function StandaloneShell({ children }: { children: ReactNode }) {
   const [projects, setProjects] = useState<Project[]>([]);
