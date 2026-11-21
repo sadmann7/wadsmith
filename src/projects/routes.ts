@@ -1,31 +1,43 @@
 type Route =
   | { kind: "home" }
-  | { kind: "featured" }
-  | { kind: "episode"; id: string }
-  | { kind: "map"; id: string; slot: string };
+  | { kind: "featured"; map?: string; play?: boolean }
+  | { kind: "episode"; id: string; play?: boolean }
+  | { kind: "map"; id: string; slot: string; play?: boolean };
 
 const slotPattern = /^MAP(0[1-9]|[12][0-9]|3[0-2])$/;
 
 function parseRoute(pathname: string): Route {
   const parts = pathname.split("/").filter(Boolean).map(decodeURIComponent);
-  if (parts.length === 1 && parts[0] === "maps") return { kind: "featured" };
-  if (parts[0] === "episodes" && parts[1]) {
-    if (parts.length === 2) return { kind: "episode", id: parts[1] };
-    const slot = parts[2]?.toUpperCase();
-    if (parts.length === 3 && slotPattern.test(slot)) {
-      return { kind: "map", id: parts[1], slot };
+  const play = parts.at(-1) === "play";
+  const rest = play ? parts.slice(0, -1) : parts;
+  const playing = <T extends Route>(route: T): T =>
+    play ? { ...route, play } : route;
+  if (rest[0] === "maps") {
+    if (rest.length === 1 && !play) return { kind: "featured" };
+    if (rest.length === 2) return playing({ kind: "featured", map: rest[1] });
+  }
+  if (rest[0] === "episodes" && rest[1]) {
+    if (rest.length === 2) return playing({ kind: "episode", id: rest[1] });
+    const slot = rest[2]?.toUpperCase();
+    if (rest.length === 3 && slotPattern.test(slot)) {
+      return playing({ kind: "map", id: rest[1], slot });
     }
   }
   return { kind: "home" };
 }
 
 function pathOf(route: Route) {
-  if (route.kind === "featured") return "/maps";
+  const play = route.kind !== "home" && route.play ? "/play" : "";
+  if (route.kind === "featured") {
+    return route.map
+      ? `/maps/${encodeURIComponent(route.map)}${play}`
+      : "/maps";
+  }
   if (route.kind === "episode") {
-    return `/episodes/${encodeURIComponent(route.id)}`;
+    return `/episodes/${encodeURIComponent(route.id)}${play}`;
   }
   if (route.kind === "map") {
-    return `/episodes/${encodeURIComponent(route.id)}/${route.slot}`;
+    return `/episodes/${encodeURIComponent(route.id)}/${route.slot}${play}`;
   }
   return "/";
 }
