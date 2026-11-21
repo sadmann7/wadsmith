@@ -12,6 +12,7 @@ type Env = {
   ALLOWED_ORIGINS: string;
   ROOM_IDLE_SECONDS?: string;
   ROOM_LIFETIME_SECONDS?: string;
+  ROOM_MESSAGES_PER_SECOND?: string;
 };
 
 type Attachment = { peer: number | null; seen: number };
@@ -67,7 +68,11 @@ class Room extends DurableObject<Env> {
     const now = Date.now();
     let limits = this.limits.get(socket);
     if (!limits) {
-      limits = new ConnectionLimits(now);
+      const perSecond = this.env.ROOM_MESSAGES_PER_SECOND;
+      limits = new ConnectionLimits(
+        now,
+        perSecond === undefined ? undefined : Number(perSecond),
+      );
       this.limits.set(socket, limits);
     }
     const verdict = limits.check(message, now);
