@@ -267,6 +267,8 @@ type AppProps = {
   navigation: ReactNode;
   onNewMap: () => void;
   onMapSettings: () => void;
+  playing: boolean;
+  onPlayingChange: (playing: boolean, coop: boolean) => void;
   episode: {
     name: string;
     maps: EpisodeEntry[];
@@ -275,6 +277,8 @@ type AppProps = {
     onOpenMap: (id: string) => void;
   };
 };
+
+type PlayedGame = { map: GameMap; coop: HostedGame | null };
 
 const saveLabels: Record<AppProps["saveStatus"], string> = {
   saving: "Saving…",
@@ -295,6 +299,8 @@ function App({
   navigation,
   onNewMap,
   onMapSettings,
+  playing,
+  onPlayingChange,
   episode,
 }: AppProps) {
   const [map, setMap] = useState(initialMap);
@@ -302,9 +308,17 @@ function App({
   const [thingKind, setThingKind] = useState<ThingKind>("imp");
   const [activeSector, setActiveSector] = useState<string | null>("sector-3");
   const [selection, setSelection] = useState<string[]>([]);
-  const [playedMap, setPlayedMap] = useState<GameMap | null>(null);
+  const [game, setGame] = useState<PlayedGame | null>(() =>
+    playing ? { map: initialMap, coop: null } : null,
+  );
+  const [followed, setFollowed] = useState(playing);
   const [coopLobby, setCoopLobby] = useState(false);
-  const [coopGame, setCoopGame] = useState<HostedGame | null>(null);
+  if (followed !== playing) {
+    setFollowed(playing);
+    setGame(playing ? (game ?? { map, coop: null }) : null);
+  }
+  const hosted = game?.coop ?? null;
+  useEffect(() => () => hosted?.close(), [hosted]);
   const [mapVersion, setMapVersion] = useState(0);
   const [fileError, setFileError] = useState<string | null>(null);
   const [welcomed, setWelcomed] = useState(loadWelcomed);
@@ -890,7 +904,10 @@ function App({
               : "Click a room, line or thing on the map";
 
   const play = () => {
-    if (canPlay && !buildProblem()) setPlayedMap(map);
+    if (canPlay && !buildProblem()) {
+      setGame({ map, coop: null });
+      onPlayingChange(true, false);
+    }
     dismissWelcome();
   };
 
@@ -906,14 +923,9 @@ function App({
     if (canPlayCoop && !buildProblem()) setCoopLobby(true);
   };
 
-  const endCoop = () => {
-    coopGame?.close();
-    setCoopGame(null);
-  };
-
   const editPlayedSpot = ({ angle, ...point }: PlayerSpot) => {
-    endCoop();
-    setPlayedMap(null);
+    setGame(null);
+    onPlayingChange(false, false);
     camera.placeAt(map, point, angle);
     const room = sectorAt(map, point);
     showTarget(
@@ -929,8 +941,8 @@ function App({
   };
 
   const exitGame = () => {
-    endCoop();
-    setPlayedMap(null);
+    setGame(null);
+    onPlayingChange(false, false);
     requestAnimationFrame(() => playButton.current?.focus());
   };
 
@@ -992,7 +1004,7 @@ function App({
 
   return (
     <>
-      <div className="app" inert={Boolean(playedMap)}>
+      <div className="app" inert={Boolean(game)}>
         <header className="topbar">
           {navigation}
           <MapSwitcher
@@ -1808,18 +1820,18 @@ function App({
           slot={slot}
           par={par}
           onAddStarts={(players) => commit(addPlayerStarts(map, players))}
-          onStart={(game) => {
+          onStart={(hosted) => {
             setCoopLobby(false);
-            setCoopGame(game);
-            setPlayedMap(map);
+            setGame({ map, coop: hosted });
+            onPlayingChange(true, true);
           }}
           onClose={() => setCoopLobby(false)}
         />
       ) : null}
-      {playedMap ? (
+      {game ? (
         <GameView
-          coop={coopGame?.session ?? null}
-          map={playedMap}
+          coop={game.coop?.session ?? null}
+          map={game.map}
           title={mapName}
           slot={slot}
           par={par}

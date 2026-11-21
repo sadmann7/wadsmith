@@ -20,7 +20,7 @@ import { App } from "../editor/editor-app";
 import { PlayTogether, type HostedGame } from "../engine/play-together";
 import { GameView, type Level } from "../engine/play-panel";
 import { checkMap } from "../map/checks";
-import type { FeaturedMap } from "../map/featured";
+import { featuredMaps, type FeaturedMap } from "../map/featured";
 import {
   MapFileError,
   maxFileBytes,
@@ -28,7 +28,8 @@ import {
   serializeMap,
 } from "../map/storage";
 import type { GameMap } from "../map/types";
-import { compileEpisode } from "../wad/compile";
+import { validateMap } from "../map/validate";
+import { compileEpisode, compileMap } from "../wad/compile";
 import {
   dialogClass,
   MapDialog,
@@ -107,6 +108,58 @@ function download(name: string, data: BlobPart, type: string) {
   URL.revokeObjectURL(url);
 }
 
+function blockedOf(ordered: ProjectMap[]) {
+  return ordered
+    .filter(
+      (entry) =>
+        entry.broken ||
+        checkMap(entry.map).some((issue) => issue.severity === "error"),
+    )
+    .map((entry) => entry.slot);
+}
+
+function levelsOf(ordered: ProjectMap[]): Level[] {
+  return ordered.map((entry) => ({
+    map: entry.map,
+    title: mapName(entry),
+    slot: entry.slot,
+    par: entry.par,
+  }));
+}
+
+function episodeGame(list: ProjectMap[]) {
+  const ordered = bySlot(list);
+  const blocked = blockedOf(ordered);
+  if (ordered.length === 0) return null;
+  return blocked.length > 0
+    ? { problem: `Fix ${blocked.join(", ")} before playing.`, levels: [] }
+    : { problem: null, levels: levelsOf(ordered) };
+}
+
+function playable(map: GameMap) {
+  if (validateMap(map).length > 0) return false;
+  try {
+    compileMap(map);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function knownFeatured(id: string | undefined) {
+  return featuredMaps.some((item) => item.id === id) ? id! : null;
+}
+
+function soloFeatured(id: string | undefined) {
+  const entry = featuredMaps.find((item) => item.id === id);
+  return entry && entry.mode !== "deathmatch" ? entry : null;
+}
+
+// A co-op game can't survive a reload, so its history entry is marked.
+function coopEntry() {
+  return Boolean((history.state as { coop?: boolean } | null)?.coop);
+}
+
 function detailsOf(entry: ProjectMap): SessionDetails {
   return { name: mapName(entry), slot: entry.slot, par: entry.par };
 }
@@ -128,14 +181,25 @@ function ProjectApp() {
   const [mapDialog, setMapDialog] = useState<"new" | "settings" | null>(null);
   const [blockedLeave, setBlockedLeave] = useState<(() => void) | null>(null);
   const [view, setView] = useState(viewOfPath);
+  const [featuredId, setFeaturedId] = useState(() => {
+    const route = parseRoute(location.pathname);
+    return route.kind === "featured" ? knownFeatured(route.map) : null;
+  });
+  const [mapPlaying, setMapPlaying] = useState(false);
+  const [coopPlaying, setCoopPlaying] = useState(false);
   const [lobby, setLobby] = useState<FeaturedMap | null>(null);
   const [episodePlay, setEpisodePlay] = useState<Level[] | null>(null);
   const [playing, setPlaying] = useState<{
     entry: FeaturedMap;
     hosted: HostedGame | null;
   } | null>(null);
-  const syncedPath = useRef<string | null>(null);
-  const syncedSession = useRef<string | null>(null);
+  const synced = useRef<{ key: string; play: boolean } | null>(null);
+  const playPushed = useRef(false);
+  const routeRun = useRef(0);
+  const settling = useRef(true);
+  const settleCount = useRef(0);
+  const historySettle = useRef(0);
+  const [settles, setSettles] = useState(0);
   const channel = useRef<BroadcastChannel | null>(null);
   const sessionRef = useRef<Session | null>(null);
   const projectIdRef = useRef("");
@@ -187,6 +251,7 @@ function ProjectApp() {
       await refresh(active, id).catch(() => setMessage(saveFailure));
       setSession(null);
       setDetails(null);
+      setMapPlaying(false);
     },
     [refresh],
   );
@@ -209,6 +274,7 @@ function ProjectApp() {
       setSession(next);
       setDetails(detailsOf(entry));
       setSaveStatus("saved");
+      setMapPlaying(false);
       selectProject(entry.projectId);
     },
     [announce, closeSession, selectProject],
@@ -216,32 +282,53 @@ function ProjectApp() {
 
   useEffect(() => {
     let cancelled = false;
+    let run = routeRun.current;
+    const stale = () => cancelled || run !== routeRun.current;
     preparing ??= openPreparedStore();
     preparing
       .then(async ({ store: opened, ready }) => {
         if (cancelled) return;
-        setStore(opened);
+        run = ++routeRun.current;
         const route = parseRoute(location.pathname);
+        const play = route.kind !== "home" && route.play && !coopEntry();
+        setStore(opened);
         const wanted =
           route.kind === "episode" || route.kind === "map"
             ? route.id
             : ready.projectId;
         selectProject(wanted);
         await refresh(opened, wanted);
-        if (cancelled) return;
+        if (stale()) return;
         if (route.kind === "map") {
           const entry = (await opened.listMaps(route.id)).find(
             (item) => item.slot === route.slot && !item.broken,
           );
-          if (cancelled) return;
-          if (entry) startSession(opened, entry);
-          else setMessage(`${route.slot} isn't in this episode.`);
+          if (stale()) return;
+          if (entry) {
+            startSession(opened, entry);
+            if (play && playable(entry.map)) setMapPlaying(true);
+          } else setMessage(`${route.slot} isn't in this episode.`);
+        } else if (route.kind === "episode" && play) {
+          const started = episodeGame(await opened.listMaps(route.id));
+          if (stale() || !started) return;
+          if (started.problem) setMessage(started.problem);
+          else setEpisodePlay(started.levels);
+        } else if (route.kind === "featured" && play) {
+          const entry = soloFeatured(route.map);
+          if (entry) setPlaying({ entry, hosted: null });
         } else if (route.kind === "home" && ready.created && ready.entry) {
           startSession(opened, ready.entry);
         }
       })
       .catch(() => {
         if (!cancelled) setMessage("Your episodes couldn't be opened.");
+      })
+      .finally(() => {
+        if (stale()) return;
+        settling.current = false;
+        settleCount.current += 1;
+        historySettle.current = settleCount.current;
+        setSettles(settleCount.current);
       });
     return () => {
       cancelled = true;
@@ -285,12 +372,12 @@ function ProjectApp() {
     };
   }, [closeSession, refresh, store]);
 
-  const whenSaved = async (next: () => void) => {
+  const whenSaved = async (next: () => void | Promise<void>) => {
     const active = sessionRef.current;
     const saved = !active || (await active.saver.flush());
     if (sessionRef.current !== active) return;
-    if (saved) next();
-    else setBlockedLeave(() => next);
+    if (saved) await next();
+    else setBlockedLeave(() => () => void next());
   };
 
   const openMap = async (entry: ProjectMap) => {
@@ -311,62 +398,160 @@ function ProjectApp() {
     }
   };
 
-  const routeTo = (route: Route) => {
-    if (!store) return;
-    setEpisodePlay(null);
-    setMessage(null);
-    void whenSaved(async () => {
-      if (route.kind === "map") {
-        const entry = (await store.listMaps(route.id)).find(
-          (item) => item.slot === route.slot,
-        );
-        if (entry) {
-          setView("projects");
-          await openMap(entry);
-          return;
-        }
-      }
-      if (sessionRef.current) await closeSession(store);
-      setView(route.kind === "featured" ? "featured" : "projects");
-      if (route.kind === "episode" || route.kind === "map") {
-        selectProject(route.id);
-        void store.setSetting(lastProjectKey, route.id).catch(() => {});
-        await refresh(store, route.id).catch(() => setMessage(saveFailure));
-      }
-    });
+  const endPlay = () => {
+    playing?.hosted?.close();
+    setPlaying(null);
   };
 
-  const applyRoute = useEffectEvent(routeTo);
+  const playEpisode = (list: ProjectMap[]) => {
+    const started = episodeGame(list);
+    if (!started) return;
+    setMessage(started.problem);
+    if (!started.problem) setEpisodePlay(started.levels);
+  };
+
+  // Routes from history change state over several awaits. The URL is already
+  // right, so syncing pauses until they settle to keep history unchanged.
+  const routeTo = async (route: Route, fromHistory = false) => {
+    if (!store) return;
+    const run = ++routeRun.current;
+    const current = () => run === routeRun.current;
+    const play = route.kind !== "home" && Boolean(route.play);
+    playPushed.current = play;
+    setMessage(null);
+    if (fromHistory) settling.current = true;
+    try {
+      const active = sessionRef.current;
+      if (
+        route.kind === "map" &&
+        active?.projectId === route.id &&
+        details?.slot === route.slot
+      ) {
+        setMapPlaying(play && playable(active.saver.map));
+        return;
+      }
+      setEpisodePlay(null);
+      endPlay();
+      await whenSaved(async () => {
+        if (route.kind === "map") {
+          const entry = (await store.listMaps(route.id)).find(
+            (item) => item.slot === route.slot,
+          );
+          if (!current()) return;
+          if (entry) {
+            setView("projects");
+            await openMap(entry);
+            if (
+              current() &&
+              play &&
+              sessionRef.current?.id === entry.id &&
+              playable(entry.map)
+            ) {
+              setMapPlaying(true);
+            }
+            return;
+          }
+        }
+        if (sessionRef.current) await closeSession(store);
+        if (!current()) return;
+        setView(route.kind === "featured" ? "featured" : "projects");
+        if (route.kind === "featured") {
+          setFeaturedId(knownFeatured(route.map));
+          const entry = play ? soloFeatured(route.map) : null;
+          if (entry) setPlaying({ entry, hosted: null });
+        }
+        if (route.kind === "episode" || route.kind === "map") {
+          selectProject(route.id);
+          void store.setSetting(lastProjectKey, route.id).catch(() => {});
+          await refresh(store, route.id).catch(() => setMessage(saveFailure));
+          if (route.kind === "episode" && play) {
+            const list = await store.listMaps(route.id);
+            if (current()) playEpisode(list);
+          }
+        }
+      });
+    } finally {
+      if (current()) {
+        settleCount.current += 1;
+        if (fromHistory) historySettle.current = settleCount.current;
+        settling.current = false;
+        setSettles(settleCount.current);
+      }
+    }
+  };
+
+  const applyRoute = useEffectEvent(
+    (route: Route) => void routeTo(route, true),
+  );
 
   useEffect(() => {
-    const onPop = () => applyRoute(parseRoute(location.pathname));
+    const onPop = () => {
+      const route = parseRoute(location.pathname);
+      if (route.kind !== "home" && route.play && coopEntry()) {
+        const page = { ...route, play: false };
+        history.replaceState(null, "", pathOf(page));
+        applyRoute(page);
+      } else applyRoute(route);
+    };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
 
-  const wantedPath =
+  const page: { key: string; route: Route } | null =
     !store || !projectId
       ? null
       : session && details
-        ? pathOf({ kind: "map", id: session.projectId, slot: details.slot })
+        ? {
+            key: `map:${session.id}`,
+            route: {
+              kind: "map",
+              id: session.projectId,
+              slot: details.slot,
+              play: mapPlaying,
+            },
+          }
         : view === "featured"
-          ? pathOf({ kind: "featured" })
-          : pathOf({ kind: "episode", id: projectId });
+          ? {
+              key: "featured",
+              route: {
+                kind: "featured",
+                map: playing?.entry.id ?? featuredId ?? undefined,
+                play: Boolean(playing),
+              },
+            }
+          : {
+              key: `episode:${projectId}`,
+              route: { kind: "episode", id: projectId, play: !!episodePlay },
+            };
+  const wantedPath = page ? pathOf(page.route) : null;
+  const wantedPlay = page?.route.kind !== "home" && Boolean(page?.route.play);
+  const pageKey = page?.key ?? null;
+  const coop = mapPlaying ? coopPlaying : Boolean(playing?.hosted);
 
-  // A slot change keeps its history entry, since it names the same map.
+  // Changes within one page, such as a slot rename, keep their history entry.
+  // Leaving a game the app pushed goes back rather than adding an entry.
   useEffect(() => {
-    if (!wantedPath) return;
-    const sessionId = session?.id ?? null;
+    if (settling.current || !wantedPath || !pageKey) return;
+    const last = synced.current;
+    const samePage = last?.key === pageKey;
     if (wantedPath !== location.pathname) {
-      const replace =
-        syncedPath.current === null ||
-        (sessionId !== null && sessionId === syncedSession.current);
-      if (replace) history.replaceState(null, "", wantedPath);
-      else history.pushState(null, "", wantedPath);
+      if (samePage && last.play && !wantedPlay && playPushed.current) {
+        playPushed.current = false;
+        history.back();
+      } else if (
+        !last ||
+        settles === historySettle.current ||
+        (samePage && (last.play === wantedPlay || !wantedPlay))
+      ) {
+        history.replaceState(null, "", wantedPath);
+      } else {
+        playPushed.current = wantedPlay && samePage;
+        history.pushState(wantedPlay && coop ? { coop } : null, "", wantedPath);
+      }
     }
-    syncedPath.current = wantedPath;
-    syncedSession.current = sessionId;
-  }, [wantedPath, session?.id]);
+    historySettle.current = -1;
+    synced.current = { key: pageKey, play: wantedPlay };
+  }, [settles, wantedPath, pageKey, wantedPlay, coop]);
 
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => {
@@ -420,13 +605,13 @@ function ProjectApp() {
           ? { kind: "featured" }
           : { kind: "episode", id: project.id },
     durable: store.durable,
-    onNavigate: routeTo,
+    onNavigate: (route) => void routeTo(route),
     onCreateProject: (name, start) => {
       const created = createProject(name);
       void attempt(async () => {
         await store.addProject(created, episodeMaps(created.id, start));
         await store.setSetting(lastProjectKey, created.id);
-        routeTo({ kind: "episode", id: created.id });
+        await routeTo({ kind: "episode", id: created.id });
       });
     },
   };
@@ -543,30 +728,10 @@ function ProjectApp() {
   };
 
   const blockedSlots = (ordered: ProjectMap[], verb: string) => {
-    const blocked = ordered.filter(
-      (entry) =>
-        entry.broken ||
-        checkMap(entry.map).some((issue) => issue.severity === "error"),
-    );
+    const blocked = blockedOf(ordered);
     if (blocked.length === 0) return false;
-    setMessage(
-      `Fix ${blocked.map((entry) => entry.slot).join(", ")} before ${verb}.`,
-    );
+    setMessage(`Fix ${blocked.join(", ")} before ${verb}.`);
     return true;
-  };
-
-  const playEpisode = () => {
-    const ordered = bySlot(maps);
-    if (blockedSlots(ordered, "playing")) return;
-    setMessage(null);
-    setEpisodePlay(
-      ordered.map((entry) => ({
-        map: entry.map,
-        title: mapName(entry),
-        slot: entry.slot,
-        par: entry.par,
-      })),
-    );
   };
 
   const buildEpisode = () => {
@@ -634,6 +799,11 @@ function ProjectApp() {
           navigation={<SidebarDrawer {...sidebar} />}
           onNewMap={() => openDialog("new")}
           onMapSettings={() => openDialog("settings")}
+          playing={mapPlaying}
+          onPlayingChange={(next, hosted) => {
+            setMapPlaying(next);
+            setCoopPlaying(next && hosted);
+          }}
           episode={{
             name: project.name,
             maps: bySlot(maps).map((entry) => ({
@@ -726,11 +896,6 @@ function ProjectApp() {
     );
   }
 
-  const endPlay = () => {
-    playing?.hosted?.close();
-    setPlaying(null);
-  };
-
   if (episodePlay) {
     const [first] = episodePlay;
     return (
@@ -767,9 +932,14 @@ function ProjectApp() {
         <FeaturedMaps
           sidebar={sidebar}
           message={message}
-          onPlaySolo={(entry) => setPlaying({ entry, hosted: null })}
+          onPlaySolo={(entry) => {
+            setFeaturedId(entry.id);
+            setPlaying({ entry, hosted: null });
+          }}
           onPlayTogether={setLobby}
           onOpenCopy={openCopy}
+          selectedId={featuredId}
+          onSelect={setFeaturedId}
         />
         {lobby ? (
           <PlayTogether
@@ -779,6 +949,7 @@ function ProjectApp() {
             par={lobby.par}
             initialMode={lobby.mode === "deathmatch" ? "deathmatch" : "coop"}
             onStart={(hosted) => {
+              setFeaturedId(lobby.id);
               setPlaying({ entry: lobby, hosted });
               setLobby(null);
             }}
@@ -814,7 +985,7 @@ function ProjectApp() {
       onImportProject={(file) => void importProject(file)}
       onImportMap={(file) => void importMap(file)}
       onBuildEpisode={buildEpisode}
-      onPlayEpisode={playEpisode}
+      onPlayEpisode={() => playEpisode(maps)}
       onOpenMap={(entry) => void openMap(entry)}
       onCreateMap={createMap}
       onUpdateMap={(entry, form) => updateMap(entry.id, form)}

@@ -68,30 +68,34 @@ function cardLine(entry: FeaturedMap) {
     : `${mode} · Par ${formatPar(entry.par)}`;
 }
 
+const defaultId =
+  featuredMaps.find((entry) => entry.mode === "coop")?.id ?? featuredMaps[0].id;
+
 function FeaturedMaps({
   sidebar,
   message,
   onPlaySolo,
   onPlayTogether,
   onOpenCopy,
+  selectedId,
+  onSelect,
 }: {
   sidebar: SidebarProps;
   message: string | null;
+  selectedId: string | null;
+  onSelect: (id: string) => void;
   onPlaySolo: (entry: FeaturedMap) => void;
   onPlayTogether: (entry: FeaturedMap) => void;
   onOpenCopy: (entry: FeaturedMap) => void;
 }) {
   const [filter, setFilter] = useState<Filter>("all");
-  const [selectedId, setSelectedId] = useState(
-    () =>
-      featuredMaps.find((entry) => entry.mode === "coop")?.id ??
-      featuredMaps[0].id,
-  );
   const shown = featuredMaps.filter(
     (entry) => filter === "all" || entry.mode === filter,
   );
   const selected =
-    shown.find((entry) => entry.id === selectedId) ?? shown[0] ?? null;
+    shown.find((entry) => entry.id === (selectedId ?? defaultId)) ??
+    shown[0] ??
+    null;
   const filters: Filter[] = [
     "all",
     ...(Object.keys(modes) as FeaturedMode[]).filter((mode) =>
@@ -193,7 +197,7 @@ function FeaturedMaps({
                 type="button"
                 aria-pressed={entry.id === selected?.id}
                 className="grid h-full w-full grid-rows-[auto_1fr] gap-0 overflow-hidden rounded-[6px] border border-border bg-surface p-0 text-left text-fg hover:border-border-strong aria-pressed:border-accent"
-                onClick={() => setSelectedId(entry.id)}
+                onClick={() => onSelect(entry.id)}
               >
                 <MapPlan
                   map={entry.map}
