@@ -668,11 +668,14 @@ function LineInspector({
                 } else if (action) {
                   changeAction({ kind });
                 } else {
-                  onLineChange({ action: newLineAction(twoSided, kind) });
+                  onLineChange({
+                    action: newLineAction(twoSided, kind),
+                    scrolls: undefined,
+                  });
                 }
               }}
             />
-            {onAddSwitch && !action ? (
+            {onAddSwitch && !action && !settings.scrolls ? (
               <Button className="self-start" onClick={onAddSwitch}>
                 Add a switch
               </Button>
@@ -747,7 +750,28 @@ function LineInspector({
                   />
                 ) : null}
               </>
-            ) : null}
+            ) : opensDoor ? null : (
+              <>
+                <ToggleField
+                  label="Texture scrolls"
+                  checked={Boolean(settings.scrolls)}
+                  onChange={(checked) =>
+                    onLineChange({ scrolls: checked || undefined })
+                  }
+                />
+                {settings.scrolls && back && !front.door && !back.door ? (
+                  <ChoiceField
+                    label="Scrolls on"
+                    value={front.id}
+                    items={[front, back].map((item) => ({
+                      value: item.id,
+                      label: `${item.name} side`,
+                    }))}
+                    onChange={(next) => onLineChange({ front: next })}
+                  />
+                ) : null}
+              </>
+            )}
           </>
         )}
       </InspectorSection>
