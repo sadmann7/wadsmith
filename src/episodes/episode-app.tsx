@@ -848,6 +848,13 @@ function EpisodeApp() {
     }
   };
 
+  const playFreedoom = () =>
+    setWadPlay({
+      title: "Freedoom: Phase 2",
+      files: { wads: [], dehacked: [], complevel: "boom", warp: 1 },
+      skill: "medium",
+    });
+
   const importWadMaps = async (picked: File[]) => {
     const run = ++importRun.current;
     const episodeAt = episode.id;
@@ -1190,6 +1197,10 @@ function EpisodeApp() {
           onPlayTogether={setLobby}
           onOpenCopy={openCopy}
           onPlayWad={(files) => void openWads(files)}
+          onPlayFreedoom={playFreedoom}
+          onOpenFreedoom={() =>
+            sidebar.onCreateEpisode?.("Freedoom", "freedoom")
+          }
           selectedId={featuredId}
           onSelect={setFeaturedId}
         />
