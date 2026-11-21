@@ -1,9 +1,3 @@
-import {
-  Dialog,
-  DialogBackdrop,
-  DialogContent,
-  DialogTitle,
-} from "@ui-sdk/react/dialog";
 import { Check, Copy, Lock, Play, Plus, TriangleAlert } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
@@ -49,11 +43,13 @@ import {
 import type { NetworkMode, Skill } from "./runtime";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
-
-const dialogClass =
-  "fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-32px)] w-[480px] max-w-[calc(100vw-32px)] -translate-1/2 flex-col overflow-hidden rounded-[6px] border border-input bg-card outline-none";
-const titleClass =
-  "m-0 block font-sans text-2xl font-bold tracking-normal text-foreground normal-case";
+import {
+  Dialog,
+  DialogBackdrop,
+  DialogContent,
+  DialogTitle,
+} from "../components/ui/dialog";
+import { Alert } from "../components/ui/alert";
 
 type HostedGame = { session: CoopSession; close: () => void };
 
@@ -292,9 +288,9 @@ function Lobby({
         </p>
       </div>
       {lost ? (
-        <p className="notice m-0" role="alert">
+        <Alert variant="destructive" role="alert">
           Lost the connection to the game server. Close this and try again.
-        </p>
+        </Alert>
       ) : null}
       <section aria-label="Players">
         <SectionLabel
@@ -531,8 +527,8 @@ function PlayTogether({
         if (!open) onClose();
       }}
     >
-      <DialogBackdrop className="fixed inset-0 z-40 bg-scrim" />
-      <DialogContent className={dialogClass}>
+      <DialogBackdrop />
+      <DialogContent className="w-[480px] overflow-hidden">
         <CardPreview map={map} code={code ?? undefined} />
         <div className="grid min-h-0 gap-[18px] overflow-y-auto px-6 pt-5">
           <CardHeading
@@ -542,7 +538,7 @@ function PlayTogether({
                 : `${slot} · ${title}`
             }
             title={
-              <DialogTitle className={titleClass}>
+              <DialogTitle className="m-0 text-2xl font-bold">
                 {code ? "Waiting for players" : "Play together"}
               </DialogTitle>
             }

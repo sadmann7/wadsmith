@@ -1,13 +1,6 @@
 "use client";
 
 import {
-  AlertDialog,
-  AlertDialogBackdrop,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogTitle,
-} from "@ui-sdk/react/alert-dialog";
-import {
   useCallback,
   useEffect,
   useEffectEvent,
@@ -40,12 +33,7 @@ import {
 } from "../wad/inspect";
 import { readMaps } from "../wad/read-map";
 import { isZip, unzip } from "../wad/zip";
-import {
-  dialogClass,
-  MapDialog,
-  titleClass,
-  type MapDetails,
-} from "./map-dialog";
+import { MapDialog, type MapDetails } from "./map-dialog";
 import {
   bySlot,
   createMapEntry,
@@ -77,6 +65,14 @@ import { WadPlayDialog } from "./wad-play-dialog";
 import { findEpisode, parseRoute, pathOf, type Route } from "./routes";
 import { createMemoryStore, openProjectStore } from "./project-store";
 import { Button } from "../components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogBackdrop,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogTitle,
+} from "../components/ui/alert-dialog";
+import { Alert } from "../components/ui/alert";
 
 type Session = {
   id: string;
@@ -659,9 +655,9 @@ function ProjectApp() {
 
   if (!store || projects.length === 0) {
     return message ? (
-      <p className="notice m-4" role="alert">
+      <Alert variant="destructive" className="m-4" role="alert">
         {message}
-      </p>
+      </Alert>
     ) : (
       <div className="editor-loading" role="status">
         Loading episodes…
@@ -1020,14 +1016,12 @@ function ProjectApp() {
               if (!open) setBlockedLeave(null);
             }}
           >
-            <AlertDialogBackdrop className="fixed inset-0 z-40 bg-scrim" />
-            <AlertDialogContent
-              className={`${dialogClass} w-[460px] gap-3 p-5`}
-            >
-              <AlertDialogTitle className={titleClass}>
+            <AlertDialogBackdrop />
+            <AlertDialogContent className="w-[460px]">
+              <AlertDialogTitle>
                 Your latest changes aren't saved
               </AlertDialogTitle>
-              <AlertDialogDescription className="m-0 text-muted-foreground">
+              <AlertDialogDescription>
                 Your browser couldn't store them. Download the map to keep a
                 copy before you leave.
               </AlertDialogDescription>

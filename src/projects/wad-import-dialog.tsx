@@ -1,18 +1,20 @@
 import { Checkbox, CheckboxIndicator } from "@ui-sdk/react/checkbox";
-import {
-  Dialog,
-  DialogBackdrop,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from "@ui-sdk/react/dialog";
-import { Check, X } from "lucide-react";
+import { Check } from "lucide-react";
 import { useState } from "react";
 
 import type { GameMap } from "../map/types";
 import type { ImportReport } from "../wad/decompile";
 import { Button } from "../components/ui/button";
+import {
+  Dialog,
+  DialogBackdrop,
+  DialogCloseButton,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../components/ui/dialog";
 
 type ImportedMap = { slot: string; map: GameMap; report: ImportReport };
 
@@ -159,24 +161,17 @@ function WadImportDialog({
         if (!open) onClose();
       }}
     >
-      <DialogBackdrop className="fixed inset-0 z-40 bg-scrim" />
-      <DialogContent className="fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-32px)] w-[600px] max-w-[calc(100vw-32px)] -translate-1/2 flex-col rounded-[4px] border border-input bg-card outline-none">
-        <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border px-5">
+      <DialogBackdrop />
+      <DialogContent className="w-[600px]">
+        <DialogHeader>
           <div className="flex min-w-0 items-baseline gap-2.5">
-            <DialogTitle className="block shrink-0 font-sans text-xl font-semibold tracking-normal text-foreground normal-case">
-              Import maps
-            </DialogTitle>
-            <DialogDescription className="truncate font-mono text-xs text-muted-foreground">
+            <DialogTitle>Import maps</DialogTitle>
+            <DialogDescription>
               {fileName} · {plural(maps.length, "map")}
             </DialogDescription>
           </div>
-          <DialogClose
-            aria-label="Close"
-            className="border-0 bg-transparent p-1 text-muted-foreground hover:text-foreground"
-          >
-            <X size={16} aria-hidden="true" />
-          </DialogClose>
-        </header>
+          <DialogCloseButton />
+        </DialogHeader>
         <div className="grid min-h-0 gap-5 overflow-y-auto p-5">
           <section aria-label="Maps to import" className="grid gap-2">
             <h3 className="m-0 flex justify-between font-mono text-xs font-normal text-muted-foreground">
@@ -249,8 +244,8 @@ function WadImportDialog({
             </section>
           ) : null}
         </div>
-        <footer className="flex items-center justify-between gap-3 border-t border-border px-5 py-3">
-          <p className="muted min-w-0">
+        <DialogFooter className="justify-between">
+          <p className="text-muted-foreground min-w-0">
             {split > 0
               ? `${plural(split, "sector")} with pillars or holes become several rooms.`
               : "Each sector becomes a room."}
@@ -270,7 +265,7 @@ function WadImportDialog({
           >
             Import {chosen.length > 1 ? plural(chosen.length, "map") : "map"}
           </Button>
-        </footer>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

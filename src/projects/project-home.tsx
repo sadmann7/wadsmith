@@ -1,17 +1,4 @@
 import {
-  AlertDialog,
-  AlertDialogBackdrop,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogTitle,
-} from "@ui-sdk/react/alert-dialog";
-import {
-  Dialog,
-  DialogBackdrop,
-  DialogContent,
-  DialogTitle,
-} from "@ui-sdk/react/dialog";
-import {
   FileInput,
   FileInputDropzone,
   FileInputTrigger,
@@ -30,7 +17,7 @@ import {
 import { useMemo, useRef, useState, type FormEvent } from "react";
 
 import { MapPlan } from "../editor/map-plan";
-import { MapDialog, dialogClass, titleClass } from "./map-dialog";
+import { MapDialog } from "./map-dialog";
 import type { MapDetails } from "./map-dialog";
 import {
   bySlot,
@@ -53,6 +40,20 @@ import {
   MenuSeparator,
   MenuTrigger,
 } from "../components/ui/menu";
+import {
+  Dialog,
+  DialogBackdrop,
+  DialogContent,
+  DialogTitle,
+} from "../components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogBackdrop,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogTitle,
+} from "../components/ui/alert-dialog";
+import { Alert } from "../components/ui/alert";
 
 type Confirmation = { title: string; body: string; run: () => void };
 
@@ -98,10 +99,10 @@ function NameDialog({
         if (!open) onClose();
       }}
     >
-      <DialogBackdrop className="fixed inset-0 z-40 bg-scrim" />
-      <DialogContent className={`${dialogClass} w-[420px]`}>
+      <DialogBackdrop />
+      <DialogContent className="w-[420px]">
         <form onSubmit={submit} className="grid gap-4 p-5">
-          <DialogTitle className={titleClass}>Rename episode</DialogTitle>
+          <DialogTitle>Rename episode</DialogTitle>
           <Field>
             <FieldLabel>Name</FieldLabel>
             <Input
@@ -141,14 +142,10 @@ function ConfirmDialog({
         if (!open) onClose();
       }}
     >
-      <AlertDialogBackdrop className="fixed inset-0 z-40 bg-scrim" />
-      <AlertDialogContent className={`${dialogClass} w-[420px] gap-3 p-5`}>
-        <AlertDialogTitle className={titleClass}>
-          {confirmation.title}
-        </AlertDialogTitle>
-        <AlertDialogDescription className="m-0 text-muted-foreground">
-          {confirmation.body}
-        </AlertDialogDescription>
+      <AlertDialogBackdrop />
+      <AlertDialogContent className="w-[420px]">
+        <AlertDialogTitle>{confirmation.title}</AlertDialogTitle>
+        <AlertDialogDescription>{confirmation.body}</AlertDialogDescription>
         <div className="flex justify-end gap-2">
           <Button onClick={onClose}>Cancel</Button>
           <Button
@@ -475,16 +472,12 @@ function ProjectHome({
           </p>
         </div>
         {!durable ? (
-          <p role="alert" className="notice m-0">
+          <Alert variant="destructive" role="alert">
             Browser storage is unavailable, so episodes last only until this tab
             closes. Back up to keep your work.
-          </p>
+          </Alert>
         ) : null}
-        {message ? (
-          <p role="status" className="notice m-0">
-            {message}
-          </p>
-        ) : null}
+        {message ? <Alert role="status">{message}</Alert> : null}
         {sorted.length > 1 ? (
           <p className="m-0 flex items-center gap-2.5 rounded-[3px] border border-border bg-card px-3 py-2.5 text-sm text-foreground">
             <Route size={15} aria-hidden="true" className="text-info" />

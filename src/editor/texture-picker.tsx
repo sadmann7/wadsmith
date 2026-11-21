@@ -1,13 +1,5 @@
-import {
-  Dialog,
-  DialogBackdrop,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from "@ui-sdk/react/dialog";
 import { Toggle, ToggleGroup } from "@ui-sdk/react/toggle";
-import { Search, X } from "lucide-react";
+import { Search } from "lucide-react";
 import { useMemo, useRef, useState, type KeyboardEvent } from "react";
 
 import { freedoomFlats, freedoomWalls } from "../map/freedoom-textures";
@@ -17,6 +9,15 @@ import type { Picture, SceneAssets } from "../wad/assets";
 import { TextureGrid, TextureTile } from "./texture-grid";
 import { Button } from "../components/ui/button";
 import { InputGroup, InputGroupInput } from "../components/ui/input";
+import {
+  Dialog,
+  DialogBackdrop,
+  DialogCloseButton,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "../components/ui/dialog";
 
 type TextureKind = "flat" | "wall";
 
@@ -136,27 +137,18 @@ function TexturePicker({
         if (!open) onClose();
       }}
     >
-      <DialogBackdrop className="fixed inset-0 z-40 bg-scrim" />
+      <DialogBackdrop />
       <DialogContent
         initialFocus={() => tileFor(value)}
-        className="fixed top-1/2 left-1/2 z-50 flex h-[620px] max-h-[calc(100vh-32px)] w-[1000px] max-w-[calc(100vw-32px)] -translate-1/2 flex-col rounded-[4px] border border-input bg-card outline-none"
+        className="h-[620px] w-[1000px]"
       >
-        <header className="flex h-14 shrink-0 items-center justify-between border-b border-border px-5">
+        <DialogHeader>
           <div className="flex min-w-0 items-baseline gap-2.5">
-            <DialogTitle className="block font-sans text-xl font-semibold tracking-normal text-foreground normal-case">
-              {title}
-            </DialogTitle>
-            <DialogDescription className="truncate font-mono text-xs text-muted-foreground">
-              {context}
-            </DialogDescription>
+            <DialogTitle>{title}</DialogTitle>
+            <DialogDescription>{context}</DialogDescription>
           </div>
-          <DialogClose
-            aria-label="Close"
-            className="border-0 bg-transparent p-1 text-muted-foreground hover:text-foreground"
-          >
-            <X size={16} aria-hidden="true" />
-          </DialogClose>
-        </header>
+          <DialogCloseButton />
+        </DialogHeader>
         <div className="grid min-h-0 flex-1 grid-cols-[168px_minmax(0,1fr)_244px] max-[820px]:grid-cols-[minmax(0,1fr)_200px]">
           <nav
             aria-label="Texture categories"
@@ -209,7 +201,7 @@ function TexturePicker({
             </InputGroup>
             <div className="min-h-0 flex-1 overflow-y-auto">
               {names.length === 0 ? (
-                <p className="muted">No textures match.</p>
+                <p className="text-muted-foreground">No textures match.</p>
               ) : (
                 <TextureGrid
                   ref={grid}

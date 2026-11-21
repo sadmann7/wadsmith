@@ -1,11 +1,3 @@
-import {
-  Dialog,
-  DialogBackdrop,
-  DialogClose,
-  DialogContent,
-  DialogTitle,
-} from "@ui-sdk/react/dialog";
-import { X } from "lucide-react";
 import { useState, type FormEvent } from "react";
 
 import { MapOutline } from "../editor/map-outline";
@@ -34,6 +26,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../components/ui/select";
+import {
+  Dialog,
+  DialogBackdrop,
+  DialogCloseButton,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../components/ui/dialog";
 
 type MapDetails = {
   name: string;
@@ -43,11 +44,6 @@ type MapDetails = {
   template: MapTemplate;
   featured: FeaturedMap | null;
 };
-
-const dialogClass =
-  "fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-32px)] w-[600px] max-w-[calc(100vw-32px)] -translate-1/2 flex-col rounded-[4px] border border-input bg-card outline-none";
-const titleClass =
-  "block font-sans text-xl font-bold tracking-normal text-foreground normal-case";
 
 function MapDialog({
   maps,
@@ -99,23 +95,16 @@ function MapDialog({
         if (!open) onClose();
       }}
     >
-      <DialogBackdrop className="fixed inset-0 z-40 bg-scrim" />
-      <DialogContent className={dialogClass}>
+      <DialogBackdrop />
+      <DialogContent className="w-[600px]">
         <form
           onSubmit={(event) => void submit(event)}
           className="flex min-h-0 flex-col"
         >
-          <header className="flex h-14 shrink-0 items-center justify-between border-b border-border px-5">
-            <DialogTitle className={titleClass}>
-              {entry ? "Map settings" : "New map"}
-            </DialogTitle>
-            <DialogClose
-              aria-label="Close"
-              className="border-0 bg-transparent p-1 text-muted-foreground hover:text-foreground"
-            >
-              <X size={16} aria-hidden="true" />
-            </DialogClose>
-          </header>
+          <DialogHeader>
+            <DialogTitle>{entry ? "Map settings" : "New map"}</DialogTitle>
+            <DialogCloseButton />
+          </DialogHeader>
           <div className="grid min-h-0 gap-5 overflow-y-auto p-5">
             <div className="grid grid-cols-[minmax(0,1fr)_120px] gap-3">
               <Field>
@@ -268,7 +257,7 @@ function MapDialog({
               </FieldItem>
             </div>
           </div>
-          <footer className="flex items-center justify-end gap-2 border-t border-border px-5 py-3.5">
+          <DialogFooter className="justify-end">
             {error || !slot ? (
               <p role="alert" className="m-0 mr-auto min-w-0 text-destructive">
                 {error ?? "All 32 map slots are in use."}
@@ -283,11 +272,11 @@ function MapDialog({
             >
               {entry ? "Save" : "Create map"}
             </Button>
-          </footer>
+          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
   );
 }
 
-export { dialogClass, MapDialog, titleClass, type MapDetails };
+export { MapDialog, type MapDetails };

@@ -1,12 +1,4 @@
-import {
-  Dialog,
-  DialogBackdrop,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from "@ui-sdk/react/dialog";
-import { CircleCheck, CircleX, TriangleAlert, X } from "lucide-react";
+import { CircleCheck, CircleX, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 
 import { wadFileName } from "../editor/build-dialog";
@@ -14,6 +6,16 @@ import { mapName, mapSlots, mapStatus, type ProjectMap } from "./project-data";
 import { Button } from "../components/ui/button";
 import { Field, FieldItem, FieldLabel, Label } from "../components/ui/field";
 import { Input } from "../components/ui/input";
+import {
+  Dialog,
+  DialogBackdrop,
+  DialogCloseButton,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../components/ui/dialog";
 
 const statusIcons = {
   ready: { icon: CircleCheck, className: "text-success" },
@@ -53,24 +55,17 @@ function EpisodeBuildDialog({
         if (!open) onClose();
       }}
     >
-      <DialogBackdrop className="fixed inset-0 z-40 bg-scrim" />
-      <DialogContent className="fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-32px)] w-[560px] max-w-[calc(100vw-32px)] -translate-1/2 flex-col rounded-[4px] border border-input bg-card outline-none">
-        <header className="flex h-14 shrink-0 items-center justify-between border-b border-border px-5">
+      <DialogBackdrop />
+      <DialogContent className="w-[560px]">
+        <DialogHeader>
           <div className="flex min-w-0 items-baseline gap-2.5">
-            <DialogTitle className="block font-sans text-xl font-semibold tracking-normal text-foreground normal-case">
-              Build WAD
-            </DialogTitle>
-            <DialogDescription className="truncate font-mono text-xs text-muted-foreground">
+            <DialogTitle>Build WAD</DialogTitle>
+            <DialogDescription>
               {name} · {maps.length} {maps.length === 1 ? "map" : "maps"}
             </DialogDescription>
           </div>
-          <DialogClose
-            aria-label="Close"
-            className="border-0 bg-transparent p-1 text-muted-foreground hover:text-foreground"
-          >
-            <X size={16} aria-hidden="true" />
-          </DialogClose>
-        </header>
+          <DialogCloseButton />
+        </DialogHeader>
         <div className="grid min-h-0 gap-4 overflow-y-auto p-5">
           <div className="grid grid-cols-[minmax(0,1fr)_120px] gap-3">
             <Field>
@@ -142,10 +137,12 @@ function EpisodeBuildDialog({
             ) : null}
           </section>
         </div>
-        <footer className="flex items-center justify-between gap-3 border-t border-border px-5 py-3">
+        <DialogFooter className="justify-between">
           <p
             className={
-              buildError ? "min-w-0 text-destructive" : "muted min-w-0"
+              buildError
+                ? "min-w-0 text-destructive"
+                : "min-w-0 text-muted-foreground"
             }
             role={buildError ? "alert" : undefined}
           >
@@ -164,7 +161,7 @@ function EpisodeBuildDialog({
           >
             Download WAD
           </Button>
-        </footer>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

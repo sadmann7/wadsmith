@@ -2,24 +2,8 @@ import { Checkbox, CheckboxIndicator } from "@ui-sdk/react/checkbox";
 import {
   NumberInput,
   NumberInputControl,
-  NumberInputDecrement,
   NumberInputGroup,
-  NumberInputIncrement,
 } from "@ui-sdk/react/number-input";
-import {
-  Slider,
-  SliderControl,
-  SliderIndicator,
-  SliderThumb,
-  SliderTrack,
-  SliderValue,
-} from "@ui-sdk/react/slider";
-import {
-  SegmentedControl,
-  SegmentedControlIndicator,
-  SegmentedControlItem,
-} from "@ui-sdk/react/segmented-control";
-import { Switch, SwitchThumb } from "@ui-sdk/react/switch";
 import { Toggle, ToggleGroup } from "@ui-sdk/react/toggle";
 import { Check, Search, TriangleAlert } from "lucide-react";
 import { useRef, useState, type ReactNode } from "react";
@@ -81,6 +65,13 @@ import {
   SelectValue,
 } from "../components/ui/select";
 import { FieldItem, Label } from "../components/ui/field";
+import { NumberField } from "../components/ui/number-field";
+import {
+  SegmentedControl,
+  SegmentedControlItem,
+} from "../components/ui/segmented-control";
+import { Slider, SliderValue } from "../components/ui/slider";
+import { Switch } from "../components/ui/switch";
 
 type ThingTab = "enemy" | "item" | "key" | "decor";
 
@@ -140,12 +131,12 @@ function InspectorSection({
           {detail ? <span>{detail}</span> : null}
         </h2>
       </summary>
-      <div className="stack">{children}</div>
+      <div className="flex flex-col gap-2.5">{children}</div>
     </details>
   );
 }
 
-function NumberField({
+function NumberSetting({
   label,
   value,
   step,
@@ -163,7 +154,8 @@ function NumberField({
   return (
     <FieldItem>
       <Label>{label}</Label>
-      <NumberInput
+      <NumberField
+        label={label}
         value={value}
         step={step}
         min={min}
@@ -171,17 +163,7 @@ function NumberField({
         onValueChange={(next) => {
           if (next !== null) onChange(Math.round(next));
         }}
-      >
-        <NumberInputGroup className="number">
-          <NumberInputDecrement aria-label={`Lower ${label}`}>
-            −
-          </NumberInputDecrement>
-          <NumberInputControl aria-label={label} />
-          <NumberInputIncrement aria-label={`Raise ${label}`}>
-            +
-          </NumberInputIncrement>
-        </NumberInputGroup>
-      </NumberInput>
+      />
     </FieldItem>
   );
 }
@@ -336,11 +318,9 @@ function ToggleField({
   onChange: (checked: boolean) => void;
 }) {
   return (
-    <label className="toggle">
+    <label className="flex items-center justify-between gap-2">
       <span>{label}</span>
-      <Switch className="switch" checked={checked} onCheckedChange={onChange}>
-        <SwitchThumb className="switch-thumb" />
-      </Switch>
+      <Switch checked={checked} onCheckedChange={onChange} />
     </label>
   );
 }
@@ -411,9 +391,9 @@ function SectorInspector({
         title="Height"
         detail={door ? undefined : String(sector.ceiling - sector.floor)}
       >
-        <div className="row">
+        <div className="flex items-center gap-2 [&>*]:min-w-0 [&>*]:flex-1">
           {door ? null : (
-            <NumberField
+            <NumberSetting
               label="Ceiling"
               value={sector.ceiling}
               step={8}
@@ -422,7 +402,7 @@ function SectorInspector({
               onChange={(ceiling) => onChange({ ceiling })}
             />
           )}
-          <NumberField
+          <NumberSetting
             label="Floor"
             value={sector.floor}
             step={8}
@@ -468,25 +448,19 @@ function SectorInspector({
       </InspectorSection>
       <InspectorSection title="Behaviour">
         <Slider
-          className="slider"
+          label="Light level"
           value={sector.light}
           min={0}
           max={255}
           step={1}
           onValueChange={(light) => onChange({ light: light as number })}
         >
-          <div className="slider-head">
+          <div className="flex justify-between tabular-nums">
             <Label>Light level</Label>
             <SliderValue />
           </div>
-          <SliderControl className="slider-control">
-            <SliderTrack className="slider-track">
-              <SliderIndicator className="slider-indicator" />
-              <SliderThumb className="slider-thumb" aria-label="Light level" />
-            </SliderTrack>
-          </SliderControl>
         </Slider>
-        <div className="row items-end">
+        <div className="flex items-center gap-2 [&>*]:min-w-0 [&>*]:flex-1 items-end">
           <ChoiceField
             label="Effect"
             value={sector.effect ?? "none"}
@@ -504,7 +478,7 @@ function SectorInspector({
               })
             }
           />
-          <NumberField
+          <NumberSetting
             label="Tag"
             value={sector.tag ?? 0}
             step={1}
@@ -588,11 +562,10 @@ function LineInspector({
         {back ? (
           <SegmentedControl
             aria-label="Line side"
-            className="segments self-start"
+            className="self-start"
             value={line.isBack ? back.id : front.id}
             onValueChange={(next) => onSelectSide(next as string)}
           >
-            <SegmentedControlIndicator className="segments-indicator" />
             <SegmentedControlItem value={front.id}>
               Front side
             </SegmentedControlItem>
@@ -629,8 +602,8 @@ function LineInspector({
             onChange={(texture) => onPaint(part, texture)}
           />
         ))}
-        <div className="row">
-          <NumberField
+        <div className="flex items-center gap-2 [&>*]:min-w-0 [&>*]:flex-1">
+          <NumberSetting
             label="Offset X"
             value={side?.offsetX ?? 0}
             step={1}
@@ -640,7 +613,7 @@ function LineInspector({
               onSideChange({ offsetX: offsetX || undefined })
             }
           />
-          <NumberField
+          <NumberSetting
             label="Offset Y"
             value={side?.offsetY ?? 0}
             step={1}
@@ -664,7 +637,9 @@ function LineInspector({
       </InspectorSection>
       <InspectorSection title="Action">
         {line.wiredSwitch ? (
-          <p className="muted">The switch on this line opens its door.</p>
+          <p className="text-muted-foreground">
+            The switch on this line opens its door.
+          </p>
         ) : (
           <>
             <ChoiceField
@@ -697,7 +672,7 @@ function LineInspector({
             ) : null}
             {action ? (
               <>
-                <div className="row items-end">
+                <div className="flex items-center gap-2 [&>*]:min-w-0 [&>*]:flex-1 items-end">
                   <ChoiceField
                     label="Trigger"
                     value={action.trigger}
@@ -752,7 +727,9 @@ function LineInspector({
                 ) : null}
                 {twoSided &&
                 (action.trigger === "door" || action.trigger === "switch") ? (
-                  <p className="muted">Press it from the front side.</p>
+                  <p className="text-muted-foreground">
+                    Press it from the front side.
+                  </p>
                 ) : null}
               </>
             ) : null}
@@ -939,11 +916,10 @@ function PlaceThings({
       </InputGroup>
       <SegmentedControl
         aria-label="Thing type"
-        className="segments w-full [&>button]:flex-1 [&>button]:px-1"
+        className="w-full [&>button]:flex-1 [&>button]:px-1"
         value={tab}
         onValueChange={(next) => setTab(next as ThingTab)}
       >
-        <SegmentedControlIndicator className="segments-indicator" />
         {thingTabs.map(({ value, label }) => (
           <SegmentedControlItem key={value} value={value}>
             {label}
@@ -977,7 +953,7 @@ function PlaceThings({
           })}
         </div>
       ) : (
-        <p className="muted">No things match.</p>
+        <p className="text-muted-foreground">No things match.</p>
       )}
     </InspectorSection>
   );
@@ -1141,7 +1117,7 @@ function SwitchInspector({
   onChange: (patch: Partial<MapSwitch>) => void;
 }) {
   return (
-    <div className="stack">
+    <div className="flex flex-col gap-2.5">
       <ChoiceField
         label="Opens"
         value={item.door ?? "none"}
