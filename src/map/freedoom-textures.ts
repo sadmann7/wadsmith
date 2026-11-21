@@ -996,4 +996,30 @@ const freedoomWalls = [
   "ZZZFACE9",
 ] as const;
 
-export { freedoomFlats, freedoomWalls };
+// See-through textures for the middle of an open line, like grates and bars.
+const freedoomMiddles = [
+  "BRNBIGC",
+  "BRNBIGL",
+  "BRNBIGR",
+  "BRNSMAL1",
+  "BRNSMAL2",
+  "BRNSMALC",
+  "BRNSMALL",
+  "BRNSMALR",
+  "MIDBARS1",
+  "MIDBARS3",
+  "MIDBRN1",
+  "MIDBRONZ",
+  "MIDGRATE",
+  "MIDSPACE",
+  "MIDSPCSM",
+  "MIDVINE1",
+  "MIDVINE2",
+] as const;
+
+const middleTextures: readonly string[] = [
+  ...freedoomMiddles,
+  ...freedoomWalls,
+];
+
+export { freedoomFlats, freedoomMiddles, freedoomWalls, middleTextures };

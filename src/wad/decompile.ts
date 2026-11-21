@@ -7,7 +7,11 @@ import {
   thingCatalog,
   thingKinds,
 } from "../map/catalog";
-import { freedoomFlats, freedoomWalls } from "../map/freedoom-textures";
+import {
+  freedoomFlats,
+  freedoomWalls,
+  middleTextures,
+} from "../map/freedoom-textures";
 import { pointInPolygon, signedArea, wallKey } from "../map/geometry";
 import {
   closesDoor,
@@ -726,7 +730,14 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
       ...(side.offsetY ? { offsetY: side.offsetY } : {}),
     });
     if (kept.length === 2) {
-      if (kept.some(({ side }) => side.middle !== noTexture)) {
+      const opening = kept.some(({ sector }) => doors.has(sector));
+      if (
+        kept.some(
+          ({ side }) =>
+            side.middle !== noTexture &&
+            (opening || !middleTextures.includes(side.middle)),
+        )
+      ) {
         report.seeThroughWalls += 1;
       }
       for (const item of kept) {
@@ -741,6 +752,11 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
             ? { upper: wall(side.upper) }
             : {}),
           ...(side.lower !== noTexture ? { lower: wall(side.lower) } : {}),
+          ...(side.middle !== noTexture &&
+          !opening &&
+          middleTextures.includes(side.middle)
+            ? { middle: side.middle }
+            : {}),
         };
         if (Object.keys(value).length > 0) sides[id] = value;
       }

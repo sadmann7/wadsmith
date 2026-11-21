@@ -225,6 +225,7 @@ function compileLumps(map: GameMap, slot = mapLumpName): Lump[] {
     if (line.backSector !== null) {
       const backSector = sectors[line.backSector];
       const door = backSector.door;
+      const doorway = door ?? frontSector.door;
       flags = lineTwoSided | (settings?.blocksAll ? lineBlocksPlayer : 0);
       if (door?.opensBy === "use") {
         special = door.fast
@@ -242,6 +243,7 @@ function compileLumps(map: GameMap, slot = mapLumpName): Lump[] {
             door?.texture ??
             wallPartTexture(map, frontSector, line.wall, "upper"),
           lower: wallPartTexture(map, frontSector, line.wall, "lower"),
+          middle: doorway ? undefined : sideOf(frontSector)?.middle,
         },
         sideOf(frontSector),
       );
@@ -252,6 +254,7 @@ function compileLumps(map: GameMap, slot = mapLumpName): Lump[] {
             door?.texture ??
             wallPartTexture(map, backSector, line.wall, "upper"),
           lower: wallPartTexture(map, backSector, line.wall, "lower"),
+          middle: doorway ? undefined : sideOf(backSector)?.middle,
         },
         sideOf(backSector),
       );
