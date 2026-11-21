@@ -57,6 +57,7 @@ import {
   type ProjectStore,
 } from "./project-data";
 import { SidebarDrawer, type SidebarProps } from "./app-sidebar";
+import { checkBuild, knownBuildProblem, useBuildChecks } from "./build-checks";
 import { EpisodeBuildDialog } from "./episode-build-dialog";
 import { FeaturedMaps } from "./featured-maps";
 import { ProjectHome } from "./project-home";
@@ -117,9 +118,14 @@ function download(name: string, data: BlobPart, type: string) {
   URL.revokeObjectURL(url);
 }
 
-function blockedOf(ordered: ProjectMap[]) {
+function blockedOf(
+  ordered: ProjectMap[],
+  problems: (string | null | undefined)[],
+) {
   return ordered
-    .filter((entry) => mapStatus(entry).kind === "error")
+    .filter(
+      (entry, index) => mapStatus(entry, problems[index]).kind === "error",
+    )
     .map((entry) => entry.slot);
 }
 
@@ -132,10 +138,13 @@ function levelsOf(ordered: ProjectMap[]): Level[] {
   }));
 }
 
-function episodeGame(list: ProjectMap[]) {
+async function episodeGame(list: ProjectMap[]) {
   const ordered = bySlot(list);
-  const blocked = blockedOf(ordered);
   if (ordered.length === 0) return null;
+  const problems = await Promise.all(
+    ordered.map((entry) => (entry.broken ? null : checkBuild(entry))),
+  );
+  const blocked = blockedOf(ordered, problems);
   return blocked.length > 0
     ? { problem: `Fix ${blocked.join(", ")} before playing.`, levels: [] }
     : { problem: null, levels: levelsOf(ordered) };
@@ -192,6 +201,8 @@ function ProjectApp() {
   const [projectId, setProjectId] = useState("");
   const [maps, setMaps] = useState<ProjectMap[]>([]);
   const [session, setSession] = useState<Session | null>(null);
+  // Only the editor's map switcher shows them; the home page's rows check their own.
+  useBuildChecks(session ? maps : []);
   const [details, setDetails] = useState<SessionDetails | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("saved");
   const [message, setMessage] = useState<string | null>(null);
@@ -377,7 +388,7 @@ function ProjectApp() {
             if (play && playable(entry.map)) setMapPlaying(true);
           } else setMessage(`${route.slot} isn't in this episode.`);
         } else if (route.kind === "episode" && play) {
-          const started = episodeGame(await opened.listMaps(route.id));
+          const started = await episodeGame(await opened.listMaps(route.id));
           if (stale() || !started) return;
           if (started.problem) setMessage(started.problem);
           else setEpisodePlay(started.levels);
@@ -469,9 +480,23 @@ function ProjectApp() {
     setPlaying(null);
   };
 
-  const playEpisode = (list: ProjectMap[]) => {
-    const started = episodeGame(list);
+  const playEpisode = async (list: ProjectMap[]) => {
+    const run = routeRun.current;
+    const projectAt = projectIdRef.current;
+    const checking = "Checking that every map builds…";
+    if (list.some((entry) => knownBuildProblem(entry) === undefined)) {
+      setMessage(checking);
+    }
+    const started = await episodeGame(list);
     if (!started) return;
+    if (
+      run !== routeRun.current ||
+      projectAt !== projectIdRef.current ||
+      sessionRef.current
+    ) {
+      setMessage((shown) => (shown === checking ? null : shown));
+      return;
+    }
     setMessage(started.problem);
     if (!started.problem) setEpisodePlay(started.levels);
   };
@@ -544,7 +569,7 @@ function ProjectApp() {
           await refresh(store, route.id).catch(() => setMessage(saveFailure));
           if (route.kind === "episode" && play) {
             const list = await store.listMaps(route.id);
-            if (current()) playEpisode(list);
+            if (current()) await playEpisode(list);
           }
         }
       });
@@ -916,7 +941,8 @@ function ProjectApp() {
 
   const buildEpisode = (fileName: string) => {
     const ordered = bySlot(maps);
-    if (blockedOf(ordered).length > 0)
+    const problems = ordered.map((entry) => knownBuildProblem(entry));
+    if (blockedOf(ordered, problems).length > 0)
       return "Fix the maps listed above first.";
     try {
       download(
@@ -984,7 +1010,7 @@ function ProjectApp() {
               id: entry.id,
               slot: entry.slot,
               name: mapName(entry),
-              health: mapStatus(entry).kind,
+              health: mapStatus(entry, knownBuildProblem(entry)).kind,
             })),
             currentId: session.id,
             canAddMap: freeSlots(maps).length > 0,
@@ -1198,7 +1224,7 @@ function ProjectApp() {
         onImportProject={(file) => void importProject(file)}
         onImportFiles={(files) => void importFiles(files)}
         onBuildEpisode={() => setBuildingEpisode(project.id)}
-        onPlayEpisode={() => playEpisode(maps)}
+        onPlayEpisode={() => void playEpisode(maps)}
         onOpenMap={(entry) => void openMap(entry)}
         onCreateMap={createMap}
         onUpdateMap={(entry, form) => updateMap(entry.id, form)}

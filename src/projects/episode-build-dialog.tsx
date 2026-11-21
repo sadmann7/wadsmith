@@ -1,7 +1,8 @@
-import { CircleCheck, CircleX, TriangleAlert } from "lucide-react";
+import { CircleCheck, CircleX, Loader, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 
 import { wadFileName } from "../editor/build-dialog";
+import { knownBuildProblem, useBuildChecks } from "./build-checks";
 import { mapName, mapSlots, mapStatus, type ProjectMap } from "./project-data";
 import { Button } from "../components/ui/button";
 import { Field, FieldItem, FieldLabel, Label } from "../components/ui/field";
@@ -21,6 +22,10 @@ const statusIcons = {
   ready: { icon: CircleCheck, className: "text-success" },
   warning: { icon: TriangleAlert, className: "text-warning" },
   error: { icon: CircleX, className: "text-destructive" },
+  checking: {
+    icon: Loader,
+    className: "text-muted-foreground motion-safe:animate-spin",
+  },
 };
 
 function EpisodeBuildDialog({
@@ -40,8 +45,13 @@ function EpisodeBuildDialog({
     wadFileName(name.toLowerCase()),
   );
   const [buildError, setBuildError] = useState<string | null>(null);
-  const rows = maps.map((entry) => ({ entry, status: mapStatus(entry) }));
+  useBuildChecks(maps);
+  const rows = maps.map((entry) => ({
+    entry,
+    status: mapStatus(entry, knownBuildProblem(entry)),
+  }));
   const blocked = rows.filter((row) => row.status.kind === "error");
+  const checking = rows.some((row) => row.status.kind === "checking");
   const last = maps.at(-1);
   const gaps = last
     ? mapSlots
@@ -151,12 +161,14 @@ function EpisodeBuildDialog({
                 ? "This episode has no maps."
                 : blocked.length > 0
                   ? `Fix ${blocked.map((row) => row.entry.slot).join(", ")} before building.`
-                  : "Ready to download.")}
+                  : checking
+                    ? "Checking that every map builds…"
+                    : "Ready to download.")}
           </p>
           <Button
             variant="primary"
             className="shrink-0"
-            disabled={blocked.length > 0 || maps.length === 0}
+            disabled={blocked.length > 0 || checking || maps.length === 0}
             onClick={() => setBuildError(onBuild(wadFileName(fileName)))}
           >
             Download WAD

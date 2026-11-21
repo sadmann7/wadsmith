@@ -117,9 +117,24 @@ function buildProblem(map: GameMap) {
   }
 }
 
-function mapStatus(entry: ProjectMap) {
-  if (entry.broken) return { kind: "error" as const, label: "Can't open" };
+const checked = new Map<
+  string,
+  { revision: number; checks: ReturnType<typeof checkMap> }
+>();
+
+// Every edit to a saved map bumps its revision, and new maps get new ids.
+function checksOf(entry: ProjectMap) {
+  const known = checked.get(entry.id);
+  if (known?.revision === entry.mapRevision) return known.checks;
   const checks = checkMap(entry.map);
+  checked.set(entry.id, { revision: entry.mapRevision, checks });
+  return checks;
+}
+
+// A problem of undefined means the build hasn't been checked yet.
+function mapStatus(entry: ProjectMap, problem?: string | null) {
+  if (entry.broken) return { kind: "error" as const, label: "Can't open" };
+  const checks = checksOf(entry);
   const errors = checks.filter((issue) => issue.severity === "error").length;
   const warnings = checks.length - errors;
   if (errors > 0) {
@@ -128,9 +143,11 @@ function mapStatus(entry: ProjectMap) {
       label: `${errors} ${errors === 1 ? "error" : "errors"}`,
     };
   }
-  const problem = buildProblem(entry.map);
   if (problem) {
     return { kind: "error" as const, label: "Won't build", detail: problem };
+  }
+  if (problem === undefined) {
+    return { kind: "checking" as const, label: "Checking" };
   }
   if (warnings === 1 && checks[0].id === "no-exit") {
     return { kind: "warning" as const, label: "No exit yet" };
@@ -422,6 +439,7 @@ function parsePar(text: string) {
 }
 
 export {
+  buildProblem,
   bySlot,
   createMapEntry,
   createMapSaver,
