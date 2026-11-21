@@ -6,12 +6,14 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@ui-sdk/react/dialog";
-import { Input } from "@ui-sdk/react/input";
 import { CircleCheck, CircleX, TriangleAlert, X } from "lucide-react";
 import { useState } from "react";
 
 import { wadFileName } from "../editor/build-dialog";
 import { mapName, mapSlots, mapStatus, type ProjectMap } from "./project-data";
+import { Button } from "../components/ui/button";
+import { Field, FieldItem, FieldLabel, Label } from "../components/ui/field";
+import { Input } from "../components/ui/input";
 
 const statusIcons = {
   ready: { icon: CircleCheck, className: "text-success" },
@@ -71,18 +73,14 @@ function EpisodeBuildDialog({
         </header>
         <div className="grid min-h-0 gap-4 overflow-y-auto p-5">
           <div className="grid grid-cols-[minmax(0,1fr)_120px] gap-3">
-            <label className="field">
-              <span className="label">File name</span>
-              <Input
-                className="input"
-                value={fileName}
-                onValueChange={setFileName}
-              />
-            </label>
-            <div className="field">
-              <span className="label">Format</span>
+            <Field>
+              <FieldLabel>File name</FieldLabel>
+              <Input value={fileName} onValueChange={setFileName} />
+            </Field>
+            <FieldItem>
+              <Label>Format</Label>
               <div className="flex min-h-[30px] items-center">Classic Doom</div>
-            </div>
+            </FieldItem>
           </div>
           <section aria-label="Maps in the WAD" className="grid gap-2">
             <h3 className="m-0 flex justify-between font-mono text-xs font-normal text-muted-foreground">
@@ -158,14 +156,14 @@ function EpisodeBuildDialog({
                   ? `Fix ${blocked.map((row) => row.entry.slot).join(", ")} before building.`
                   : "Ready to download.")}
           </p>
-          <button
-            type="button"
-            className="button primary shrink-0"
+          <Button
+            variant="primary"
+            className="shrink-0"
             disabled={blocked.length > 0 || maps.length === 0}
             onClick={() => setBuildError(onBuild(wadFileName(fileName)))}
           >
             Download WAD
-          </button>
+          </Button>
         </footer>
       </DialogContent>
     </Dialog>

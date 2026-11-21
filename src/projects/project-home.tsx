@@ -16,14 +16,6 @@ import {
   FileInputDropzone,
   FileInputTrigger,
 } from "@ui-sdk/react/file-input";
-import { Input } from "@ui-sdk/react/input";
-import {
-  Menu,
-  MenuContent,
-  MenuItem,
-  MenuSeparator,
-  MenuTrigger,
-} from "@ui-sdk/react/menu";
 import {
   Download,
   Ellipsis,
@@ -51,6 +43,16 @@ import {
   type ProjectMap,
 } from "./project-data";
 import { AppShell, Crumb, type SidebarProps } from "./app-sidebar";
+import { Button, buttonVariants } from "../components/ui/button";
+import { Field, FieldLabel } from "../components/ui/field";
+import { Input } from "../components/ui/input";
+import {
+  Menu,
+  MenuContent,
+  MenuItem,
+  MenuSeparator,
+  MenuTrigger,
+} from "../components/ui/menu";
 
 type Confirmation = { title: string; body: string; run: () => void };
 
@@ -100,26 +102,24 @@ function NameDialog({
       <DialogContent className={`${dialogClass} w-[420px]`}>
         <form onSubmit={submit} className="grid gap-4 p-5">
           <DialogTitle className={titleClass}>Rename episode</DialogTitle>
-          <label className="field">
-            <span className="label">Name</span>
+          <Field>
+            <FieldLabel>Name</FieldLabel>
             <Input
-              className="input"
               maxLength={maxNameLength}
               value={name}
               onValueChange={setName}
             />
-          </label>
+          </Field>
           <div className="flex justify-end gap-2">
-            <button type="button" className="button" onClick={onClose}>
-              Cancel
-            </button>
-            <button
+            <Button onClick={onClose}>Cancel</Button>
+            <Button
+              variant="primary"
               type="submit"
-              className="button primary"
+
               disabled={!name.trim()}
             >
               Save
-            </button>
+            </Button>
           </div>
         </form>
       </DialogContent>
@@ -150,19 +150,17 @@ function ConfirmDialog({
           {confirmation.body}
         </AlertDialogDescription>
         <div className="flex justify-end gap-2">
-          <button type="button" className="button" onClick={onClose}>
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="button border-destructive text-destructive"
+          <Button onClick={onClose}>Cancel</Button>
+          <Button
+            variant="destructive"
+
             onClick={() => {
               confirmation.run();
               onClose();
             }}
           >
             Delete
-          </button>
+          </Button>
         </div>
       </AlertDialogContent>
     </AlertDialog>
@@ -285,54 +283,33 @@ function MapRow({
       <td>
         <Menu>
           <MenuTrigger
-            className="icon-button"
+            className={buttonVariants({ variant: "ghost", size: "icon" })}
             aria-label={`Actions for ${name}`}
           >
             <Ellipsis size={16} aria-hidden="true" />
           </MenuTrigger>
-          <MenuContent className="select-content" align="end">
-            <MenuItem
-              className="select-item"
-              disabled={entry.broken}
-              onSelect={onOpen}
-            >
+          <MenuContent align="end">
+            <MenuItem disabled={entry.broken} onSelect={onOpen}>
               Open
             </MenuItem>
-            <MenuItem
-              className="select-item"
-              disabled={entry.broken}
-              onSelect={onSettings}
-            >
+            <MenuItem disabled={entry.broken} onSelect={onSettings}>
               Map settings
             </MenuItem>
             <MenuItem
-              className="select-item"
               disabled={entry.broken || !canDuplicate}
               onSelect={onDuplicate}
             >
               Duplicate
             </MenuItem>
-            <MenuSeparator className="menu-separator" />
-            <MenuItem
-              className="select-item"
-              disabled={!canMoveUp}
-              onSelect={() => onMove(-1)}
-            >
+            <MenuSeparator />
+            <MenuItem disabled={!canMoveUp} onSelect={() => onMove(-1)}>
               Move up
             </MenuItem>
-            <MenuItem
-              className="select-item"
-              disabled={!canMoveDown}
-              onSelect={() => onMove(1)}
-            >
+            <MenuItem disabled={!canMoveDown} onSelect={() => onMove(1)}>
               Move down
             </MenuItem>
-            <MenuSeparator className="menu-separator" />
-            <MenuItem
-              className="select-item data-[highlighted]:bg-destructive/15"
-              destructive
-              onSelect={onDelete}
-            >
+            <MenuSeparator />
+            <MenuItem variant="destructive" destructive onSelect={onDelete}>
               Delete
             </MenuItem>
           </MenuContent>
@@ -420,36 +397,28 @@ function ProjectHome({
       crumbs={<Crumb>{project.name}</Crumb>}
       actions={
         <>
-          <button type="button" className="button" onClick={onExportProject}>
+          <Button onClick={onExportProject}>
             <Download size={14} aria-hidden="true" />
             <span className="max-[1000px]:sr-only">Back up</span>
-          </button>
-          <button
-            type="button"
-            className="button"
-            disabled={maps.length === 0}
-            onClick={onBuildEpisode}
-          >
+          </Button>
+          <Button disabled={maps.length === 0} onClick={onBuildEpisode}>
             <Package size={14} aria-hidden="true" />
             <span className="max-[1000px]:sr-only">Build WAD</span>
-          </button>
+          </Button>
           <Menu>
             <MenuTrigger
-              className="button px-2"
+              className={buttonVariants({ className: "px-2!" })}
               aria-label="More episode actions"
             >
               <Ellipsis size={16} aria-hidden="true" />
             </MenuTrigger>
-            <MenuContent className="select-content" align="end">
-              <MenuItem
-                className="select-item"
-                onSelect={() => projectFile.current?.click()}
-              >
+            <MenuContent align="end">
+              <MenuItem onSelect={() => projectFile.current?.click()}>
                 Import episode backup
               </MenuItem>
-              <MenuSeparator className="menu-separator" />
+              <MenuSeparator />
               <MenuItem
-                className="select-item data-[highlighted]:bg-destructive/15"
+                variant="destructive"
                 destructive
                 disabled={sidebar.projects.length === 1}
                 onSelect={() =>
@@ -464,15 +433,15 @@ function ProjectHome({
               </MenuItem>
             </MenuContent>
           </Menu>
-          <button
-            type="button"
-            className="button primary"
+          <Button
+            variant="primary"
+
             disabled={maps.length === 0}
             onClick={onPlayEpisode}
           >
             <Play size={14} aria-hidden="true" />
             <span className="max-[600px]:sr-only">Play</span>
-          </button>
+          </Button>
         </>
       }
     >
@@ -482,15 +451,16 @@ function ProjectHome({
             <h1 className="m-0 truncate text-4xl leading-tight font-bold">
               {project.name}
             </h1>
-            <button
-              type="button"
-              className="icon-button shrink-0"
+            <Button
+              variant="ghost"
+              size="icon"
+              className="shrink-0"
               aria-label="Rename episode"
               title="Rename episode"
               onClick={() => setRenaming(true)}
             >
               <Pencil size={15} aria-hidden="true" />
-            </button>
+            </Button>
           </div>
           <p className="m-0 mt-1 font-mono text-xs text-muted-foreground">
             {[

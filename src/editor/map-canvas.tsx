@@ -23,6 +23,7 @@ import {
   MapWorld,
 } from "./map-editor";
 import { thingIcons } from "./thing-icons";
+import { buttonVariants } from "../components/ui/button";
 
 const worldSize = 65536;
 const crowdedRooms = 60;
@@ -211,20 +212,24 @@ function MapCanvas({
       </MapWorld>
       <div className="map-actions">
         <MapLookHere
-          className="icon-button"
+          className={buttonVariants({ variant: "outline", size: "icon" })}
           aria-label="Look here"
           title="Look here"
         >
           <Focus size={16} aria-hidden="true" />
         </MapLookHere>
         <MapFindCamera
-          className="icon-button"
+          className={buttonVariants({ variant: "outline", size: "icon" })}
           aria-label="Find camera"
           title="Find camera"
         >
           <LocateFixed size={16} aria-hidden="true" />
         </MapFindCamera>
-        <MapFit className="icon-button" aria-label="Fit map" title="Fit map">
+        <MapFit
+          className={buttonVariants({ variant: "outline", size: "icon" })}
+          aria-label="Fit map"
+          title="Fit map"
+        >
           <Maximize size={16} aria-hidden="true" />
         </MapFit>
       </div>

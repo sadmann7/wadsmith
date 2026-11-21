@@ -76,6 +76,7 @@ import { WadImportDialog, type ImportedMap } from "./wad-import-dialog";
 import { WadPlayDialog } from "./wad-play-dialog";
 import { findEpisode, parseRoute, pathOf, type Route } from "./routes";
 import { createMemoryStore, openProjectStore } from "./project-store";
+import { Button } from "../components/ui/button";
 
 type Session = {
   id: string;
@@ -1031,16 +1032,8 @@ function ProjectApp() {
                 copy before you leave.
               </AlertDialogDescription>
               <div className="flex flex-wrap justify-end gap-2">
-                <button
-                  type="button"
-                  className="button"
-                  onClick={() => setBlockedLeave(null)}
-                >
-                  Stay here
-                </button>
-                <button
-                  type="button"
-                  className="button"
+                <Button onClick={() => setBlockedLeave(null)}>Stay here</Button>
+                <Button
                   onClick={() => {
                     const leave = blockedLeave;
                     setBlockedLeave(null);
@@ -1048,10 +1041,10 @@ function ProjectApp() {
                   }}
                 >
                   Leave without saving
-                </button>
-                <button
-                  type="button"
-                  className="button primary"
+                </Button>
+                <Button
+                  variant="primary"
+
                   onClick={() =>
                     download(
                       "wadsmith-map.json",
@@ -1064,7 +1057,7 @@ function ProjectApp() {
                   }
                 >
                   Download map
-                </button>
+                </Button>
               </div>
             </AlertDialogContent>
           </AlertDialog>

@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 
 import type { SurfaceInfo } from "../map/surfaces";
 import { gameWallShade, type Picture, type SceneAssets } from "../wad/assets";
+import { Button } from "../components/ui/button";
 
 const swatchSize = 48;
 const tileSize = 64;
@@ -102,13 +103,9 @@ function SurfacePanel({
             ))}
           </RadioGroup>
           {info.paints === "wall" ? (
-            <button
-              type="button"
-              className="button"
-              onClick={() => onPaint(info.texture!, true)}
-            >
+            <Button onClick={() => onPaint(info.texture!, true)}>
               Use on every wall in this room
-            </button>
+            </Button>
           ) : null}
         </>
       ) : null}

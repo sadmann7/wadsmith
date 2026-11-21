@@ -11,6 +11,7 @@ import {
 } from "../map/featured";
 import { AppShell, type SidebarProps } from "./app-sidebar";
 import { formatPar } from "./project-data";
+import { Button } from "../components/ui/button";
 
 const modes: Record<FeaturedMode, { label: string; dot: string }> = {
   single: { label: "Single player", dot: "bg-info" },
@@ -118,14 +119,10 @@ function FeaturedMaps({
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              className="button"
-              onClick={() => wadInput.current?.click()}
-            >
+            <Button onClick={() => wadInput.current?.click()}>
               <FolderOpen size={14} aria-hidden="true" />
               Play a WAD
-            </button>
+            </Button>
             <input
               ref={wadInput}
               type="file"
@@ -180,33 +177,30 @@ function FeaturedMaps({
                 {detailsOf(selected)}
               </p>
               <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  className="button"
-                  onClick={() => onOpenCopy(selected)}
-                >
+                <Button onClick={() => onOpenCopy(selected)}>
                   <Copy size={14} aria-hidden="true" />
                   Open a copy
-                </button>
+                </Button>
                 {selected.players.max > 1 ? (
-                  <button
-                    type="button"
-                    className={`button ${selected.mode === "deathmatch" ? "primary" : ""}`}
+                  <Button
+                    variant={
+                      selected.mode === "deathmatch" ? "primary" : "default"
+                    }
                     onClick={() => onPlayTogether(selected)}
                   >
                     <Users size={14} aria-hidden="true" />
                     Play together
-                  </button>
+                  </Button>
                 ) : null}
                 {selected.mode === "deathmatch" ? null : (
-                  <button
-                    type="button"
-                    className="button primary"
+                  <Button
+                    variant="primary"
+
                     onClick={() => onPlaySolo(selected)}
                   >
                     <Play size={14} aria-hidden="true" />
                     Play
-                  </button>
+                  </Button>
                 )}
               </div>
             </div>

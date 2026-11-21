@@ -6,7 +6,6 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@ui-sdk/react/dialog";
-import { Input } from "@ui-sdk/react/input";
 import { Toggle, ToggleGroup } from "@ui-sdk/react/toggle";
 import { Search, X } from "lucide-react";
 import { useMemo, useRef, useState, type KeyboardEvent } from "react";
@@ -16,6 +15,8 @@ import type { TextureUse } from "../map/textures";
 import { TextureSwatch } from "../preview/surface-panel";
 import type { Picture, SceneAssets } from "../wad/assets";
 import { TextureGrid, TextureTile } from "./texture-grid";
+import { Button } from "../components/ui/button";
+import { InputGroup, InputGroupInput } from "../components/ui/input";
 
 type TextureKind = "flat" | "wall";
 
@@ -188,25 +189,24 @@ function TexturePicker({
             </ToggleGroup>
           </nav>
           <div className="flex min-h-0 flex-col gap-3 p-4">
-            <label className="input-box flex h-[34px] shrink-0 items-center gap-2 rounded-[2px] border border-input px-2.5">
+            <InputGroup className="h-[34px] shrink-0">
               <Search
                 size={14}
                 className="text-muted-foreground"
                 aria-hidden="true"
               />
-              <Input
+              <InputGroupInput
                 ref={searchInput}
                 aria-label="Search textures"
                 onKeyDown={onSearchKey}
                 placeholder={`Search ${active.names.length} textures`}
-                className="w-full min-w-0 border-0 bg-transparent outline-none"
                 value={query}
                 onValueChange={(next) => {
                   setQuery(next);
                   setShown(pageSize);
                 }}
               />
-            </label>
+            </InputGroup>
             <div className="min-h-0 flex-1 overflow-y-auto">
               {names.length === 0 ? (
                 <p className="muted">No textures match.</p>
@@ -260,13 +260,12 @@ function TexturePicker({
                 </TextureGrid>
               )}
               {names.length > shown ? (
-                <button
-                  type="button"
-                  className="button mt-3 w-full justify-center"
+                <Button
+                  className="mt-3 w-full justify-center"
                   onClick={() => setShown((count) => count + pageSize)}
                 >
                   Show more
-                </button>
+                </Button>
               ) : null}
             </div>
           </div>
@@ -301,20 +300,16 @@ function TexturePicker({
               <p className="m-0 font-mono text-xs text-muted-foreground">
                 Arrows move · Enter applies · Type to search
               </p>
-              <button
-                type="button"
-                className="button primary justify-center"
+              <Button
+                variant="primary"
+                className="justify-center"
                 onClick={() => apply(chosen)}
               >
                 Apply texture
-              </button>
-              <button
-                type="button"
-                className="button justify-center"
-                onClick={onClose}
-              >
+              </Button>
+              <Button className="justify-center" onClick={onClose}>
                 Cancel
-              </button>
+              </Button>
             </div>
           </aside>
         </div>

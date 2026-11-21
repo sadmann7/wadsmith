@@ -1,6 +1,7 @@
 import { createLocalStorage } from "@ui-sdk/core";
 import { Monitor } from "lucide-react";
 import { useState, useSyncExternalStore } from "react";
+import { Button } from "../components/ui/button";
 
 const savedNotice = createLocalStorage("wadsmith:device-notice");
 // Phones and tablets without a keyboard or mouse can't edit or play.
@@ -40,16 +41,15 @@ function DeviceNotice() {
         Building and playing maps needs a keyboard and mouse. Look around here,
         then open Wadsmith on a computer to make your own.
       </p>
-      <button
-        type="button"
-        className="button justify-self-start"
+      <Button
+        className="justify-self-start"
         onClick={() => {
           savedNotice.set("1");
           setDismissed(true);
         }}
       >
         Got it
-      </button>
+      </Button>
     </section>
   );
 }
