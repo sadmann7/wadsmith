@@ -1025,16 +1025,10 @@
     color: var(--color-fg-muted);
   }
 
-  .edit-modes kbd {
-    color: var(--color-fg-muted);
-    font: 11px var(--font-mono);
-  }
-
   .edit-modes button[data-checked],
   .edit-modes button[aria-checked="true"] {
     background: var(--color-surface-raised);
     color: var(--color-fg);
-    font-weight: 600;
   }
 
   .pane-actions {
@@ -1360,10 +1354,6 @@
   @container (max-width: 640px) {
     .map-overlay {
       max-width: calc(100% - 24px);
-    }
-
-    .edit-modes kbd {
-      display: none;
     }
 
     .pane-actions,

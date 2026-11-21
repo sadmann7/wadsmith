@@ -1299,9 +1299,12 @@ function App({
                       onValueChange={(next) => setEditMode(next as EditMode)}
                     >
                       {editModes.map(({ value, label, key }) => (
-                        <SegmentedControlItem key={value} value={value}>
+                        <SegmentedControlItem
+                          key={value}
+                          value={value}
+                          aria-keyshortcuts={key}
+                        >
                           {label}
-                          <kbd>{key}</kbd>
                         </SegmentedControlItem>
                       ))}
                     </SegmentedControl>
