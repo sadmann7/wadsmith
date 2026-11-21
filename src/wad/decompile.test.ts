@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 
 import { thingCatalog } from "../map/catalog";
 import { pointInPolygon, sectorPolygon } from "../map/geometry";
@@ -309,9 +309,13 @@ describe("readMaps", () => {
 });
 
 describe.skipIf(!existsSync(freedoom))("Freedoom's maps", () => {
-  const maps = readMaps([
-    { name: "freedoom2.wad", data: new Uint8Array(readFileSync(freedoom)) },
-  ]);
+  let maps: DoomMap[] = [];
+
+  beforeAll(() => {
+    maps = readMaps([
+      { name: "freedoom2.wad", data: new Uint8Array(readFileSync(freedoom)) },
+    ]);
+  });
 
   it("convert into rooms that keep their shape and save", () => {
     expect(maps).toHaveLength(32);
