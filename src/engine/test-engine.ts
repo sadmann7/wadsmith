@@ -14,7 +14,7 @@ import {
   type DoomGame,
   type GameEvents,
   type GameFiles,
-  type Resolution,
+  type Screen,
 } from "./runtime";
 
 const engineDirectory = resolve(import.meta.dirname, "../../public/engine");
@@ -32,7 +32,7 @@ export async function launch(
   map: GameMap | Uint8Array | GameFiles,
   sampleRate: number | null = null,
   events?: GameEvents,
-  resolution?: Resolution,
+  screen?: Screen,
 ) {
   const url = pathToFileURL(resolve(engineDirectory, "woof.js")).href;
   const { default: createDoom } = (await import(/* @vite-ignore */ url)) as {
@@ -48,7 +48,7 @@ export async function launch(
     options: { print: () => {}, printErr: (line) => engineWarnings.push(line) },
     events,
     sampleRate,
-    resolution,
+    screen,
   });
   running.push(game);
   return game;

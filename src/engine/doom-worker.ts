@@ -1,13 +1,13 @@
 import { NetInbox } from "./net-inbox";
 import {
   startDoom,
-  screenSizes,
+  screenSize,
   type CreateDoom,
   type DoomGame,
   type GameFiles,
   type GameStatus,
   type NetworkMode,
-  type Resolution,
+  type Screen,
   type Skill,
 } from "./runtime";
 
@@ -34,7 +34,7 @@ type DoomWorkerRequest =
       paused: boolean;
       sampleRate: number;
       audioPort: MessagePort | null;
-      resolution: Resolution;
+      screen: Screen;
       skill: Skill;
       network: WorkerNetwork | null;
     }
@@ -104,7 +104,7 @@ function pumpAudio(running: DoomGame, port: MessagePort) {
 
 function sendFrame() {
   if (!game) return;
-  const { width, height } = screenSizes[game.resolution];
+  const { width, height } = screenSize(game.screen);
   const buffer = spareFrames.pop() ?? new ArrayBuffer(width * height * 4);
   game.frame(new Uint8ClampedArray(buffer));
   const now = performance.now();
@@ -154,7 +154,7 @@ async function start(request: Extract<DoomWorkerRequest, { type: "start" }>) {
       onFailure: () => fail("The engine stopped."),
     },
     sampleRate: request.audioPort ? request.sampleRate : null,
-    resolution: request.resolution,
+    screen: request.screen,
     skill: request.skill,
     network: request.network
       ? {

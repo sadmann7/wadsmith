@@ -29,11 +29,11 @@ import {
   doomKeys,
   keysByCode,
   maxVolume,
-  screenSizes,
+  screenSize,
   type GameFiles,
   type GameStatus,
   type NetworkMode,
-  type Resolution,
+  type Screen,
   type Skill,
 } from "./runtime";
 import { hostPeer, type RoomPlayer } from "./room";
@@ -43,6 +43,7 @@ type SoundSettings = { volume: number; muted: boolean };
 
 const savedSound = createLocalStorage("wadsmith:sound");
 const savedResolution = createLocalStorage("wadsmith:resolution");
+const savedWidescreen = createLocalStorage("wadsmith:widescreen");
 const defaultSound: SoundSettings = { volume: 8, muted: false };
 const noteMessageMs = 2000;
 // Escape can reach the page just after it released the pointer.
@@ -71,12 +72,16 @@ function saveSound(sound: SoundSettings) {
   savedSound.set(JSON.stringify(sound));
 }
 
-function loadResolution(): Resolution {
-  return savedResolution.get() === "classic" ? "classic" : "high";
+function loadScreen(): Screen {
+  return {
+    resolution: savedResolution.get() === "classic" ? "classic" : "high",
+    widescreen: savedWidescreen.get() !== "off",
+  };
 }
 
-function saveResolution(resolution: Resolution) {
-  savedResolution.set(resolution);
+function saveScreen(screen: Screen) {
+  savedResolution.set(screen.resolution);
+  savedWidescreen.set(screen.widescreen ? "on" : "off");
 }
 
 type PlayerSpot = Point & { angle: number };
@@ -146,8 +151,8 @@ type GameSessionProps = Omit<Level, "map"> & {
   episode: Level[] | null;
   sound: SoundSettings;
   onSoundChange: (sound: SoundSettings) => void;
-  resolution: Resolution;
-  onResolutionChange: (resolution: Resolution) => void;
+  screen: Screen;
+  onScreenChange: (screen: Screen) => void;
   fullscreen: boolean;
   onRestart: () => void;
   onToggleFullscreen: () => void;
@@ -168,8 +173,8 @@ function GameSession({
   episode,
   sound,
   onSoundChange,
-  resolution,
-  onResolutionChange,
+  screen,
+  onScreenChange,
   fullscreen,
   onRestart,
   onToggleFullscreen,
@@ -224,7 +229,7 @@ function GameSession({
   const lockTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const gameHeld = noteSpot !== null || holdsGame(capture);
   const gameHeldRef = useRef(gameHeld);
-  const { width, height } = screenSizes[resolution];
+  const { width, height } = screenSize(screen);
   const coopStarted = coopBegan && status?.inLevel;
 
   useEffect(() => {
@@ -288,7 +293,7 @@ function GameSession({
             warp: 1,
           },
           sound: soundRef.current,
-          resolution,
+          screen,
           skill: coop?.skill ?? skill,
           onFrame: (pixels) =>
             context.putImageData(new ImageData(pixels, width, height), 0, 0),
@@ -383,7 +388,7 @@ function GameSession({
       client?.stop();
       gameRef.current = null;
     };
-  }, [map, files, episode, resolution, width, height, coop, skill]);
+  }, [map, files, episode, screen, width, height, coop, skill]);
 
   useEffect(() => () => clearInterval(advanceTimer.current), []);
 
@@ -597,9 +602,9 @@ function GameSession({
         deathmatch={coop?.mode === "deathmatch"}
         episode={episode !== null}
         exit={gameExit}
-        resolution={resolution}
+        screen={screen}
         onSoundChange={onSoundChange}
-        onResolutionChange={onResolutionChange}
+        onScreenChange={onScreenChange}
         onRestart={onRestart}
         onToggleFullscreen={onToggleFullscreen}
         onExit={requestExit}
@@ -615,6 +620,7 @@ function GameSession({
       >
         <div
           className="game-frame @container"
+          data-widescreen={screen.widescreen || undefined}
           onPointerDown={(event) => {
             const target = event.target as Element;
             if (
@@ -858,7 +864,7 @@ function GameView({
   const [run, setRun] = useState(0);
   const [fullscreen, setFullscreen] = useState(false);
   const [sound, setSound] = useState(loadSound);
-  const [resolution, setResolution] = useState(loadResolution);
+  const [screen, setScreen] = useState(loadScreen);
 
   useEffect(() => {
     const update = () => setFullscreen(Boolean(document.fullscreenElement));
@@ -881,7 +887,7 @@ function GameView({
   return (
     <section ref={stageRef} className="game-stage" aria-label="Game">
       <GameSession
-        key={`${run}-${resolution}`}
+        key={`${run}-${screen.resolution}-${screen.widescreen}`}
         map={map}
         files={files}
         title={title}
@@ -893,10 +899,10 @@ function GameView({
           setSound(next);
           saveSound(next);
         }}
-        resolution={resolution}
-        onResolutionChange={(next) => {
-          setResolution(next);
-          saveResolution(next);
+        screen={screen}
+        onScreenChange={(next) => {
+          setScreen(next);
+          saveScreen(next);
         }}
         fullscreen={fullscreen}
         onRestart={() => setRun((value) => value + 1)}
