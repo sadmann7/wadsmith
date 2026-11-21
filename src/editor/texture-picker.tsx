@@ -138,20 +138,20 @@ function TexturePicker({
       <DialogBackdrop className="fixed inset-0 z-40 bg-scrim" />
       <DialogContent
         initialFocus={() => tileFor(value)}
-        className="fixed top-1/2 left-1/2 z-50 flex h-[620px] max-h-[calc(100vh-32px)] w-[1000px] max-w-[calc(100vw-32px)] -translate-1/2 flex-col rounded-[4px] border border-border-strong bg-surface outline-none"
+        className="fixed top-1/2 left-1/2 z-50 flex h-[620px] max-h-[calc(100vh-32px)] w-[1000px] max-w-[calc(100vw-32px)] -translate-1/2 flex-col rounded-[4px] border border-input bg-card outline-none"
       >
         <header className="flex h-14 shrink-0 items-center justify-between border-b border-border px-5">
           <div className="flex min-w-0 items-baseline gap-2.5">
-            <DialogTitle className="block font-sans text-xl font-semibold tracking-normal text-fg normal-case">
+            <DialogTitle className="block font-sans text-xl font-semibold tracking-normal text-foreground normal-case">
               {title}
             </DialogTitle>
-            <DialogDescription className="truncate font-mono text-xs text-fg-muted">
+            <DialogDescription className="truncate font-mono text-xs text-muted-foreground">
               {context}
             </DialogDescription>
           </div>
           <DialogClose
             aria-label="Close"
-            className="border-0 bg-transparent p-1 text-fg-muted hover:text-fg"
+            className="border-0 bg-transparent p-1 text-muted-foreground hover:text-foreground"
           >
             <X size={16} aria-hidden="true" />
           </DialogClose>
@@ -177,10 +177,10 @@ function TexturePicker({
                 <Toggle
                   key={item.id}
                   value={item.id}
-                  className="flex h-8 items-center justify-between gap-2 rounded-[3px] border-0 bg-transparent px-2 text-left text-fg-muted hover:text-fg aria-pressed:bg-surface-raised aria-pressed:text-fg"
+                  className="flex h-8 items-center justify-between gap-2 rounded-[3px] border-0 bg-transparent px-2 text-left text-muted-foreground hover:text-foreground aria-pressed:bg-muted aria-pressed:text-foreground aria-pressed:ring-1 aria-pressed:ring-input aria-pressed:ring-inset"
                 >
                   <span className="truncate">{item.label}</span>
-                  <span className="font-mono text-xs text-fg-muted">
+                  <span className="font-mono text-xs text-muted-foreground">
                     {item.names.length}
                   </span>
                 </Toggle>
@@ -189,7 +189,11 @@ function TexturePicker({
           </nav>
           <div className="flex min-h-0 flex-col gap-3 p-4">
             <label className="input-box flex h-[34px] shrink-0 items-center gap-2 rounded-[2px] border border-input px-2.5">
-              <Search size={14} className="text-fg-muted" aria-hidden="true" />
+              <Search
+                size={14}
+                className="text-muted-foreground"
+                aria-hidden="true"
+              />
               <Input
                 ref={searchInput}
                 aria-label="Search textures"
@@ -235,7 +239,7 @@ function TexturePicker({
                       key={name}
                       value={name}
                       aria-label={name}
-                      className="group relative grid min-w-0 gap-1 border-0 bg-transparent p-0 text-left font-mono text-xs text-fg-muted outline-none aria-selected:text-fg"
+                      className="group relative grid min-w-0 gap-1 border-0 bg-transparent p-0 text-left font-mono text-xs text-muted-foreground outline-none aria-selected:text-foreground"
                     >
                       <TextureSwatch
                         name={name}
@@ -243,10 +247,10 @@ function TexturePicker({
                         assets={assets}
                         light={light}
                         whole={kind === "wall"}
-                        className="aspect-square w-full outline-2 -outline-offset-2 outline-transparent [image-rendering:pixelated] group-focus-visible:outline-fg group-aria-selected:outline-accent"
+                        className="aspect-square w-full outline-2 -outline-offset-2 outline-transparent [image-rendering:pixelated] group-focus-visible:outline-foreground group-aria-selected:outline-primary"
                       />
                       {name === value ? (
-                        <span className="absolute top-1.5 left-1.5 bg-canvas px-1.5 py-0.5 text-fg">
+                        <span className="absolute top-1.5 left-1.5 bg-background px-1.5 py-0.5 text-foreground">
                           Current
                         </span>
                       ) : null}
@@ -278,15 +282,15 @@ function TexturePicker({
               />
               <div>
                 <div className="font-mono text-base break-all">{chosen}</div>
-                <div className="text-fg-muted">Freedoom</div>
+                <div className="text-muted-foreground">Freedoom</div>
               </div>
-              <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1.5 text-fg-muted">
+              <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1.5 text-muted-foreground">
                 <dt>Size</dt>
-                <dd className="m-0 font-mono text-xs text-fg">
+                <dd className="m-0 font-mono text-xs text-foreground">
                   {preview.width} × {preview.height}
                 </dd>
                 <dt>In this map</dt>
-                <dd className="m-0 font-mono text-xs text-fg">
+                <dd className="m-0 font-mono text-xs text-foreground">
                   {uses > 0
                     ? `${uses} ${uses === 1 ? "use" : "uses"}`
                     : "Not used"}
@@ -294,7 +298,7 @@ function TexturePicker({
               </dl>
             </div>
             <div className="grid gap-2">
-              <p className="m-0 font-mono text-xs text-fg-muted">
+              <p className="m-0 font-mono text-xs text-muted-foreground">
                 Arrows move · Enter applies · Type to search
               </p>
               <button

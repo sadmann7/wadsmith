@@ -65,10 +65,10 @@ const keyStyles = [
   { label: "Red skull key", icon: Skull, color: "var(--color-key-red)" },
 ];
 const slowPingMs = 120;
-const panelClass = "pointer-events-auto rounded-[3px] bg-surface/90";
-const buttonClass = `${panelClass} flex items-center gap-2 border-0 px-3 py-2 text-fg hover:bg-surface-raised`;
+const panelClass = "pointer-events-auto rounded-[3px] bg-card/90";
+const buttonClass = `${panelClass} flex items-center gap-2 border-0 px-3 py-2 text-foreground hover:bg-muted`;
 const iconButtonClass =
-  "flex size-[30px] items-center justify-center rounded-[3px] border-0 bg-transparent p-0 text-fg-muted hover:bg-surface-raised hover:text-fg";
+  "flex size-[30px] items-center justify-center rounded-[3px] border-0 bg-transparent p-0 text-muted-foreground hover:bg-muted hover:text-foreground";
 
 function formatTime(tics: number) {
   const seconds = Math.floor(tics / ticsPerSecond);
@@ -101,7 +101,7 @@ function Minimap({
                 cx={other.x}
                 cy={0 - other.y}
                 r={extent * 0.02}
-                fill="var(--color-fg-soft)"
+                fill="var(--color-foreground)"
                 stroke="var(--color-map-bg)"
                 strokeWidth={1.5}
                 vectorEffect="non-scaling-stroke"
@@ -127,7 +127,7 @@ function Minimap({
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-3">
-      <dt className="text-fg-muted">{label}</dt>
+      <dt className="text-muted-foreground">{label}</dt>
       <dd className="m-0 font-mono text-xs">{value}</dd>
     </div>
   );
@@ -136,7 +136,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 function Vital({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div>
-      <div className="font-mono text-xs text-fg-soft uppercase">{label}</div>
+      <div className="font-mono text-xs text-foreground uppercase">{label}</div>
       <div className="text-[44px] leading-none font-bold @max-2xl:text-2xl">
         {value}
       </div>
@@ -168,20 +168,20 @@ function Scoreboard({
   return (
     <section
       aria-label="Scoreboard"
-      className={`${panelClass} absolute top-1/2 left-1/2 w-[min(600px,calc(100%-32px))] -translate-1/2 border border-border-strong`}
+      className={`${panelClass} absolute top-1/2 left-1/2 w-[min(600px,calc(100%-32px))] -translate-1/2 border border-input`}
     >
       <header className="flex items-end justify-between gap-4 border-b border-border px-5 py-3">
         <div className="grid gap-0.5">
           <h2 className="m-0 text-lg font-semibold">
             {deathmatch ? "Deathmatch" : "Co-op"}
           </h2>
-          <span className="font-mono text-xs text-fg-muted uppercase">
+          <span className="font-mono text-xs text-muted-foreground uppercase">
             {title}
             {status ? ` · ${formatTime(status.tics)}` : ""}
             {par ? ` / par ${formatTime(par * ticsPerSecond)}` : ""}
           </span>
         </div>
-        <span className="font-mono text-xs text-fg-soft">
+        <span className="font-mono text-xs text-foreground">
           {deathmatch
             ? `First to ${fragLimit} frags`
             : status
@@ -191,7 +191,7 @@ function Scoreboard({
       </header>
       <table className="w-full border-collapse text-left">
         <thead>
-          <tr className="font-mono text-xs text-fg-muted uppercase">
+          <tr className="font-mono text-xs text-muted-foreground uppercase">
             <th className="py-2 pl-5 font-normal" colSpan={2}>
               Player
             </th>
@@ -207,7 +207,7 @@ function Scoreboard({
           {sorted.map((row) => (
             <tr
               key={row.peer}
-              className={`border-t border-border ${row.you ? "bg-accent/10" : ""}`}
+              className={`border-t border-border ${row.you ? "bg-primary/10" : ""}`}
             >
               <td className="w-6 py-2.5 pl-5">
                 <PlayerBadge peer={row.peer} />
@@ -215,12 +215,12 @@ function Scoreboard({
               <td className="py-2.5 pl-3">
                 <span className="text-base font-semibold">{row.name}</span>
                 {row.host ? (
-                  <span className="ml-2 font-mono text-xs text-fg-muted uppercase">
+                  <span className="ml-2 font-mono text-xs text-muted-foreground uppercase">
                     Host
                   </span>
                 ) : null}
                 {row.you ? (
-                  <span className="ml-2 font-mono text-xs text-fg-muted uppercase">
+                  <span className="ml-2 font-mono text-xs text-muted-foreground uppercase">
                     You
                   </span>
                 ) : null}
@@ -231,7 +231,7 @@ function Scoreboard({
                 </td>
               ))}
               <td
-                className={`py-2.5 pr-5 text-right font-mono text-xs ${row.ping !== null && row.ping > slowPingMs ? "text-warning" : "text-fg-muted"}`}
+                className={`py-2.5 pr-5 text-right font-mono text-xs ${row.ping !== null && row.ping > slowPingMs ? "text-warning" : "text-muted-foreground"}`}
               >
                 {row.ping === null ? "—" : `${row.ping} ms`}
               </td>
@@ -239,7 +239,7 @@ function Scoreboard({
           ))}
         </tbody>
       </table>
-      <footer className="border-t border-border px-5 py-2 text-sm text-fg-muted">
+      <footer className="border-t border-border px-5 py-2 text-sm text-muted-foreground">
         Release Tab to hide
       </footer>
     </section>
@@ -249,7 +249,9 @@ function Scoreboard({
 function Tally({ label, value }: { label: string; value: string }) {
   return (
     <div className="grid gap-1">
-      <dt className="font-mono text-xs text-fg-muted uppercase">{label}</dt>
+      <dt className="font-mono text-xs text-muted-foreground uppercase">
+        {label}
+      </dt>
       <dd className="m-0 text-lg font-semibold">{value}</dd>
     </div>
   );
@@ -275,7 +277,7 @@ function BetweenLevels({
   return (
     <section
       aria-label={`${slot} complete`}
-      className={`${panelClass} absolute top-1/2 left-1/2 grid w-[min(420px,calc(100%-32px))] -translate-1/2 gap-4 border border-border-strong p-6`}
+      className={`${panelClass} absolute top-1/2 left-1/2 grid w-[min(420px,calc(100%-32px))] -translate-1/2 gap-4 border border-input p-6`}
     >
       <div className="grid gap-1">
         <span className="font-mono text-xs tracking-wide text-success uppercase">
@@ -303,10 +305,10 @@ function BetweenLevels({
       <div className="flex items-center gap-3">
         <MapPlan
           map={next.map}
-          className="h-[48px] w-[80px] shrink-0 rounded-[2px] bg-canvas"
+          className="h-[48px] w-[80px] shrink-0 rounded-[2px] bg-background"
         />
         <div className="grid min-w-0 gap-0.5">
-          <span className="font-mono text-xs text-fg-muted uppercase">
+          <span className="font-mono text-xs text-muted-foreground uppercase">
             Next · {next.slot}
           </span>
           <span className="truncate font-semibold">{next.title}</span>
@@ -346,7 +348,7 @@ function StallBanner({ names, since }: { names: string[]; since: number }) {
         <span className="truncate text-base font-semibold">
           Waiting for {new Intl.ListFormat("en").format(names)}
         </span>
-        <span className="text-sm text-fg-muted">
+        <span className="text-sm text-muted-foreground">
           Everyone waits so the game stays in step.
         </span>
       </div>
@@ -362,7 +364,7 @@ function NoteForm({ onSave }: { onSave: (text: string) => void }) {
   return (
     <form
       aria-label="Leave a note"
-      className={`${panelClass} absolute bottom-24 left-1/2 flex w-[min(460px,calc(100%-32px))] -translate-x-1/2 gap-2 border border-border-strong p-2`}
+      className={`${panelClass} absolute bottom-24 left-1/2 flex w-[min(460px,calc(100%-32px))] -translate-x-1/2 gap-2 border border-input p-2`}
       onSubmit={(event) => {
         event.preventDefault();
         if (text.trim()) onSave(text.trim());
@@ -434,33 +436,35 @@ function GameTopBar({
         ? "Episode"
         : "Solo";
   return (
-    <header className="flex h-[48px] min-w-0 items-center gap-4 border-b border-border bg-surface px-3 text-fg">
+    <header className="flex h-[48px] min-w-0 items-center gap-4 border-b border-border bg-card px-3 text-foreground">
       <button type="button" className="button shrink-0" onClick={onExit}>
         <ArrowLeft size={14} aria-hidden="true" />
         <span>
           Exit
           {exit.to ? (
-            <span className="text-fg-muted"> to {exit.to}</span>
+            <span className="text-muted-foreground"> to {exit.to}</span>
           ) : null}
         </span>
         {fullscreen ? null : (
-          <kbd className="font-mono text-xs text-fg-muted">Esc</kbd>
+          <kbd className="font-mono text-xs text-muted-foreground">Esc</kbd>
         )}
       </button>
       <div className="flex min-w-0 flex-1 items-center gap-2.5">
-        <span className="shrink-0 font-mono text-xs text-fg-muted">{slot}</span>
+        <span className="shrink-0 font-mono text-xs text-muted-foreground">
+          {slot}
+        </span>
         <span className="truncate text-base font-semibold">{title}</span>
-        <span className="shrink-0 rounded-full border border-border-strong px-2 py-0.5 font-mono text-xs tracking-[0.06em] text-fg-soft uppercase max-[640px]:hidden">
+        <span className="shrink-0 rounded-full border border-input px-2 py-0.5 font-mono text-xs tracking-[0.06em] text-foreground uppercase max-[640px]:hidden">
           {mode} · {skillNames[skill]}
         </span>
       </div>
       <span
         aria-label="Time"
-        className="shrink-0 font-mono text-sm text-fg-soft"
+        className="shrink-0 font-mono text-sm text-foreground"
       >
         {status ? formatTime(status.tics) : "0:00"}
         {par ? (
-          <span className="text-fg-muted max-[640px]:hidden">
+          <span className="text-muted-foreground max-[640px]:hidden">
             {" "}
             / par {formatTime(par * ticsPerSecond)}
           </span>
@@ -505,7 +509,7 @@ function GameTopBar({
           <>
             <button
               type="button"
-              className={`${iconButtonClass} text-sm font-medium aria-pressed:text-accent`}
+              className={`${iconButtonClass} text-sm font-medium aria-pressed:text-primary`}
               aria-label="Double resolution"
               aria-pressed={resolution === "high"}
               title={`${screenSizes[resolution].width}×${screenSizes[resolution].height}, restarts the level`}
@@ -599,18 +603,18 @@ function GameHud({
   const ammoName = status ? ammoNames[status.ammoType] : undefined;
   const tabHelp = coop ? "Tab scores" : "Tab automap";
   return (
-    <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden text-fg">
+    <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden text-foreground">
       <div className="absolute inset-x-0 bottom-0 h-56 bg-linear-to-t from-void/70 to-transparent" />
       {inLevel && !finished ? (
         <Crosshair
           size={20}
-          className="absolute top-1/2 left-1/2 -translate-1/2 text-fg/70"
+          className="absolute top-1/2 left-1/2 -translate-1/2 text-foreground/70"
           aria-hidden="true"
         />
       ) : null}
       <aside
         aria-label="Run"
-        className="pointer-events-auto absolute top-0 right-5 w-[260px] overflow-hidden rounded-b-[3px] border border-t-0 border-border bg-surface @max-xl:w-44"
+        className="pointer-events-auto absolute top-0 right-5 w-[260px] overflow-hidden rounded-b-[3px] border border-t-0 border-border bg-card @max-xl:w-44"
       >
         {map ? <Minimap map={map} status={status} others={others} /> : null}
         <dl className="m-0 grid gap-1.5 p-3">
@@ -639,12 +643,12 @@ function GameHud({
           )}
         </dl>
         {audioUnavailable ? (
-          <p className="px-3 pb-2 text-sm text-fg-muted">
+          <p className="px-3 pb-2 text-sm text-muted-foreground">
             Sound needs HTTPS or localhost.
           </p>
         ) : null}
         {mouseMode === "denied" ? (
-          <p className="px-3 pb-2 text-sm text-fg-muted">
+          <p className="px-3 pb-2 text-sm text-muted-foreground">
             This browser won't capture the mouse. Clicking fires.
           </p>
         ) : null}
@@ -658,7 +662,7 @@ function GameHud({
                 ? "Episode complete"
                 : "Level complete"
           }
-          className={`${panelClass} absolute top-1/2 left-1/2 grid w-[min(320px,calc(100%-32px))] -translate-1/2 gap-3 border border-border-strong p-4`}
+          className={`${panelClass} absolute top-1/2 left-1/2 grid w-[min(320px,calc(100%-32px))] -translate-1/2 gap-3 border border-input p-4`}
         >
           <h2 className="m-0 text-xl font-semibold">
             {deathmatch
@@ -667,7 +671,7 @@ function GameHud({
                 ? "Episode complete"
                 : "Level complete"}
           </h2>
-          <p className="m-0 font-mono text-xs text-fg-muted">
+          <p className="m-0 font-mono text-xs text-muted-foreground">
             {formatTime(status.tics)} ·{" "}
             {deathmatch
               ? `${status.frags} ${status.frags === 1 ? "frag" : "frags"}`
@@ -711,19 +715,19 @@ function GameHud({
       {mouseMode === "released" && !finished && !noteOpen ? (
         <section
           aria-label={coop ? "Mouse released" : "Paused"}
-          className="absolute top-1/2 left-1/2 grid w-[min(320px,calc(100%-32px))] -translate-1/2 gap-1 rounded-[3px] border border-border-strong bg-surface/90 p-4 text-center"
+          className="absolute top-1/2 left-1/2 grid w-[min(320px,calc(100%-32px))] -translate-1/2 gap-1 rounded-[3px] border border-input bg-card/90 p-4 text-center"
         >
           <h2 className="m-0 text-xl font-semibold">Paused</h2>
-          <p role="status" className="m-0 text-fg-soft">
+          <p role="status" className="m-0 text-foreground">
             Click the game to capture the mouse and carry on.
           </p>
-          <p className="m-0 font-mono text-xs text-fg-muted">
+          <p className="m-0 font-mono text-xs text-muted-foreground">
             {fullscreen ? "Esc leaves fullscreen" : exit.hint}
           </p>
         </section>
       ) : null}
       {showHelp && !finished && mouseMode !== "released" ? (
-        <p className="absolute inset-x-4 bottom-24 m-0 text-center text-sm text-fg-soft">
+        <p className="absolute inset-x-4 bottom-24 m-0 text-center text-sm text-foreground">
           {mouseMode === "locked"
             ? `Mouse turn · Left click fire · WASD move · E use · Shift run · ${tabHelp} · Esc release mouse`
             : `${mouseMode === "denied" ? "" : "Click to use the mouse · "}WASD move · ←→ turn · Space fire · E use · Shift run · ${tabHelp}`}
@@ -732,7 +736,7 @@ function GameHud({
       {noteSaved ? (
         <p
           role="status"
-          className="absolute inset-x-4 bottom-24 m-0 text-center text-fg-soft"
+          className="absolute inset-x-4 bottom-24 m-0 text-center text-foreground"
         >
           Note saved to this spot.
         </p>
@@ -749,7 +753,9 @@ function GameHud({
             />
             {/* Deathmatch hands every player every key. */}
             <div className={deathmatch ? "hidden" : "pb-1.5"}>
-              <div className="mb-1.5 font-mono text-xs text-fg-soft">KEYS</div>
+              <div className="mb-1.5 font-mono text-xs text-foreground">
+                KEYS
+              </div>
               <div className="flex h-[22px] gap-1">
                 {keyStyles.map(({ label, icon: Icon, color }, index) =>
                   status.keys & (1 << index) ? (
@@ -776,7 +782,7 @@ function GameHud({
             onClick={onOpenNote}
           >
             Leave a note
-            <kbd className="font-mono text-xs text-fg-muted">N</kbd>
+            <kbd className="font-mono text-xs text-muted-foreground">N</kbd>
           </button>
           <button
             type="button"
@@ -785,7 +791,7 @@ function GameHud({
             onClick={onEditSpot}
           >
             Edit this spot
-            <kbd className="font-mono text-xs text-fg-muted">F2</kbd>
+            <kbd className="font-mono text-xs text-muted-foreground">F2</kbd>
           </button>
         </div>
       </div>
@@ -812,13 +818,13 @@ function EndGameConfirm({
       role="alertdialog"
       aria-labelledby="end-game-title"
       aria-describedby="end-game-body"
-      className={`${panelClass} absolute top-3 left-3 z-30 grid w-[min(320px,calc(100%-24px))] gap-3.5 border border-border-strong p-4 shadow-lg`}
+      className={`${panelClass} absolute top-3 left-3 z-30 grid w-[min(320px,calc(100%-24px))] gap-3.5 border border-input p-4 shadow-lg`}
     >
       <div className="grid gap-1.5">
         <h2 id="end-game-title" className="m-0 text-base font-semibold">
           End the game for everyone?
         </h2>
-        <p id="end-game-body" className="m-0 text-sm text-fg-soft">
+        <p id="end-game-body" className="m-0 text-sm text-foreground">
           {list} {names.length === 1 ? "is" : "are"} still playing, and their
           game ends too.
         </p>
@@ -834,7 +840,7 @@ function EndGameConfirm({
         </button>
         <button
           type="button"
-          className="button border-danger text-danger"
+          className="button border-destructive text-destructive"
           onClick={onEndGame}
         >
           End game

@@ -119,14 +119,14 @@ function ShortcutSheet({ onClose }: { onClose: () => void }) {
       }}
     >
       <DialogBackdrop className="fixed inset-0 z-40 bg-scrim" />
-      <DialogContent className="fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-32px)] w-[680px] max-w-[calc(100vw-32px)] -translate-1/2 flex-col rounded-[4px] border border-border-strong bg-surface outline-none">
+      <DialogContent className="fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-32px)] w-[680px] max-w-[calc(100vw-32px)] -translate-1/2 flex-col rounded-[4px] border border-input bg-card outline-none">
         <header className="flex h-14 shrink-0 items-center justify-between border-b border-border px-5">
-          <DialogTitle className="block font-sans text-xl font-semibold tracking-normal text-fg normal-case">
+          <DialogTitle className="block font-sans text-xl font-semibold tracking-normal text-foreground normal-case">
             Keyboard shortcuts
           </DialogTitle>
           <DialogClose
             aria-label="Close"
-            className="border-0 bg-transparent p-1 text-fg-muted hover:text-fg"
+            className="border-0 bg-transparent p-1 text-muted-foreground hover:text-foreground"
           >
             <X size={16} aria-hidden="true" />
           </DialogClose>
@@ -134,7 +134,7 @@ function ShortcutSheet({ onClose }: { onClose: () => void }) {
         <div className="grid min-h-0 grid-cols-2 gap-x-8 gap-y-6 overflow-y-auto p-5 max-[640px]:grid-cols-1">
           {groups().map((group) => (
             <section key={group.title} className="grid content-start gap-2">
-              <h3 className="m-0 font-mono text-xs font-normal tracking-wide text-fg-muted uppercase">
+              <h3 className="m-0 font-mono text-xs font-normal tracking-wide text-muted-foreground uppercase">
                 {group.title}
               </h3>
               <dl className="m-0 grid gap-1.5">
@@ -143,19 +143,19 @@ function ShortcutSheet({ onClose }: { onClose: () => void }) {
                     key={item.does}
                     className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-3"
                   >
-                    <dt className="text-sm text-fg-soft">{item.does}</dt>
+                    <dt className="text-sm text-foreground">{item.does}</dt>
                     <dd className="m-0 flex items-baseline gap-1">
                       {item.keys.map((entry, index) => (
                         <span key={entry.text} className="flex gap-1">
                           {index > 0 ? (
-                            <span className="text-xs text-fg-muted">
+                            <span className="text-xs text-muted-foreground">
                               <span aria-hidden="true">/</span>
                               <span className="sr-only">or</span>
                             </span>
                           ) : null}
                           <kbd
                             aria-label={entry.spoken}
-                            className="rounded-[3px] border border-border-strong px-1.5 font-mono text-xs text-fg"
+                            className="rounded-[3px] border border-input px-1.5 font-mono text-xs text-foreground"
                           >
                             {entry.text}
                           </kbd>
@@ -168,7 +168,7 @@ function ShortcutSheet({ onClose }: { onClose: () => void }) {
             </section>
           ))}
         </div>
-        <footer className="border-t border-border px-5 py-3 text-xs text-fg-muted">
+        <footer className="border-t border-border px-5 py-3 text-xs text-muted-foreground">
           Walking and the N and P keys go by position, as on a US keyboard.
         </footer>
       </DialogContent>

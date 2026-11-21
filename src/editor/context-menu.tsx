@@ -105,13 +105,14 @@ type MapContextMenuProps = {
 type BodyProps = Omit<MapContextMenuProps, "controller" | "onOpenChange">;
 
 const contentClass =
-  "z-30 w-54 rounded-[7px] border border-border-strong bg-surface-raised p-1 shadow-popover outline-none";
+  "z-30 w-54 rounded-[7px] border border-input bg-muted p-1 shadow-popover outline-none";
 const itemClass =
-  "flex h-7 cursor-default items-center gap-2 rounded-[4px] px-2 outline-none select-none data-[disabled]:text-fg-disabled data-[highlighted]:bg-surface-hover data-[popup-open]:bg-surface-hover";
-const iconClass = "flex w-3.5 shrink-0 justify-center text-fg-muted";
-const destructiveIconClass = "flex w-3.5 shrink-0 justify-center text-danger";
-const hintClass = "ml-auto font-mono text-xs text-fg-muted";
-const destructiveHintClass = "ml-auto font-mono text-xs text-danger";
+  "flex h-7 cursor-default items-center gap-2 rounded-[4px] px-2 outline-none select-none data-[disabled]:text-muted-foreground/60 data-[highlighted]:bg-accent data-[popup-open]:bg-accent";
+const iconClass = "flex w-3.5 shrink-0 justify-center text-muted-foreground";
+const destructiveIconClass =
+  "flex w-3.5 shrink-0 justify-center text-destructive";
+const hintClass = "ml-auto font-mono text-xs text-muted-foreground";
+const destructiveHintClass = "ml-auto font-mono text-xs text-destructive";
 
 const roomSides: { side: RoomSide; label: string }[] = [
   { side: "north", label: "North" },
@@ -159,7 +160,7 @@ function Item({
 }) {
   return (
     <MenuItem
-      className={`${itemClass} data-[destructive]:text-danger data-[destructive]:data-[highlighted]:bg-danger/15`}
+      className={`${itemClass} data-[destructive]:text-destructive data-[destructive]:data-[highlighted]:bg-destructive/15`}
       destructive={destructive}
       {...props}
     >
@@ -199,7 +200,7 @@ function CheckItem({
         <Icon size={14} />
       </MenuItemIcon>
       {children}
-      <MenuItemIndicator className="ml-auto text-accent">
+      <MenuItemIndicator className="ml-auto text-primary">
         <Check size={14} />
       </MenuItemIndicator>
     </MenuCheckboxItem>
@@ -224,7 +225,7 @@ function SubMenu({
           <Icon size={14} />
         </MenuItemIcon>
         {label}
-        <MenuItemIcon className="ml-auto text-fg-muted" mirror>
+        <MenuItemIcon className="ml-auto text-muted-foreground" mirror>
           <ChevronRight size={14} />
         </MenuItemIcon>
       </MenuSubTrigger>
@@ -269,7 +270,7 @@ function Choices({
             </MenuItemIcon>
           ) : null}
           {item.label}
-          <MenuItemIndicator className="ml-auto text-accent">
+          <MenuItemIndicator className="ml-auto text-primary">
             <Check size={14} />
           </MenuItemIndicator>
         </MenuRadioItem>
@@ -280,7 +281,7 @@ function Choices({
 
 function Heading({ children }: { children: ReactNode }) {
   return (
-    <div className="truncate px-2 pt-1 pb-1.5 font-mono text-xs tracking-[0.04em] text-fg-muted uppercase">
+    <div className="truncate px-2 pt-1 pb-1.5 font-mono text-xs tracking-[0.04em] text-muted-foreground uppercase">
       {children}
     </div>
   );

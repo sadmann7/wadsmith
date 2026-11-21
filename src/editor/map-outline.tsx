@@ -7,8 +7,8 @@ function MapOutline({
   map,
   className,
   label,
-  solidColor = "var(--color-fg-disabled)",
-  openColor = "var(--color-border-strong)",
+  solidColor = "color-mix(in oklab, var(--color-muted-foreground) 60%, transparent)",
+  openColor = "var(--color-input)",
   children,
 }: {
   map: GameMap;

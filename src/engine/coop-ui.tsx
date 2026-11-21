@@ -10,7 +10,7 @@ const playerColors = [
   "border-success text-success",
   "border-info text-info",
   "border-warning text-warning",
-  "border-danger text-danger",
+  "border-destructive text-destructive",
 ];
 
 function PlayerBadge({ peer, open = false }: { peer: number; open?: boolean }) {
@@ -19,7 +19,7 @@ function PlayerBadge({ peer, open = false }: { peer: number; open?: boolean }) {
       aria-hidden="true"
       className={`grid size-[22px] shrink-0 place-items-center rounded-full border-[1.5px] font-mono text-xs ${
         open
-          ? "border-dashed border-border-strong text-fg-muted"
+          ? "border-dashed border-input text-muted-foreground"
           : (playerColors[peer - 1] ?? playerColors[0])
       }`}
     >
@@ -35,7 +35,7 @@ function CardPreview({ map, code }: { map: GameMap; code?: string }) {
       {code ? (
         <span
           aria-label="Room code"
-          className="absolute top-3 right-3 rounded-[3px] border border-border-strong bg-surface px-2 py-1 font-mono text-xs tracking-[0.06em]"
+          className="absolute top-3 right-3 rounded-[3px] border border-input bg-card px-2 py-1 font-mono text-xs tracking-[0.06em]"
         >
           {formatRoomCode(code)}
         </span>
@@ -55,11 +55,13 @@ function CardHeading({
 }) {
   return (
     <div className="grid gap-1.5">
-      <span className="font-mono text-xs tracking-[0.08em] text-fg-muted uppercase">
+      <span className="font-mono text-xs tracking-[0.08em] text-muted-foreground uppercase">
         {eyebrow}
       </span>
       {title}
-      {detail ? <span className="text-sm text-fg-soft">{detail}</span> : null}
+      {detail ? (
+        <span className="text-sm text-foreground">{detail}</span>
+      ) : null}
     </div>
   );
 }
@@ -72,7 +74,7 @@ function SectionLabel({
   aside?: ReactNode;
 }) {
   return (
-    <div className="flex justify-between border-b border-border pb-1.5 font-mono text-xs tracking-[0.08em] text-fg-muted uppercase">
+    <div className="flex justify-between border-b border-border pb-1.5 font-mono text-xs tracking-[0.08em] text-muted-foreground uppercase">
       <span>{children}</span>
       {aside}
     </div>
@@ -81,7 +83,7 @@ function SectionLabel({
 
 function FieldLabel({ children }: { children: ReactNode }) {
   return (
-    <span className="mb-1.5 block font-mono text-xs tracking-[0.08em] text-fg-muted uppercase">
+    <span className="mb-1.5 block font-mono text-xs tracking-[0.08em] text-muted-foreground uppercase">
       {children}
     </span>
   );
@@ -102,7 +104,7 @@ function Choice<Value extends string | number>({
     <div
       role="group"
       aria-label={label}
-      className="flex gap-[3px] rounded-[3px] border border-border bg-canvas p-[3px]"
+      className="flex gap-[3px] rounded-[3px] border border-input bg-background p-[3px]"
     >
       {options.map((option) => (
         <button
@@ -111,7 +113,7 @@ function Choice<Value extends string | number>({
           aria-pressed={value === option.value}
           disabled={option.disabled}
           title={option.hint}
-          className="h-[26px] flex-1 rounded-[2px] border-0 bg-transparent px-3 text-sm text-fg-muted hover:text-fg disabled:opacity-40 aria-pressed:bg-surface-hover aria-pressed:text-fg"
+          className="h-[26px] flex-1 rounded-[2px] border-0 bg-transparent px-3 text-sm text-muted-foreground hover:text-foreground disabled:opacity-40 aria-pressed:bg-accent aria-pressed:text-foreground aria-pressed:ring-1 aria-pressed:ring-input aria-pressed:ring-inset"
           onClick={() => onChange(option.value)}
         >
           {option.label}
@@ -137,7 +139,7 @@ function CoopCard({
   return (
     <section
       aria-label={label}
-      className="overflow-hidden rounded-[6px] border border-border-strong bg-surface"
+      className="overflow-hidden rounded-[6px] border border-input bg-card"
     >
       <CardPreview map={map} code={code} />
       <div className="grid gap-[18px] px-6 pt-5 pb-6">{children}</div>
@@ -166,18 +168,18 @@ function StatusCard({
   const color = {
     info: "text-info",
     warning: "text-warning",
-    danger: "text-danger",
+    danger: "text-destructive",
   }[tone];
   return (
     <section
       aria-label={title}
-      className="grid gap-3 rounded-[6px] border border-border-strong bg-surface p-6"
+      className="grid gap-3 rounded-[6px] border border-input bg-card p-6"
     >
       <h2 className="m-0 flex items-center gap-2.5 text-xl font-bold">
         <Icon size={18} aria-hidden="true" className={color} />
         {title}
       </h2>
-      <div className="grid gap-3 text-base text-fg-soft">{children}</div>
+      <div className="grid gap-3 text-base text-foreground">{children}</div>
       {actions ? <div className="flex justify-end gap-2">{actions}</div> : null}
     </section>
   );
@@ -187,7 +189,7 @@ function Progress({ label, value }: { label: string; value: number }) {
   const percent = Math.round(value * 100);
   return (
     <div className="grid gap-1.5">
-      <div className="flex justify-between font-mono text-xs text-fg-muted">
+      <div className="flex justify-between font-mono text-xs text-muted-foreground">
         <span>{label}</span>
         <span>{percent}%</span>
       </div>
@@ -197,7 +199,7 @@ function Progress({ label, value }: { label: string; value: number }) {
         aria-valuenow={percent}
         aria-valuemin={0}
         aria-valuemax={100}
-        className="h-1 overflow-hidden rounded-full bg-surface-raised"
+        className="h-1 overflow-hidden rounded-full bg-muted"
       >
         <div className="h-full bg-info" style={{ width: `${percent}%` }} />
       </div>

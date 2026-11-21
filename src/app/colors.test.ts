@@ -81,3 +81,78 @@ describe("color tokens", () => {
     expect(unknown).toEqual([]);
   });
 });
+
+const values = new Map(
+  [...css.matchAll(/--color-([\w-]+):\s*([^;]+);/g)].map((match) => [
+    match[1],
+    match[2].trim(),
+  ]),
+);
+
+function oklchOf(name: string): [number, number, number] {
+  const value = values.get(name) ?? "";
+  const reference = /^var\(--color-([\w-]+)\)$/.exec(value);
+  if (reference) return oklchOf(reference[1]);
+  const parts = /^oklch\(([\d.]+) ([\d.]+) ([\d.]+)\)$/.exec(value);
+  if (!parts) throw new Error(`--color-${name} isn't a plain oklch() color.`);
+  return [Number(parts[1]), Number(parts[2]), Number(parts[3])];
+}
+
+// OKLCH to linear sRGB, as in the CSS Color 4 spec.
+function luminance(name: string) {
+  const [l, c, h] = oklchOf(name);
+  const a = c * Math.cos((h * Math.PI) / 180);
+  const b = c * Math.sin((h * Math.PI) / 180);
+  const lms = [
+    l + 0.3963377774 * a + 0.2158037573 * b,
+    l - 0.1055613458 * a - 0.0638541728 * b,
+    l - 0.0894841775 * a - 1.291485548 * b,
+  ].map((value) => value ** 3);
+  const rgb = [
+    4.0767416621 * lms[0] - 3.3077115913 * lms[1] + 0.2309699292 * lms[2],
+    -1.2684380046 * lms[0] + 2.6097574011 * lms[1] - 0.3413193965 * lms[2],
+    -0.0041960863 * lms[0] - 0.7034186147 * lms[1] + 1.707614701 * lms[2],
+  ].map((value) => Math.min(1, Math.max(0, value)));
+  return 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
+}
+
+function contrast(front: string, back: string) {
+  const [light, dark] = [luminance(front), luminance(back)].sort(
+    (a, b) => b - a,
+  );
+  return (light + 0.05) / (dark + 0.05);
+}
+
+const surfaces = ["background", "card", "muted", "accent"];
+
+describe("color contrast", () => {
+  it.each(
+    ["foreground", "muted-foreground"].flatMap((text) =>
+      surfaces.map((surface) => [text, surface]),
+    ),
+  )("reads %s on %s at 4.5:1", (text, surface) => {
+    expect(contrast(text, surface)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it.each([
+    ["primary", "background"],
+    ["primary", "card"],
+    ["primary", "muted"],
+    ["primary-foreground", "primary"],
+    ["destructive", "card"],
+    ["destructive", "muted"],
+    ["warning", "card"],
+    ["success", "card"],
+    ["info", "card"],
+  ])("reads %s on %s at 4.5:1", (text, surface) => {
+    expect(contrast(text, surface)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it.each(
+    ["input", "ring"].flatMap((edge) =>
+      ["background", "card", "muted"].map((surface) => [edge, surface]),
+    ),
+  )("draws %s edges on %s at 3:1", (edge, surface) => {
+    expect(contrast(edge, surface)).toBeGreaterThanOrEqual(3);
+  });
+});

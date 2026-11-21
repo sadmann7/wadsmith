@@ -24,10 +24,10 @@ const maxNameLength = 64;
 const statusIcons = {
   passed: { icon: CircleCheck, className: "text-success", label: "Passed" },
   warning: { icon: TriangleAlert, className: "text-warning", label: "Warning" },
-  error: { icon: CircleX, className: "text-danger", label: "Error" },
+  error: { icon: CircleX, className: "text-destructive", label: "Error" },
   waiting: {
     icon: CircleDashed,
-    className: "text-fg-muted",
+    className: "text-muted-foreground",
     label: "Not checked",
   },
 };
@@ -86,19 +86,19 @@ function BuildDialog({
       }}
     >
       <DialogBackdrop className="fixed inset-0 z-40 bg-scrim" />
-      <DialogContent className="fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-32px)] w-[560px] max-w-[calc(100vw-32px)] -translate-1/2 flex-col rounded-[4px] border border-border-strong bg-surface outline-none">
+      <DialogContent className="fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-32px)] w-[560px] max-w-[calc(100vw-32px)] -translate-1/2 flex-col rounded-[4px] border border-input bg-card outline-none">
         <header className="flex h-14 shrink-0 items-center justify-between border-b border-border px-5">
           <div className="flex min-w-0 items-baseline gap-2.5">
-            <DialogTitle className="block font-sans text-xl font-semibold tracking-normal text-fg normal-case">
+            <DialogTitle className="block font-sans text-xl font-semibold tracking-normal text-foreground normal-case">
               Build WAD
             </DialogTitle>
-            <DialogDescription className="truncate font-mono text-xs text-fg-muted">
+            <DialogDescription className="truncate font-mono text-xs text-muted-foreground">
               {slot} {name}
             </DialogDescription>
           </div>
           <DialogClose
             aria-label="Close"
-            className="border-0 bg-transparent p-1 text-fg-muted hover:text-fg"
+            className="border-0 bg-transparent p-1 text-muted-foreground hover:text-foreground"
           >
             <X size={16} aria-hidden="true" />
           </DialogClose>
@@ -119,7 +119,7 @@ function BuildDialog({
             </div>
           </div>
           <section aria-label="Build checks" className="grid gap-2">
-            <h3 className="m-0 flex justify-between font-mono text-xs font-normal text-fg-muted">
+            <h3 className="m-0 flex justify-between font-mono text-xs font-normal text-muted-foreground">
               <span>MAP CHECK</span>
               <span>{summary}</span>
             </h3>
@@ -147,7 +147,7 @@ function BuildDialog({
                         <span className="sr-only">{label}: </span>
                         {check.name}
                       </div>
-                      <div className="truncate font-mono text-xs text-fg-muted">
+                      <div className="truncate font-mono text-xs text-muted-foreground">
                         {issue
                           ? `${issueText(issue).title}${more > 0 ? ` · +${more} more` : ""}`
                           : check.waiting
@@ -158,7 +158,7 @@ function BuildDialog({
                     {issue?.target ? (
                       <button
                         type="button"
-                        className="border-0 bg-transparent p-0 text-fg-muted hover:text-fg"
+                        className="border-0 bg-transparent p-0 text-muted-foreground hover:text-foreground"
                         aria-label={`Show: ${check.name}`}
                         onClick={() => onShow(issue)}
                       >
@@ -173,7 +173,9 @@ function BuildDialog({
         </div>
         <footer className="flex items-center justify-between gap-3 border-t border-border px-5 py-3">
           <p
-            className={buildError ? "min-w-0 text-danger" : "muted min-w-0"}
+            className={
+              buildError ? "min-w-0 text-destructive" : "muted min-w-0"
+            }
             role={buildError ? "alert" : undefined}
           >
             {buildError ??

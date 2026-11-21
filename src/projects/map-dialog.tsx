@@ -43,9 +43,9 @@ type MapDetails = {
 };
 
 const dialogClass =
-  "fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-32px)] w-[600px] max-w-[calc(100vw-32px)] -translate-1/2 flex-col rounded-[4px] border border-border-strong bg-surface outline-none";
+  "fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-32px)] w-[600px] max-w-[calc(100vw-32px)] -translate-1/2 flex-col rounded-[4px] border border-input bg-card outline-none";
 const titleClass =
-  "block font-sans text-xl font-bold tracking-normal text-fg normal-case";
+  "block font-sans text-xl font-bold tracking-normal text-foreground normal-case";
 
 function MapDialog({
   maps,
@@ -109,7 +109,7 @@ function MapDialog({
             </DialogTitle>
             <DialogClose
               aria-label="Close"
-              className="border-0 bg-transparent p-1 text-fg-muted hover:text-fg"
+              className="border-0 bg-transparent p-1 text-muted-foreground hover:text-foreground"
             >
               <X size={16} aria-hidden="true" />
             </DialogClose>
@@ -178,7 +178,7 @@ function MapDialog({
                   <div
                     role="group"
                     aria-label="Start from"
-                    className="flex rounded-[3px] border border-border p-0.5"
+                    className="flex rounded-[3px] border border-input p-0.5"
                   >
                     {(
                       [
@@ -190,7 +190,7 @@ function MapDialog({
                         key={value}
                         type="button"
                         aria-pressed={source === value}
-                        className="rounded-[2px] border-0 bg-transparent px-2.5 py-1 text-sm text-fg-muted aria-pressed:bg-surface-raised aria-pressed:text-fg"
+                        className="rounded-[2px] border-0 bg-transparent px-2.5 py-1 text-sm text-muted-foreground aria-pressed:bg-muted aria-pressed:text-foreground aria-pressed:ring-1 aria-pressed:ring-input aria-pressed:ring-inset"
                         onClick={() => {
                           setSource(value);
                           if (value === "featured" && !name.trim()) {
@@ -211,13 +211,13 @@ function MapDialog({
                         key={item.value}
                         type="button"
                         aria-pressed={template === item.value}
-                        className="grid gap-1.5 rounded-[3px] border border-border bg-transparent p-2 text-fg-muted aria-pressed:border-accent aria-pressed:bg-accent/10 aria-pressed:text-fg"
+                        className="grid gap-1.5 rounded-[3px] border border-input bg-transparent p-2 text-muted-foreground aria-pressed:border-primary aria-pressed:bg-primary/10 aria-pressed:text-foreground"
                         onClick={() => setTemplate(item.value)}
                       >
                         <MapOutline
                           map={item.map}
-                          className="h-20 w-full bg-canvas"
-                          solidColor="var(--color-fg-muted)"
+                          className="h-20 w-full bg-background"
+                          solidColor="var(--color-muted-foreground)"
                         />
                         {item.label}
                       </button>
@@ -230,7 +230,7 @@ function MapDialog({
                         key={item.id}
                         type="button"
                         aria-pressed={featured.id === item.id}
-                        className="grid gap-1.5 rounded-[3px] border border-border bg-transparent p-2 text-left text-fg-muted aria-pressed:border-accent aria-pressed:bg-accent/10 aria-pressed:text-fg"
+                        className="grid gap-1.5 rounded-[3px] border border-input bg-transparent p-2 text-left text-muted-foreground aria-pressed:border-primary aria-pressed:bg-primary/10 aria-pressed:text-foreground"
                         onClick={() => {
                           if (!name.trim() || name === featured.title) {
                             setName(item.title);
@@ -241,7 +241,7 @@ function MapDialog({
                       >
                         <MapPlan
                           map={item.map}
-                          className="h-20 w-full bg-canvas"
+                          className="h-20 w-full bg-background"
                         />
                         {item.title}
                       </button>
@@ -249,7 +249,7 @@ function MapDialog({
                   </div>
                 )}
                 {source === "featured" ? (
-                  <p className="m-0 mt-1 text-sm text-fg-muted">
+                  <p className="m-0 mt-1 text-sm text-muted-foreground">
                     You get your own copy in this episode. The featured map
                     stays as it is.
                   </p>
@@ -269,7 +269,7 @@ function MapDialog({
           </div>
           <footer className="flex items-center justify-end gap-2 border-t border-border px-5 py-3.5">
             {error || !slot ? (
-              <p role="alert" className="m-0 mr-auto min-w-0 text-danger">
+              <p role="alert" className="m-0 mr-auto min-w-0 text-destructive">
                 {error ?? "All 32 map slots are in use."}
               </p>
             ) : null}

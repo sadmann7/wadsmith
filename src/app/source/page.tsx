@@ -49,7 +49,7 @@ function engineInfo(): EngineInfo | null {
 
 const engineFiles = "/engine/";
 const linkClass =
-  "text-fg underline decoration-fg-disabled underline-offset-4 hover:decoration-fg";
+  "text-foreground underline decoration-muted-foreground/60 underline-offset-4 hover:decoration-foreground";
 
 function Section({
   title,
@@ -60,7 +60,7 @@ function Section({
 }) {
   return (
     <section className="grid gap-3 border-t border-border pt-6">
-      <h2 className="m-0 font-mono text-xs font-medium tracking-wide text-fg-muted uppercase">
+      <h2 className="m-0 font-mono text-xs font-medium tracking-wide text-muted-foreground uppercase">
         {title}
       </h2>
       {children}
@@ -75,7 +75,7 @@ export default function SourcePage() {
       <main className="grid max-w-[744px] gap-8 px-8 pt-10 pb-12 max-[760px]:px-4">
         <div className="grid gap-3">
           <h1 className="m-0 text-4xl font-bold">Source and licences</h1>
-          <p className="m-0 text-base text-fg-soft">
+          <p className="m-0 text-base text-foreground">
             Wadsmith plays maps in Woof, a Doom engine released under the GNU
             General Public License, version 2. This page has the engine&apos;s
             source, every change Wadsmith makes to it, and the licences of
@@ -92,14 +92,14 @@ export default function SourcePage() {
                 >
                   Download the engine source
                 </a>
-                <span className="text-fg-muted">
+                <span className="text-muted-foreground">
                   {" "}
                   · Woof {engine.woof.version} at the commit Wadsmith builds,
                   its patch and the build scripts
                 </span>
               </p>
               <dl className="m-0 grid grid-cols-[max-content_1fr] gap-x-6 gap-y-1 font-mono text-xs">
-                <dt className="text-fg-muted">Upstream</dt>
+                <dt className="text-muted-foreground">Upstream</dt>
                 <dd className="m-0">
                   <a
                     className={linkClass}
@@ -108,9 +108,9 @@ export default function SourcePage() {
                     fabiangreffrath/woof
                   </a>
                 </dd>
-                <dt className="text-fg-muted">Commit</dt>
+                <dt className="text-muted-foreground">Commit</dt>
                 <dd className="m-0 break-all">{engine.woof.commit}</dd>
-                <dt className="text-fg-muted">Licence</dt>
+                <dt className="text-muted-foreground">Licence</dt>
                 <dd className="m-0">
                   <a
                     className={linkClass}

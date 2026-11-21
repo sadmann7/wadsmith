@@ -43,7 +43,7 @@ const starts: { value: EpisodeStart; label: string; detail: string }[] = [
 function StartPreview({ start }: { start: EpisodeStart }) {
   if (start === "empty") {
     return (
-      <div className="grid h-[92px] place-items-center bg-canvas text-fg-muted">
+      <div className="grid h-[92px] place-items-center bg-background text-muted-foreground">
         <Plus size={18} aria-hidden="true" />
       </div>
     );
@@ -52,13 +52,13 @@ function StartPreview({ start }: { start: EpisodeStart }) {
     return (
       <MapOutline
         map={blankMap}
-        className="h-[92px] w-full bg-canvas p-5"
-        solidColor="var(--color-fg-muted)"
+        className="h-[92px] w-full bg-background p-5"
+        solidColor="var(--color-muted-foreground)"
       />
     );
   }
   return (
-    <div className="grid h-[92px] grid-cols-3 gap-1 bg-canvas p-2">
+    <div className="grid h-[92px] grid-cols-3 gap-1 bg-background p-2">
       {featuredMaps.map((item) => (
         <MapPlan key={item.id} map={item.map} className="size-full" />
       ))}
@@ -95,7 +95,7 @@ function NewEpisodeDialog({
             <DialogTitle className={titleClass}>New episode</DialogTitle>
             <DialogClose
               aria-label="Close"
-              className="border-0 bg-transparent p-1 text-fg-muted hover:text-fg"
+              className="border-0 bg-transparent p-1 text-muted-foreground hover:text-foreground"
             >
               <X size={16} aria-hidden="true" />
             </DialogClose>
@@ -118,7 +118,7 @@ function NewEpisodeDialog({
                     key={item.value}
                     type="button"
                     aria-pressed={start === item.value}
-                    className="grid gap-2 rounded-[3px] border border-border-strong bg-transparent p-2 text-left text-fg-soft aria-pressed:border-accent aria-pressed:bg-accent/10 aria-pressed:text-fg"
+                    className="grid gap-2 rounded-[3px] border border-input bg-transparent p-2 text-left text-foreground aria-pressed:border-primary aria-pressed:bg-primary/10 aria-pressed:text-foreground"
                     onClick={() => setStart(item.value)}
                   >
                     <StartPreview start={item.value} />
@@ -126,7 +126,7 @@ function NewEpisodeDialog({
                       <span className="text-sm font-semibold">
                         {item.label}
                       </span>
-                      <span className="text-xs text-fg-muted">
+                      <span className="text-xs text-muted-foreground">
                         {item.detail}
                       </span>
                     </span>
@@ -136,7 +136,7 @@ function NewEpisodeDialog({
             </fieldset>
           </div>
           <footer className="flex items-center justify-end gap-2 border-t border-border px-5 py-3.5">
-            <p className="m-0 mr-auto text-sm text-fg-muted">
+            <p className="m-0 mr-auto text-sm text-muted-foreground">
               {durable
                 ? "Saved in this browser."
                 : "Kept until this tab closes."}
@@ -168,7 +168,7 @@ type SidebarProps = {
 };
 
 const rowClass =
-  "relative flex items-center gap-2.5 rounded-[3px] px-2 py-1.5 text-sm text-fg-soft no-underline hover:bg-surface-raised hover:text-fg aria-[current=page]:bg-surface-raised aria-[current=page]:font-semibold aria-[current=page]:text-fg";
+  "relative flex items-center gap-2.5 rounded-[3px] px-2 py-1.5 text-sm text-foreground no-underline hover:bg-muted hover:text-foreground aria-[current=page]:bg-muted aria-[current=page]:font-semibold aria-[current=page]:text-foreground";
 
 function SidebarLink({
   route,
@@ -212,14 +212,14 @@ function AppSidebar({
   const currentEpisode =
     current?.kind === "episode" || current?.kind === "map" ? current.id : null;
   return (
-    <div className="flex h-full min-h-0 flex-col bg-surface">
+    <div className="flex h-full min-h-0 flex-col bg-card">
       <div className="flex h-[48px] shrink-0 items-center px-[18px]">
         <SidebarLink
           route={{ kind: "home" }}
           current={false}
           onNavigate={onNavigate}
         >
-          <span className="text-[17px] font-bold tracking-[0.12em] text-accent">
+          <span className="text-[17px] font-bold tracking-[0.12em] text-primary">
             WADSMITH
           </span>
         </SidebarLink>
@@ -237,12 +237,12 @@ function AppSidebar({
           Featured maps
         </SidebarLink>
         <div className="grid gap-0.5">
-          <div className="mb-1 flex h-6 items-center justify-between pr-1 pl-2 font-mono text-xs tracking-[0.08em] text-fg-muted">
+          <div className="mb-1 flex h-6 items-center justify-between pr-1 pl-2 font-mono text-xs tracking-[0.08em] text-muted-foreground">
             EPISODES
             {onCreateProject ? (
               <button
                 type="button"
-                className="grid size-6 place-items-center rounded-[3px] border-0 bg-transparent p-0 text-fg-muted hover:bg-surface-raised hover:text-fg"
+                className="grid size-6 place-items-center rounded-[3px] border-0 bg-transparent p-0 text-muted-foreground hover:bg-muted hover:text-foreground"
                 aria-label="New episode"
                 title="New episode"
                 onClick={() => setCreating(true)}
@@ -263,13 +263,13 @@ function AppSidebar({
                 {active ? (
                   <span
                     aria-hidden="true"
-                    className="absolute top-1.5 bottom-1.5 left-0 w-[3px] rounded-full bg-accent"
+                    className="absolute top-1.5 bottom-1.5 left-0 w-[3px] rounded-full bg-primary"
                   />
                 ) : null}
                 <span className="min-w-0 flex-1 truncate pl-1.5">
                   {item.name}
                 </span>
-                <span className="font-mono text-xs font-normal text-fg-muted">
+                <span className="font-mono text-xs font-normal text-muted-foreground">
                   {counts[item.id] ?? 0}
                   <span className="sr-only"> maps</span>
                 </span>
@@ -279,20 +279,20 @@ function AppSidebar({
         </div>
       </nav>
       <div className="mx-2.5 grid shrink-0 gap-1 border-t border-border px-2 pt-3 pb-4">
-        <div className="flex items-center gap-2 text-sm text-fg-soft">
+        <div className="flex items-center gap-2 text-sm text-foreground">
           <span
             aria-hidden="true"
             className={`size-1.5 rounded-full ${durable ? "bg-success" : "bg-warning"}`}
           />
           {durable ? "Saved in this browser" : "Kept until this tab closes"}
         </div>
-        <p className="m-0 text-sm text-fg-muted">
+        <p className="m-0 text-sm text-muted-foreground">
           Back up an episode to keep it safe or move it to another computer.
         </p>
         <Link
           href="/source"
           aria-current={current === null ? "page" : undefined}
-          className="mt-1 justify-self-start text-sm text-fg-muted underline underline-offset-4 hover:text-fg aria-[current=page]:text-fg"
+          className="mt-1 justify-self-start text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground aria-[current=page]:text-foreground"
         >
           Source and licences
         </Link>
@@ -332,7 +332,7 @@ function SidebarDrawer({
         <PanelLeft size={16} aria-hidden="true" />
       </DrawerTrigger>
       <DrawerBackdrop className="fixed inset-0 size-full bg-scrim" />
-      <DrawerContent className="h-full w-[248px] border-r border-border-strong text-fg">
+      <DrawerContent className="h-full w-[248px] border-r border-input text-foreground">
         <DrawerTitle className="sr-only">Wadsmith</DrawerTitle>
         <AppSidebar {...props} onNavigate={navigate} />
       </DrawerContent>
@@ -354,7 +354,7 @@ function AppShell({
   // A page without crumbs or actions keeps the bar only for the phone drawer.
   const bare = !crumbs && !actions;
   return (
-    <div className="grid h-dvh grid-cols-[248px_minmax(0,1fr)] bg-canvas text-fg max-[760px]:grid-cols-1">
+    <div className="grid h-dvh grid-cols-[248px_minmax(0,1fr)] bg-background text-foreground max-[760px]:grid-cols-1">
       <aside className="min-h-0 border-r border-border max-[760px]:hidden">
         <AppSidebar {...sidebar} />
       </aside>
@@ -366,7 +366,7 @@ function AppShell({
           {crumbs ? (
             <nav
               aria-label="Breadcrumb"
-              className="flex min-w-0 flex-1 items-center gap-2 text-sm text-fg-muted"
+              className="flex min-w-0 flex-1 items-center gap-2 text-sm text-muted-foreground"
             >
               {crumbs}
             </nav>
@@ -377,7 +377,7 @@ function AppShell({
                 current={false}
                 onNavigate={sidebar.onNavigate}
               >
-                <span className="text-base font-bold tracking-[0.12em] text-accent">
+                <span className="text-base font-bold tracking-[0.12em] text-primary">
                   WADSMITH
                 </span>
               </SidebarLink>
@@ -394,7 +394,7 @@ function AppShell({
 }
 
 function Crumb({ children }: { children: ReactNode }) {
-  return <span className="truncate text-fg">{children}</span>;
+  return <span className="truncate text-foreground">{children}</span>;
 }
 
 export { AppShell, AppSidebar, Crumb, SidebarDrawer, type SidebarProps };

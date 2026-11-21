@@ -16,7 +16,7 @@ import { mapName, mapSlots, mapStatus, type ProjectMap } from "./project-data";
 const statusIcons = {
   ready: { icon: CircleCheck, className: "text-success" },
   warning: { icon: TriangleAlert, className: "text-warning" },
-  error: { icon: CircleX, className: "text-danger" },
+  error: { icon: CircleX, className: "text-destructive" },
 };
 
 function EpisodeBuildDialog({
@@ -52,19 +52,19 @@ function EpisodeBuildDialog({
       }}
     >
       <DialogBackdrop className="fixed inset-0 z-40 bg-scrim" />
-      <DialogContent className="fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-32px)] w-[560px] max-w-[calc(100vw-32px)] -translate-1/2 flex-col rounded-[4px] border border-border-strong bg-surface outline-none">
+      <DialogContent className="fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-32px)] w-[560px] max-w-[calc(100vw-32px)] -translate-1/2 flex-col rounded-[4px] border border-input bg-card outline-none">
         <header className="flex h-14 shrink-0 items-center justify-between border-b border-border px-5">
           <div className="flex min-w-0 items-baseline gap-2.5">
-            <DialogTitle className="block font-sans text-xl font-semibold tracking-normal text-fg normal-case">
+            <DialogTitle className="block font-sans text-xl font-semibold tracking-normal text-foreground normal-case">
               Build WAD
             </DialogTitle>
-            <DialogDescription className="truncate font-mono text-xs text-fg-muted">
+            <DialogDescription className="truncate font-mono text-xs text-muted-foreground">
               {name} · {maps.length} {maps.length === 1 ? "map" : "maps"}
             </DialogDescription>
           </div>
           <DialogClose
             aria-label="Close"
-            className="border-0 bg-transparent p-1 text-fg-muted hover:text-fg"
+            className="border-0 bg-transparent p-1 text-muted-foreground hover:text-foreground"
           >
             <X size={16} aria-hidden="true" />
           </DialogClose>
@@ -85,7 +85,7 @@ function EpisodeBuildDialog({
             </div>
           </div>
           <section aria-label="Maps in the WAD" className="grid gap-2">
-            <h3 className="m-0 flex justify-between font-mono text-xs font-normal text-fg-muted">
+            <h3 className="m-0 flex justify-between font-mono text-xs font-normal text-muted-foreground">
               <span>MAPS</span>
               <span>
                 {blocked.length > 0
@@ -104,19 +104,19 @@ function EpisodeBuildDialog({
                     className="grid grid-cols-[14px_48px_minmax(0,1fr)_auto] items-center gap-2"
                   >
                     <Icon size={14} className={className} aria-hidden="true" />
-                    <span className="font-mono text-xs text-fg-muted">
+                    <span className="font-mono text-xs text-muted-foreground">
                       {entry.slot}
                     </span>
                     <span className="min-w-0">
                       <span className="block truncate">
                         {mapName(entry)}
-                        <span className="ml-2 font-mono text-xs text-fg-muted">
+                        <span className="ml-2 font-mono text-xs text-muted-foreground">
                           {status.label}
                           {entry.broken ? " · delete it to build" : ""}
                         </span>
                       </span>
                       {"detail" in status ? (
-                        <span className="block text-xs text-fg-muted">
+                        <span className="block text-xs text-muted-foreground">
                           {status.detail}
                         </span>
                       ) : null}
@@ -124,7 +124,7 @@ function EpisodeBuildDialog({
                     {status.kind === "error" && !entry.broken ? (
                       <button
                         type="button"
-                        className="border-0 bg-transparent p-0 text-fg-muted hover:text-fg"
+                        className="border-0 bg-transparent p-0 text-muted-foreground hover:text-foreground"
                         aria-label={`Open ${entry.slot} to fix it`}
                         onClick={() => onOpenMap(entry)}
                       >
@@ -136,7 +136,7 @@ function EpisodeBuildDialog({
               })}
             </ul>
             {gaps.length > 0 ? (
-              <p className="m-0 text-sm text-fg-muted">
+              <p className="m-0 text-sm text-muted-foreground">
                 {gaps.join(", ")} {gaps.length === 1 ? "has" : "have"} no map,
                 so the game uses Freedoom&apos;s own{" "}
                 {gaps.length === 1 ? "level" : "levels"} there.
@@ -146,7 +146,9 @@ function EpisodeBuildDialog({
         </div>
         <footer className="flex items-center justify-between gap-3 border-t border-border px-5 py-3">
           <p
-            className={buildError ? "min-w-0 text-danger" : "muted min-w-0"}
+            className={
+              buildError ? "min-w-0 text-destructive" : "muted min-w-0"
+            }
             role={buildError ? "alert" : undefined}
           >
             {buildError ??
