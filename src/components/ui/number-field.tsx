@@ -1,11 +1,5 @@
-import {
-  NumberInput,
-  NumberInputControl,
-  NumberInputDecrement,
-  NumberInputGroup,
-  NumberInputIncrement,
-} from "@ui-sdk/react/number-input";
-import type { ComponentProps } from "react";
+import * as NumberInputPrimitive from "@ui-sdk/react/number-input";
+import * as React from "react";
 
 import { cn } from "../../lib/cn";
 
@@ -16,36 +10,39 @@ function NumberField({
   label,
   className,
   ...props
-}: Omit<ComponentProps<typeof NumberInput>, "className" | "children"> & {
+}: Omit<
+  React.ComponentProps<typeof NumberInputPrimitive.NumberInput>,
+  "className" | "children"
+> & {
   label: string;
   className?: string;
 }) {
   return (
-    <NumberInput {...props}>
-      <NumberInputGroup
+    <NumberInputPrimitive.NumberInput {...props}>
+      <NumberInputPrimitive.NumberInputGroup
         className={cn(
           "grid min-h-[30px] w-full grid-cols-[26px_minmax(0,1fr)_26px] overflow-hidden rounded-[3px] border border-input has-focus-visible:outline-2 has-focus-visible:outline-offset-1 has-focus-visible:outline-ring [&_:focus-visible]:outline-none",
           className,
         )}
       >
-        <NumberInputDecrement
+        <NumberInputPrimitive.NumberInputDecrement
           aria-label={`Lower ${label}`}
           className={stepClass}
         >
           −
-        </NumberInputDecrement>
-        <NumberInputControl
+        </NumberInputPrimitive.NumberInputDecrement>
+        <NumberInputPrimitive.NumberInputControl
           aria-label={label}
           className="w-full min-w-0 border-0 bg-transparent text-center tabular-nums"
         />
-        <NumberInputIncrement
+        <NumberInputPrimitive.NumberInputIncrement
           aria-label={`Raise ${label}`}
           className={stepClass}
         >
           +
-        </NumberInputIncrement>
-      </NumberInputGroup>
-    </NumberInput>
+        </NumberInputPrimitive.NumberInputIncrement>
+      </NumberInputPrimitive.NumberInputGroup>
+    </NumberInputPrimitive.NumberInput>
   );
 }
 

@@ -1,12 +1,5 @@
-import {
-  AlertDialog,
-  AlertDialogBackdrop as AlertDialogBackdropPrimitive,
-  AlertDialogClose,
-  AlertDialogContent as AlertDialogContentPrimitive,
-  AlertDialogDescription as AlertDialogDescriptionPrimitive,
-  AlertDialogTitle as AlertDialogTitlePrimitive,
-} from "@ui-sdk/react/alert-dialog";
-import type { ComponentProps } from "react";
+import * as AlertDialogPrimitive from "@ui-sdk/react/alert-dialog";
+import * as React from "react";
 
 import { cn } from "../../lib/cn";
 import { backdropClass, contentClass, titleClass } from "./dialog";
@@ -16,9 +9,11 @@ type WithClass<P> = Omit<P, "className"> & { className?: string };
 function AlertDialogBackdrop({
   className,
   ...props
-}: WithClass<ComponentProps<typeof AlertDialogBackdropPrimitive>>) {
+}: WithClass<
+  React.ComponentProps<typeof AlertDialogPrimitive.AlertDialogBackdrop>
+>) {
   return (
-    <AlertDialogBackdropPrimitive
+    <AlertDialogPrimitive.AlertDialogBackdrop
       className={cn(backdropClass, className)}
       {...props}
     />
@@ -28,9 +23,11 @@ function AlertDialogBackdrop({
 function AlertDialogContent({
   className,
   ...props
-}: WithClass<ComponentProps<typeof AlertDialogContentPrimitive>>) {
+}: WithClass<
+  React.ComponentProps<typeof AlertDialogPrimitive.AlertDialogContent>
+>) {
   return (
-    <AlertDialogContentPrimitive
+    <AlertDialogPrimitive.AlertDialogContent
       className={cn(contentClass, "gap-3 p-5", className)}
       {...props}
     />
@@ -40,9 +37,11 @@ function AlertDialogContent({
 function AlertDialogTitle({
   className,
   ...props
-}: WithClass<ComponentProps<typeof AlertDialogTitlePrimitive>>) {
+}: WithClass<
+  React.ComponentProps<typeof AlertDialogPrimitive.AlertDialogTitle>
+>) {
   return (
-    <AlertDialogTitlePrimitive
+    <AlertDialogPrimitive.AlertDialogTitle
       className={cn(titleClass, className ?? "text-xl font-semibold")}
       {...props}
     />
@@ -52,9 +51,11 @@ function AlertDialogTitle({
 function AlertDialogDescription({
   className,
   ...props
-}: WithClass<ComponentProps<typeof AlertDialogDescriptionPrimitive>>) {
+}: WithClass<
+  React.ComponentProps<typeof AlertDialogPrimitive.AlertDialogDescription>
+>) {
   return (
-    <AlertDialogDescriptionPrimitive
+    <AlertDialogPrimitive.AlertDialogDescription
       className={cn("m-0 text-muted-foreground", className)}
       {...props}
     />
@@ -62,10 +63,10 @@ function AlertDialogDescription({
 }
 
 export {
-  AlertDialog,
   AlertDialogBackdrop,
-  AlertDialogClose,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogTitle,
 };
+
+export { AlertDialog, AlertDialogClose } from "@ui-sdk/react/alert-dialog";
