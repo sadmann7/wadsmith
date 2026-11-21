@@ -44,7 +44,7 @@ const game = await startDoom({
   createDoom,
   iwad: readFileSync(resolve(setup.engineDirectory, "freedoom2.wad")),
   base: readFileSync(resolve(setup.engineDirectory, "woof.pk3")),
-  map: setup.map,
+  wads: [setup.map],
   options: { print: () => {}, printErr: () => {} },
   network: {
     role: setup.role,

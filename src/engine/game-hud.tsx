@@ -568,7 +568,7 @@ function GameHud({
   onSaveNote,
   onEditSpot,
 }: {
-  map: GameMap;
+  map: GameMap | null;
   title: string;
   slot: string;
   par: number | null;
@@ -612,7 +612,7 @@ function GameHud({
         aria-label="Run"
         className="pointer-events-auto absolute top-0 right-5 w-[260px] overflow-hidden rounded-b-[3px] border border-t-0 border-border bg-surface @max-xl:w-44"
       >
-        <Minimap map={map} status={status} others={others} />
+        {map ? <Minimap map={map} status={status} others={others} /> : null}
         <dl className="m-0 grid gap-1.5 p-3">
           {deathmatch ? (
             <Stat

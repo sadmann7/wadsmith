@@ -27,6 +27,7 @@ import {
   type CreateDoom,
   type DoomGame,
   type GameEvents,
+  type GameFiles,
   type Resolution,
 } from "./runtime";
 
@@ -42,7 +43,7 @@ afterEach(() => {
 const engineWarnings: string[] = [];
 
 async function launch(
-  map: GameMap | Uint8Array,
+  map: GameMap | Uint8Array | GameFiles,
   sampleRate: number | null = null,
   events?: GameEvents,
   resolution?: Resolution,
@@ -55,7 +56,9 @@ async function launch(
     createDoom,
     iwad: readFileSync(resolve(engineDirectory, "freedoom2.wad")),
     base: readFileSync(resolve(engineDirectory, "woof.pk3")),
-    map: map instanceof Uint8Array ? map : compileMap(map),
+    ...("wads" in map
+      ? map
+      : { wads: [map instanceof Uint8Array ? map : compileMap(map)] }),
     options: { print: () => {}, printErr: (line) => engineWarnings.push(line) },
     events,
     sampleRate,
@@ -782,5 +785,23 @@ describe.skipIf(!ready)("an episode in the engine", () => {
     });
     game.key(false, doomKeys.use);
     expect(game.status()).toMatchObject({ inLevel: true, map: 2 });
+  }, 30_000);
+});
+
+describe.skipIf(!ready)("a loaded WAD in the engine", () => {
+  it("loads several WADs and a patch at the level it asks for", async () => {
+    const game = await launch({
+      wads: [compileMap(starterMap), compileMap(starterMap, "MAP02")],
+      dehacked: [
+        new TextEncoder().encode(
+          "Patch File for DeHackEd v3.0\nDoom version = 21\nPatch format = 6\n",
+        ),
+      ],
+      complevel: "boom",
+      warp: 2,
+    });
+    await waitForPlay(game);
+    expect(game.status().map).toBe(2);
+    expect(game.classicMode()).toEqual({ strict: true, demoVersion: 202 });
   }, 30_000);
 });

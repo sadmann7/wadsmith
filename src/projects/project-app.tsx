@@ -19,6 +19,7 @@ import { wadFileName } from "../editor/build-dialog";
 import { App } from "../editor/editor-app";
 import { PlayTogether, type HostedGame } from "../engine/play-together";
 import { GameView, type Level } from "../engine/play-panel";
+import type { GameFiles, Skill } from "../engine/runtime";
 import { checkMap } from "../map/checks";
 import { featuredMaps, type FeaturedMap } from "../map/featured";
 import {
@@ -30,6 +31,13 @@ import {
 import type { GameMap } from "../map/types";
 import { validateMap } from "../map/validate";
 import { compileEpisode, compileMap } from "../wad/compile";
+import {
+  WadFileError,
+  inspectWads,
+  type GameFile,
+  type WadSummary,
+} from "../wad/inspect";
+import { isZip, unzip } from "../wad/zip";
 import {
   dialogClass,
   MapDialog,
@@ -62,6 +70,7 @@ import { SidebarDrawer, type SidebarProps } from "./app-sidebar";
 import { EpisodeBuildDialog } from "./episode-build-dialog";
 import { FeaturedMaps } from "./featured-maps";
 import { ProjectHome } from "./project-home";
+import { WadPlayDialog } from "./wad-play-dialog";
 import { parseRoute, pathOf, type Route } from "./routes";
 import { createMemoryStore, openProjectStore } from "./project-store";
 
@@ -194,9 +203,19 @@ function ProjectApp() {
     entry: FeaturedMap;
     hosted: HostedGame | null;
   } | null>(null);
+  const [wadPick, setWadPick] = useState<{
+    title: string;
+    summary: WadSummary;
+  } | null>(null);
+  const [wadPlay, setWadPlay] = useState<{
+    title: string;
+    files: GameFiles;
+    skill: Skill;
+  } | null>(null);
   const synced = useRef<{ key: string; play: boolean } | null>(null);
   const playPushed = useRef(false);
   const routeRun = useRef(0);
+  const wadRun = useRef(0);
   const settling = useRef(true);
   const settleCount = useRef(0);
   const historySettle = useRef(0);
@@ -458,6 +477,9 @@ function ProjectApp() {
         return;
       }
       setEpisodePlay(null);
+      wadRun.current += 1;
+      setWadPick(null);
+      setWadPlay(null);
       endPlay();
       await whenSaved(async () => {
         if (route.kind === "map") {
@@ -702,6 +724,35 @@ function ProjectApp() {
     }
   };
 
+  const openWads = async (picked: File[]) => {
+    const run = ++wadRun.current;
+    try {
+      const files = await Promise.all(
+        picked.map(async (file): Promise<GameFile[]> => {
+          const data = new Uint8Array(await file.arrayBuffer());
+          return isZip(data)
+            ? unzip({ name: file.name, data })
+            : [{ name: file.name, data }];
+        }),
+      );
+      if (run !== wadRun.current) return;
+      setMessage(null);
+      setWadPick({
+        title: (
+          picked.find((file) => !/\.(deh|bex)$/i.test(file.name)) ?? picked[0]
+        ).name.replace(/\.[^.]+$/, ""),
+        summary: inspectWads(files.flat()),
+      });
+    } catch (error) {
+      if (run !== wadRun.current) return;
+      setMessage(
+        error instanceof WadFileError
+          ? `Couldn't play that WAD. ${error.message}`
+          : "Couldn't open those files.",
+      );
+    }
+  };
+
   const importMap = async (file: File) => {
     try {
       if (file.size > maxFileBytes) {
@@ -925,6 +976,21 @@ function ProjectApp() {
     );
   }
 
+  if (wadPlay) {
+    return (
+      <GameView
+        map={null}
+        files={wadPlay.files}
+        title={wadPlay.title}
+        slot={`MAP${String(wadPlay.files.warp).padStart(2, "0")}`}
+        par={null}
+        skill={wadPlay.skill}
+        exit="maps"
+        onExit={() => setWadPlay(null)}
+      />
+    );
+  }
+
   if (playing) {
     const { entry, hosted } = playing;
     return (
@@ -952,9 +1018,21 @@ function ProjectApp() {
           }}
           onPlayTogether={setLobby}
           onOpenCopy={openCopy}
+          onPlayWad={(files) => void openWads(files)}
           selectedId={featuredId}
           onSelect={setFeaturedId}
         />
+        {wadPick ? (
+          <WadPlayDialog
+            title={wadPick.title}
+            summary={wadPick.summary}
+            onPlay={(files, skill) => {
+              setWadPlay({ title: wadPick.title, files, skill });
+              setWadPick(null);
+            }}
+            onClose={() => setWadPick(null)}
+          />
+        ) : null}
         {lobby ? (
           <PlayTogether
             map={lobby.map}
