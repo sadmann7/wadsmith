@@ -6,7 +6,7 @@ import {
 } from "@ui-sdk/react/number-input";
 import { Toggle, ToggleGroup } from "@ui-sdk/react/toggle";
 import { Check, Search, TriangleAlert } from "lucide-react";
-import { useRef, useState, type ReactNode } from "react";
+import * as React from "react";
 
 import {
   ceilingTextures,
@@ -125,7 +125,7 @@ function InspectorSection({
 }: {
   title: string;
   detail?: string;
-  children: ReactNode;
+  children: React.ReactNode;
 }) {
   return (
     <details className="inspector-section" open>
@@ -193,8 +193,8 @@ function TextureField({
   browse?: { kind: TextureKind; use: TextureUse; context: string };
   onChange: (value: string) => void;
 }) {
-  const [browsing, setBrowsing] = useState(false);
-  const browseButton = useRef<HTMLButtonElement>(null);
+  const [browsing, setBrowsing] = React.useState(false);
+  const browseButton = React.useRef<HTMLButtonElement>(null);
   const items = options.includes(value) ? options : [value, ...options];
   const swatch = (
     <TextureSwatch
@@ -950,8 +950,8 @@ function PlaceThings({
   kind: ThingKind;
   onPick: (kind: ThingKind) => void;
 }) {
-  const [tab, setTab] = useState(() => tabOf(kind));
-  const [query, setQuery] = useState("");
+  const [tab, setTab] = React.useState(() => tabOf(kind));
+  const [query, setQuery] = React.useState("");
   const search = query.trim().toLowerCase();
   const shown = thingKinds.filter((item) =>
     search

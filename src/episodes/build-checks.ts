@@ -1,4 +1,4 @@
-import { useEffect, useSyncExternalStore } from "react";
+import * as React from "react";
 
 import type { GameMap } from "../map/types";
 import type { Lump } from "../wad/compile";
@@ -117,13 +117,13 @@ function subscribe(listener: () => void) {
 // Rerenders when a check of one of these maps finishes, so knownBuildProblem
 // catches up.
 function useBuildChecks(entries: EpisodeMap[]) {
-  useSyncExternalStore(
+  React.useSyncExternalStore(
     subscribe,
     () =>
       entries.filter((entry) => knownBuildProblem(entry) !== undefined).length,
     () => 0,
   );
-  useEffect(() => {
+  React.useEffect(() => {
     for (const entry of entries) if (!entry.broken) void checkBuild(entry);
   });
 }

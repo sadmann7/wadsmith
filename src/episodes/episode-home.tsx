@@ -14,7 +14,7 @@ import {
   Route,
   Upload,
 } from "lucide-react";
-import { useRef, useState, type FormEvent } from "react";
+import * as React from "react";
 
 import { MapPlan } from "../components/map-plan";
 import { knownBuildProblem, useBuildChecks } from "./build-checks";
@@ -89,8 +89,8 @@ function NameDialog({
   onSubmit: (name: string) => void;
   onClose: () => void;
 }) {
-  const [name, setName] = useState(initial);
-  const submit = (event: FormEvent) => {
+  const [name, setName] = React.useState(initial);
+  const submit = (event: React.FormEvent) => {
     event.preventDefault();
     if (name.trim()) onSubmit(name.trim());
   };
@@ -362,14 +362,16 @@ function EpisodeHome({
   onDeleteMap: (entry: EpisodeMap) => void;
   onReorderMaps: (order: string[]) => void;
 }) {
-  const [creatingMap, setCreatingMap] = useState(false);
-  const [editing, setEditing] = useState<EpisodeMap | null>(null);
-  const [renaming, setRenaming] = useState(false);
-  const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
-  const [dragged, setDragged] = useState<string | null>(null);
-  const [dropIndex, setDropIndex] = useState<number | null>(null);
-  const accepted = useRef(false);
-  const episodeFile = useRef<HTMLInputElement>(null);
+  const [creatingMap, setCreatingMap] = React.useState(false);
+  const [editing, setEditing] = React.useState<EpisodeMap | null>(null);
+  const [renaming, setRenaming] = React.useState(false);
+  const [confirmation, setConfirmation] = React.useState<Confirmation | null>(
+    null,
+  );
+  const [dragged, setDragged] = React.useState<string | null>(null);
+  const [dropIndex, setDropIndex] = React.useState<number | null>(null);
+  const accepted = React.useRef(false);
+  const episodeFile = React.useRef<HTMLInputElement>(null);
   const { durable } = sidebar;
   const sorted = bySlot(maps);
   const nextSlot = freeSlots(maps)[0];

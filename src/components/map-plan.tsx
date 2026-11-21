@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import * as React from "react";
 
 import { sectorAt, wallOwners } from "../map/geometry";
 import { endsLevel, movesSector } from "../map/lines";
@@ -67,7 +67,7 @@ function MapPlan({
   className?: string;
   label?: string;
 }) {
-  const { viewBox, rooms, walls } = useMemo(() => {
+  const { viewBox, rooms, walls } = React.useMemo(() => {
     const points = Object.values(map.vertices);
     const xs = points.map((point) => point.x);
     const ys = points.map((point) => point.y);

@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useEffectEvent,
-  useRef,
-  useState,
-} from "react";
+import * as React from "react";
 
 import { wadFileName } from "../editor/build-dialog";
 import { App } from "../editor/editor-app";
@@ -202,74 +196,80 @@ async function readGameFiles(picked: File[]) {
 }
 
 function EpisodeApp() {
-  const [store, setStore] = useState<EpisodeStore | null>(null);
-  const [episodes, setEpisodes] = useState<Episode[]>([]);
-  const [counts, setCounts] = useState<Record<string, number>>({});
-  const [episodeId, setEpisodeId] = useState("");
-  const [maps, setMaps] = useState<EpisodeMap[]>([]);
-  const [session, setSession] = useState<Session | null>(null);
+  const [store, setStore] = React.useState<EpisodeStore | null>(null);
+  const [episodes, setEpisodes] = React.useState<Episode[]>([]);
+  const [counts, setCounts] = React.useState<Record<string, number>>({});
+  const [episodeId, setEpisodeId] = React.useState("");
+  const [maps, setMaps] = React.useState<EpisodeMap[]>([]);
+  const [session, setSession] = React.useState<Session | null>(null);
   // Only the editor's map switcher shows them; the home page's rows check their own.
   useBuildChecks(session ? maps : []);
-  const [details, setDetails] = useState<SessionDetails | null>(null);
-  const [saveStatus, setSaveStatus] = useState<SaveStatus>("saved");
-  const [message, setMessage] = useState<string | null>(null);
-  const [mapDialog, setMapDialog] = useState<"new" | "settings" | null>(null);
-  const [buildingEpisode, setBuildingEpisode] = useState<string | null>(null);
-  const [blockedLeave, setBlockedLeave] = useState<(() => void) | null>(null);
-  const [view, setView] = useState(viewOfPath);
-  const [homeId, setHomeId] = useState<string | null>(null);
-  const [featuredId, setFeaturedId] = useState(() => {
+  const [details, setDetails] = React.useState<SessionDetails | null>(null);
+  const [saveStatus, setSaveStatus] = React.useState<SaveStatus>("saved");
+  const [message, setMessage] = React.useState<string | null>(null);
+  const [mapDialog, setMapDialog] = React.useState<"new" | "settings" | null>(
+    null,
+  );
+  const [buildingEpisode, setBuildingEpisode] = React.useState<string | null>(
+    null,
+  );
+  const [blockedLeave, setBlockedLeave] = React.useState<(() => void) | null>(
+    null,
+  );
+  const [view, setView] = React.useState(viewOfPath);
+  const [homeId, setHomeId] = React.useState<string | null>(null);
+  const [featuredId, setFeaturedId] = React.useState(() => {
     const route = parseRoute(location.pathname);
     return route.kind === "featured" ? knownFeatured(route.map) : null;
   });
-  const [mapPlaying, setMapPlaying] = useState(false);
-  const [coopPlaying, setCoopPlaying] = useState(false);
-  const [lobby, setLobby] = useState<FeaturedMap | null>(null);
-  const [episodePlay, setEpisodePlay] = useState<Level[] | null>(null);
-  const [playing, setPlaying] = useState<{
+  const [mapPlaying, setMapPlaying] = React.useState(false);
+  const [coopPlaying, setCoopPlaying] = React.useState(false);
+  const [lobby, setLobby] = React.useState<FeaturedMap | null>(null);
+  const [episodePlay, setEpisodePlay] = React.useState<Level[] | null>(null);
+  const [playing, setPlaying] = React.useState<{
     entry: FeaturedMap;
     hosted: HostedGame | null;
   } | null>(null);
-  const [wadImport, setWadImport] = useState<{
+  const [wadImport, setWadImport] = React.useState<{
     episodeId: string;
     fileName: string;
     maps: ImportedMap[];
     slots: string[];
   } | null>(null);
-  const [wadPick, setWadPick] = useState<{
+  const [wadPick, setWadPick] = React.useState<{
     title: string;
     summary: WadSummary;
   } | null>(null);
-  const [wadPlay, setWadPlay] = useState<{
+  const [wadPlay, setWadPlay] = React.useState<{
     title: string;
     files: GameFiles;
     skill: Skill;
   } | null>(null);
-  const synced = useRef<{ key: string; play: boolean } | null>(null);
-  const playPushed = useRef(false);
-  const routeRun = useRef(0);
-  const wadRun = useRef(0);
-  const importRun = useRef(0);
-  const settling = useRef(true);
-  const settleCount = useRef(0);
-  const historySettle = useRef(0);
-  const [settles, setSettles] = useState(0);
-  const channel = useRef<BroadcastChannel | null>(null);
-  const sessionRef = useRef<Session | null>(null);
-  const episodeIdRef = useRef("");
-  const refreshRun = useRef(0);
-  const externalListeners = useRef(new Set<(map: GameMap) => void>());
+  const synced = React.useRef<{ key: string; play: boolean } | null>(null);
+  const playPushed = React.useRef(false);
+  const routeRun = React.useRef(0);
+  const wadRun = React.useRef(0);
+  const importRun = React.useRef(0);
+  const settling = React.useRef(true);
+  const settleCount = React.useRef(0);
+  const historySettle = React.useRef(0);
+  const [settles, setSettles] = React.useState(0);
+  const channel = React.useRef<BroadcastChannel | null>(null);
+  const sessionRef = React.useRef<Session | null>(null);
+  const episodeIdRef = React.useRef("");
+  const refreshRun = React.useRef(0);
+  const externalListeners = React.useRef(new Set<(map: GameMap) => void>());
 
-  const announce = useCallback((mapId?: string) => {
+  const announce = React.useCallback((mapId?: string) => {
     channel.current?.postMessage({ mapId });
   }, []);
 
-  const selectEpisode = useCallback((id: string) => {
+  const selectEpisode = React.useCallback((id: string) => {
     episodeIdRef.current = id;
     setEpisodeId(id);
   }, []);
 
-  const refresh = useCallback(
+  const refresh = React.useCallback(
     async (active: EpisodeStore, id: string) => {
       refreshRun.current += 1;
       const run = refreshRun.current;
@@ -294,7 +294,7 @@ function EpisodeApp() {
     [selectEpisode],
   );
 
-  const closeSession = useCallback(
+  const closeSession = React.useCallback(
     async (active: EpisodeStore, note: string | null = null) => {
       const id = sessionRef.current?.episodeId ?? episodeIdRef.current;
       sessionRef.current = null;
@@ -310,7 +310,7 @@ function EpisodeApp() {
     [refresh],
   );
 
-  const startSession = useCallback(
+  const startSession = React.useCallback(
     (active: EpisodeStore, entry: EpisodeMap) => {
       const saver = createMapSaver(active, entry, {
         onStatus: setSaveStatus,
@@ -335,7 +335,7 @@ function EpisodeApp() {
     [announce, closeSession, selectEpisode],
   );
 
-  useEffect(() => {
+  React.useEffect(() => {
     let cancelled = false;
     let run = routeRun.current;
     const stale = () => cancelled || run !== routeRun.current;
@@ -419,7 +419,7 @@ function EpisodeApp() {
     };
   }, [refresh, selectEpisode, startSession]);
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (!store?.durable || typeof BroadcastChannel === "undefined") return;
     const opened = new BroadcastChannel(channelName);
     channel.current = opened;
@@ -590,11 +590,11 @@ function EpisodeApp() {
     }
   };
 
-  const applyRoute = useEffectEvent(
+  const applyRoute = React.useEffectEvent(
     (route: Route) => void routeTo(route, true),
   );
 
-  useEffect(() => {
+  React.useEffect(() => {
     const onPop = () => {
       const route = parseRoute(location.pathname);
       if (route.kind !== "home" && route.play && coopEntry()) {
@@ -643,7 +643,7 @@ function EpisodeApp() {
 
   // Changes within one page, such as a slot rename, keep their history entry.
   // Leaving a game the app pushed goes back rather than adding an entry.
-  useEffect(() => {
+  React.useEffect(() => {
     if (settling.current || !wantedPath || !pageKey) return;
     const last = synced.current;
     const samePage = last?.key === pageKey;
@@ -666,7 +666,7 @@ function EpisodeApp() {
     synced.current = { key: pageKey, play: wantedPlay };
   }, [settles, wantedPath, pageKey, wantedPlay, coop]);
 
-  useEffect(() => {
+  React.useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => {
       if (sessionRef.current?.saver.failed) event.preventDefault();
     };
@@ -674,16 +674,19 @@ function EpisodeApp() {
     return () => window.removeEventListener("beforeunload", warn);
   }, []);
 
-  const onSave = useCallback((map: GameMap) => {
+  const onSave = React.useCallback((map: GameMap) => {
     sessionRef.current?.saver.saveMap(map);
   }, []);
 
-  const watchExternal = useCallback((listener: (map: GameMap) => void) => {
-    externalListeners.current.add(listener);
-    return () => {
-      externalListeners.current.delete(listener);
-    };
-  }, []);
+  const watchExternal = React.useCallback(
+    (listener: (map: GameMap) => void) => {
+      externalListeners.current.add(listener);
+      return () => {
+        externalListeners.current.delete(listener);
+      };
+    },
+    [],
+  );
 
   if (!store || episodes.length === 0) {
     return message ? (

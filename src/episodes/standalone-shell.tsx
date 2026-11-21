@@ -1,17 +1,17 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import * as React from "react";
 
 import { AppShell } from "./app-sidebar";
 import type { Episode } from "./episode-data";
 import { openEpisodeStore } from "./episode-store";
 
-function StandaloneShell({ children }: { children: ReactNode }) {
-  const [episodes, setEpisodes] = useState<Episode[]>([]);
-  const [counts, setCounts] = useState<Record<string, number>>({});
-  const [durable, setDurable] = useState(true);
+function StandaloneShell({ children }: { children: React.ReactNode }) {
+  const [episodes, setEpisodes] = React.useState<Episode[]>([]);
+  const [counts, setCounts] = React.useState<Record<string, number>>({});
+  const [durable, setDurable] = React.useState(true);
 
-  useEffect(() => {
+  React.useEffect(() => {
     let cancelled = false;
     openEpisodeStore()
       .then(async (store) => {

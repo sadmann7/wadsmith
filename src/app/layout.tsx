@@ -1,7 +1,7 @@
 import "./globals.css";
 
 import type { Metadata, Viewport } from "next";
-import type { ReactNode } from "react";
+import * as React from "react";
 
 import { fontMono, fontSans } from "@/lib/fonts";
 
@@ -37,7 +37,11 @@ export const viewport: Viewport = {
   themeColor: "oklch(0.16 0.003 67.6)",
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="en" className={`${fontSans.variable} ${fontMono.variable}`}>
       <body>{children}</body>

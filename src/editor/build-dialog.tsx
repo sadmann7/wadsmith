@@ -4,7 +4,7 @@ import {
   CircleX,
   TriangleAlert,
 } from "lucide-react";
-import { useState } from "react";
+import * as React from "react";
 
 import { buildChecks, issueText, type CheckedIssue } from "../map/checks";
 import type { GameMap } from "../map/types";
@@ -63,8 +63,8 @@ function BuildDialog({
   onShow: (issue: CheckedIssue) => void;
   onClose: () => void;
 }) {
-  const [fileName, setFileName] = useState(() => defaultFileName(name));
-  const [buildError, setBuildError] = useState<string | null>(null);
+  const [fileName, setFileName] = React.useState(() => defaultFileName(name));
+  const [buildError, setBuildError] = React.useState<string | null>(null);
   const checks = buildChecks(map);
   const issues = checks.flatMap((check) => check.issues);
   const errors = issues.filter((issue) => issue.severity === "error");

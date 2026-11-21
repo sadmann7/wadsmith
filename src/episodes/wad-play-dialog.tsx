@@ -1,5 +1,5 @@
 import { Play } from "lucide-react";
-import { useState } from "react";
+import * as React from "react";
 
 import { skillNames } from "../engine/coop";
 import { Choice } from "../engine/coop-ui";
@@ -54,9 +54,9 @@ function WadPlayDialog({
   onPlay: (files: GameFiles, skill: Skill) => void;
   onClose: () => void;
 }) {
-  const [complevel, setComplevel] = useState(summary.complevel);
-  const [warp, setWarp] = useState(summary.maps[0]);
-  const [skill, setSkill] = useState<Skill>("medium");
+  const [complevel, setComplevel] = React.useState(summary.complevel);
+  const [warp, setWarp] = React.useState(summary.maps[0]);
+  const [skill, setSkill] = React.useState<Skill>("medium");
   const slots = summary.maps.map(slotOf);
   const patches = summary.dehacked.length;
   return (

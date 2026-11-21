@@ -22,7 +22,7 @@ Default to no comment. Write one only for a constraint, an external quirk, or an
 
 UI SDK parts render no styles. The shared controls in `src/components/ui` style them with Tailwind.
 
-- Import React as `import * as React from "react"`, and a UI SDK part as a namespace named after it, like `import * as DialogPrimitive from "@ui-sdk/react/dialog"`. `src/components/ui` follows this; the rest of the app still uses named React imports until it moves over.
+- Import React as `import * as React from "react"`, and a UI SDK part as a namespace named after it, like `import * as DialogPrimitive from "@ui-sdk/react/dialog"`.
 - A part's props are `React.ComponentProps<typeof DialogPrimitive.DialogContent>`. Pass `className` through `cn` without narrowing it: a part takes a string or a function of its state, and `cn` keeps either.
 - `cn` merges with `tailwind-merge`, so the class a caller passes beats the component's own. Never reach for `!`.
 - Style state from the part's `data-slot` and state attributes, like `data-open:` or `data-checked:`, and the CSS variables its docs list, never from inline styles or generated ids.

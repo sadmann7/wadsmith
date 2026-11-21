@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import * as React from "react";
 
 import { MapPlan } from "../components/map-plan";
 import type { GameMap } from "../map/types";
@@ -50,8 +50,8 @@ function CardHeading({
   detail,
 }: {
   eyebrow: string;
-  title: ReactNode;
-  detail?: ReactNode;
+  title: React.ReactNode;
+  detail?: React.ReactNode;
 }) {
   return (
     <div className="grid gap-1.5">
@@ -70,8 +70,8 @@ function SectionLabel({
   children,
   aside,
 }: {
-  children: ReactNode;
-  aside?: ReactNode;
+  children: React.ReactNode;
+  aside?: React.ReactNode;
 }) {
   return (
     <div className="flex justify-between border-b border-border pb-1.5 font-mono text-xs tracking-[0.08em] text-muted-foreground uppercase">
@@ -81,7 +81,7 @@ function SectionLabel({
   );
 }
 
-function FieldLabel({ children }: { children: ReactNode }) {
+function FieldLabel({ children }: { children: React.ReactNode }) {
   return (
     <span className="mb-1.5 block font-mono text-xs tracking-[0.08em] text-muted-foreground uppercase">
       {children}
@@ -133,8 +133,8 @@ function CoopCard({
   label: string;
   map: GameMap;
   code?: string;
-  footer?: ReactNode;
-  children: ReactNode;
+  footer?: React.ReactNode;
+  children: React.ReactNode;
 }) {
   return (
     <section
@@ -162,8 +162,8 @@ function StatusCard({
   icon: LucideIcon;
   tone: "info" | "warning" | "danger";
   title: string;
-  children: ReactNode;
-  actions?: ReactNode;
+  children: React.ReactNode;
+  actions?: React.ReactNode;
 }) {
   const color = {
     info: "text-info",

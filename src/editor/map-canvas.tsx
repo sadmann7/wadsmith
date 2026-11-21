@@ -1,6 +1,5 @@
 import { Focus, LocateFixed, Maximize, StickyNote } from "lucide-react";
-import { useMemo, useState } from "react";
-import type { ComponentProps, CSSProperties } from "react";
+import * as React from "react";
 
 import { thingCatalog } from "../map/catalog";
 import { doorKeyPrefix, switchKeyPrefix, thingKeyPrefix } from "../map/edit";
@@ -154,13 +153,13 @@ function MapCanvas({
   callouts,
   onViewChange,
   ...props
-}: ComponentProps<typeof MapEditor> & {
+}: React.ComponentProps<typeof MapEditor> & {
   map: GameMap;
   callouts: { id: string; x: number; y: number; text: string }[];
 }) {
-  const [step, setStep] = useState(1);
-  const [zoomedOut, setZoomedOut] = useState(false);
-  const [seen, setSeen] = useState<Area | null>(null);
+  const [step, setStep] = React.useState(1);
+  const [zoomedOut, setZoomedOut] = React.useState(false);
+  const [seen, setSeen] = React.useState<Area | null>(null);
   const crowded = map.sectors.length > crowdedRooms;
   // Zoomed out, a big map's corners and icons would bury its rooms, and every
   // mounted part updates on every pan and zoom.
@@ -172,7 +171,7 @@ function MapCanvas({
   const area = crowded ? (seen ?? nowhere) : null;
   const selection = props.selection ?? noSelection;
 
-  const shapes = useMemo(
+  const shapes = React.useMemo(
     () => (
       <>
         {map.sectors.map((sector) => (
@@ -206,7 +205,7 @@ function MapCanvas({
     [map],
   );
 
-  const rooms = useMemo(
+  const rooms = React.useMemo(
     () =>
       map.sectors
         .filter((sector) => !sector.door)
@@ -218,7 +217,7 @@ function MapCanvas({
     [map],
   );
 
-  const labels = useMemo(
+  const labels = React.useMemo(
     () =>
       clearOf(
         rooms.filter(
@@ -236,7 +235,9 @@ function MapCanvas({
           key={sector.id}
           value={sector.id}
           className="map-label"
-          style={{ "--room-width": box.right - box.left } as CSSProperties}
+          style={
+            { "--room-width": box.right - box.left } as React.CSSProperties
+          }
         >
           <strong>{sector.name}</strong>
           <span>
@@ -247,7 +248,7 @@ function MapCanvas({
     [rooms, labelStep, area],
   );
 
-  const handles = useMemo(
+  const handles = React.useMemo(
     () =>
       Object.entries(map.vertices)
         .filter(
@@ -266,7 +267,7 @@ function MapCanvas({
     [map, corners, area, selection],
   );
 
-  const things = useMemo(
+  const things = React.useMemo(
     () =>
       map.things
         .filter(
@@ -285,7 +286,7 @@ function MapCanvas({
               className="map-thing"
               aria-label={label}
               title={label}
-              style={{ "--thing-color": color } as CSSProperties}
+              style={{ "--thing-color": color } as React.CSSProperties}
             >
               {far
                 ? null
@@ -296,7 +297,7 @@ function MapCanvas({
     [map, far, area, selection],
   );
 
-  const ports = useMemo(
+  const ports = React.useMemo(
     () => (
       <>
         {map.sectors

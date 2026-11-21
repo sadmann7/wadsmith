@@ -1,6 +1,6 @@
 import { createLocalStorage } from "@ui-sdk/core";
 import { Monitor } from "lucide-react";
-import { useState, useSyncExternalStore } from "react";
+import * as React from "react";
 import { Button } from "../components/ui/button";
 
 const savedNotice = createLocalStorage("wadsmith:device-notice");
@@ -18,8 +18,10 @@ function isTouchOnly() {
 }
 
 function DeviceNotice() {
-  const touchOnly = useSyncExternalStore(subscribeTouchOnly, isTouchOnly);
-  const [dismissed, setDismissed] = useState(() => savedNotice.get() !== null);
+  const touchOnly = React.useSyncExternalStore(subscribeTouchOnly, isTouchOnly);
+  const [dismissed, setDismissed] = React.useState(
+    () => savedNotice.get() !== null,
+  );
   if (!touchOnly || dismissed) return null;
   return (
     <section

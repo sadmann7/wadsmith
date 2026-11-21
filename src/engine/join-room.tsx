@@ -1,13 +1,6 @@
 import Link from "next/link";
 import { LogOut, RefreshCw, Timer, Users, WifiOff } from "lucide-react";
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type FormEvent,
-  type ReactNode,
-} from "react";
+import * as React from "react";
 
 import {
   appVersion,
@@ -61,7 +54,7 @@ function backHome() {
   location.assign("/");
 }
 
-function GuestShell({ children }: { children: ReactNode }) {
+function GuestShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="grid min-h-dvh grid-rows-[auto_1fr_auto] bg-background text-foreground">
       <header className="flex h-[48px] items-center px-5">
@@ -237,8 +230,8 @@ function Invite({
   joining: boolean;
   onJoin: (name: string) => void;
 }) {
-  const [name, setName] = useState(loadName);
-  const submit = (event: FormEvent) => {
+  const [name, setName] = React.useState(loadName);
+  const submit = (event: React.FormEvent) => {
     event.preventDefault();
     if (name.trim()) onJoin(name.trim());
   };
@@ -352,18 +345,18 @@ function Waiting({
 }
 
 function CoopJoin({ code }: { code: string }) {
-  const [state, setState] = useState<JoinState>({
+  const [state, setState] = React.useState<JoinState>({
     step: "finding",
     slow: false,
   });
-  const [info, setInfo] = useState<RoomInfo | null>(null);
-  const [players, setPlayers] = useState<RoomPlayer[]>([]);
-  const roomRef = useRef<GuestRoom | null>(null);
-  const linksRef = useRef<PeerLinks | null>(null);
-  const relayRef = useRef(packetRelay());
-  const [session, setSession] = useState<CoopSession | null>(null);
+  const [info, setInfo] = React.useState<RoomInfo | null>(null);
+  const [players, setPlayers] = React.useState<RoomPlayer[]>([]);
+  const roomRef = React.useRef<GuestRoom | null>(null);
+  const linksRef = React.useRef<PeerLinks | null>(null);
+  const relayRef = React.useRef(packetRelay());
+  const [session, setSession] = React.useState<CoopSession | null>(null);
 
-  useEffect(() => {
+  React.useEffect(() => {
     let peer = 0;
     let roster: RoomPlayer[] = [];
     const stalls = stallRelay();
@@ -458,7 +451,7 @@ function CoopJoin({ code }: { code: string }) {
   const game = state.step === "playing" ? state.game : null;
   const peer = state.step === "playing" ? state.peer : 0;
   // A new session object would restart the game, so it only changes with it.
-  const playing = useMemo(
+  const playing = React.useMemo(
     () =>
       session && game
         ? {

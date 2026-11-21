@@ -41,7 +41,7 @@ import {
   Zap,
   type LucideIcon,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import * as React from "react";
 
 import { isPlayerStart, thingCatalog, thingKinds } from "../map/catalog";
 import {
@@ -156,7 +156,7 @@ function Item({
 }: {
   icon: LucideIcon;
   hint?: string;
-  children: ReactNode;
+  children: React.ReactNode;
   disabled?: boolean;
   destructive?: boolean;
   onSelect: () => void;
@@ -188,7 +188,7 @@ function CheckItem({
 }: {
   icon: LucideIcon;
   checked: boolean;
-  children: ReactNode;
+  children: React.ReactNode;
   onChange: (checked: boolean) => void;
 }) {
   return (
@@ -219,7 +219,7 @@ function SubMenu({
   icon: LucideIcon;
   label: string;
   disabled?: boolean;
-  children: ReactNode;
+  children: React.ReactNode;
 }) {
   return (
     <MenuSub>
@@ -285,7 +285,7 @@ function Choices({
   );
 }
 
-function Heading({ children }: { children: ReactNode }) {
+function Heading({ children }: { children: React.ReactNode }) {
   return (
     <div className="truncate px-2 pt-1 pb-1.5 font-mono text-xs tracking-[0.04em] text-muted-foreground uppercase">
       {children}

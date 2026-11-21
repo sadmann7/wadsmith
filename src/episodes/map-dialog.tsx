@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import * as React from "react";
 
 import { MapOutline } from "../components/map-outline";
 import { MapPlan } from "../components/map-plan";
@@ -57,22 +57,26 @@ function MapDialog({
   onClose: () => void;
 }) {
   const slots = freeSlots(maps, entry?.slot);
-  const [name, setName] = useState(entry ? mapName(entry) : "");
-  const [slot, setSlot] = useState(entry?.slot ?? slots[0]);
-  const [description, setDescription] = useState(entry?.description ?? "");
-  const [par, setPar] = useState(formatPar(entry?.par ?? null));
-  const [template, setTemplate] = useState<MapTemplate>("room");
-  const [source, setSource] = useState<"template" | "featured">("template");
-  const [featured, setFeatured] = useState<FeaturedMap>(featuredMaps[0]);
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [name, setName] = React.useState(entry ? mapName(entry) : "");
+  const [slot, setSlot] = React.useState(entry?.slot ?? slots[0]);
+  const [description, setDescription] = React.useState(
+    entry?.description ?? "",
+  );
+  const [par, setPar] = React.useState(formatPar(entry?.par ?? null));
+  const [template, setTemplate] = React.useState<MapTemplate>("room");
+  const [source, setSource] = React.useState<"template" | "featured">(
+    "template",
+  );
+  const [featured, setFeatured] = React.useState<FeaturedMap>(featuredMaps[0]);
+  const [error, setError] = React.useState<string | null>(null);
+  const [saving, setSaving] = React.useState(false);
   const parValue = parsePar(par);
   const canSubmit =
     Boolean(slot) &&
     name.trim().length > 0 &&
     parValue !== undefined &&
     !saving;
-  const submit = async (event: FormEvent) => {
+  const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!canSubmit) return;
     setSaving(true);
