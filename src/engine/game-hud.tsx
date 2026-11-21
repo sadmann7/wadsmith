@@ -431,21 +431,26 @@ function GameTopBar({
         ? "Episode"
         : "Solo";
   return (
-    <header className="flex h-[48px] min-w-0 items-center gap-4 border-b border-border bg-card px-3 text-foreground">
+    <header className="flex h-[48px] min-w-0 items-center gap-4 max-[640px]:gap-2 border-b border-border bg-card px-3 text-foreground">
       <Button className="shrink-0" onClick={onExit}>
         <ArrowLeft size={14} aria-hidden="true" />
         <span>
           Exit
           {exit.to ? (
-            <span className="text-muted-foreground"> to {exit.to}</span>
+            <span className="text-muted-foreground max-[640px]:hidden">
+              {" "}
+              to {exit.to}
+            </span>
           ) : null}
         </span>
         {fullscreen ? null : (
-          <kbd className="font-mono text-xs text-muted-foreground">Esc</kbd>
+          <kbd className="font-mono text-xs text-muted-foreground max-[640px]:hidden">
+            Esc
+          </kbd>
         )}
       </Button>
       <div className="flex min-w-0 flex-1 items-center gap-2.5">
-        <span className="shrink-0 font-mono text-xs text-muted-foreground">
+        <span className="shrink-0 font-mono text-xs text-muted-foreground max-[480px]:hidden">
           {slot}
         </span>
         <span className="truncate text-base font-semibold">{title}</span>

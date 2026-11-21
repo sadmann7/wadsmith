@@ -1053,7 +1053,12 @@ function App({
           <span className="separator" aria-hidden="true" />
           <div className="flex items-center gap-4">
             <Menu onAction={(action) => runFileAction(action as string)}>
-              <MenuTrigger className={buttonVariants({ variant: "text" })}>
+              <MenuTrigger
+                className={buttonVariants({
+                  variant: "text",
+                  className: "min-h-[24px]",
+                })}
+              >
                 File
               </MenuTrigger>
               <MenuContent>
@@ -1067,7 +1072,12 @@ function App({
               </MenuContent>
             </Menu>
             <Menu onAction={(action) => (action === "undo" ? undo() : redo())}>
-              <MenuTrigger className={buttonVariants({ variant: "text" })}>
+              <MenuTrigger
+                className={buttonVariants({
+                  variant: "text",
+                  className: "min-h-[24px]",
+                })}
+              >
                 Edit
               </MenuTrigger>
               <MenuContent>
@@ -1090,7 +1100,12 @@ function App({
               </MenuContent>
             </Menu>
             <Menu onAction={(action) => runViewAction(action as string)}>
-              <MenuTrigger className={buttonVariants({ variant: "text" })}>
+              <MenuTrigger
+                className={buttonVariants({
+                  variant: "text",
+                  className: "min-h-[24px]",
+                })}
+              >
                 View
               </MenuTrigger>
               <MenuContent>
@@ -1119,7 +1134,12 @@ function App({
               </MenuContent>
             </Menu>
             <Menu onAction={(action) => runMapAction(action as string)}>
-              <MenuTrigger className={buttonVariants({ variant: "text" })}>
+              <MenuTrigger
+                className={buttonVariants({
+                  variant: "text",
+                  className: "min-h-[24px]",
+                })}
+              >
                 Map
               </MenuTrigger>
               <MenuContent>

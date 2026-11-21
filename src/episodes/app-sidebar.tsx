@@ -125,7 +125,7 @@ function NewEpisodeDialog({
               <legend className="mb-2 p-0 text-sm text-muted-foreground">
                 Start with
               </legend>
-              <div className="grid grid-cols-2 gap-2.5 max-[560px]:grid-cols-1">
+              <div className="grid grid-cols-2 gap-2.5">
                 {starts.map((item) => (
                   <button
                     key={item.value}
@@ -259,7 +259,7 @@ function AppSidebar({
             {onCreateEpisode ? (
               <button
                 type="button"
-                className="grid size-6 place-items-center rounded-[3px] border-0 bg-transparent p-0 text-muted-foreground hover:bg-muted hover:text-foreground"
+                className="grid size-[24px] place-items-center rounded-[3px] border-0 bg-transparent p-0 text-muted-foreground hover:bg-muted hover:text-foreground"
                 aria-label="New episode"
                 title="New episode"
                 onClick={() => setCreating(true)}

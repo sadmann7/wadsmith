@@ -260,7 +260,7 @@ function MapRow({
       <td className="text-right font-mono text-sm max-[700px]:hidden">
         {entry.map.things.length}
       </td>
-      <td className="text-right font-mono text-sm">
+      <td className="text-right font-mono text-sm max-[480px]:hidden">
         {formatPar(entry.par) || (
           <span className="text-muted-foreground">—</span>
         )}
@@ -529,7 +529,7 @@ function EpisodeHome({
                     <th className="w-20 text-right max-[700px]:hidden">
                       THINGS
                     </th>
-                    <th className="w-16 text-right">PAR</th>
+                    <th className="w-16 text-right max-[480px]:hidden">PAR</th>
                     <th className="w-32 pl-4">STATUS</th>
                     <th className="w-24 max-[900px]:hidden">EDITED</th>
                     <th className="w-10">
@@ -599,13 +599,13 @@ function EpisodeHome({
                 <>
                   <button
                     type="button"
-                    className="flex items-center gap-2 border-0 bg-transparent p-0 text-sm font-semibold text-primary hover:underline"
+                    className="flex min-h-[24px] items-center gap-2 border-0 bg-transparent p-0 text-sm font-semibold text-primary hover:underline"
                     onClick={() => setCreatingMap(true)}
                   >
                     <Plus size={14} aria-hidden="true" />
                     Add a map in {nextSlot}
                   </button>
-                  <FileInputTrigger className="border-0 bg-transparent p-0 text-sm text-muted-foreground hover:text-foreground hover:underline">
+                  <FileInputTrigger className="min-h-[24px] border-0 bg-transparent p-0 text-sm text-muted-foreground hover:text-foreground hover:underline">
                     or import a map file or WAD
                   </FileInputTrigger>
                 </>
