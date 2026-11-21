@@ -1,22 +1,26 @@
-type ClassValue = string | false | null | undefined;
+import { clsx, type ClassValue } from "clsx";
+import { twMerge } from "tailwind-merge";
 
 function cn(...classes: ClassValue[]): string;
 function cn<State>(
   ...classes: (ClassValue | ((state: State) => ClassValue))[]
 ): string | ((state: State) => string);
-// A UI SDK part's class name can be a function of its state, so the joined
+// A UI SDK part's class name can be a function of its state, so the merged
 // class names become one too.
 function cn<State>(
   ...classes: (ClassValue | ((state: State) => ClassValue))[]
 ) {
-  const join = (state: State) =>
-    classes
-      .map((value) => (typeof value === "function" ? value(state) : value))
-      .filter(Boolean)
-      .join(" ");
+  const merge = (state: State) =>
+    twMerge(
+      clsx(
+        classes.map((value) =>
+          typeof value === "function" ? value(state) : value,
+        ),
+      ),
+    );
   return classes.some((value) => typeof value === "function")
-    ? join
-    : join(undefined as State);
+    ? merge
+    : merge(undefined as State);
 }
 
 export { cn };

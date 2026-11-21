@@ -1268,7 +1268,7 @@ function App({
           <div className="views" data-layout={visibleLayout}>
             <SegmentedControl
               aria-label="Main view"
-              className="absolute! top-3 right-3 z-5"
+              className="absolute top-3 right-3 z-5"
               value={visibleLayout}
               onValueChange={(next) => changeLayout(next as ViewLayout)}
             >

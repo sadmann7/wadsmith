@@ -407,7 +407,7 @@ function EpisodeHome({
           </Button>
           <Menu>
             <MenuTrigger
-              className={buttonVariants({ className: "px-2!" })}
+              className={buttonVariants({ className: "px-2" })}
               aria-label="More episode actions"
             >
               <Ellipsis size={16} aria-hidden="true" />
