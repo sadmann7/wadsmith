@@ -9,7 +9,7 @@ import {
   type FeaturedMap,
   type FeaturedMode,
 } from "../map/featured";
-import { AppShell, Crumb, type SidebarProps } from "./app-sidebar";
+import { AppShell, type SidebarProps } from "./app-sidebar";
 import { formatPar } from "./project-data";
 
 const modes: Record<FeaturedMode, { label: string; dot: string }> = {
@@ -103,7 +103,7 @@ function FeaturedMaps({
     ),
   ];
   return (
-    <AppShell sidebar={sidebar} crumbs={<Crumb>Featured maps</Crumb>}>
+    <AppShell sidebar={sidebar}>
       <main className="flex flex-col gap-6 px-8 pt-10 pb-10 max-[760px]:px-4">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="min-w-0">
@@ -147,11 +147,11 @@ function FeaturedMaps({
               label={`Plan of ${selected.title}`}
               className="aspect-[16/10] w-full border-r border-border bg-map-bg p-10 max-[900px]:border-r-0 max-[900px]:border-b"
             />
-            <div className="flex flex-col gap-3 p-8 max-[760px]:p-5">
+            <div className="flex flex-col justify-center gap-3 p-8 max-[760px]:p-5">
               <ModeLine entry={selected} />
               <h2 className="m-0 text-4xl font-bold">{selected.title}</h2>
               <p className="m-0 text-[15px] text-fg-soft">{selected.blurb}</p>
-              <p className="m-0 mt-auto pt-6 font-mono text-xs text-fg-muted">
+              <p className="m-0 pt-3 font-mono text-xs text-fg-muted">
                 {detailsOf(selected)}
               </p>
               <div className="flex flex-wrap gap-2">

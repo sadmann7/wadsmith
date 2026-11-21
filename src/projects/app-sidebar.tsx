@@ -347,24 +347,42 @@ function AppShell({
   children,
 }: {
   sidebar: SidebarProps;
-  crumbs: ReactNode;
+  crumbs?: ReactNode;
   actions?: ReactNode;
   children: ReactNode;
 }) {
+  // A page without crumbs or actions keeps the bar only for the phone drawer.
+  const bare = !crumbs && !actions;
   return (
     <div className="grid h-dvh grid-cols-[248px_minmax(0,1fr)] bg-canvas text-fg max-[760px]:grid-cols-1">
       <aside className="min-h-0 border-r border-border max-[760px]:hidden">
         <AppSidebar {...sidebar} />
       </aside>
-      <div className="grid min-h-0 grid-rows-[48px_minmax(0,1fr)]">
-        <header className="flex min-w-0 items-center gap-3 border-b border-border px-8 max-[760px]:px-3">
-          <SidebarDrawer {...sidebar} className="min-[761px]:hidden" />
-          <nav
-            aria-label="Breadcrumb"
-            className="flex min-w-0 flex-1 items-center gap-2 text-[13px] text-fg-muted"
-          >
-            {crumbs}
-          </nav>
+      <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)]">
+        <header
+          className={`flex h-12 min-w-0 items-center gap-3 border-b border-border px-8 max-[760px]:px-3 ${bare ? "min-[760px]:hidden" : ""}`}
+        >
+          <SidebarDrawer {...sidebar} className="min-[760px]:hidden" />
+          {crumbs ? (
+            <nav
+              aria-label="Breadcrumb"
+              className="flex min-w-0 flex-1 items-center gap-2 text-[13px] text-fg-muted"
+            >
+              {crumbs}
+            </nav>
+          ) : (
+            <div className="flex-1">
+              <SidebarLink
+                route={{ kind: "home" }}
+                current={false}
+                onNavigate={sidebar.onNavigate}
+              >
+                <span className="text-[15px] font-bold tracking-[0.12em] text-accent">
+                  WADSMITH
+                </span>
+              </SidebarLink>
+            </div>
+          )}
           {actions ? (
             <div className="flex shrink-0 items-center gap-2">{actions}</div>
           ) : null}

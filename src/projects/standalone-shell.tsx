@@ -2,17 +2,11 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 
-import { AppShell, Crumb } from "./app-sidebar";
+import { AppShell } from "./app-sidebar";
 import type { Project } from "./project-data";
 import { openProjectStore } from "./project-store";
 
-function StandaloneShell({
-  crumb,
-  children,
-}: {
-  crumb: string;
-  children: ReactNode;
-}) {
+function StandaloneShell({ children }: { children: ReactNode }) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [durable, setDurable] = useState(true);
@@ -44,10 +38,7 @@ function StandaloneShell({
   }, []);
 
   return (
-    <AppShell
-      sidebar={{ projects, counts, current: null, durable }}
-      crumbs={<Crumb>{crumb}</Crumb>}
-    >
+    <AppShell sidebar={{ projects, counts, current: null, durable }}>
       {children}
     </AppShell>
   );
