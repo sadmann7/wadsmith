@@ -71,7 +71,7 @@ function Section({
 export default function SourcePage() {
   const engine = engineInfo();
   return (
-    <StandaloneShell crumb="Source and licences">
+    <StandaloneShell>
       <main className="grid max-w-[744px] gap-8 px-8 pt-10 pb-12 max-[760px]:px-4">
         <div className="grid gap-3">
           <h1 className="m-0 text-4xl font-bold">Source and licences</h1>
