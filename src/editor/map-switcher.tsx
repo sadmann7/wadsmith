@@ -52,7 +52,7 @@ function MapSwitcher({
     <nav aria-label="Breadcrumb" className="map-title min-w-0 gap-2">
       <button
         type="button"
-        className="min-w-0 truncate border-0 bg-transparent p-0 text-[13px] text-fg-muted hover:text-fg max-lg:hidden"
+        className="min-w-0 truncate border-0 bg-transparent p-0 text-sm text-fg-muted hover:text-fg max-lg:hidden"
         onClick={onEpisodeHome}
       >
         {episodeName}
@@ -75,7 +75,7 @@ function MapSwitcher({
           <span className="flex-none font-mono text-xs text-fg-muted">
             {current?.slot}
           </span>
-          <strong className="max-w-[240px] min-w-0 truncate text-[15px] font-semibold">
+          <strong className="max-w-[240px] min-w-0 truncate text-base font-semibold">
             {current?.name}
           </strong>
           <ChevronDown
@@ -86,7 +86,7 @@ function MapSwitcher({
         </MenuTrigger>
         <MenuContent className="select-content min-w-[300px]" align="center">
           <MenuGroup>
-            <MenuGroupLabel className="px-2 pt-1 pb-1.5 font-mono text-[11px] tracking-wide text-fg-muted uppercase">
+            <MenuGroupLabel className="px-2 pt-1 pb-1.5 font-mono text-xs tracking-wide text-fg-muted uppercase">
               {episodeName} · {maps.length} {maps.length === 1 ? "map" : "maps"}
             </MenuGroupLabel>
             {maps.map((entry) => (

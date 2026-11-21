@@ -765,7 +765,7 @@ function App({
       <SelectContent className="select-content max-h-[min(var(--available-height),360px)]">
         {thingGroups.map(({ category, label }) => (
           <SelectGroup key={category}>
-            <SelectGroupLabel className="px-2 pt-2 pb-1 font-mono text-[11px] tracking-wide text-fg-muted uppercase">
+            <SelectGroupLabel className="px-2 pt-2 pb-1 font-mono text-xs tracking-wide text-fg-muted uppercase">
               {label}
             </SelectGroupLabel>
             {thingKinds
@@ -1355,11 +1355,11 @@ function App({
                     >
                       <h2
                         id="welcome-title"
-                        className="text-[15px] font-semibold text-fg"
+                        className="text-base font-semibold text-fg"
                       >
                         Welcome to Wadsmith
                       </h2>
-                      <p className="text-[13px] text-fg-muted">
+                      <p className="text-sm text-fg-muted">
                         Build Doom maps in your browser and play them on the
                         spot. This starter map is ready, so play it, then change
                         anything and play again.
@@ -1668,7 +1668,7 @@ function App({
                         <div className="min-w-0">
                           <div>{title}</div>
                           {detail ? (
-                            <div className="truncate font-mono text-[11px] text-fg-muted">
+                            <div className="truncate font-mono text-xs text-fg-muted">
                               {detail}
                             </div>
                           ) : null}

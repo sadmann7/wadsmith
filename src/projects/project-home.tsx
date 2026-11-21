@@ -246,21 +246,21 @@ function MapRow({
         >
           {name}
         </button>
-        <div className="truncate text-[13px] text-fg-muted">
+        <div className="truncate text-sm text-fg-muted">
           {entry.description}
         </div>
       </td>
-      <td className="text-right font-mono text-[13px] max-[700px]:hidden">
+      <td className="text-right font-mono text-sm max-[700px]:hidden">
         {entry.map.sectors.length}
       </td>
-      <td className="text-right font-mono text-[13px] max-[700px]:hidden">
+      <td className="text-right font-mono text-sm max-[700px]:hidden">
         {entry.map.things.length}
       </td>
-      <td className="text-right font-mono text-[13px]">
+      <td className="text-right font-mono text-sm">
         {formatPar(entry.par) || <span className="text-fg-muted">—</span>}
       </td>
       <td className="pl-4">
-        <span className="flex items-center gap-2 text-[13px] whitespace-nowrap">
+        <span className="flex items-center gap-2 text-sm whitespace-nowrap">
           <span
             aria-hidden="true"
             className={`size-1.5 rounded-full ${statusDots[status.kind]}`}
@@ -268,7 +268,7 @@ function MapRow({
           {status.label}
         </span>
       </td>
-      <td className="text-[13px] whitespace-nowrap text-fg-muted max-[900px]:hidden">
+      <td className="text-sm whitespace-nowrap text-fg-muted max-[900px]:hidden">
         {formatEdited(entry.editedAt)}
       </td>
       <td>
@@ -502,7 +502,7 @@ function ProjectHome({
           </p>
         ) : null}
         {sorted.length > 1 ? (
-          <p className="m-0 flex items-center gap-2.5 rounded-[3px] border border-border bg-surface px-3 py-2.5 text-[13px] text-fg-soft">
+          <p className="m-0 flex items-center gap-2.5 rounded-[3px] border border-border bg-surface px-3 py-2.5 text-sm text-fg-soft">
             <Route size={15} aria-hidden="true" className="text-info" />
             Maps play in slot order, and an exit takes everyone to the next
             slot. Drag a row to change the order.
@@ -511,7 +511,7 @@ function ProjectHome({
         {sorted.length > 0 ? (
           <table className="w-full border-collapse text-left">
             <thead>
-              <tr className="h-8 border-b border-border font-mono text-[11px] tracking-wide text-fg-muted [&>th]:font-normal">
+              <tr className="h-8 border-b border-border font-mono text-xs tracking-wide text-fg-muted [&>th]:font-normal">
                 <th className="w-6">
                   <span className="sr-only">Order</span>
                 </th>
@@ -598,14 +598,14 @@ function ProjectHome({
               </button>
               <button
                 type="button"
-                className="border-0 bg-transparent p-0 text-[13px] text-fg-muted hover:text-fg hover:underline"
+                className="border-0 bg-transparent p-0 text-sm text-fg-muted hover:text-fg hover:underline"
                 onClick={() => mapFile.current?.click()}
               >
                 or import a map file
               </button>
             </>
           ) : (
-            <p className="m-0 text-[13px] text-fg-muted">
+            <p className="m-0 text-sm text-fg-muted">
               All 32 map slots are in use.
             </p>
           )}

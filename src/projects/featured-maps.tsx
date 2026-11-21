@@ -45,7 +45,7 @@ function enemiesOf(entry: FeaturedMap) {
 function ModeLine({ entry }: { entry: FeaturedMap }) {
   const mode = modes[entry.mode];
   return (
-    <div className="flex items-center gap-1.5 font-mono text-[11px] tracking-wide text-fg-soft uppercase">
+    <div className="flex items-center gap-1.5 font-mono text-xs tracking-wide text-fg-soft uppercase">
       <span
         className={`size-1.5 rounded-full ${mode.dot}`}
         aria-hidden="true"
@@ -108,7 +108,7 @@ function FeaturedMaps({
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="min-w-0">
             <h1 className="m-0 text-4xl font-bold">Featured maps</h1>
-            <p className="m-0 mt-1 text-[15px] text-fg-muted">
+            <p className="m-0 mt-1 text-base text-fg-muted">
               {countWords[featuredMaps.length] ?? featuredMaps.length} maps made
               in Wadsmith. Play one, bring friends, or open a copy to see how
               it&apos;s built.
@@ -124,7 +124,7 @@ function FeaturedMaps({
                 key={item}
                 type="button"
                 aria-pressed={filter === item}
-                className="rounded-[2px] border-0 bg-transparent px-3 py-1.5 text-xs text-fg-muted aria-pressed:bg-surface-raised aria-pressed:font-semibold aria-pressed:text-fg"
+                className="rounded-[2px] border-0 bg-transparent px-3 py-1.5 text-sm text-fg-muted aria-pressed:bg-surface-raised aria-pressed:font-semibold aria-pressed:text-fg"
                 onClick={() => setFilter(item)}
               >
                 {item === "all" ? "All" : modes[item].label}
@@ -150,7 +150,7 @@ function FeaturedMaps({
             <div className="flex flex-col justify-center gap-3 p-8 max-[760px]:p-5">
               <ModeLine entry={selected} />
               <h2 className="m-0 text-4xl font-bold">{selected.title}</h2>
-              <p className="m-0 text-[15px] text-fg-soft">{selected.blurb}</p>
+              <p className="m-0 text-base text-fg-soft">{selected.blurb}</p>
               <p className="m-0 pt-3 font-mono text-xs text-fg-muted">
                 {detailsOf(selected)}
               </p>
@@ -204,10 +204,10 @@ function FeaturedMaps({
                   className="aspect-[16/9] w-full bg-map-bg p-4"
                 />
                 <span className="grid gap-1 px-3 py-3">
-                  <span className="truncate text-[15px] font-semibold">
+                  <span className="truncate text-base font-semibold">
                     {entry.title}
                   </span>
-                  <span className="truncate font-mono text-[10px] text-fg-muted uppercase">
+                  <span className="truncate font-mono text-xs text-fg-muted uppercase">
                     {cardLine(entry)}
                   </span>
                 </span>
