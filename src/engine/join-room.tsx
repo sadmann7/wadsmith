@@ -62,7 +62,7 @@ function backHome() {
 function GuestShell({ children }: { children: ReactNode }) {
   return (
     <div className="grid min-h-dvh grid-rows-[auto_1fr_auto] bg-canvas text-fg">
-      <header className="flex h-12 items-center px-5">
+      <header className="flex h-[48px] items-center px-5">
         <Link
           href="/"
           className="text-[17px] font-bold tracking-[0.12em] text-accent no-underline"
@@ -73,7 +73,7 @@ function GuestShell({ children }: { children: ReactNode }) {
       <main className="grid place-items-center p-4">
         <div className="grid w-[min(420px,100%)] gap-4">{children}</div>
       </main>
-      <footer className="flex flex-wrap justify-center gap-x-4 gap-y-1 px-5 py-4 text-xs text-fg-muted">
+      <footer className="flex flex-wrap justify-center gap-x-4 gap-y-1 px-5 py-4 text-sm text-fg-muted">
         <span>Doom maps, built and played in your browser.</span>
         <Link
           href="/source"
@@ -297,7 +297,7 @@ function Waiting({
       map={info.map}
       footer={
         <>
-          <span className="text-[13px] text-fg-muted" role="status">
+          <span className="text-sm text-fg-muted" role="status">
             The game starts for everyone at once.
           </span>
           <button type="button" className="button" onClick={onLeave}>
@@ -331,13 +331,13 @@ function Waiting({
               <span className="min-w-0 flex-1 truncate text-sm font-semibold">
                 {player.name}
                 {player.peer === peer || player.peer === hostPeer ? (
-                  <span className="ml-2 font-mono text-[11px] font-normal tracking-[0.06em] text-fg-muted">
+                  <span className="ml-2 font-mono text-xs font-normal tracking-[0.06em] text-fg-muted">
                     {player.peer === peer ? "YOU" : "HOST"}
                   </span>
                 ) : null}
               </span>
               {player.ready ? (
-                <span className="flex items-center gap-1.5 text-[13px] text-fg-soft">
+                <span className="flex items-center gap-1.5 text-sm text-fg-soft">
                   <span
                     aria-hidden="true"
                     className="size-1.5 rounded-full bg-success"
@@ -345,7 +345,7 @@ function Waiting({
                   Ready
                 </span>
               ) : (
-                <span className="font-mono text-[11px] text-fg-muted">
+                <span className="font-mono text-xs text-fg-muted">
                   {Math.round(player.progress * 100)}%
                 </span>
               )}
@@ -505,7 +505,7 @@ function CoopJoin({ code }: { code: string }) {
       {state.step === "finding" ? (
         <div className="grid justify-items-center gap-3 text-center">
           <h1 className="sr-only">Join a game</h1>
-          <p className="m-0 text-sm text-fg-muted" role="status">
+          <p className="m-0 text-base text-fg-muted" role="status">
             {!state.slow
               ? "Finding the room…"
               : roomsUrl

@@ -178,7 +178,7 @@ function MapCanvas({
             value={callout.id}
             x={callout.x}
             y={callout.y}
-            className="pointer-events-none origin-bottom-left border border-danger bg-danger-soft px-2 py-1 font-mono text-[11px] whitespace-nowrap text-danger-soft-fg [transform:translateY(-100%)_scale(calc(1/var(--canvas-zoom,1)))]"
+            className="pointer-events-none origin-bottom-left border border-danger bg-danger-soft px-2 py-1 font-mono text-xs whitespace-nowrap text-danger-soft-fg [transform:translateY(-100%)_scale(calc(1/var(--canvas-zoom,1)))]"
           >
             {callout.text}
           </MapMarker>

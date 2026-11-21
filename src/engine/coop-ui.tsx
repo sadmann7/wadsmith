@@ -17,7 +17,7 @@ function PlayerBadge({ peer, open = false }: { peer: number; open?: boolean }) {
   return (
     <span
       aria-hidden="true"
-      className={`grid size-[22px] shrink-0 place-items-center rounded-full border-[1.5px] font-mono text-[11px] ${
+      className={`grid size-[22px] shrink-0 place-items-center rounded-full border-[1.5px] font-mono text-xs ${
         open
           ? "border-dashed border-border-strong text-fg-muted"
           : (playerColors[peer - 1] ?? playerColors[0])
@@ -55,7 +55,7 @@ function CardHeading({
 }) {
   return (
     <div className="grid gap-1.5">
-      <span className="font-mono text-[11px] tracking-[0.08em] text-fg-muted uppercase">
+      <span className="font-mono text-xs tracking-[0.08em] text-fg-muted uppercase">
         {eyebrow}
       </span>
       {title}
@@ -72,7 +72,7 @@ function SectionLabel({
   aside?: ReactNode;
 }) {
   return (
-    <div className="flex justify-between border-b border-border pb-1.5 font-mono text-[11px] tracking-[0.08em] text-fg-muted uppercase">
+    <div className="flex justify-between border-b border-border pb-1.5 font-mono text-xs tracking-[0.08em] text-fg-muted uppercase">
       <span>{children}</span>
       {aside}
     </div>
@@ -81,7 +81,7 @@ function SectionLabel({
 
 function FieldLabel({ children }: { children: ReactNode }) {
   return (
-    <span className="mb-1.5 block font-mono text-[11px] tracking-[0.08em] text-fg-muted uppercase">
+    <span className="mb-1.5 block font-mono text-xs tracking-[0.08em] text-fg-muted uppercase">
       {children}
     </span>
   );
@@ -111,7 +111,7 @@ function Choice<Value extends string | number>({
           aria-pressed={value === option.value}
           disabled={option.disabled}
           title={option.hint}
-          className="h-[26px] flex-1 rounded-[2px] border-0 bg-transparent px-3 text-[13px] text-fg-muted hover:text-fg disabled:opacity-40 aria-pressed:bg-surface-hover aria-pressed:font-semibold aria-pressed:text-fg"
+          className="h-[26px] flex-1 rounded-[2px] border-0 bg-transparent px-3 text-sm text-fg-muted hover:text-fg disabled:opacity-40 aria-pressed:bg-surface-hover aria-pressed:font-semibold aria-pressed:text-fg"
           onClick={() => onChange(option.value)}
         >
           {option.label}
@@ -177,7 +177,7 @@ function StatusCard({
         <Icon size={18} aria-hidden="true" className={color} />
         {title}
       </h2>
-      <div className="grid gap-3 text-sm text-fg-soft">{children}</div>
+      <div className="grid gap-3 text-base text-fg-soft">{children}</div>
       {actions ? <div className="flex justify-end gap-2">{actions}</div> : null}
     </section>
   );
@@ -187,7 +187,7 @@ function Progress({ label, value }: { label: string; value: number }) {
   const percent = Math.round(value * 100);
   return (
     <div className="grid gap-1.5">
-      <div className="flex justify-between font-mono text-[11px] text-fg-muted">
+      <div className="flex justify-between font-mono text-xs text-fg-muted">
         <span>{label}</span>
         <span>{percent}%</span>
       </div>

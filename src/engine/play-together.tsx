@@ -95,7 +95,7 @@ function CheckRow({
           {title}
         </span>
         {detail ? (
-          <span className="text-xs text-fg-muted">{detail}</span>
+          <span className="text-sm text-fg-muted">{detail}</span>
         ) : null}
       </span>
       {action}
@@ -147,7 +147,7 @@ function Setup({
           }))}
           onChange={(mode) => onChange({ ...settings, mode })}
         />
-        <p className="m-0 mt-1.5 text-xs text-fg-muted">
+        <p className="m-0 mt-1.5 text-sm text-fg-muted">
           {modeHelp[settings.mode]}
         </p>
       </div>
@@ -289,7 +289,7 @@ function Lobby({
             {copied ? "Copied" : "Copy link"}
           </button>
         </div>
-        <p className="m-0 text-xs text-fg-muted">
+        <p className="m-0 text-sm text-fg-muted">
           {roomsUrl
             ? "Anyone with the link can join until you start."
             : "Opens in other tabs of this browser until you start."}
@@ -320,13 +320,13 @@ function Lobby({
               <span className="min-w-0 flex-1 truncate text-sm font-semibold">
                 {player.name}
                 {player.peer === hostPeer ? (
-                  <span className="ml-2 font-mono text-[11px] font-normal tracking-[0.06em] text-fg-muted">
+                  <span className="ml-2 font-mono text-xs font-normal tracking-[0.06em] text-fg-muted">
                     YOU · HOST
                   </span>
                 ) : null}
               </span>
               {player.peer !== hostPeer ? (
-                <span className="font-mono text-[11px] text-fg-muted">
+                <span className="font-mono text-xs text-fg-muted">
                   {[
                     links[player.peer] ? linkLabels[links[player.peer]] : null,
                     player.ping === null ? null : `${player.ping} ms`,
@@ -336,7 +336,7 @@ function Lobby({
                 </span>
               ) : null}
               {player.ready ? (
-                <span className="flex items-center gap-1.5 text-[13px] text-fg-soft">
+                <span className="flex items-center gap-1.5 text-sm text-fg-soft">
                   <span
                     aria-hidden="true"
                     className="size-1.5 rounded-full bg-success"
@@ -351,7 +351,7 @@ function Lobby({
               {player.peer !== hostPeer ? (
                 <button
                   type="button"
-                  className="border-0 bg-transparent p-0 text-[13px] text-fg-muted hover:text-danger"
+                  className="border-0 bg-transparent p-0 text-sm text-fg-muted hover:text-danger"
                   aria-label={`Remove ${player.name}`}
                   onClick={() => onRemove(player.peer)}
                 >
@@ -570,7 +570,7 @@ function PlayTogether({
           )}
         </div>
         <footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 px-6 pt-[18px] pb-5">
-          <span className="text-[13px] text-fg-muted" role="status">
+          <span className="text-sm text-fg-muted" role="status">
             {code
               ? statusOf(players, settings.players)
               : "You get a link to share next."}

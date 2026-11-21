@@ -119,7 +119,7 @@ function BuildDialog({
             </div>
           </div>
           <section aria-label="Build checks" className="grid gap-2">
-            <h3 className="m-0 flex justify-between font-mono text-[11px] font-normal text-fg-muted">
+            <h3 className="m-0 flex justify-between font-mono text-xs font-normal text-fg-muted">
               <span>MAP CHECK</span>
               <span>{summary}</span>
             </h3>
@@ -147,7 +147,7 @@ function BuildDialog({
                         <span className="sr-only">{label}: </span>
                         {check.name}
                       </div>
-                      <div className="truncate font-mono text-[11px] text-fg-muted">
+                      <div className="truncate font-mono text-xs text-fg-muted">
                         {issue
                           ? `${issueText(issue).title}${more > 0 ? ` · +${more} more` : ""}`
                           : check.waiting

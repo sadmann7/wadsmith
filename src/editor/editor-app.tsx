@@ -61,6 +61,7 @@ import {
 
 import { agent } from "../agent";
 import { BuildDialog } from "./build-dialog";
+import { ShortcutSheet } from "./shortcut-sheet";
 import { MapContextMenu } from "./context-menu";
 import {
   LineInspector,
@@ -344,6 +345,7 @@ function App({
   const menuOpen = useRef(false);
   const [contextMenuOpen, setContextMenuOpen] = useState(false);
   const [building, setBuilding] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
   const [draftCorners, setDraftCorners] = useState(0);
   const [showDock, setShowDock] = useState(initialLayout.dock);
   const [editMode, setEditMode] = useState<EditMode>("vertices");
@@ -467,6 +469,28 @@ function App({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [history, restore]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (
+        event.key !== "?" ||
+        event.repeat ||
+        event.ctrlKey ||
+        event.metaKey ||
+        ignoresShortcuts(event.target) ||
+        (event.target as Element).closest?.(
+          '[role="combobox"], [role="listbox"], [role="menu"]',
+        ) ||
+        document.querySelector(".game-stage")
+      ) {
+        return;
+      }
+      event.preventDefault();
+      setShowShortcuts(true);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -765,7 +789,7 @@ function App({
       <SelectContent className="select-content max-h-[min(var(--available-height),360px)]">
         {thingGroups.map(({ category, label }) => (
           <SelectGroup key={category}>
-            <SelectGroupLabel className="px-2 pt-2 pb-1 font-mono text-[11px] tracking-wide text-fg-muted uppercase">
+            <SelectGroupLabel className="px-2 pt-2 pb-1 font-mono text-xs tracking-wide text-fg-muted uppercase">
               {label}
             </SelectGroupLabel>
             {thingKinds
@@ -850,7 +874,8 @@ function App({
   };
 
   const runViewAction = (action: string) => {
-    if (action === "dock") toggleDock();
+    if (action === "shortcuts") setShowShortcuts(true);
+    else if (action === "dock") toggleDock();
     else if (action === "camera") findCameraOnMap();
     else changeLayout(action as ViewLayout);
   };
@@ -1087,6 +1112,13 @@ function App({
                 </MenuItem>
                 <MenuItem value="camera" className="select-item">
                   Find camera on map
+                </MenuItem>
+                <MenuSeparator className="menu-separator" />
+                <MenuItem value="shortcuts" className="select-item">
+                  Keyboard shortcuts
+                  <kbd className="ml-auto pl-4 font-mono text-[11px] text-fg-muted">
+                    ?
+                  </kbd>
                 </MenuItem>
               </MenuContent>
             </Menu>
@@ -1355,11 +1387,11 @@ function App({
                     >
                       <h2
                         id="welcome-title"
-                        className="text-[15px] font-semibold text-fg"
+                        className="text-base font-semibold text-fg"
                       >
                         Welcome to Wadsmith
                       </h2>
-                      <p className="text-[13px] text-fg-muted">
+                      <p className="text-sm text-fg-muted">
                         Build Doom maps in your browser and play them on the
                         spot. This starter map is ready, so play it, then change
                         anything and play again.
@@ -1668,7 +1700,7 @@ function App({
                         <div className="min-w-0">
                           <div>{title}</div>
                           {detail ? (
-                            <div className="truncate font-mono text-[11px] text-fg-muted">
+                            <div className="truncate font-mono text-xs text-fg-muted">
                               {detail}
                             </div>
                           ) : null}
@@ -1789,6 +1821,9 @@ function App({
           }))
         }
       />
+      {showShortcuts ? (
+        <ShortcutSheet onClose={() => setShowShortcuts(false)} />
+      ) : null}
       {building ? (
         <BuildDialog
           map={map}
