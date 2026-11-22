@@ -7,6 +7,7 @@ import {
   type GameInfo,
   slotCount as gameSlots,
 } from "@/lib/engine/game";
+import { type CloudLink, parseCloudLink } from "@/lib/episodes/cloud";
 import { checkMap } from "@/lib/map/checks";
 import { addRoomOnSide, type RoomSide } from "@/lib/map/edit";
 import { featuredMaps } from "@/lib/map/featured";
@@ -35,6 +36,7 @@ export interface EpisodeMap {
   mapRevision: number;
   map: GameMap;
   broken?: boolean;
+  cloud?: CloudLink;
 }
 
 export type LevelDetails = Partial<
@@ -249,7 +251,12 @@ export function mapFromTemplate(template: MapTemplate, name: string): GameMap {
 
 export function parseStoredMap(value: EpisodeMap): EpisodeMap {
   try {
-    return { ...value, map: parseMap(value.map), broken: undefined };
+    return {
+      ...value,
+      map: parseMap(value.map),
+      broken: undefined,
+      cloud: parseCloudLink(value.cloud),
+    };
   } catch {
     return {
       ...value,
@@ -327,6 +334,9 @@ export function createMapSaver(
         map: { ...map, name: entry.map.name },
         mapRevision: entry.mapRevision + 1,
         editedAt: Date.now(),
+        // An edit the online copy doesn't have yet, even if the tab closes
+        // before it is sent.
+        ...(entry.cloud && { cloud: { ...entry.cloud, pending: true } }),
       }))
       .then((saved) => {
         if (!saved) {
