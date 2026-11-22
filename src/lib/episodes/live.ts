@@ -25,6 +25,8 @@ export interface LiveEvents {
   onRefused: () => void;
   // Whether the link is connected, for showing it.
   onConnected: (connected: boolean) => void;
+  // The server turned an edit away, which then came off the map shown.
+  onDropped: (reason: string) => void;
 }
 
 interface LiveOptions extends LiveEvents {
@@ -190,6 +192,7 @@ export function openLiveMap({
         // The server didn't take the edit, so it comes off the map shown.
         confirm(Number(data.id));
         replay();
+        events.onDropped(typeof data.error === "string" ? data.error : "");
         idle();
       }
     });

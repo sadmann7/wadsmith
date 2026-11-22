@@ -61,6 +61,29 @@ describe("an edit history", () => {
     expect(undone.vertices[corners[2]]).toBeUndefined();
   });
 
+  it("won't bring back a room whose corners someone else removed", () => {
+    const history = createEditHistory(options);
+    const removed = {
+      ...testMap,
+      sectors: testMap.sectors.filter((sector) => sector.id !== "sector-2"),
+    };
+    history.record(testMap, removed);
+    // Another editor then removes corners the corridor used.
+    const vertices = Object.fromEntries(
+      Object.entries(removed.vertices).filter(
+        ([id]) => id !== "v13" && id !== "v14",
+      ),
+    );
+    const theirs = {
+      ...removed,
+      vertices,
+      sectors: removed.sectors.filter(
+        (sector) => !sector.vertices.some((id) => id === "v13" || id === "v14"),
+      ),
+    };
+    expect(history.undo(theirs)).toBeUndefined();
+  });
+
   it("forgets its steps when the map is swapped whole", () => {
     const history = createEditHistory(options);
     history.record(testMap, updateThing(testMap, "imp-1", { x: 1 }));

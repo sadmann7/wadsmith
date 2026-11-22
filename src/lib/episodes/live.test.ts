@@ -160,6 +160,18 @@ describe("live editing in the browser", () => {
     expect(bo.map.name).toBe("Hangar");
   });
 
+  it("takes back an edit the server turned away", async () => {
+    const server = fakeServer(testMap);
+    const ana = server.join("Ana");
+    await ready(server);
+    server.refuseWith("too-big");
+    ana.edit((map) => updateThing(map, "imp-1", { x: 5 }));
+    server.run();
+    expect(ana.map.things[3].x).toBe(testMap.things[3].x);
+    expect(ana.seen.dropped).toEqual(["too-big"]);
+    expect(ana.live.idle).toBe(true);
+  });
+
   it("passes pointers on to the others", async () => {
     vi.useRealTimers();
     const server = fakeServer(testMap);
@@ -191,6 +203,7 @@ function fakeServer(start: GameMap) {
   const queue: [FakeSocket, Record<string, unknown>][] = [];
   const seen = new Map<string, number>();
   const patches: MapPatch[] = [];
+  let refuse = "";
 
   class FakeSocket extends EventTarget {
     readyState: number = WebSocket.CONNECTING;
@@ -235,6 +248,10 @@ function fakeServer(start: GameMap) {
         from.hear({ type: "welcome", peer: from.peer, revision, map, peers });
       } else if (data.type === "patch") {
         const id = Number(data.id);
+        if (refuse) {
+          from.hear({ type: "refused", id, error: refuse });
+          continue;
+        }
         if (id <= (seen.get(from.client) ?? 0)) {
           from.hear({ type: "ack", id, revision });
           continue;
@@ -268,7 +285,11 @@ function fakeServer(start: GameMap) {
   const join = (name: string, from = start) => {
     let local = from;
     let current: FakeSocket | null = null;
-    const seenBy = { peers: [] as LivePeer[], idle: [] as number[] };
+    const seenBy = {
+      peers: [] as LivePeer[],
+      idle: [] as number[],
+      dropped: [] as string[],
+    };
     const live = openLiveMap({
       url: "ws://rooms.test/maps/x/live",
       secret: "s",
@@ -293,6 +314,7 @@ function fakeServer(start: GameMap) {
       onIdle: (at) => seenBy.idle.push(at),
       onRefused: () => {},
       onConnected: () => {},
+      onDropped: (reason) => seenBy.dropped.push(reason),
     });
     return {
       live,
@@ -314,6 +336,9 @@ function fakeServer(start: GameMap) {
     join,
     run,
     patches,
+    refuseWith(reason: string) {
+      refuse = reason;
+    },
     // Drops everything waiting, as when a connection fails mid-flight.
     lose() {
       queue.length = 0;

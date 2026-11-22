@@ -199,6 +199,30 @@ export function parsePatch(value: unknown): MapPatch | null {
   return value;
 }
 
+// Corners rooms name that the map doesn't have, as when one person draws a
+// room against a corner another removed at the same moment.
+export function missingCorners(source: object) {
+  const map = source as Json;
+  const vertices = (map.vertices as Json | undefined) ?? {};
+  const missing = new Set<string>();
+  for (const sector of (map.sectors as Json[] | undefined) ?? []) {
+    const loops = [
+      sector.vertices,
+      ...((sector.holes as unknown[] | undefined) ?? []),
+      ...((sector.details as unknown[] | undefined) ?? []),
+    ];
+    for (const loop of loops) {
+      if (!Array.isArray(loop)) continue;
+      for (const id of loop) {
+        if (typeof id === "string" && !Object.hasOwn(vertices, id)) {
+          missing.add(id);
+        }
+      }
+    }
+  }
+  return missing;
+}
+
 // One patch that does both, the second winning where they touch one field.
 export function combinePatches(first: MapPatch, second: MapPatch): MapPatch {
   const set: NonNullable<MapPatch["set"]> = {};

@@ -4,7 +4,12 @@
 import { DurableObject } from "cloudflare:workers";
 
 import { ConnectionLimits } from "./limits";
-import { applyPatch, type MapPatch, parsePatch } from "./map-patch";
+import {
+  applyPatch,
+  type MapPatch,
+  missingCorners,
+  parsePatch,
+} from "./map-patch";
 
 export interface MapsEnv {
   MAPS: DurableObjectNamespace<MapCopy>;
@@ -100,7 +105,8 @@ class MapCopy extends DurableObject<MapsEnv> {
     const now = Date.now();
     let limits = this.limits.get(socket);
     if (!limits) {
-      limits = new ConnectionLimits(now, 60);
+      // One edit can be as big as a map, like pasting half of one.
+      limits = new ConnectionLimits(now, 60, maxMapBytes + 64 * 1024);
       this.limits.set(socket, limits);
     }
     const verdict = limits.check(message, now);
@@ -215,6 +221,15 @@ class MapCopy extends DurableObject<MapsEnv> {
       return;
     }
     const map = applyPatch(current.map, patch);
+    // An edit that would leave a room on corners that are gone is turned
+    // away, and its sender's copy takes it back.
+    const before = missingCorners(current.map);
+    if ([...missingCorners(map)].some((corner) => !before.has(corner))) {
+      socket.send(
+        JSON.stringify({ type: "refused", id, error: "missing-corners" }),
+      );
+      return;
+    }
     // A map grows by at most what the patch holds, so the whole map is
     // measured again only when that could take it past the limit.
     let size = this.size + byteLength(JSON.stringify(patch));

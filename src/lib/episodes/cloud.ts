@@ -1,3 +1,5 @@
+import { diffMaps, getIsEmptyPatch } from "@rooms/map-patch";
+
 import type { GameMap } from "@/lib/map/types";
 
 import { parseMap } from "@/lib/map/storage";
@@ -145,6 +147,18 @@ export async function syncMap(
 > {
   if (link.pending && link.secret) {
     const written = await api.write(link, map);
+    // The online copy may already hold these edits, sent another way before
+    // this browser heard back.
+    if (
+      written.kind === "conflict" &&
+      written.map.name === map.name &&
+      getIsEmptyPatch(diffMaps(written.map, map))
+    ) {
+      return {
+        kind: "pushed",
+        link: { ...link, revision: written.revision, pending: undefined },
+      };
+    }
     if (written.kind === "conflict") return written;
     return {
       kind: "pushed",

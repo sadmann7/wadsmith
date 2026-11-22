@@ -93,6 +93,17 @@ describe("a map's online copy", () => {
     });
   });
 
+  it("counts a copy that already holds this browser's edits as in step", async () => {
+    const { api } = fakeServer();
+    const made = await api.create(renamed("Same"));
+    // The edits reached the copy another way, but this browser still has the
+    // older revision and its edits marked as unsent.
+    await api.write(made, renamed("Same"));
+    expect(
+      await syncMap(api, { ...made, pending: true }, renamed("Same")),
+    ).toEqual({ kind: "pushed", link: { ...made, revision: 2 } });
+  });
+
   it("refuses a copy the server can't vouch for", async () => {
     const { api, copies } = fakeServer();
     const made = await api.create(testMap);

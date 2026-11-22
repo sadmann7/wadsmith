@@ -206,6 +206,23 @@ describe("live editing", () => {
       JSON.stringify({ type: "patch", patch: { set: { secrets: {} } } }),
     );
     editor.socket.send(JSON.stringify({ type: "cursor", x: 1, y: 2 }));
+    // A room on a corner the map doesn't have is turned away.
+    editor.socket.send(
+      JSON.stringify({
+        type: "patch",
+        id: 1,
+        patch: {
+          set: {
+            sectors: { s: { id: "s", vertices: ["a", "b", "c"] } },
+          },
+        },
+      }),
+    );
+    expect(await editor.next()).toEqual({
+      type: "refused",
+      id: 1,
+      error: "missing-corners",
+    });
     // The bad patch is dropped, and nothing came back for either message.
     expect(await (await send(`/maps/${id}`)).json()).toMatchObject({
       revision: 1,

@@ -4,6 +4,7 @@ import {
   diffMaps,
   getIsEmptyPatch,
   type MapPatch,
+  missingCorners,
 } from "@rooms/map-patch";
 
 import type { GameMap } from "@/lib/map/types";
@@ -48,14 +49,20 @@ export function createEditHistory({ limit, groupDelay }: EditHistoryOptions) {
     undo(current: GameMap) {
       const step = done.pop();
       if (!step) return undefined;
+      const next = keepCorners(current, applyPatch(current, step.undo));
+      // A room can't come back on corners someone else removed since, so
+      // that step is gone.
+      if (getHasLostCorners(current, next)) return undefined;
       undone.push(step);
-      return keepCorners(current, applyPatch(current, step.undo));
+      return next;
     },
     redo(current: GameMap) {
       const step = undone.pop();
       if (!step) return undefined;
+      const next = keepCorners(current, applyPatch(current, step.redo));
+      if (getHasLostCorners(current, next)) return undefined;
       done.push({ ...step, group: undefined });
-      return keepCorners(current, applyPatch(current, step.redo));
+      return next;
     },
     canUndo: () => done.length > 0,
     canRedo: () => undone.length > 0,
@@ -65,6 +72,11 @@ export function createEditHistory({ limit, groupDelay }: EditHistoryOptions) {
       undone.length = 0;
     },
   };
+}
+
+function getHasLostCorners(current: GameMap, next: GameMap) {
+  const before = missingCorners(current);
+  return [...missingCorners(next)].some((id) => !before.has(id));
 }
 
 // Corners a step would take away that a room still uses, like one someone

@@ -476,8 +476,16 @@ export function EpisodeScreen() {
           url: liveUrl(cloudUrl, entry.cloud.id),
           secret,
           name: loadName(),
-          map: current.saver.map,
+          map: entry.map,
           onChange: (patch) => takeRemote(active, mapId, patch),
+          onDropped: (reason) =>
+            setCloudProblem(
+              reason === "too-big"
+                ? "That edit would make the map too big to keep online, so it was taken back."
+                : reason === "missing-corners"
+                  ? "That edit was taken back: someone removed corners it uses at the same moment."
+                  : "The online copy turned an edit away, so it was taken back.",
+            ),
           onPeers: setPeers,
           onIdle: () => settle(active, mapId),
           onConnected: (connected) =>
@@ -494,6 +502,8 @@ export function EpisodeScreen() {
           },
         });
         live.current = { mapId, link };
+        // Edits made while the stored map was read go out on the link.
+        link.send(current.saver.map);
       });
     };
     cloudSteps.current = { goLive, settle };
@@ -689,10 +699,13 @@ export function EpisodeScreen() {
       }
       if (entry.broken) return;
       setDetails(detailsOf(entry));
+      // Each tab's live link brings it the same edits, so it doesn't take
+      // another tab's copy of them as well.
       if (
         entry.mapRevision > active.saver.revision &&
         !active.saver.busy &&
-        !active.saver.failed
+        !active.saver.failed &&
+        live.current?.mapId !== active.id
       ) {
         active.saver.adopt(entry);
         for (const listener of externalListeners.current) listener(entry.map);
@@ -1528,10 +1541,12 @@ export function EpisodeScreen() {
               }));
               announce(session.id);
               await refresh(store, session.episodeId);
+              stopLive();
               void syncCloud(store, session.id);
             }}
             onStop={() =>
               void attempt(async () => {
+                stopLive();
                 await store.updateMap(session.id, (entry) => ({
                   ...entry,
                   cloud: undefined,
