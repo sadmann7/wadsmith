@@ -14,6 +14,10 @@ const listed = ["sectors", "things", "switches", "notes"] as const;
 const compared = ["complevel"] as const;
 const allowed = ["complevel", "name"] as const;
 
+// The longest patch a live link sends: as big as a whole map, with room for
+// the message around it.
+export const maxPatchLength = 5 * 1024 * 1024;
+
 type Collection = (typeof keyed)[number] | (typeof listed)[number];
 type Field = (typeof allowed)[number];
 

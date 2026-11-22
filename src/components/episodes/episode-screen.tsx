@@ -487,7 +487,10 @@ export function EpisodeScreen() {
                   : "The online copy turned an edit away, so it was taken back.",
             ),
           onPeers: setPeers,
-          onIdle: () => settle(active, mapId),
+          onIdle: () => {
+            setCloudProblem(null);
+            settle(active, mapId);
+          },
           onConnected: (connected) =>
             setCloudProblem(
               connected

@@ -172,6 +172,18 @@ describe("live editing in the browser", () => {
     expect(ana.live.idle).toBe(true);
   });
 
+  it("takes back an edit too long to send", async () => {
+    const server = fakeServer(testMap);
+    const ana = server.join("Ana");
+    await ready(server);
+    const note = { id: "n", x: 0, y: 0, text: "x".repeat(6 * 1024 * 1024) };
+    ana.edit((map) => ({ ...map, notes: [note] }));
+    server.run();
+    expect(ana.map.notes).toBeUndefined();
+    expect(server.patches).toEqual([]);
+    expect(ana.seen.dropped).toEqual(["too-big"]);
+  });
+
   it("passes pointers on to the others", async () => {
     vi.useRealTimers();
     const server = fakeServer(testMap);

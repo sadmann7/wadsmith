@@ -3,6 +3,7 @@ import {
   diffMaps,
   getIsEmptyPatch,
   type MapPatch,
+  maxPatchLength,
   parsePatch,
 } from "@rooms/map-patch";
 
@@ -192,8 +193,9 @@ export function openLiveMap({
         // The server didn't take the edit, so it comes off the map shown.
         confirm(Number(data.id));
         replay();
-        events.onDropped(typeof data.error === "string" ? data.error : "");
         idle();
+        // After idle, so the message about it stays up.
+        events.onDropped(typeof data.error === "string" ? data.error : "");
       }
     });
   };
@@ -204,6 +206,13 @@ export function openLiveMap({
   };
 
   const push = (patch: MapPatch) => {
+    // An edit too long to send would close the link on every try, so it is
+    // taken back here instead.
+    if (JSON.stringify(patch).length > maxPatchLength) {
+      replay();
+      events.onDropped("too-big");
+      return;
+    }
     sent += 1;
     pending.push({ id: sent, patch });
     post({ type: "patch", id: sent, patch });

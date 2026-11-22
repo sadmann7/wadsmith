@@ -557,6 +557,7 @@ export function EditorScreen({
   };
 
   const restore = (next: GameMap | undefined) => {
+    syncUndoable();
     if (!next) return;
     showMap(next);
     setSelection([]);

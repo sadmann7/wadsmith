@@ -7,6 +7,7 @@ import { ConnectionLimits } from "./limits";
 import {
   applyPatch,
   type MapPatch,
+  maxPatchLength,
   missingCorners,
   parsePatch,
 } from "./map-patch";
@@ -106,7 +107,7 @@ class MapCopy extends DurableObject<MapsEnv> {
     let limits = this.limits.get(socket);
     if (!limits) {
       // One edit can be as big as a map, like pasting half of one.
-      limits = new ConnectionLimits(now, 60, maxMapBytes + 64 * 1024);
+      limits = new ConnectionLimits(now, 60, maxPatchLength + 64 * 1024);
       this.limits.set(socket, limits);
     }
     const verdict = limits.check(message, now);
