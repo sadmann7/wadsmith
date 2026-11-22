@@ -3,6 +3,16 @@ import type { GameMap } from "./types";
 
 type TextureUse = Map<string, number>;
 
+// The names the game in use has: solid textures for walls, flats, the
+// textures for the middle of an open line with the see-through ones first,
+// and every texture whatever its use.
+interface TextureNames {
+  walls: readonly string[];
+  flats: readonly string[];
+  middles: readonly string[];
+  textures: readonly string[];
+}
+
 function countUse(use: TextureUse, name: string) {
   use.set(name, (use.get(name) ?? 0) + 1);
 }
@@ -31,4 +41,4 @@ function wallUse(map: GameMap) {
   return use;
 }
 
-export { flatUse, wallUse, type TextureUse };
+export { flatUse, wallUse, type TextureNames, type TextureUse };

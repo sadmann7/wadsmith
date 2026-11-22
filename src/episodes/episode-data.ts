@@ -1,8 +1,14 @@
+import {
+  defaultGame,
+  slotCount as gameSlots,
+  type GameInfo,
+} from "@/engine/game";
 import { addRoomOnSide, type RoomSide } from "@/map/edit";
 import { checkMap } from "@/map/checks";
 import { blankMap, starterMap } from "@/map/starter-map";
 import { loadSavedMap, MapFileError, parseMap } from "@/map/storage";
 import type { Complevel, GameMap } from "@/map/types";
+import type { CheckContext } from "@/map/validate";
 import { compileLumps } from "@/wad/compile";
 import { featuredMaps } from "@/map/featured";
 
@@ -58,7 +64,8 @@ const backupVersion = 1;
 const maxBackupBytes = 64 * 1024 * 1024;
 const maxNameLength = 80;
 const maxDescriptionLength = 160;
-const slotCount = 32;
+// Doom II has 32 map slots; Ultimate Doom's four episodes hold 36.
+const maxSlots = 36;
 const firstEpisodeId = "first-project";
 const firstMapId = "first-map";
 const lastMapKey = "lastMap";
@@ -68,7 +75,7 @@ const oldFirstNames = new Set(["My project", "My episode"]);
 const hubSides: RoomSide[] = ["north", "east", "south", "west"];
 
 const mapSlots = Array.from(
-  { length: slotCount },
+  { length: maxSlots },
   (_, index) => `MAP${String(index + 1).padStart(2, "0")}`,
 );
 
@@ -102,9 +109,16 @@ function newId() {
   );
 }
 
-function freeSlots(maps: EpisodeMap[], keep?: string) {
+// Each game has only as many slots as its maps or episodes hold.
+function freeSlots(
+  maps: EpisodeMap[],
+  keep?: string,
+  game: GameInfo = defaultGame,
+) {
   const used = new Set(maps.map((entry) => entry.slot));
-  return mapSlots.filter((slot) => slot === keep || !used.has(slot));
+  return mapSlots
+    .slice(0, gameSlots(game))
+    .filter((slot) => slot === keep || !used.has(slot));
 }
 
 function bySlot(maps: EpisodeMap[]) {
@@ -129,22 +143,30 @@ function buildProblem(map: GameMap) {
 
 const checked = new Map<
   string,
-  { revision: number; checks: ReturnType<typeof checkMap> }
+  { revision: number; game: string; checks: ReturnType<typeof checkMap> }
 >();
 
-// Every edit to a saved map bumps its revision, and new maps get new ids.
-function checksOf(entry: EpisodeMap) {
+// Every edit to a saved map bumps its revision, and new maps get new ids. A
+// change of game checks every map again.
+function checksOf(entry: EpisodeMap, context?: CheckContext) {
+  const game = context?.game?.id ?? "";
   const known = checked.get(entry.id);
-  if (known?.revision === entry.mapRevision) return known.checks;
-  const checks = checkMap(entry.map);
-  checked.set(entry.id, { revision: entry.mapRevision, checks });
+  if (known?.revision === entry.mapRevision && known.game === game) {
+    return known.checks;
+  }
+  const checks = checkMap(entry.map, context);
+  checked.set(entry.id, { revision: entry.mapRevision, game, checks });
   return checks;
 }
 
 // A problem of undefined means the build hasn't been checked yet.
-function mapStatus(entry: EpisodeMap, problem?: string | null) {
+function mapStatus(
+  entry: EpisodeMap,
+  problem?: string | null,
+  context?: CheckContext,
+) {
   if (entry.broken) return { kind: "error" as const, label: "Can't open" };
-  const checks = checksOf(entry);
+  const checks = checksOf(entry, context);
   const errors = checks.filter((issue) => issue.severity === "error").length;
   const warnings = checks.length - errors;
   if (errors > 0) {

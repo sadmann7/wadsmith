@@ -10,6 +10,7 @@ import {
   freedoomWalls,
   middleTextures,
 } from "@/map/freedoom-textures";
+import type { TextureNames } from "@/map/textures";
 import { generalizedTrigger, isGeneralized } from "@/map/boom";
 import {
   higherLevel,
@@ -176,8 +177,13 @@ const effects = new Map(
 const thingKindOf = new Map<number, ThingKind>(
   thingKinds.map((kind) => [thingCatalog[kind].doomType, kind]),
 );
-const walls = new Set<string>(freedoomWalls);
-const flats = new Set<string>(freedoomFlats);
+// Without the game's own names, Freedoom's stand in.
+const freedoomNames: TextureNames = {
+  walls: freedoomWalls,
+  flats: freedoomFlats,
+  middles: middleTextures,
+  textures: [...middleTextures, ...doorTextures, ...switchTextures],
+};
 
 // Keeping the sector on the right and turning as far right as possible walks
 // the smallest outline around it, so a sector that touches itself at a corner
@@ -288,7 +294,13 @@ function mostCommon(names: string[]) {
   return [...counts].toSorted((a, b) => b[1] - a[1])[0]?.[0];
 }
 
-function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
+function decompileMap(
+  doom: DoomMap,
+  names: TextureNames = freedoomNames,
+): { map: GameMap; report: ImportReport } {
+  const walls = new Set(names.walls);
+  const flats = new Set(names.flats);
+  const middles = new Set(names.middles);
   const report: ImportReport = {
     rooms: 0,
     splitSectors: 0,
@@ -748,8 +760,7 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
       if (
         kept.some(
           ({ side }) =>
-            side.middle !== noTexture &&
-            (opening || !middleTextures.includes(side.middle)),
+            side.middle !== noTexture && (opening || !middles.has(side.middle)),
         )
       ) {
         report.seeThroughWalls += 1;
@@ -774,9 +785,7 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
               ? name
               : wall(name);
         const middle =
-          side.middle !== noTexture &&
-          !opening &&
-          middleTextures.includes(side.middle)
+          side.middle !== noTexture && !opening && middles.has(side.middle)
             ? { middle: side.middle }
             : {};
         const value: LineSide = detail

@@ -4,7 +4,7 @@ type Route =
   | { kind: "episode"; id: string; play?: boolean }
   | { kind: "map"; id: string; slot: string; play?: boolean };
 
-const slotPattern = /^MAP(0[1-9]|[12][0-9]|3[0-2])$/;
+const slotPattern = /^MAP(0[1-9]|[12][0-9]|3[0-6])$/;
 const shortIdPattern = /^[0-9a-z]{8}$/;
 
 // Episodes made before short ids keep their stored id, and their address is a

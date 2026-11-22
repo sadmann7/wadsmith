@@ -23,6 +23,7 @@ import {
   SectionLabel,
   StatusCard,
 } from "./coop-ui";
+import { defaultGame, games, type GameId } from "./game";
 import { peerLinks, type PeerLinks } from "./peer-link";
 import { GameView, type CoopSession } from "./play-panel";
 import {
@@ -36,6 +37,7 @@ import {
   type RoomInfo,
   type RoomPlayer,
 } from "./room";
+import { useIwad } from "./use-iwad";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -48,7 +50,7 @@ type JoinState =
   | { step: "getting"; peer: number; progress: number }
   | { step: "waiting"; peer: number; game: CoopGame }
   | { step: "playing"; peer: number; game: CoopGame }
-  | { step: "ended"; reason: Refusal | Ending | "left" | "quit" };
+  | { step: "ended"; reason: Refusal | Ending | "left" | "quit" | "game" };
 
 function backHome() {
   location.assign("/");
@@ -84,9 +86,11 @@ function GuestShell({ children }: { children: React.ReactNode }) {
 function Ended({
   reason,
   info,
+  hostGame,
 }: {
-  reason: Refusal | Ending | "left" | "quit";
+  reason: Refusal | Ending | "left" | "quit" | "game";
   info: RoomInfo | null;
+  hostGame: GameId | null;
 }) {
   const host = info?.host ?? "The host";
   const back = (
@@ -94,6 +98,26 @@ function Ended({
       Make your own map
     </Button>
   );
+  if (reason === "game") {
+    return (
+      <StatusCard
+        icon={LogOut}
+        tone="info"
+        title="A different game"
+        actions={
+          <>
+            <Button onClick={() => location.reload()}>Join again</Button>
+            {back}
+          </>
+        }
+      >
+        <p className="m-0">
+          {host} plays on {hostGame ? games[hostGame].label : "another game"}.
+          Everyone needs the same game, so bring its IWAD first.
+        </p>
+      </StatusCard>
+    );
+  }
   if (reason === "full") {
     return (
       <StatusCard
@@ -355,6 +379,12 @@ function CoopJoin({ code }: { code: string }) {
   const linksRef = React.useRef<PeerLinks | null>(null);
   const relayRef = React.useRef(packetRelay());
   const [session, setSession] = React.useState<CoopSession | null>(null);
+  const [hostGame, setHostGame] = React.useState<GameId | null>(null);
+  const iwad = useIwad();
+  const iwadRef = React.useRef(iwad);
+  React.useEffect(() => {
+    iwadRef.current = iwad;
+  }, [iwad]);
 
   React.useEffect(() => {
     let peer = 0;
@@ -403,7 +433,15 @@ function CoopJoin({ code }: { code: string }) {
         setState((current) =>
           current.step === "getting" ? { ...current, progress } : current,
         ),
+      // A map plays on the host's IWAD, so another one here would desync.
       onGame: (received) => {
+        const mine = iwadRef.current?.game.id ?? defaultGame.id;
+        if (received.game && received.game !== mine) {
+          setHostGame(received.game);
+          setState({ step: "ended", reason: "game" });
+          room.leave();
+          return;
+        }
         game = received;
         setState({ step: "waiting", peer, game: received });
       },
@@ -542,7 +580,7 @@ function CoopJoin({ code }: { code: string }) {
         />
       ) : null}
       {state.step === "ended" ? (
-        <Ended reason={state.reason} info={info} />
+        <Ended reason={state.reason} info={info} hostGame={hostGame} />
       ) : null}
     </GuestShell>
   );

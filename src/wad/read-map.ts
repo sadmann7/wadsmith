@@ -1,3 +1,4 @@
+import { isMapLump } from "@/engine/game";
 import type { Point } from "@/map/types";
 import { WadFileError, readLumps, type GameFile } from "./inspect";
 
@@ -42,7 +43,6 @@ interface DoomMap {
   title?: string;
 }
 
-const mapLump = /^MAP(0[1-9]|[12][0-9]|3[0-2])$/;
 const noSide = 0xffff;
 const text = new TextDecoder("latin1");
 const levelString = /^\s*HUSTR_(\d+)\s*=\s*(.*?)\s*$/gim;
@@ -126,7 +126,7 @@ function readTitles(lumpName: string, data: Uint8Array) {
     for (const [, number, value] of source.matchAll(levelString)) {
       const slot = `MAP${number.padStart(2, "0")}`;
       const title = titleOf(slot, value);
-      if (mapLump.test(slot) && title) titles.push([slot, title]);
+      if (isMapLump(slot) && title) titles.push([slot, title]);
     }
   } else {
     for (const [, slot, body] of source.matchAll(levelInfo)) {
@@ -143,17 +143,15 @@ function readTitles(lumpName: string, data: Uint8Array) {
 function readMaps(files: GameFile[]): DoomMap[] {
   const maps = new Map<string, DoomMap>();
   const titles = new Map<string, string>();
-  let doomOne = false;
   for (const file of files) {
     const lumps = readLumps(file);
     for (const [index, lump] of lumps.entries()) {
-      if (/^E\dM\d$/.test(lump.name)) doomOne = true;
       if (lump.name === "DEHACKED" || lump.name === "UMAPINFO") {
         for (const [slot, title] of readTitles(lump.name, lump.data)) {
           titles.set(slot, title);
         }
       }
-      if (!mapLump.test(lump.name)) continue;
+      if (!isMapLump(lump.name)) continue;
       const parts = new Map<string, Uint8Array>();
       for (const part of lumps.slice(index + 1, index + 12)) {
         if (part.name === "TEXTMAP") {
@@ -161,7 +159,7 @@ function readMaps(files: GameFile[]): DoomMap[] {
             `${lump.name} in ${file.name} is a UDMF map, which the editor can't open.`,
           );
         }
-        if (parts.has(part.name) || mapLump.test(part.name)) break;
+        if (parts.has(part.name) || isMapLump(part.name)) break;
         parts.set(part.name, part.data);
       }
       if (parts.has("BEHAVIOR")) {
@@ -173,11 +171,7 @@ function readMaps(files: GameFile[]): DoomMap[] {
     }
   }
   if (maps.size === 0) {
-    throw new WadFileError(
-      doomOne
-        ? "These are Doom 1 maps. Wadsmith edits Doom II maps (MAP01 to MAP32)."
-        : "There are no maps in these files.",
-    );
+    throw new WadFileError("There are no maps in these files.");
   }
   return [...maps.values()]
     .map((map) =>

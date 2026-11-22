@@ -4,6 +4,7 @@ import {
   screenSize,
   type CreateDoom,
   type DoomGame,
+  type EngineIwad,
   type GameFiles,
   type GameStatus,
   type NetworkMode,
@@ -31,7 +32,7 @@ type DoomWorkerRequest =
       type: "start";
       engineUrl: string;
       baseUrl: string;
-      iwad: Uint8Array;
+      iwad: EngineIwad;
       files: GameFiles;
       sound: SoundLevel;
       paused: boolean;

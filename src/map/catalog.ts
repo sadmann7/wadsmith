@@ -66,6 +66,8 @@ const thingCatalog: Record<
     category: ThingCategory;
     // How far below the ceiling the engine hangs it, for things that hang.
     hangs?: number;
+    // Doom II added it, so a Doom 1 game has no such thing.
+    doom2?: boolean;
   }
 > = {
   player: {
@@ -132,12 +134,14 @@ const thingCatalog: Record<
   chaingunner: {
     label: "Chaingunner",
     doomType: 65,
+    doom2: true,
     color: "#ef4444",
     category: "enemy",
   },
   "pain-elemental": {
     label: "Pain elemental",
     doomType: 71,
+    doom2: true,
     color: "#a16207",
     category: "enemy",
   },
@@ -235,6 +239,7 @@ const thingCatalog: Record<
   "hell-knight": {
     label: "Hell knight",
     doomType: 69,
+    doom2: true,
     color: "#f87171",
     category: "enemy",
   },
@@ -247,24 +252,28 @@ const thingCatalog: Record<
   arachnotron: {
     label: "Arachnotron",
     doomType: 68,
+    doom2: true,
     color: "#f87171",
     category: "enemy",
   },
   revenant: {
     label: "Revenant",
     doomType: 66,
+    doom2: true,
     color: "#f87171",
     category: "enemy",
   },
   mancubus: {
     label: "Mancubus",
     doomType: 67,
+    doom2: true,
     color: "#f87171",
     category: "enemy",
   },
   "arch-vile": {
     label: "Arch-vile",
     doomType: 64,
+    doom2: true,
     color: "#f87171",
     category: "enemy",
   },
@@ -283,12 +292,14 @@ const thingCatalog: Record<
   "wolfenstein-ss": {
     label: "Wolfenstein SS",
     doomType: 84,
+    doom2: true,
     color: "#f87171",
     category: "enemy",
   },
   "commander-keen": {
     label: "Commander Keen",
     doomType: 72,
+    doom2: true,
     color: "#f87171",
     category: "enemy",
     hangs: 72,
@@ -296,6 +307,7 @@ const thingCatalog: Record<
   "boss-brain": {
     label: "Boss brain",
     doomType: 88,
+    doom2: true,
     color: "#f87171",
     category: "enemy",
   },
@@ -308,6 +320,7 @@ const thingCatalog: Record<
   "super-shotgun": {
     label: "Super shotgun",
     doomType: 82,
+    doom2: true,
     color: "#facc15",
     category: "item",
   },
@@ -386,6 +399,7 @@ const thingCatalog: Record<
   megasphere: {
     label: "Megasphere",
     doomType: 83,
+    doom2: true,
     color: "#60a5fa",
     category: "item",
   },
@@ -452,18 +466,21 @@ const thingCatalog: Record<
   "burning-barrel": {
     label: "Burning barrel",
     doomType: 70,
+    doom2: true,
     color: "#9ca3af",
     category: "decor",
   },
   "tall-tech-lamp": {
     label: "Tall tech lamp",
     doomType: 85,
+    doom2: true,
     color: "#9ca3af",
     category: "decor",
   },
   "short-tech-lamp": {
     label: "Short tech lamp",
     doomType: 86,
+    doom2: true,
     color: "#9ca3af",
     category: "decor",
   },
@@ -738,6 +755,7 @@ const thingCatalog: Record<
   "hanging-victim-guts": {
     label: "Hanging victim, guts removed",
     doomType: 73,
+    doom2: true,
     color: "#9ca3af",
     category: "decor",
     hangs: 88,
@@ -745,6 +763,7 @@ const thingCatalog: Record<
   "hanging-victim-guts-brain": {
     label: "Hanging victim, guts and brain removed",
     doomType: 74,
+    doom2: true,
     color: "#9ca3af",
     category: "decor",
     hangs: 88,
@@ -752,6 +771,7 @@ const thingCatalog: Record<
   "hanging-torso-looking-down": {
     label: "Hanging torso, looking down",
     doomType: 75,
+    doom2: true,
     color: "#9ca3af",
     category: "decor",
     hangs: 64,
@@ -759,6 +779,7 @@ const thingCatalog: Record<
   "hanging-torso-open-skull": {
     label: "Hanging torso, open skull",
     doomType: 76,
+    doom2: true,
     color: "#9ca3af",
     category: "decor",
     hangs: 64,
@@ -766,6 +787,7 @@ const thingCatalog: Record<
   "hanging-torso-looking-up": {
     label: "Hanging torso, looking up",
     doomType: 77,
+    doom2: true,
     color: "#9ca3af",
     category: "decor",
     hangs: 64,
@@ -773,6 +795,7 @@ const thingCatalog: Record<
   "hanging-torso-brain-removed": {
     label: "Hanging torso, brain removed",
     doomType: 78,
+    doom2: true,
     color: "#9ca3af",
     category: "decor",
     hangs: 64,
@@ -780,30 +803,35 @@ const thingCatalog: Record<
   "pool-of-blood": {
     label: "Pool of blood",
     doomType: 79,
+    doom2: true,
     color: "#9ca3af",
     category: "decor",
   },
   "pool-of-blood-2": {
     label: "Pool of blood, small",
     doomType: 80,
+    doom2: true,
     color: "#9ca3af",
     category: "decor",
   },
   "pool-of-brains": {
     label: "Pool of brains",
     doomType: 81,
+    doom2: true,
     color: "#9ca3af",
     category: "decor",
   },
   "boss-shooter": {
     label: "Monster spawner",
     doomType: 89,
+    doom2: true,
     color: "#9ca3af",
     category: "decor",
   },
   "spawn-spot": {
     label: "Spawn spot",
     doomType: 87,
+    doom2: true,
     color: "#9ca3af",
     category: "decor",
   },

@@ -36,7 +36,6 @@ import {
   type SectorBits,
 } from "@/map/boom";
 import { atLeast } from "@/map/complevel";
-import { middleTextures } from "@/map/freedoom-textures";
 import { defaultDoor, gridSize } from "@/map/edit";
 import { containerOf } from "@/map/geometry";
 import {
@@ -930,7 +929,7 @@ function LineInspector({
                 light={line.sector.light}
                 whole
                 value={side.middle}
-                options={middleTextures}
+                options={assets.names.middles}
                 onChange={(middle) => onSideChange({ middle })}
               />
             ) : null}
@@ -1386,15 +1385,17 @@ function BalancePanel({ map }: { map: GameMap }) {
 
 function PlaceThings({
   kind,
+  kinds,
   onPick,
 }: {
   kind: ThingKind;
+  kinds: readonly ThingKind[];
   onPick: (kind: ThingKind) => void;
 }) {
   const [tab, setTab] = React.useState(() => tabOf(kind));
   const [query, setQuery] = React.useState("");
   const search = query.trim().toLowerCase();
-  const shown = thingKinds.filter((item) =>
+  const shown = kinds.filter((item) =>
     search
       ? thingCatalog[item].label.toLowerCase().includes(search)
       : tabOf(item) === tab,
@@ -1593,6 +1594,7 @@ function ThingInspector({
   map,
   things,
   placing,
+  kinds = thingKinds,
   grid = gridSize,
   onChange,
   onPlace,
@@ -1600,6 +1602,7 @@ function ThingInspector({
   map: GameMap;
   things: Thing[];
   placing: ThingKind;
+  kinds?: readonly ThingKind[];
   grid?: number;
   onChange: (change: ThingChange) => void;
   onPlace: (kind: ThingKind) => void;
@@ -1614,7 +1617,7 @@ function ThingInspector({
           onChange={onChange}
         />
       ) : null}
-      <PlaceThings kind={placing} onPick={onPlace} />
+      <PlaceThings kind={placing} kinds={kinds} onPick={onPlace} />
       <BalancePanel map={map} />
     </>
   );

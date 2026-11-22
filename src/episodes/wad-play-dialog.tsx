@@ -3,6 +3,7 @@ import * as React from "react";
 
 import { skillNames } from "@/engine/coop";
 import { Choice } from "@/engine/coop-ui";
+import { slotName, type GameInfo } from "@/engine/game";
 import type { Complevel, GameFiles, Skill } from "@/engine/runtime";
 import { complevelLabels } from "@/map/complevel";
 import type { WadSummary } from "@/wad/inspect";
@@ -35,23 +36,27 @@ const complevelHelp: Record<Complevel, string> = {
   mbf21: "Adds MBF21's line flags and DEHACKED extensions.",
 };
 
-const slotOf = (map: number) => `MAP${String(map).padStart(2, "0")}`;
-
 function WadPlayDialog({
   title,
   summary,
+  game,
   onPlay,
   onClose,
 }: {
   title: string;
   summary: WadSummary;
+  game: GameInfo;
   onPlay: (files: GameFiles, skill: Skill) => void;
   onClose: () => void;
 }) {
   const [complevel, setComplevel] = React.useState(summary.complevel);
   const [warp, setWarp] = React.useState(summary.maps[0]);
   const [skill, setSkill] = React.useState<Skill>("medium");
-  const slots = summary.maps.map(slotOf);
+  const slotOf = (map: number) => slotName(map, summary.episodes);
+  const slots = summary.maps.map((map) => ({
+    value: String(map),
+    label: slotOf(map),
+  }));
   const patches = summary.dehacked.length;
   return (
     <Dialog
@@ -97,10 +102,10 @@ function WadPlayDialog({
           </FieldItem>
           <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)] gap-3">
             <Select
-              value={slotOf(warp)}
+              value={String(warp)}
               items={slots}
               onValueChange={(next) => {
-                if (next) setWarp(Number(next.slice(3)));
+                if (next) setWarp(Number(next));
               }}
             >
               <FieldItem>
@@ -112,8 +117,8 @@ function WadPlayDialog({
               </FieldItem>
               <SelectContent>
                 {slots.map((item) => (
-                  <SelectItem key={item} value={item}>
-                    {item}
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
                     <SelectCheck />
                   </SelectItem>
                 ))}
@@ -135,7 +140,7 @@ function WadPlayDialog({
         </div>
         <DialogFooter className="justify-between">
           <p className="text-muted-foreground min-w-0">
-            Anything the WAD doesn&apos;t replace comes from Freedoom.
+            Anything the WAD doesn&apos;t replace comes from {game.label}.
           </p>
           <Button
             variant="primary"

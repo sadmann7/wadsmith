@@ -1,4 +1,5 @@
 import type { GameMap } from "@/map/types";
+import type { GameId } from "./game";
 import type { NetworkMode, Skill } from "./runtime";
 
 // The host numbers the players in a room, and the engine addresses them by
@@ -16,6 +17,8 @@ interface CoopGame {
   title: string;
   slot: string;
   par: number | null;
+  // Every player's engine needs the same IWAD under the map.
+  game?: GameId;
 }
 
 interface RoomPlayer {

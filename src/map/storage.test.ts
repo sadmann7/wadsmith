@@ -81,19 +81,19 @@ describe("map files", () => {
     expect(parseMapFile(serializeMap(map))).toEqual(map);
   });
 
-  it("opens any Freedoom texture and rejects unknown names", () => {
+  it("opens any texture name, since the game decides what exists", () => {
     const map = updateSector(testMap, "sector-1", {
       floorTexture: "NUKAGE1",
       wallTexture: "ASHWALL2",
     });
     expect(parseMapFile(serializeMap(map))).toEqual(map);
-    expect(() =>
+    expect(
       parseMapFile(
         fileWith((file) => {
           file.sectors[0].floorTexture = "SLAG_PL2";
         }),
-      ),
-    ).toThrow("unknown texture");
+      ).sectors[0].floorTexture,
+    ).toBe("SLAG_PL2");
   });
 
   it("keeps playtest notes", () => {
@@ -177,7 +177,7 @@ describe("map files", () => {
     [
       "an unknown texture",
       fileWith((map) => {
-        map.sectors[0].wallTexture = "NOTREAL";
+        map.sectors[0].wallTexture = "not real";
       }),
       "unknown texture",
     ],
@@ -254,5 +254,31 @@ describe("blankMap", () => {
   it("is ready to play and extend", () => {
     expect(validateMap(blankMap)).toEqual([]);
     expect(addRoomOnSide(blankMap, "sector-1", "east", 128)).not.toBeNull();
+  });
+});
+
+describe("texture names", () => {
+  it("keeps any texture name the game might have", () => {
+    const renamed: GameMap = {
+      ...testMap,
+      sectors: testMap.sectors.map((sector, index) =>
+        index === 0
+          ? { ...sector, wallTexture: "ZIMMER8", floorTexture: "FLAT23" }
+          : sector,
+      ),
+    };
+    expect(parseMapFile(serializeMap(renamed))).toEqual(renamed);
+  });
+
+  it("refuses names no lump can have", () => {
+    for (const name of ["", "startan3", "TOOLONGNAME", "A B"]) {
+      expect(() =>
+        parseMapFile(
+          fileWith((map) => {
+            map.sectors[0].wallTexture = name;
+          }),
+        ),
+      ).toThrow("unknown texture");
+    }
   });
 });

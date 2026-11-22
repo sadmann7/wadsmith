@@ -1,4 +1,15 @@
-import { thingCatalog, thingKinds } from "@/map/catalog";
+import {
+  doorTextures,
+  switchTextures,
+  thingCatalog,
+  thingKinds,
+} from "@/map/catalog";
+import {
+  freedoomFlats,
+  freedoomWalls,
+  middleTextures,
+} from "@/map/freedoom-textures";
+import type { TextureNames } from "@/map/textures";
 import type { ThingKind } from "@/map/types";
 
 interface Picture {
@@ -12,6 +23,7 @@ interface Picture {
 
 interface SceneAssets {
   shades: Uint32Array;
+  names: TextureNames;
   texture: (name: string) => Picture;
   flat: (name: string) => Picture;
   sprite: (kind: ThingKind) => Picture | null;
@@ -310,30 +322,62 @@ function readWadAssets(bytes: Uint8Array): SceneAssets {
   const flatCache = new Map<string, Picture>();
   const spriteCache = new Map<ThingKind, Picture | null>();
 
-  return {
+  const compose = (entry: number) => {
+    const picture = createPicture(
+      view.getInt16(entry + 12, true),
+      view.getInt16(entry + 14, true),
+    );
+    const patches = view.getInt16(entry + 20, true);
+    for (let index = 0; index < patches; index += 1) {
+      const patch = entry + 22 + index * 10;
+      const lump = lumps.get(patchNames[view.getInt16(patch + 4, true)]);
+      if (lump) {
+        drawPatch(
+          lump,
+          picture,
+          view.getInt16(patch, true),
+          view.getInt16(patch + 2, true),
+        );
+      }
+    }
+    return picture;
+  };
+
+  // The first texture is the engine's placeholder and can't be drawn.
+  const all = [...definitions.keys()].slice(1).toSorted();
+  const flatNames = [...flats.keys()].toSorted();
+  // A texture with a hole in it shows through, so it suits an open line and
+  // not a solid wall. Telling them apart means drawing each one once.
+  let sorted: { walls: string[]; middles: string[] } | null = null;
+  const sort = () => {
+    if (sorted) return sorted;
+    const walls: string[] = [];
+    const holed: string[] = [];
+    for (const name of all) {
+      const holes = compose(definitions.get(name)!).opaque.includes(0);
+      (holes ? holed : walls).push(name);
+    }
+    sorted = { walls, middles: [...holed, ...walls] };
+    return sorted;
+  };
+  const assets: SceneAssets = {
     shades,
+    names: {
+      get walls() {
+        return sort().walls;
+      },
+      flats: flatNames,
+      get middles() {
+        return sort().middles;
+      },
+      textures: all,
+    },
     texture(name) {
       const cached = textureCache.get(name);
       if (cached) return cached;
       const entry = definitions.get(name);
       if (entry === undefined) return missing;
-      const picture = createPicture(
-        view.getInt16(entry + 12, true),
-        view.getInt16(entry + 14, true),
-      );
-      const patches = view.getInt16(entry + 20, true);
-      for (let index = 0; index < patches; index += 1) {
-        const patch = entry + 22 + index * 10;
-        const lump = lumps.get(patchNames[view.getInt16(patch + 4, true)]);
-        if (lump) {
-          drawPatch(
-            lump,
-            picture,
-            view.getInt16(patch, true),
-            view.getInt16(patch + 2, true),
-          );
-        }
-      }
+      const picture = compose(entry);
       textureCache.set(name, picture);
       return picture;
     },
@@ -372,6 +416,7 @@ function readWadAssets(bytes: Uint8Array): SceneAssets {
       return picture;
     },
   };
+  return assets;
 }
 
 const flatColors: Record<string, readonly [number, number, number]> = {
@@ -444,6 +489,12 @@ function createFlatAssets(): SceneAssets {
   const tile = (name: string) => solidPicture(1, 1, indexes.get(name) ?? 0);
   return {
     shades,
+    names: {
+      walls: freedoomWalls,
+      flats: freedoomFlats,
+      middles: middleTextures,
+      textures: [...middleTextures, ...doorTextures, ...switchTextures],
+    },
     texture: tile,
     flat: tile,
     sprite(kind) {

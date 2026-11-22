@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { Choice } from "@/engine/coop-ui";
+import { engineSlot, slotCount, type GameInfo } from "@/engine/game";
 import { MapOutline } from "@/components/map-outline";
 import { complevelLabels, complevels } from "@/map/complevel";
 import type { Complevel } from "@/map/types";
@@ -52,15 +53,17 @@ interface MapDetails {
 function MapDialog({
   maps,
   entry,
+  game,
   onSubmit,
   onClose,
 }: {
   maps: EpisodeMap[];
   entry?: EpisodeMap;
+  game: GameInfo;
   onSubmit: (details: MapDetails) => Promise<string | null>;
   onClose: () => void;
 }) {
-  const slots = freeSlots(maps, entry?.slot);
+  const slots = freeSlots(maps, entry?.slot, game);
   const [name, setName] = React.useState(entry ? mapName(entry) : "");
   const [slot, setSlot] = React.useState(entry?.slot ?? slots[0]);
   const [description, setDescription] = React.useState(
@@ -129,7 +132,10 @@ function MapDialog({
               </Field>
               <Select
                 value={slot}
-                items={slots}
+                items={slots.map((item) => ({
+                  value: item,
+                  label: engineSlot(item, game),
+                }))}
                 onValueChange={(next) => {
                   if (next) setSlot(next);
                 }}
@@ -144,7 +150,7 @@ function MapDialog({
                 <SelectContent>
                   {slots.map((item) => (
                     <SelectItem key={item} value={item}>
-                      {item}
+                      {engineSlot(item, game)}
                       <SelectCheck />
                     </SelectItem>
                   ))}
@@ -277,18 +283,18 @@ function MapDialog({
             <div className="grid grid-cols-2 gap-3">
               <FieldItem>
                 <Label>Format</Label>
-                <span>Classic Doom</span>
+                <span>{game.episodes > 0 ? "Doom" : "Doom II"}</span>
               </FieldItem>
               <FieldItem>
-                <Label>Texture pack</Label>
-                <span>freedoom2</span>
+                <Label>Game</Label>
+                <span>{game.label}</span>
               </FieldItem>
             </div>
           </div>
           <DialogFooter className="justify-end">
             {error || !slot ? (
               <p role="alert" className="m-0 mr-auto min-w-0 text-destructive">
-                {error ?? "All 32 map slots are in use."}
+                {error ?? `All ${slotCount(game)} map slots are in use.`}
               </p>
             ) : null}
             <Button onClick={onClose}>Cancel</Button>

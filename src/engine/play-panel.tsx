@@ -4,6 +4,14 @@ import * as React from "react";
 import type { GameMap, Point } from "@/map/types";
 import { compileEpisode, compileMap, type Lump } from "@/wad/compile";
 import { inspectWads } from "@/wad/inspect";
+import {
+  defaultGame,
+  engineSlot,
+  indexSlot,
+  statusIndex,
+  statusSlot,
+  type GameInfo,
+} from "./game";
 import type { NetworkState } from "./doom-worker";
 import { startGameClient, type GameClient } from "./game-client";
 import { EndGameConfirm, GameHud, GameTopBar, type ScoreRow } from "./game-hud";
@@ -200,11 +208,15 @@ function GameSession({
   const [finished, setFinished] = React.useState(false);
   const [levelIndex, setLevelIndex] = React.useState(0);
   const [between, setBetween] = React.useState<GameStatus | null>(null);
+  const [game, setGame] = React.useState<GameInfo>(defaultGame);
   const advanceTimer = React.useRef<ReturnType<typeof setInterval>>(undefined);
   const level = episode?.[levelIndex] ?? {
     map,
     title,
-    slot: files && status ? `MAP${String(status.map).padStart(2, "0")}` : slot,
+    slot:
+      files && status
+        ? statusSlot(game, status.episode, status.map)
+        : engineSlot(slot, game),
     par,
   };
   const [network, setNetwork] = React.useState<NetworkState | null>(null);
@@ -272,19 +284,20 @@ function GameSession({
         const context = canvas?.getContext("2d");
         if (stopped || !canvas || !context) return;
         canvas.focus();
+        setGame(iwad.game);
         const built =
           coop?.wad ??
           (episode
             ? compileEpisode(
                 episode.map((entry, index) => ({
-                  slot: `MAP${String(index + 1).padStart(2, "0")}`,
+                  slot: engineSlot(indexSlot(index + 1), iwad.game),
                   map: entry.map,
                   lumps: entry.lumps,
                 })),
               )
-            : map && compileMap(map));
+            : map && compileMap(map, engineSlot(indexSlot(1), iwad.game)));
         client = startGameClient({
-          iwad,
+          iwad: { game: iwad.game, data: iwad.data },
           files: files ?? {
             wads: built ? [built] : [],
             dehacked: [],
@@ -306,6 +319,7 @@ function GameSession({
               lastTics = next.tics;
               ticsChangedAt = performance.now();
             }
+            const reached = statusIndex(iwad.game, next.episode, next.map);
             if (next.inLevel && netStarted) {
               reachedLevel = true;
               lastInLevel = next;
@@ -313,11 +327,11 @@ function GameSession({
                 clearInterval(advanceTimer.current);
                 advanceTimer.current = undefined;
                 setBetween(null);
-                setLevelIndex(Math.min(next.map, episode.length) - 1);
+                setLevelIndex(Math.min(reached, episode.length) - 1);
               }
             }
             if (reachedLevel && !next.inLevel && !files) {
-              if (!episode || next.map >= episode.length) {
+              if (!episode || reached >= episode.length) {
                 client?.stop();
                 setFinished(true);
                 return;

@@ -5,11 +5,6 @@ import {
   thingKinds,
 } from "./catalog";
 import {
-  freedoomFlats,
-  freedoomWalls,
-  middleTextures,
-} from "./freedoom-textures";
-import {
   isLineActionKind,
   keyColors,
   lineSpecial,
@@ -89,9 +84,20 @@ function integer(value: unknown, limit: number, label: string) {
   return value as number;
 }
 
-// The engine stops with a fatal error on a texture name it doesn't know.
-function texture(value: unknown, allowed: readonly string[], label: string) {
-  if (typeof value !== "string" || !allowed.includes(value)) {
+// A texture is any lump name; whether the game has it is for the map's checks,
+// since the game can change after the map is saved.
+const lumpName = /^[A-Z0-9_\-\\[\]]{1,8}$/;
+
+function texture(
+  value: unknown,
+  allowed: readonly string[] | null,
+  label: string,
+) {
+  if (
+    typeof value !== "string" ||
+    !lumpName.test(value) ||
+    (allowed && !allowed.includes(value))
+  ) {
     fail(`${label} uses an unknown texture.`);
   }
   return value;
@@ -171,7 +177,7 @@ function parseSector(value: unknown, vertices: Record<string, Point>): Sector {
       : Object.fromEntries(
           Object.entries(record(sector.wallOverrides, label)).map(
             ([wall, name]) => {
-              return [wallId(wall, label), texture(name, freedoomWalls, label)];
+              return [wallId(wall, label), texture(name, null, label)];
             },
           ),
         );
@@ -192,9 +198,9 @@ function parseSector(value: unknown, vertices: Record<string, Point>): Sector {
     floor: integer(sector.floor, heightLimit, label),
     ceiling: integer(sector.ceiling, heightLimit, label),
     light,
-    floorTexture: texture(sector.floorTexture, freedoomFlats, label),
-    ceilingTexture: texture(sector.ceilingTexture, freedoomFlats, label),
-    wallTexture: texture(sector.wallTexture, freedoomWalls, label),
+    floorTexture: texture(sector.floorTexture, null, label),
+    ceilingTexture: texture(sector.ceilingTexture, null, label),
+    wallTexture: texture(sector.wallTexture, null, label),
     ...(overrides ? { wallOverrides: overrides } : {}),
     ...(sector.door === undefined
       ? {}
@@ -230,12 +236,6 @@ function parseLineAction(value: unknown, label: string): LineAction {
   return parsed;
 }
 
-const sideTextures: readonly string[] = [
-  ...freedoomWalls,
-  ...switchTextures,
-  ...doorTextures,
-];
-
 function parseLineSide(value: unknown, label: string): LineSide {
   const side = record(value, label);
   return {
@@ -247,13 +247,13 @@ function parseLineSide(value: unknown, label: string): LineSide {
       : { offsetY: integer(side.offsetY, wordLimit, label) }),
     ...(side.upper === undefined
       ? {}
-      : { upper: texture(side.upper, sideTextures, label) }),
+      : { upper: texture(side.upper, null, label) }),
     ...(side.lower === undefined
       ? {}
-      : { lower: texture(side.lower, sideTextures, label) }),
+      : { lower: texture(side.lower, null, label) }),
     ...(side.middle === undefined
       ? {}
-      : { middle: texture(side.middle, middleTextures, label) }),
+      : { middle: texture(side.middle, null, label) }),
   };
 }
 

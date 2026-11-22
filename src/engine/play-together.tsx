@@ -4,6 +4,8 @@ import * as React from "react";
 import { deathmatchStarts } from "@/map/catalog";
 import type { GameMap } from "@/map/types";
 import { compileMap } from "@/wad/compile";
+import { defaultGame, engineSlot, indexSlot } from "./game";
+import { useIwad } from "./use-iwad";
 import {
   appVersion,
   coopPlayers,
@@ -411,6 +413,7 @@ function PlayTogether({
   const relayRef = React.useRef(packetRelay());
   const handedOff = React.useRef(false);
   const gameRef = React.useRef<CoopGame | null>(null);
+  const iwad = useIwad();
   const hostRef = React.useRef({ name: "Player 1", players: 2 });
 
   const ready =
@@ -465,10 +468,11 @@ function PlayTogether({
       map,
       mode: settings.mode,
       skill: settings.skill,
-      wad: compileMap(map),
+      wad: compileMap(map, engineSlot(indexSlot(1), iwad?.game ?? defaultGame)),
       title,
       slot,
       par,
+      game: iwad?.game.id ?? defaultGame.id,
     };
     setPlayers([
       {

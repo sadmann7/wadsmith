@@ -73,7 +73,12 @@ describe("routes", () => {
   });
 
   it("sends anything else home", () => {
-    expect(parseRoute("/episodes/abc/MAP33")).toEqual({ kind: "home" });
+    expect(parseRoute("/episodes/abc/MAP36")).toEqual({
+      kind: "map",
+      id: "abc",
+      slot: "MAP36",
+    });
+    expect(parseRoute("/episodes/abc/MAP37")).toEqual({ kind: "home" });
     expect(parseRoute("/elsewhere")).toEqual({ kind: "home" });
     expect(parseRoute("/maps/play")).toEqual({ kind: "home" });
     expect(parseRoute("/play")).toEqual({ kind: "home" });

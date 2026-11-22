@@ -17,6 +17,8 @@ import {
 import * as React from "react";
 
 import { MapPlan } from "@/components/map-plan";
+import { engineSlot, slotCount, type GameInfo } from "@/engine/game";
+import type { CheckContext } from "@/map/validate";
 import { knownBuildProblem, useBuildChecks } from "./build-checks";
 import { MapDialog } from "./map-dialog";
 import { MapOrder, MapOrderHandle, MapOrderRow } from "./map-order";
@@ -178,6 +180,7 @@ function ConfirmDialog({
 const MapRow = React.memo(function MapRow({
   entry,
   slot,
+  context,
   canDuplicate,
   canMoveUp,
   canMoveDown,
@@ -186,6 +189,7 @@ const MapRow = React.memo(function MapRow({
 }: {
   entry: EpisodeMap;
   slot: string;
+  context: CheckContext;
   canDuplicate: boolean;
   canMoveUp: boolean;
   canMoveDown: boolean;
@@ -194,7 +198,7 @@ const MapRow = React.memo(function MapRow({
 }) {
   const onOpen = () => onAction("open", entry);
   useBuildChecks(React.useMemo(() => [entry], [entry]));
-  const status = mapStatus(entry, knownBuildProblem(entry));
+  const status = mapStatus(entry, knownBuildProblem(entry), context);
   const name = mapName(entry);
   return (
     <MapOrderRow
@@ -324,6 +328,8 @@ function EpisodeHome({
   sidebar,
   episode,
   maps,
+  game,
+  context,
   message,
   onRenameEpisode,
   onDeleteEpisode,
@@ -342,6 +348,8 @@ function EpisodeHome({
   sidebar: SidebarProps;
   episode: Episode;
   maps: EpisodeMap[];
+  game: GameInfo;
+  context: CheckContext;
   message: string | null;
   onRenameEpisode: (name: string) => void;
   onDeleteEpisode: () => void;
@@ -376,12 +384,13 @@ function EpisodeHome({
     () => new Map(sorted.map((entry) => [entry.id, entry])),
     [sorted],
   );
-  const nextSlot = freeSlots(maps)[0];
+  const nextSlot = freeSlots(maps, undefined, game)[0];
   const lastEdited = Math.max(...maps.map((entry) => entry.editedAt));
+  const label = (slot: string) => engineSlot(slot, game);
   const range =
     sorted.length > 1
-      ? `${sorted[0].slot} to ${sorted.at(-1)!.slot}`
-      : sorted[0]?.slot;
+      ? `${label(sorted[0].slot)} to ${label(sorted.at(-1)!.slot)}`
+      : sorted[0] && label(sorted[0].slot);
 
   // Holds the dropped order until the save lands, so rows don't snap back meanwhile.
   const saveOrder = (order: string[]) => {
@@ -406,7 +415,7 @@ function EpisodeHome({
     else {
       setConfirmation({
         title: `Delete ${mapName(entry)}?`,
-        body: `${entry.slot} is removed from this browser. Back up the episode first if you might need it.`,
+        body: `${label(entry.slot)} is removed from this browser. Back up the episode first if you might need it.`,
         run: () => onDeleteMap(entry),
       });
     }
@@ -586,7 +595,8 @@ function EpisodeHome({
                         <MapRow
                           key={entry.id}
                           entry={entry}
-                          slot={sorted[index]?.slot ?? entry.slot}
+                          slot={label(sorted[index]?.slot ?? entry.slot)}
+                          context={context}
                           canDuplicate={Boolean(nextSlot)}
                           canMoveUp={index > 0}
                           canMoveDown={index < sorted.length - 1}
@@ -624,7 +634,7 @@ function EpisodeHome({
                 </>
               ) : (
                 <p className="m-0 text-sm text-muted-foreground">
-                  All 32 map slots are in use.
+                  All {slotCount(game)} map slots are in use.
                 </p>
               )}
             </div>
@@ -653,6 +663,7 @@ function EpisodeHome({
       {creatingMap ? (
         <MapDialog
           maps={maps}
+          game={game}
           onClose={() => setCreatingMap(false)}
           onSubmit={onCreateMap}
         />
@@ -661,6 +672,7 @@ function EpisodeHome({
         <MapDialog
           maps={maps}
           entry={editing}
+          game={game}
           onClose={() => setEditing(null)}
           onSubmit={(details) => onUpdateMap(editing, details)}
         />

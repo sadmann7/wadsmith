@@ -11,6 +11,7 @@ import * as React from "react";
 
 import { MapOutline } from "@/components/map-outline";
 import { MapPlan } from "@/components/map-plan";
+import { slotCount, type GameInfo } from "@/engine/game";
 import { featuredMaps } from "@/map/featured";
 import { blankMap } from "@/map/starter-map";
 import { maxNameLength, type EpisodeStart, type Episode } from "./episode-data";
@@ -28,22 +29,36 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-const starts: { value: EpisodeStart; label: string; detail: string }[] = [
-  { value: "empty", label: "Empty", detail: "No maps yet" },
-  { value: "one", label: "One map", detail: "A starter room in MAP01" },
-  {
-    value: "featured",
-    label: "Featured maps",
-    detail: `All ${featuredMaps.length}, in MAP01 to MAP${String(featuredMaps.length).padStart(2, "0")}`,
-  },
-  {
-    value: "freedoom",
-    label: "Freedoom",
-    detail: "All 32 levels of Freedoom: Phase 2",
-  },
-];
+function startsFor(
+  game: GameInfo,
+): { value: EpisodeStart; label: string; detail: string }[] {
+  return [
+    { value: "empty", label: "Empty", detail: "No maps yet" },
+    {
+      value: "one",
+      label: "One map",
+      detail: "A starter room in the first slot",
+    },
+    {
+      value: "featured",
+      label: "Featured maps",
+      detail: `All ${featuredMaps.length}, in the first ${featuredMaps.length} slots`,
+    },
+    {
+      value: "freedoom",
+      label: game.label,
+      detail: `All ${slotCount(game)} levels of ${game.label}`,
+    },
+  ];
+}
 
-function StartPreview({ start }: { start: EpisodeStart }) {
+function StartPreview({
+  start,
+  game,
+}: {
+  start: EpisodeStart;
+  game: GameInfo;
+}) {
   if (start === "empty") {
     return (
       <div className="grid h-[92px] place-items-center bg-background text-muted-foreground">
@@ -63,7 +78,7 @@ function StartPreview({ start }: { start: EpisodeStart }) {
   if (start === "freedoom") {
     return (
       <div className="grid h-[92px] grid-cols-8 content-center gap-1 bg-background p-3">
-        {Array.from({ length: 32 }, (_, index) => (
+        {Array.from({ length: slotCount(game) }, (_, index) => (
           <span key={index} className="h-3 rounded-[1px] bg-input" />
         ))}
       </div>
@@ -80,15 +95,18 @@ function StartPreview({ start }: { start: EpisodeStart }) {
 
 function NewEpisodeDialog({
   durable,
+  game,
   onSubmit,
   onClose,
 }: {
   durable: boolean;
+  game: GameInfo;
   onSubmit: (name: string, start: EpisodeStart) => void;
   onClose: () => void;
 }) {
   const [name, setName] = React.useState("");
   const [start, setStart] = React.useState<EpisodeStart>("one");
+  const starts = startsFor(game);
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
     if (name.trim()) onSubmit(name.trim(), start);
@@ -130,11 +148,11 @@ function NewEpisodeDialog({
                     onClick={() => {
                       setStart(item.value);
                       if (item.value === "freedoom" && !name.trim()) {
-                        setName("Freedoom");
+                        setName(game.label);
                       }
                     }}
                   >
-                    <StartPreview start={item.value} />
+                    <StartPreview start={item.value} game={game} />
                     <span className="grid gap-0.5 px-1 pb-1">
                       <span className="text-sm font-semibold">
                         {item.label}
@@ -175,6 +193,7 @@ interface SidebarProps {
   counts: Record<string, number>;
   current: Route | null;
   durable: boolean;
+  game: GameInfo;
   onNavigate?: (route: Route) => void;
   onCreateEpisode?: (name: string, start: EpisodeStart) => void;
 }
@@ -217,6 +236,7 @@ function AppSidebar({
   counts,
   current,
   durable,
+  game,
   onNavigate,
   onCreateEpisode,
 }: SidebarProps) {
@@ -312,6 +332,7 @@ function AppSidebar({
       {creating && onCreateEpisode ? (
         <NewEpisodeDialog
           durable={durable}
+          game={game}
           onClose={() => setCreating(false)}
           onSubmit={(name, start) => {
             onCreateEpisode(name, start);

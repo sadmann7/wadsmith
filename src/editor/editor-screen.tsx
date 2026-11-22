@@ -58,7 +58,7 @@ import {
 import type { EditMode, MapTool, MapViewStatus } from "./map-editor";
 import { PlayTogether, type HostedGame } from "@/engine/play-together";
 import { GameView, type PlayerSpot } from "@/engine/play-panel";
-import { thingCatalog } from "@/map/catalog";
+import { thingCatalog, thingKinds } from "@/map/catalog";
 import {
   addPlayerStarts,
   addNote,
@@ -91,7 +91,9 @@ import {
 import type { GameMap, Point, ThingCategory, ThingKind } from "@/map/types";
 import { checkMap, fixIssue, issueText } from "@/map/checks";
 import { MapSwitcher, type EpisodeEntry, type MapHealth } from "./map-switcher";
+import { defaultGame, engineSlot } from "@/engine/game";
 import { loadIwad } from "@/engine/iwad";
+import { useIwad } from "@/engine/use-iwad";
 import { SceneCamera } from "@/preview/scene-camera";
 import { SceneCanvas, type DraftSource } from "@/preview/scene-editor";
 import { SurfacePanel } from "@/preview/surface-panel";
@@ -447,7 +449,21 @@ function EditorScreen({
     createUndoStack(initialMap, { limit: 200, groupDelay: 500 }),
   );
 
-  const checks = React.useMemo(() => checkMap(map), [map]);
+  const iwad = useIwad();
+  const iwadGame = iwad?.game ?? defaultGame;
+  const context = React.useMemo(
+    () => ({ game: iwad?.game, names: iwad ? assets.names : undefined }),
+    [assets, iwad],
+  );
+  // Doom II's things don't exist in a Doom 1 game.
+  const placeable = React.useMemo(
+    () =>
+      iwadGame.doom2
+        ? thingKinds
+        : thingKinds.filter((kind) => !thingCatalog[kind].doom2),
+    [iwadGame],
+  );
+  const checks = React.useMemo(() => checkMap(map, context), [context, map]);
   const issues = React.useMemo(
     () => checks.filter((issue) => issue.severity === "error"),
     [checks],
@@ -586,8 +602,8 @@ function EditorScreen({
   React.useEffect(() => {
     let active = true;
     loadIwad()
-      .then((bytes) => {
-        if (active) setAssets(readWadAssets(bytes));
+      .then((loaded) => {
+        if (active) setAssets(readWadAssets(loaded.data));
       })
       .catch(() => {});
     return () => {
@@ -1695,6 +1711,7 @@ function EditorScreen({
                 map={map}
                 things={selectedThings}
                 placing={thingKind}
+                kinds={placeable}
                 grid={grid}
                 onChange={(patch) =>
                   commit(
@@ -1924,9 +1941,11 @@ function EditorScreen({
           map={map}
           name={mapName}
           slot={slot}
+          game={iwadGame}
+          context={context}
           onBuild={(fileName) => {
             try {
-              downloadWad(map, slot, fileName);
+              downloadWad(map, engineSlot(slot, iwadGame), fileName);
             } catch (error) {
               return `Couldn't build the map. ${(error as Error).message}`;
             }

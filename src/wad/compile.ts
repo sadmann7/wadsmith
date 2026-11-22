@@ -256,6 +256,36 @@ function complevelLump(maps: GameMap[]): Lump {
   };
 }
 
+// A Doom 1 game ends an episode after its eighth map and sends the ninth
+// back into it, so every slot from the first map to the last names the slot
+// after it, gaps included: a gap plays the game's own level there, as on
+// Doom II, and the engine finds the entry by episode and map.
+const episodeSlot = /^E(\d)M(\d)$/;
+const mostEpisodeSlots = 36;
+
+function slotAfter(slot: string) {
+  const [, episode, map] = episodeSlot.exec(slot)!.map(Number);
+  return map < 9 ? `E${episode}M${map + 1}` : `E${episode + 1}M1`;
+}
+
+function umapinfoLump(slots: string[]): Lump[] {
+  const chained = slots.filter((slot) => episodeSlot.test(slot));
+  if (chained.length < 2) return [];
+  const last = chained.at(-1)!;
+  const entries: string[] = [];
+  for (
+    let slot = chained[0];
+    slot !== last && entries.length < mostEpisodeSlots;
+    slot = slotAfter(slot)
+  ) {
+    entries.push(`MAP ${slot}\n{\n  next = "${slotAfter(slot)}"\n}\n`);
+  }
+  const text = entries.join("\n");
+  return [
+    { name: "UMAPINFO", data: Uint8Array.from(text, (c) => c.charCodeAt(0)) },
+  ];
+}
+
 // A switch's door gets a tag no line or sector in the map has chosen.
 function sectorTags(map: GameMap, sectors: Sector[]) {
   const used = new Set([
@@ -512,6 +542,7 @@ function compileEpisode(
         ? [{ name: slot, data: new Uint8Array() }, ...lumps.slice(1)]
         : compileLumps(map, slot),
     ),
+    ...umapinfoLump(maps.map(({ slot }) => slot)),
     complevelLump(maps.map(({ map }) => map)),
   ]);
 }

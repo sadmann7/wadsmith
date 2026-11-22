@@ -3,7 +3,12 @@ import { deathmatchStarts, thingCatalog } from "./catalog";
 import { removeSwitch, removeThings, updateLine, updateSector } from "./edit";
 import { endsLevel, fitLineAction, triggersFor } from "./lines";
 import type { GameMap, KeyColor } from "./types";
-import { activeLineActions, inspectMap, type MapIssue } from "./validate";
+import {
+  activeLineActions,
+  inspectMap,
+  type CheckContext,
+  type MapIssue,
+} from "./validate";
 
 type CheckedIssue = MapIssue & { severity: "error" | "warning" };
 
@@ -177,13 +182,13 @@ const buildGroups: {
   {
     name: "Compatibility",
     passed: "Nothing past the map's level",
-    ids: /^(line-level|sector-level|thing-level)(:|$)/,
+    ids: /^(line-level|sector-level|thing-level|texture-missing|thing-game)(:|$)/,
   },
 ];
 
 // validateMap stops at the first layer of errors, so later groups stay unknown.
-function buildChecks(map: GameMap) {
-  const issues = checkMap(map);
+function buildChecks(map: GameMap, context?: CheckContext) {
+  const issues = checkMap(map, context);
   const blocked = issues.some((issue) => issue.severity === "error");
   const grouped = buildGroups.map(({ name, passed, ids, needsValidRooms }) => {
     const found = issues.filter((issue) => ids.test(issue.id));
@@ -204,8 +209,8 @@ function buildChecks(map: GameMap) {
       ];
 }
 
-function checkMap(map: GameMap): CheckedIssue[] {
-  const { errors, warnings } = inspectMap(map);
+function checkMap(map: GameMap, context?: CheckContext): CheckedIssue[] {
+  const { errors, warnings } = inspectMap(map, context);
   return [
     ...errors.map((issue) => ({ ...issue, severity: "error" as const })),
     ...warnings.map((issue) => ({ ...issue, severity: "warning" as const })),
