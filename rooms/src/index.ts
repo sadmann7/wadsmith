@@ -6,7 +6,7 @@
 import { DurableObject } from "cloudflare:workers";
 
 import { ConnectionLimits } from "./limits";
-import { handleMaps, MapCopy, type MapsEnv } from "./maps";
+import { MapCopy, type MapsEnv, routeMaps } from "./maps";
 import { allowedOrigin } from "./origin";
 
 interface Env extends MapsEnv {
@@ -158,7 +158,7 @@ export default {
   async fetch(request, env) {
     const origin = request.headers.get("Origin") ?? "";
     const allowed = allowedOrigin(origin, env.ALLOWED_ORIGINS);
-    const maps = await handleMaps(
+    const maps = await routeMaps(
       request,
       env,
       allowed

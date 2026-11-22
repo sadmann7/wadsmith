@@ -18,7 +18,6 @@ import { type CloudLink, editLink, viewLink } from "@/lib/episodes/cloud";
 interface ShareDialogProps {
   name: string;
   link: CloudLink | null;
-  // Why the online copy can't be reached, or null while it can.
   problem: string | null;
   onShare: () => Promise<void>;
   onStop: () => void;

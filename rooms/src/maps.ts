@@ -1,7 +1,6 @@
-// The online copy of a map: one Durable Object per map, holding its latest
-// version and a revision number. Anyone with the map's id can read it, and
-// only a request with its edit secret can write it, and only on top of the
-// revision it last saw, so a stale device can't overwrite a newer copy.
+// One Durable Object per map holds its latest version and a revision number.
+// Anyone with the map's id can read it. A write needs the edit secret and the
+// current revision, so a stale device can't overwrite a newer copy.
 import { DurableObject } from "cloudflare:workers";
 
 export interface MapsEnv {
@@ -9,7 +8,6 @@ export interface MapsEnv {
   NEW_MAPS?: RateLimit;
 }
 
-// A map file holds at most this much, as the editor's own limit says.
 export const maxMapBytes = 5 * 1024 * 1024;
 
 const mapPath = /^\/maps(?:\/([a-z0-9]{16}))?$/;
@@ -77,8 +75,7 @@ class MapCopy extends DurableObject {
   }
 }
 
-// Answers a request under /maps, or returns null for any other path.
-export async function handleMaps(
+export async function routeMaps(
   request: Request,
   env: MapsEnv,
   headers: Record<string, string>,
@@ -99,8 +96,6 @@ export async function handleMaps(
 // many characters, each at most 3 bytes in UTF-8.
 const partLength = 512 * 1024;
 
-// A map's parts to store, with the parts an earlier, longer version left
-// cleared so they don't linger.
 function partsOf(map: string, before: number) {
   const parts = Math.max(1, Math.ceil(map.length / partLength));
   const entries: Record<string, string | number> = { parts };
@@ -181,7 +176,6 @@ async function answer(
     written.status,
   );
 
-  // The map's text, refused when it is too big or isn't JSON.
   async function readMap(from: Request) {
     const length = Number(from.headers.get("Content-Length") ?? 0);
     if (length > maxMapBytes) {

@@ -64,7 +64,6 @@ describe("a map's online copy", () => {
     const made = await api.create(renamed("First"));
     expect(made.revision).toBe(1);
 
-    // This browser edited the map while it agreed with revision 1.
     const pushed = await syncMap(
       api,
       { ...made, pending: true },
@@ -72,7 +71,6 @@ describe("a map's online copy", () => {
     );
     expect(pushed).toEqual({ kind: "pushed", link: { ...made, revision: 2 } });
 
-    // Another device still at revision 1 learns of the newer copy.
     const pulled = await syncMap(api, made, renamed("Ignored"));
     expect(pulled).toMatchObject({
       kind: "pulled",
@@ -83,7 +81,6 @@ describe("a map's online copy", () => {
       kind: "same",
     });
 
-    // That device also edited the map before it heard, so it can't push.
     const clash = await syncMap(
       api,
       { ...made, pending: true },
@@ -114,7 +111,6 @@ describe("a map's online copy", () => {
   });
 });
 
-// A stand-in for the rooms server's /maps routes.
 function fakeServer() {
   const copies = new Map<string, { revision: number; map: string }>();
   let next = 0;

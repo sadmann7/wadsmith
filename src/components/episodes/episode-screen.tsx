@@ -143,7 +143,6 @@ type SaveStatus = "saving" | "saved" | "failed";
 type HomeView = "episodes" | "featured";
 
 const channelName = "wadsmith";
-// Edits wait this long for more before going to the online copy.
 const cloudDelayMs = 1500;
 const cloudUrl = cloudBase();
 const cloudApi = cloudUrl ? createCloudApi(cloudUrl) : null;
@@ -212,8 +211,6 @@ export function EpisodeScreen() {
   } | null>(null);
   const [texturesOpen, setTexturesOpen] = React.useState(false);
   const [sharing, setSharing] = React.useState(false);
-  // The open map's online copy: why it can't be reached, and a newer copy
-  // that clashes with edits made here.
   const [cloudProblem, setCloudProblem] = React.useState<string | null>(null);
   const [clash, setClash] = React.useState<{
     revision: number;
@@ -1388,7 +1385,7 @@ export function EpisodeScreen() {
         {clash ? (
           <AlertDialog open>
             <AlertDialogBackdrop />
-            <AlertDialogContent className="w-[460px]">
+            <AlertDialogContent className="w-115">
               <AlertDialogTitle>
                 This map changed on another device
               </AlertDialogTitle>
