@@ -5,6 +5,7 @@ import { createLocalStorage, matchesShortcut } from "@ui-sdk/core";
 import * as SegmentedControlPrimitive from "@ui-sdk/react/segmented-control";
 import { useShortcut } from "@ui-sdk/react/shortcuts";
 import {
+  Bot,
   Check,
   CircleCheck,
   CircleDot,
@@ -54,7 +55,9 @@ import {
   SegmentedControlItem,
 } from "@/components/ui/segmented-control";
 import { useIwad } from "@/hooks/use-iwad";
-import { agent } from "@/lib/editor/agent";
+import { agent, agentSession } from "@/lib/editor/agent";
+import { agentStepSummary } from "@/lib/editor/agent-actions";
+import { idleAgentSession } from "@/lib/editor/agent-session";
 import {
   dropFragment,
   heldFragment,
@@ -170,6 +173,7 @@ import type {
   MapViewStatus,
 } from "./map-editor";
 
+import { AgentCard } from "./agent-card";
 import { BuildDialog } from "./build-dialog";
 import { MapContextMenu } from "./context-menu";
 import { GradientPanel } from "./gradient-panel";
@@ -553,8 +557,10 @@ export function EditorScreen({
     syncUndoable();
   };
 
-  const commit = (next: GameMap, group?: string) => {
-    history.record(mapRef.current, next, group);
+  const commit = (next: GameMap, group?: string, delay?: number) => {
+    // The person's own edit ends what a browser agent was doing.
+    if (!group?.startsWith("agent-")) agentSession.endRequest();
+    history.record(mapRef.current, next, group, delay);
     showMap(next);
   };
 
@@ -675,6 +681,7 @@ export function EditorScreen({
     }
     const copies = duplicateThings(map, selectedThingIds);
     if (copies.ids.length === 0) return;
+    agentSession.endRequest();
     history.record(map, copies.map);
     showMap(copies.map);
     selectPasted(copies.ids.map((id) => `${thingKeyPrefix}${id}`));
@@ -1416,6 +1423,7 @@ export function EditorScreen({
   };
 
   const runAgent = async (action: string, args: unknown[]) => {
+    agentSession.forget();
     const result = await agent.act({
       steps: [{ ref: "Map", action, args }],
     });
@@ -1425,8 +1433,52 @@ export function EditorScreen({
     if (!result.ok) setNotice(failure ?? `${action} was refused.`);
   };
 
-  // The visible trail of what an agent did, whoever the agent is.
-  const logAgentAction = (action: string, { fixed, todo }: AgentReport) =>
+  const agentState = React.useSyncExternalStore(
+    agentSession.subscribe,
+    agentSession.getSnapshot,
+    () => idleAgentSession,
+  );
+  const agentAsk = agentState.question
+    ? agentStepSummary(
+        map,
+        agentState.question.action,
+        agentState.question.args,
+        null,
+      )
+    : null;
+  // A browser agent's request is one undo step however long it runs.
+  const commitAgentEdit = (next: GameMap) => {
+    const request = agentSession.currentRequest();
+    if (request === null) commit(next);
+    else commit(next, `agent-${request}`, Infinity);
+  };
+  const undoAgentRequest = () => {
+    const request = agentState.request;
+    if (!request) return;
+    const working = agentState.status !== "idle";
+    agentSession.stop();
+    const next = history.undoGroup(`agent-${request.id}`, mapRef.current);
+    restore(next);
+    // A request stopped mid-way stays, so the rest of its calls are refused.
+    if (next && working) agentSession.clearTrail();
+    else if (next) agentSession.dismiss();
+    else {
+      setNotice(
+        "The agent's changes can't be undone together any more. Undo them one at a time.",
+      );
+    }
+  };
+  React.useEffect(() => () => agentSession.reset(), []);
+
+  // The visible trail of what an agent did, whoever the agent is. A browser
+  // agent's edits go to its card instead.
+  const logAgentAction = (action: string, report: AgentReport) => {
+    const traced = agentSession.record(action, report.todo, (args) =>
+      agentStepSummary(mapRef.current, action, args, report.result),
+    );
+    if (!traced) logBridgeAction(action, report);
+  };
+  const logBridgeAction = (action: string, { fixed, todo }: AgentReport) =>
     setNotice(
       [
         `${action} ran through the agent bridge.`,
@@ -1559,6 +1611,19 @@ export function EditorScreen({
               </MenuContent>
             </Menu>
           </div>
+          <span data-agent-hidden role="status">
+            {agentState.status === "idle" ? null : (
+              <span className="flex h-7 items-center gap-2 rounded-[3px] border border-input bg-card pr-2.5 pl-2 text-sm">
+                <Bot size={14} aria-hidden="true" />
+                <span className="font-medium">Agent</span>
+                <span className="text-muted-foreground">
+                  {agentState.status === "asking"
+                    ? "waiting for you"
+                    : "working…"}
+                </span>
+              </span>
+            )}
+          </span>
           <input
             ref={fileInput}
             type="file"
@@ -1725,12 +1790,16 @@ export function EditorScreen({
                       thingKind={thingKind}
                       activeSector={activeSector}
                       selection={selection}
-                      onMapChange={(next, details) =>
+                      onMapChange={(next, details) => {
+                        if (details.reason === "agent") {
+                          commitAgentEdit(next);
+                          return;
+                        }
                         commit(
                           next,
                           details.reason === "move-key" ? "nudge" : undefined,
-                        )
-                      }
+                        );
+                      }}
                       onAgentAction={logAgentAction}
                       checkContext={context}
                       onToolChange={setTool}
@@ -1754,6 +1823,11 @@ export function EditorScreen({
                       links={links}
                       trail={showTrail ? (playtest?.run ?? null) : null}
                       peers={peers}
+                      agentAt={
+                        agentState.status === "idle"
+                          ? null
+                          : (agentAsk?.at ?? agentState.request?.at ?? null)
+                      }
                       drawShape={drawShape}
                       drawSides={drawSides}
                       drawRequest={drawRequest}
@@ -1763,7 +1837,19 @@ export function EditorScreen({
                       contextMenuOpen={contextMenuOpen}
                     />
                   </MenuContextTrigger>
-                  {welcomed ? null : (
+                  <AgentCard
+                    session={agentState}
+                    map={map}
+                    onAnswer={(yes, always) =>
+                      agentSession.answer(yes, { always })
+                    }
+                    onStop={() => agentSession.stop()}
+                    onUndoAll={undoAgentRequest}
+                    onDismiss={() => agentSession.dismiss()}
+                  />
+                  {welcomed ||
+                  agentState.request ||
+                  agentState.question ? null : (
                     <section
                       aria-labelledby="welcome-title"
                       className="absolute bottom-3 left-3 z-4 grid max-w-[min(380px,calc(100%-24px))] gap-3 rounded-[3px] border border-border bg-card p-4 shadow-lg"

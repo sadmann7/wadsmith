@@ -80,8 +80,14 @@ export function ShortcutSheet({ onClose }: ShortcutSheetProps) {
             </section>
           ))}
         </div>
-        <footer className="border-t border-border px-5 py-3 text-xs text-muted-foreground">
-          Walking and the N and P keys go by position, as on a US keyboard.
+        <footer className="grid gap-1 border-t border-border px-5 py-3 text-xs text-muted-foreground">
+          <p>
+            Walking and the N and P keys go by position, as on a US keyboard.
+          </p>
+          <p>
+            In a browser with WebMCP, such as ChatGPT's, its built-in agent can
+            edit this map. It asks before removing anything.
+          </p>
         </footer>
       </DialogContent>
     </Dialog>

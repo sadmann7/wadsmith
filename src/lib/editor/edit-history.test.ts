@@ -114,4 +114,20 @@ describe("an edit history", () => {
     fresh.record(testMap, testMap);
     expect(fresh.canUndo()).toBe(false);
   });
+
+  it("undoes one group's steps however long it ran", () => {
+    const history = createEditHistory({ limit: 10, groupDelay: 0 });
+    const first = updateThing(testMap, "imp-1", { x: 800 });
+    history.record(testMap, first, "agent-1", Infinity);
+    const second = updateSector(first, "sector-3", { light: 90 });
+    history.record(first, second, "agent-1", Infinity);
+    const mine = updateThing(second, "player-1", { x: 120 });
+    history.record(second, mine);
+    const undone = defined(history.undoGroup("agent-1", mine));
+    expect(undone.things.find((thing) => thing.id === "imp-1")?.x).toBe(832);
+    expect(undone.sectors[2].light).toBe(testMap.sectors[2].light);
+    expect(undone.things.find((thing) => thing.id === "player-1")?.x).toBe(120);
+    expect(history.undoGroup("agent-1", undone)).toBeUndefined();
+    expect(history.canUndo()).toBe(true);
+  });
 });
