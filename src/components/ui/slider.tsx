@@ -19,7 +19,7 @@ function Slider({
     >
       {children}
       <SliderPrimitive.SliderControl className="flex h-[18px] items-center">
-        <SliderPrimitive.SliderTrack className="relative h-1 w-full rounded-sm bg-input/50">
+        <SliderPrimitive.SliderTrack className="relative h-1 w-full rounded-sm bg-muted">
           <SliderPrimitive.SliderIndicator className="h-full rounded-sm bg-primary" />
           <SliderPrimitive.SliderThumb
             aria-label={label}

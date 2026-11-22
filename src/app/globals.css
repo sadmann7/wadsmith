@@ -15,11 +15,11 @@
   --color-muted: oklch(0.268 0.007 34.298);
   --color-muted-foreground: oklch(0.709 0.01 56.259);
   --color-accent: oklch(0.31 0.009 60);
-  --color-border: oklch(0.268 0.007 34.298);
-  --color-input: oklch(0.553 0.013 58.071);
+  --color-border: oklch(1 0 0 / 10%);
+  --color-input: oklch(1 0 0 / 15%);
   --color-primary: oklch(0.702 0.196 40.7);
   --color-primary-foreground: oklch(0.161 0.024 47.1);
-  --color-ring: oklch(0.702 0.196 40.7);
+  --color-ring: oklch(0.553 0.013 58.071);
   --color-destructive: oklch(0.68 0.19 26.8);
   --color-warning: oklch(0.844 0.151 87.9);
   --color-success: oklch(0.821 0.188 126.1);

@@ -104,7 +104,7 @@ function Choice<Value extends string | number>({
     <div
       role="group"
       aria-label={label}
-      className="flex gap-[3px] rounded-[3px] border border-input bg-background p-[3px]"
+      className="flex gap-[3px] rounded-[3px] bg-muted p-[3px]"
     >
       {options.map((option) => (
         <button
@@ -113,7 +113,7 @@ function Choice<Value extends string | number>({
           aria-pressed={value === option.value}
           disabled={option.disabled}
           title={option.hint}
-          className="h-[26px] flex-1 rounded-[2px] border-0 bg-transparent px-3 text-sm text-muted-foreground hover:text-foreground disabled:opacity-40 aria-pressed:bg-accent aria-pressed:text-foreground aria-pressed:ring-1 aria-pressed:ring-input aria-pressed:ring-inset"
+          className="h-[26px] flex-1 rounded-[2px] border-0 bg-transparent px-3 text-sm text-muted-foreground hover:text-foreground disabled:opacity-50 aria-pressed:bg-input/30 aria-pressed:text-foreground aria-pressed:shadow-sm aria-pressed:ring-1 aria-pressed:ring-input aria-pressed:ring-inset"
           onClick={() => onChange(option.value)}
         >
           {option.label}

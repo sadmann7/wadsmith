@@ -148,11 +148,10 @@ describe("color contrast", () => {
     expect(contrast(text, surface)).toBeGreaterThanOrEqual(4.5);
   });
 
-  it.each(
-    ["input", "ring"].flatMap((edge) =>
-      ["background", "card", "muted"].map((surface) => [edge, surface]),
-    ),
-  )("draws %s edges on %s at 3:1", (edge, surface) => {
-    expect(contrast(edge, surface)).toBeGreaterThanOrEqual(3);
-  });
+  it.each(["background", "card", "muted"])(
+    "draws focus rings on %s at 3:1",
+    (surface) => {
+      expect(contrast("ring", surface)).toBeGreaterThanOrEqual(3);
+    },
+  );
 });

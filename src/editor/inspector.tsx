@@ -1143,7 +1143,7 @@ function ThingFields({
           <ToggleGroup
             aria-label="Difficulties"
             multiple
-            className="grid grid-cols-3 gap-0.5 rounded-[3px] bg-background p-0.5"
+            className="grid grid-cols-3 gap-0.5 rounded-[3px] bg-muted p-[3px]"
             value={pressed}
             onValueChange={(next) => {
               const changed = allSkills.find(
@@ -1156,7 +1156,7 @@ function ThingFields({
               <Toggle
                 key={skill}
                 value={skill}
-                className="h-[26px] rounded-[2px] border-0 bg-transparent text-muted-foreground aria-pressed:bg-muted aria-pressed:text-foreground aria-pressed:ring-1 aria-pressed:ring-input aria-pressed:ring-inset"
+                className="h-[26px] rounded-[2px] border-0 bg-transparent text-muted-foreground hover:text-foreground aria-pressed:bg-input/30 aria-pressed:text-foreground aria-pressed:shadow-sm aria-pressed:ring-1 aria-pressed:ring-input aria-pressed:ring-inset"
               >
                 {skillLabels[skill]}
               </Toggle>
