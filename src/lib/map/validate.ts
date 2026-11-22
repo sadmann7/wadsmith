@@ -6,7 +6,12 @@ import type { TextureNames } from "./textures";
 import type { Complevel, GameMap, Point, Sector, ThingSkill } from "./types";
 
 import { appearsOn } from "./balance";
-import { generalizedKind, generalizedTrigger, getIsGeneralized } from "./boom";
+import {
+  generalizedKind,
+  generalizedTrigger,
+  getIsDoorClass,
+  getIsGeneralized,
+} from "./boom";
 import {
   getIsPlayerStart,
   keyThings,
@@ -105,9 +110,9 @@ export function inspectMap(map: GameMap, context: CheckContext = {}) {
   if (issues.length === 0) {
     validateNeighbors(map, issues);
     validateDoors(map, issues, warnings, lineActions(), openedTags());
-    validateLines(map, issues, lineActions());
+    validateLines(map, issues, warnings, lineActions());
   }
-  validateLevels(map, issues, issues.length === 0);
+  validateLevels(map, issues, warnings, issues.length === 0);
   validateGame(map, issues, context);
   for (const [id, point] of Object.entries(map.vertices)) {
     if (
@@ -686,10 +691,15 @@ function lineOpensDoor(
 
 const skills: ThingSkill[] = ["easy", "medium", "hard"];
 
-function validateLines(map: GameMap, issues: MapIssue[], actions: LineActions) {
+function validateLines(
+  map: GameMap,
+  issues: MapIssue[],
+  warnings: MapIssue[],
+  actions: LineActions,
+) {
   for (const { wall, action, line } of actions) {
-    const add = (kind: string, message: string) =>
-      issues.push({
+    const add = (kind: string, message: string, list = issues) =>
+      list.push({
         id: `${kind}:${wall}`,
         message: `Line ${line.number}: ${message}`,
         target: wall,
@@ -698,6 +708,8 @@ function validateLines(map: GameMap, issues: MapIssue[], actions: LineActions) {
       add("line-door", "a press-to-open door needs a sector behind the line.");
     } else if (!line.twoSided && action.trigger === "walk") {
       add("line-walk", "nothing can walk over a solid wall.");
+    } else if (action.trigger === "door" && !line.doorBehind) {
+      add("line-doorless", doorlessMessage(line), warnings);
     }
     if (action.key) {
       const kinds = keyThings[action.key];
@@ -740,11 +752,25 @@ function validateLines(map: GameMap, issues: MapIssue[], actions: LineActions) {
   }
 }
 
+// The engine moves the ceiling of whatever is behind a pressed door line, and
+// a WAD made elsewhere may mean it to: a door that starts open is one.
+function doorlessMessage({ front, back }: ReturnType<typeof describeLine>) {
+  const room = back === front ? "this room" : (back?.name ?? "the room behind");
+  return `pressing it moves the ceiling of ${room} like a door. If that isn't meant, ${
+    back === front ? "" : `make ${room} a door or `
+  }choose another trigger.`;
+}
+
 // A map set to one engine's compatibility can't use what a later one added,
 // and a Boom special on a wall nothing can cross or press from behind does
 // nothing. Lines are numbered only once every room is whole, since numbering
 // reads the walls.
-function validateLevels(map: GameMap, issues: MapIssue[], whole: boolean) {
+function validateLevels(
+  map: GameMap,
+  issues: MapIssue[],
+  warnings: MapIssue[],
+  whole: boolean,
+) {
   const level = map.complevel ?? "vanilla";
   const needs = (
     id: string,
@@ -773,9 +799,10 @@ function validateLevels(map: GameMap, issues: MapIssue[], whole: boolean) {
       wall,
       lineLevel(special, flags),
     );
-    if (!info || info.twoSided || !generalizedKind(special)) continue;
+    const kind = generalizedKind(special);
+    if (!info || !kind) continue;
     const { trigger } = generalizedTrigger(special);
-    if (trigger === "door" || trigger === "walk") {
+    if (!info.twoSided && (trigger === "door" || trigger === "walk")) {
       issues.push({
         id: `line-${trigger}:${wall}`,
         message: `Line ${number}: ${
@@ -783,6 +810,24 @@ function validateLevels(map: GameMap, issues: MapIssue[], whole: boolean) {
             ? "a press-to-open door needs a sector behind the line."
             : "nothing can walk over a solid wall."
         }`,
+        target: wall,
+      });
+    } else if (
+      trigger === "door" &&
+      getIsDoorClass(kind) &&
+      !info.doorBehind &&
+      !line.action
+    ) {
+      warnings.push({
+        id: `line-doorless:${wall}`,
+        message: `Line ${number}: ${doorlessMessage(info)}`,
+        target: wall,
+      });
+    } else if (trigger !== "door" && !line.raw?.tag && !line.action) {
+      // Boom works a switch, a walk-over or a shot only on tagged sectors.
+      warnings.push({
+        id: `line-target:${wall}`,
+        message: `Line ${number}: it does nothing until it has a sector to act on.`,
         target: wall,
       });
     }
