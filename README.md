@@ -28,10 +28,10 @@ Maps save per browser address. The dev server now uses `localhost:3000`, so a ma
 - **Walls:** right-click a wall and choose **Add corner here** to split it. Drop a corner onto another to join them, and drag a wall in line mode to move both of its corners.
 - **Lines:** choose **Draw line** and click points inside a room, then click the last one again or press Enter. A line has the room on both sides, so it can hold a see-through middle texture or a walk-over action. Right-click it to delete it.
 - **Grid:** the grid menu in the status bar picks a size from 1 to 64 and turns snapping off. Press [ and ] to halve or double it and G to toggle snapping.
-- **Compatibility:** **Map settings** picks the engine the map is made for: Vanilla, Boom, MBF or MBF21. A line or room can take a raw special number for anything the menus don't offer, and the checks flag numbers and flags past the map's level.
+- **Compatibility:** **Map settings** picks the engine the map is made for: Vanilla, Boom, MBF or MBF21. From Boom up, a line's action menu offers Boom floors, ceilings, doors, locked doors, lifts, stairs and crushers built from their own fields, and a room's behaviour adds damage, secret, friction and wind, with MBF21's kill modes above that. A line or room can still take a raw special number for anything else, and the checks flag numbers and flags past the map's level.
 - **Place:** pick a thing and click inside a room.
 - **Switch:** click a solid wall to add a switch, then drag from it to a door.
-- **Doors:** draw a thin room between two rooms and turn on **Door** in the inspector. It can open with the use key or a switch, and close again or stay open.
+- **Doors:** draw a thin room between two rooms and turn on **Door** in the inspector. It can open with the use key or a switch, and close again or stay open. Each line into the door can keep the door shut on its side, open it its own way or wear its own face, and **Use on the whole door** paints every face again.
 - **Edit modes:** press V, L, S or T to work with vertices, lines, sectors or things.
 - **Views:** switch between **Map**, **Split** and **3D**. Drag the divider, or press M to maximize the view under the pointer and return to Split. In Map view, the player view stays docked in the corner.
 - **Camera:** drag the camera marker on the map, double-click the map or press C to move the 3D view, and use **Find camera** to center the map on it.

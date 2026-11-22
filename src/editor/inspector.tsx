@@ -17,6 +17,25 @@ import {
   wallTextures,
 } from "@/map/catalog";
 import { appearsOn, mapBalance } from "@/map/balance";
+import {
+  altDamageLabels,
+  damageLabels,
+  decodeSectorSpecial,
+  encodeSectorSpecial,
+  fieldValue,
+  generalizedClass,
+  generalizedFields,
+  generalizedKind,
+  generalizedKinds,
+  generalizedTrigger,
+  newGeneralized,
+  sectorBases,
+  sectorSpecialOf,
+  sectorSpecialPatch,
+  withField,
+  type SectorBits,
+} from "@/map/boom";
+import { atLeast } from "@/map/complevel";
 import { middleTextures } from "@/map/freedoom-textures";
 import { defaultDoor, gridSize } from "@/map/edit";
 import { containerOf } from "@/map/geometry";
@@ -37,6 +56,7 @@ import {
 } from "@/map/lines";
 import { describeSurface, surfaceKey, type WallPart } from "@/map/surfaces";
 import type {
+  Complevel,
   DoorSettings,
   GameMap,
   KeyColor,
@@ -131,6 +151,7 @@ const thingFlags: {
 ];
 
 const rawSpecialLimit = 32767;
+const vanillaSectorTypes = 31;
 
 function tabOf(kind: ThingKind): ThingTab {
   const { category } = thingCatalog[kind];
@@ -415,6 +436,199 @@ function DoorFields({
   );
 }
 
+// Boom reads a vanilla effect from the low bits of a sector's special and the
+// rest from bits above it, so the fields edit one number together.
+function BoomSectorFields({
+  special,
+  level,
+  tag,
+  onChange,
+  onTagChange,
+}: {
+  special: number;
+  level: Complevel;
+  tag: number;
+  onChange: (special: number) => void;
+  onTagChange: (tag: number) => void;
+}) {
+  const bits = decodeSectorSpecial(special);
+  const set = (patch: Partial<SectorBits>) =>
+    onChange(encodeSectorSpecial({ ...bits, ...patch }));
+  const exitSpecial = sectorEffects["damage-20-exit"].special;
+  const exit = special === exitSpecial;
+  const known =
+    bits.base === 0 || sectorBases.some((base) => base.value === bits.base);
+  const mbf21 = atLeast(level, "mbf21") || bits.altDamage || bits.killGrounded;
+  return (
+    <>
+      <div className="flex items-center gap-2 [&>*]:min-w-0 [&>*]:flex-1 items-end">
+        <ChoiceField
+          label="Effect"
+          value={String(bits.base)}
+          items={[
+            { value: "0", label: "None" },
+            ...sectorBases.map(({ value, label }) => ({
+              value: String(value),
+              label,
+            })),
+            {
+              value: String(exitSpecial),
+              label: sectorEffects["damage-20-exit"].label,
+            },
+            ...(known || exit
+              ? []
+              : [{ value: String(bits.base), label: `Type ${bits.base}` }]),
+          ]}
+          // Boom ignores the exit type once any bit above it is set.
+          onChange={(base) =>
+            Number(base) === exitSpecial
+              ? onChange(exitSpecial)
+              : set({ base: Number(base) })
+          }
+        />
+        <NumberSetting
+          label="Tag"
+          value={tag}
+          step={1}
+          min={0}
+          max={tagLimit}
+          onChange={onTagChange}
+        />
+      </div>
+      <div className="flex items-center gap-2 [&>*]:min-w-0 [&>*]:flex-1 items-end">
+        {exit ? null : (
+          <ChoiceField
+            label="Damage"
+            value={String(bits.damage)}
+            items={(bits.altDamage ? altDamageLabels : damageLabels).map(
+              (label, value) => ({ value: String(value), label }),
+            )}
+            onChange={(damage) => set({ damage: Number(damage) })}
+          />
+        )}
+        <NumberSetting
+          label="Special number"
+          value={special}
+          step={1}
+          min={0}
+          max={rawSpecialLimit}
+          onChange={onChange}
+        />
+      </div>
+      {exit ? null : (
+        <>
+          <ToggleField
+            label="Secret"
+            checked={bits.secret}
+            onChange={(secret) => set({ secret })}
+          />
+          <ToggleField
+            label="Friction set by a line 223 with its tag"
+            checked={bits.friction}
+            onChange={(friction) => set({ friction })}
+          />
+          <ToggleField
+            label="Wind or current from a line 224 to 226 with its tag"
+            checked={bits.wind}
+            onChange={(wind) => set({ wind })}
+          />
+          {mbf21 ? (
+            <>
+              <ToggleField
+                label="Damage kills instead (MBF21)"
+                checked={bits.altDamage}
+                onChange={(altDamage) => set({ altDamage })}
+              />
+              <ToggleField
+                label="Kills monsters on the floor (MBF21)"
+                checked={bits.killGrounded}
+                onChange={(killGrounded) => set({ killGrounded })}
+              />
+            </>
+          ) : null}
+        </>
+      )}
+    </>
+  );
+}
+
+// A Boom line special is one number with a field for each choice, so the
+// fields edit it together.
+function BoomLineFields({
+  map,
+  special,
+  tag,
+  twoSided,
+  onChange,
+  onTargetChange,
+}: {
+  map: GameMap;
+  special: number;
+  tag: number;
+  twoSided: boolean;
+  onChange: (special: number) => void;
+  onTargetChange: (sector: string | null) => void;
+}) {
+  const kind = generalizedKind(special);
+  if (!kind) return null;
+  const { trigger } = generalizedTrigger(special);
+  const target = tag ? map.sectors.find((item) => item.tag === tag) : undefined;
+  return (
+    <>
+      {generalizedFields(special).map((field) => {
+        const value = fieldValue(special, field);
+        if (field.width === 1 && field.options[0] === "No") {
+          return (
+            <ToggleField
+              key={field.id}
+              label={field.label}
+              checked={value === 1}
+              onChange={(checked) =>
+                onChange(withField(special, field, checked ? 1 : 0))
+              }
+            />
+          );
+        }
+        // Nothing walks over or presses the back of a wall with nothing
+        // behind it.
+        const items = field.options.flatMap((label, option) =>
+          field.id !== "trigger" ||
+          twoSided ||
+          option === value ||
+          (option >= 2 && option <= 5)
+            ? [{ value: String(option), label }]
+            : [],
+        );
+        return (
+          <ChoiceField
+            key={field.id}
+            label={field.label}
+            value={String(value)}
+            items={items}
+            onChange={(next) =>
+              onChange(withField(special, field, Number(next)))
+            }
+          />
+        );
+      })}
+      {trigger === "door" ? null : (
+        <ChoiceField
+          label={kind.target}
+          value={target?.id ?? "none"}
+          items={[
+            { value: "none", label: "Choose a sector" },
+            ...map.sectors.map((item) => ({
+              value: item.id,
+              label: item.name,
+            })),
+          ]}
+          onChange={(next) => onTargetChange(next === "none" ? null : next)}
+        />
+      )}
+    </>
+  );
+}
+
 function SectorInspector({
   map,
   sector,
@@ -427,6 +641,8 @@ function SectorInspector({
   onChange: (patch: Partial<Sector>) => void;
 }) {
   const { door } = sector;
+  const level = map.complevel ?? "vanilla";
+  const special = sectorSpecialOf(sector);
   const flats = {
     kind: "flat" as const,
     use: flatUse(map),
@@ -507,46 +723,56 @@ function SectorInspector({
             <SliderValue />
           </div>
         </Slider>
-        <div className="flex items-center gap-2 [&>*]:min-w-0 [&>*]:flex-1 items-end">
-          <ChoiceField
-            label="Effect"
-            value={sector.effect ?? "none"}
-            items={[
-              { value: "none", label: "None" },
-              ...Object.entries(sectorEffects).map(([value, { label }]) => ({
-                value,
-                label,
-              })),
-            ]}
-            onChange={(effect) =>
-              onChange({
-                effect:
-                  effect === "none" ? undefined : (effect as SectorEffect),
-                rawEffect: undefined,
-              })
-            }
+        {atLeast(level, "boom") || special > vanillaSectorTypes ? (
+          <BoomSectorFields
+            special={special}
+            level={level}
+            tag={sector.tag ?? 0}
+            onChange={(next) => onChange(sectorSpecialPatch(next))}
+            onTagChange={(tag) => onChange({ tag: tag || undefined })}
           />
-          {sector.effect ? null : (
-            <NumberSetting
-              label="Special number"
-              value={sector.rawEffect ?? 0}
-              step={1}
-              min={0}
-              max={rawSpecialLimit}
-              onChange={(rawEffect) =>
-                onChange({ rawEffect: rawEffect || undefined })
+        ) : (
+          <div className="flex items-center gap-2 [&>*]:min-w-0 [&>*]:flex-1 items-end">
+            <ChoiceField
+              label="Effect"
+              value={sector.effect ?? "none"}
+              items={[
+                { value: "none", label: "None" },
+                ...Object.entries(sectorEffects).map(([value, { label }]) => ({
+                  value,
+                  label,
+                })),
+              ]}
+              onChange={(effect) =>
+                onChange({
+                  effect:
+                    effect === "none" ? undefined : (effect as SectorEffect),
+                  rawEffect: undefined,
+                })
               }
             />
-          )}
-          <NumberSetting
-            label="Tag"
-            value={sector.tag ?? 0}
-            step={1}
-            min={0}
-            max={tagLimit}
-            onChange={(tag) => onChange({ tag: tag || undefined })}
-          />
-        </div>
+            {sector.effect ? null : (
+              <NumberSetting
+                label="Special number"
+                value={sector.rawEffect ?? 0}
+                step={1}
+                min={0}
+                max={rawSpecialLimit}
+                onChange={(rawEffect) =>
+                  onChange({ rawEffect: rawEffect || undefined })
+                }
+              />
+            )}
+            <NumberSetting
+              label="Tag"
+              value={sector.tag ?? 0}
+              step={1}
+              min={0}
+              max={tagLimit}
+              onChange={(tag) => onChange({ tag: tag || undefined })}
+            />
+          </div>
+        )}
       </InspectorSection>
       <InspectorSection title="Door">
         <ToggleField
@@ -616,9 +842,23 @@ function LineInspector({
       info.paints === "wall" &&
       (wallTextures as readonly string[]).includes(info.texture!),
   );
+  const doorFace = fields.find(({ info }) => info.paints === "door");
   const target = action?.tag
     ? map.sectors.find((item) => item.tag === action.tag)
     : undefined;
+  const level = map.complevel ?? "vanilla";
+  const generalized =
+    settings.raw && !action ? generalizedKind(settings.raw.special) : null;
+  const boomOffered = (atLeast(level, "boom") && !opensDoor) || generalized;
+  // A switch, a shot or a press works from the line's front only.
+  const frontMatters = action
+    ? usedFromFront(action)
+    : generalized
+      ? generalizedTrigger(settings.raw!.special).trigger !== "walk"
+      : false;
+  // Door tracks and switch art are pegged to the floor unless told otherwise.
+  const peggedByDefault =
+    line.mapSwitch !== null || (!twoSided && Boolean(line.sector.door));
   const changeAction = (patch: Partial<NonNullable<typeof action>>) => {
     if (action) {
       onLineChange({
@@ -725,6 +965,13 @@ function LineInspector({
             Use on every wall in this room
           </Button>
         ) : null}
+        {doorFace ? (
+          <Button
+            onClick={() => onPaint(doorFace.part, doorFace.info.texture!, true)}
+          >
+            Use on the whole door
+          </Button>
+        ) : null}
       </InspectorSection>
       <InspectorSection title="Action">
         {line.wiredSwitch ? (
@@ -735,40 +982,95 @@ function LineInspector({
           <>
             <ChoiceField
               label="When triggered"
-              value={action?.kind ?? "none"}
+              value={
+                generalized
+                  ? `boom:${generalized.class}`
+                  : (action?.kind ?? "none")
+              }
               items={[
                 {
                   value: "none",
                   label: opensDoor ? "From door settings" : "Nothing",
                 },
               ]}
-              groups={lineActionGroups(
-                lineActionKinds.filter(
-                  (value) =>
-                    value === action?.kind ||
-                    triggersFor(value, twoSided).length > 0,
+              groups={[
+                ...lineActionGroups(
+                  lineActionKinds.filter(
+                    (value) =>
+                      value === action?.kind ||
+                      triggersFor(value, twoSided).length > 0,
+                  ),
                 ),
-              )}
+                ...(boomOffered
+                  ? [
+                      {
+                        label: "Boom",
+                        items: generalizedKinds.map((kind) => ({
+                          value: `boom:${kind.class}`,
+                          label: kind.label,
+                          short: kind.label.replace(/^Boom /, ""),
+                        })),
+                      },
+                    ]
+                  : []),
+              ]}
               onChange={(kind) => {
-                if (!isLineActionKind(kind)) {
-                  onLineChange({ action: undefined });
+                const boom = kind.startsWith("boom:")
+                  ? generalizedClass(kind.slice("boom:".length))
+                  : null;
+                if (boom) {
+                  onLineChange({
+                    action: undefined,
+                    scrolls: undefined,
+                    shut: undefined,
+                    raw: {
+                      special: newGeneralized(boom, twoSided),
+                      tag: settings.raw?.tag ?? 0,
+                    },
+                  });
+                } else if (!isLineActionKind(kind)) {
+                  onLineChange({
+                    action: undefined,
+                    raw: generalized ? undefined : settings.raw,
+                  });
                 } else if (action) {
                   changeAction({ kind });
                 } else {
                   onLineChange({
                     action: newLineAction(twoSided, kind),
                     scrolls: undefined,
+                    shut: undefined,
                     raw: undefined,
                   });
                 }
               }}
             />
-            {onAddSwitch && !action && !settings.scrolls ? (
+            {onAddSwitch && !action && !settings.scrolls && !generalized ? (
               <Button className="self-start" onClick={onAddSwitch}>
                 Add a switch
               </Button>
             ) : null}
-            {action ? (
+            {opensDoor && !action && !generalized ? (
+              <ToggleField
+                label="Opens the door from this side"
+                checked={!settings.shut}
+                onChange={(checked) =>
+                  onLineChange({ shut: checked ? undefined : true })
+                }
+              />
+            ) : null}
+            {generalized ? (
+              <BoomLineFields
+                map={map}
+                special={settings.raw!.special}
+                tag={settings.raw!.tag}
+                twoSided={twoSided}
+                onChange={(special) =>
+                  onLineChange({ raw: { special, tag: settings.raw!.tag } })
+                }
+                onTargetChange={onTargetChange}
+              />
+            ) : action ? (
               <>
                 <div className="flex items-center gap-2 [&>*]:min-w-0 [&>*]:flex-1 items-end">
                   <ChoiceField
@@ -826,27 +1128,6 @@ function LineInspector({
                     onChange={(repeat) => changeAction({ repeat })}
                   />
                 ) : null}
-                {detail && usedFromFront(action) ? (
-                  <p className="text-muted-foreground">
-                    Works from the right-hand side of the direction it was drawn
-                    in. Flip line in its menu turns it around.
-                  </p>
-                ) : null}
-                {back &&
-                !detail &&
-                !front.door &&
-                !back.door &&
-                usedFromFront(action) ? (
-                  <ChoiceField
-                    label="Works from"
-                    value={front.id}
-                    items={[front, back].map((item) => ({
-                      value: item.id,
-                      label: item.name,
-                    }))}
-                    onChange={(next) => onLineChange({ front: next })}
-                  />
-                ) : null}
               </>
             ) : opensDoor ? null : (
               <>
@@ -883,6 +1164,23 @@ function LineInspector({
                 ) : null}
               </>
             )}
+            {frontMatters && detail ? (
+              <p className="text-muted-foreground">
+                Works from the right-hand side of the direction it was drawn in.
+                Flip line in its menu turns it around.
+              </p>
+            ) : null}
+            {frontMatters && back && !detail && !front.door && !back.door ? (
+              <ChoiceField
+                label="Works from"
+                value={front.id}
+                items={[front, back].map((item) => ({
+                  value: item.id,
+                  label: item.name,
+                }))}
+                onChange={(next) => onLineChange({ front: next })}
+              />
+            ) : null}
           </>
         )}
         {!line.wiredSwitch && !action && !opensDoor ? (
@@ -937,16 +1235,27 @@ function LineInspector({
             }
           />
         ) : null}
-        {lineFlags.map(({ flag, label }) => (
-          <ToggleField
-            key={flag}
-            label={label}
-            checked={Boolean(settings[flag])}
-            onChange={(checked) =>
-              onLineChange({ [flag]: checked || undefined })
-            }
-          />
-        ))}
+        {lineFlags.map(({ flag, label }) =>
+          flag === "lowerFixed" && peggedByDefault ? (
+            <ToggleField
+              key={flag}
+              label="Pegged to the floor"
+              checked={settings.lowerFixed !== false}
+              onChange={(checked) =>
+                onLineChange({ lowerFixed: checked ? undefined : false })
+              }
+            />
+          ) : (
+            <ToggleField
+              key={flag}
+              label={label}
+              checked={Boolean(settings[flag])}
+              onChange={(checked) =>
+                onLineChange({ [flag]: checked || undefined })
+              }
+            />
+          ),
+        )}
       </InspectorSection>
     </>
   );

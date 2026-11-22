@@ -530,7 +530,8 @@ describe("decompileMap", () => {
     const e = build.vertex(512, 256);
     const f = build.vertex(512, 0);
     build.line(a, b, room, null, { middle: "BTSXWALL" });
-    build.line(b, c, room);
+    // A Boom walk-over special on a solid wall does nothing, like a vanilla one.
+    build.line(b, c, room, null, { special: 0x6000 });
     build.line(c, d, room, next, { special: 242, middle: "BTSXMID" });
     build.line(d, a, room);
     build.line(c, e, next);
@@ -561,11 +562,118 @@ describe("decompileMap", () => {
       special: 242,
       tag: 0,
     });
+    expect(map.lines?.[wallKey("v1", "v2")]).toBeUndefined();
     expect(map.things.find((thing) => thing.kind === "imp")).toMatchObject({
       multiplayer: true,
     });
     expect(validateMap(map)).toEqual([]);
     expect(parseMapFile(serializeMap(map))).toEqual(map);
+  });
+});
+
+describe("doors line by line", () => {
+  it("keeps each line's own way of opening a door, its face and its pegging", () => {
+    const build = doomMap();
+    const rooms = [
+      build.sector(),
+      build.sector({ ceiling: 0 }),
+      build.sector(),
+    ];
+    const xs = [0, 256, 288, 544];
+    const top = xs.map((x) => build.vertex(x, 128));
+    const bottom = xs.map((x) => build.vertex(x, 0));
+    build.line(bottom[0], top[0], rooms[0]);
+    build.line(top[3], bottom[3], rooms[2]);
+    rooms.forEach((room, index) => {
+      build.line(top[index], top[index + 1], room);
+      build.line(bottom[index + 1], bottom[index], room);
+    });
+    // The door's top track is pegged to the floor and its bottom one is not.
+    const [topTrack] = build.map.lines.filter(
+      (line) => build.map.sides[line.front!].sector === rooms[1],
+    );
+    topTrack.flags |= 0x10;
+    const side = (sector: number, upper: string) =>
+      build.map.sides.push({
+        offsetX: 0,
+        offsetY: 0,
+        upper,
+        lower: "-",
+        middle: "-",
+        sector,
+      }) - 1;
+    build.map.lines.push(
+      {
+        start: top[1],
+        end: bottom[1],
+        flags: 4,
+        special: 1,
+        tag: 3,
+        front: side(rooms[0], "BIGDOOR2"),
+        back: side(rooms[1], "-"),
+      },
+      {
+        start: bottom[2],
+        end: top[2],
+        flags: 4,
+        special: 0,
+        tag: 0,
+        front: side(rooms[2], "BIGDOOR4"),
+        back: side(rooms[1], "-"),
+      },
+    );
+    build.map.things.push({ x: 64, y: 64, angle: 0, type: 1, flags: 7 });
+
+    const { map, report } = decompileMap(build.map);
+    expect(report.plainDoors).toBe(0);
+    const door = map.sectors.find((sector) => sector.id === "s1")!;
+    expect(door.door).toEqual({
+      opensBy: "use",
+      closes: true,
+      texture: "BIGDOOR2",
+    });
+    const wallBetween = (a: number, b: number) =>
+      Object.entries(map.lines ?? {}).find(([key]) => {
+        const [from, to] = key.split("|").map((id) => map.vertices[id]);
+        return [from.x, to.x].toSorted().join() === [a, b].toSorted().join();
+      })![1];
+    expect(wallBetween(256, 256)).toEqual({
+      action: { kind: "door-raise", trigger: "door", repeat: true, tag: 3 },
+    });
+    expect(wallBetween(288, 288)).toEqual({
+      shut: true,
+      sides: { s2: { upper: "BIGDOOR4" } },
+    });
+    const trackSettings = Object.entries(map.lines ?? {}).filter(([key]) => {
+      const [from, to] = key.split("|").map((id) => map.vertices[id]);
+      return from.y === to.y && from.x >= 256 && to.x <= 288;
+    });
+    expect(trackSettings.map(([, settings]) => settings)).toEqual(
+      expect.arrayContaining([{ lowerFixed: true }, { lowerFixed: false }]),
+    );
+    expect(trackSettings).toHaveLength(2);
+    expect(validateMap(map)).toEqual([]);
+    expect(parseMapFile(serializeMap(map))).toEqual(map);
+
+    const [again] = readMaps([{ name: "map.wad", data: compileMap(map) }]);
+    const at = (x: number) =>
+      again.lines.filter(
+        (line) =>
+          again.vertices[line.start].x === x &&
+          again.vertices[line.end].x === x,
+      );
+    expect(at(256)).toMatchObject([{ special: 1, tag: 3 }]);
+    expect(at(288)).toMatchObject([{ special: 0, tag: 0 }]);
+    const [shut] = at(288);
+    const faces = [shut.front, shut.back].map((index) => again.sides[index!]);
+    expect(faces.find((face) => face.sector === 2)?.upper).toBe("BIGDOOR4");
+    expect(faces.find((face) => face.sector === 1)?.upper).toBe("BIGDOOR2");
+    const tracks = again.lines.filter(
+      (line) => line.back === null && again.sides[line.front!].sector === 1,
+    );
+    expect(tracks.map((line) => line.flags & 0x10).toSorted()).toEqual([
+      0, 0x10,
+    ]);
   });
 });
 

@@ -66,6 +66,7 @@ import {
   duplicateThings,
   freeWallAt,
   removeNote,
+  setDoorTexture,
   setLineTarget,
   setRoomDoor,
   setRoomWalls,
@@ -1720,7 +1721,14 @@ function App({
                 onChange={(patch) =>
                   commit(
                     "door" in patch
-                      ? setRoomDoor(map, sector.id, patch.door)
+                      ? patch.door &&
+                        patch.door.texture !== sector.door?.texture
+                        ? setDoorTexture(
+                            setRoomDoor(map, sector.id, patch.door),
+                            sector.id,
+                            patch.door.texture,
+                          )
+                        : setRoomDoor(map, sector.id, patch.door)
                       : patch.wallTexture
                         ? setRoomWalls(map, sector.id, patch.wallTexture)
                         : updateSector(map, sector.id, patch),

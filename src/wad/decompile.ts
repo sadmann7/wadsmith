@@ -10,6 +10,7 @@ import {
   freedoomWalls,
   middleTextures,
 } from "@/map/freedoom-textures";
+import { generalizedTrigger, isGeneralized } from "@/map/boom";
 import {
   higherLevel,
   lineLevel,
@@ -25,10 +26,10 @@ import {
 } from "@/map/geometry";
 import {
   closesDoor,
+  doorSpecial,
   isFast,
   lineActionKinds,
   lineActions,
-  lineUsesTag,
   movesSector,
   opensDoor,
   usedFromFront,
@@ -422,13 +423,24 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
   const doorCandidates = new Map<number, DoorSettings["opensBy"] | null>();
   const doorCloses = new Map<number, boolean>();
   const doorFast = new Set<number>();
+  const manualLines = new Map<number, number[]>();
   for (const line of lines) {
-    const closes = manualDoors[line.special];
-    if (closes !== undefined && line.backSector !== null) {
-      doorCandidates.set(line.backSector, "use");
-      doorCloses.set(line.backSector, closes);
-      if (fastManualDoors.has(line.special)) doorFast.add(line.backSector);
+    if (manualDoors[line.special] !== undefined && line.backSector !== null) {
+      manualLines.set(line.backSector, [
+        ...(manualLines.get(line.backSector) ?? []),
+        line.special,
+      ]);
     }
+  }
+  // A door opens the way most of its lines do, and the rest keep their own.
+  for (const [index, specials] of manualLines) {
+    const plain = specials.filter((special) => !keyedManualDoors.has(special));
+    const special = Number(
+      mostCommon((plain.length > 0 ? plain : specials).map(String)),
+    );
+    doorCandidates.set(index, "use");
+    doorCloses.set(index, manualDoors[special]);
+    if (fastManualDoors.has(special)) doorFast.add(index);
   }
   for (const line of [...lines, ...details]) {
     const action = actions.get(line.special);
@@ -561,6 +573,8 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
 
   const sectors: Sector[] = [];
   const sectorFor = new Map<string, Sector>();
+  const doorOf = new Map<number, DoorSettings>();
+  const doorFaceOf = new Map<number, string>();
   doom.sectors.forEach((source, index) => {
     if (pieces[index].length === 0) return;
     const ownLines = lines.filter(
@@ -615,6 +629,8 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
         ...(doorFast.has(index) ? { fast: true } : {}),
         texture,
       };
+      doorOf.set(index, door);
+      if (upper) doorFaceOf.set(index, upper);
       ceiling = opened;
     }
 
@@ -649,6 +665,19 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
   });
   report.rooms = sectors.length;
 
+  // One sector can be two doors apart, opened together by either one's
+  // lines. Cut into pieces, a piece with no opening line of its own would
+  // never open, so its lines open it instead of staying shut.
+  const openedPieces = new Set<string>();
+  for (const line of lines) {
+    if (line.backSector === null || manualDoors[line.special] === undefined) {
+      continue;
+    }
+    if (!doors.has(line.backSector)) continue;
+    const id = pieceAt(line.backSector, line.start, line.end);
+    if (id) openedPieces.add(id);
+  }
+
   const settings: Record<string, LineSettings> = {};
   const switches: MapSwitch[] = [];
   for (const line of [...lines, ...details]) {
@@ -667,27 +696,45 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
     const key = keyOf(line.start, line.end);
     const entry: LineSettings = {};
     const sides: Record<string, LineSide> = {};
+    const flags =
+      line.flags & lineReserved ? line.flags & vanillaLineFlags : line.flags;
+    const doorBehind =
+      line.backSector === null ? undefined : doorOf.get(line.backSector);
+    // The compiler puts a door behind every line into it, whichever side the
+    // WAD had it on.
+    const doorAt = kept.find(({ sector }) => doors.has(sector));
 
     if (line.special === specialScrollLeft) {
       entry.scrolls = true;
-    } else if (line.special !== 0) {
+    } else if (line.special === 0) {
+      if (
+        kept.length === 2 &&
+        doorAt &&
+        doorOf.get(doorAt.sector)?.opensBy === "use" &&
+        openedPieces.has(doorAt.id)
+      ) {
+        entry.shut = true;
+      }
+    } else {
       const action = actions.get(line.special);
-      const intoDoor = line.backSector !== null && doors.has(line.backSector);
+      // A line that opens the door the door's own way adds nothing, unless
+      // it carries a tag to keep.
       const automatic =
-        intoDoor &&
-        manualDoors[line.special] !== undefined &&
-        !keyedManualDoors.has(line.special);
+        doorBehind !== undefined &&
+        line.special === doorSpecial(doorBehind) &&
+        line.tag === 0;
+      const trigger = action
+        ? action.trigger
+        : isGeneralized(line.special)
+          ? generalizedTrigger(line.special).trigger
+          : null;
       const unreachable =
-        kept.length === 1 &&
-        (action?.trigger === "walk" || action?.trigger === "door");
+        kept.length === 1 && (trigger === "walk" || trigger === "door");
       if (action && !automatic && !unreachable) {
-        const value = { ...action, tag: 0 };
+        const value = { ...action, tag: line.tag };
         if (!value.key) delete value.key;
-        entry.action = {
-          ...value,
-          tag: lineUsesTag(value) ? line.tag : 0,
-        };
-      } else if (!action && !automatic) {
+        entry.action = value;
+      } else if (!action && !automatic && !unreachable) {
         entry.raw = { special: line.special, tag: line.tag };
       }
     }
@@ -707,20 +754,25 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
       ) {
         report.seeThroughWalls += 1;
       }
+      // The compiler gives every face of a door the door's own texture, so
+      // only a face that differs keeps its own.
+      const doorFace = kept
+        .filter(({ sector }) => doors.has(sector))
+        .map(({ sector }) => doorFaceOf.get(sector))[0];
       for (const item of kept) {
         // Both sides of a line inside a room are the room, so the front's
         // textures stand for both.
         if (detail && item !== kept[0]) continue;
         const { id, side } = item;
-        // The compiler gives the walls above a door the door's own texture.
-        const facesDoor = kept.some(
-          (other) => other !== item && doors.has(other.sector),
-        );
-        // A switch on an open line keeps its texture so the press still shows.
+        const facesDoor = opening && side.upper === doorFace;
+        // A switch on an open line keeps its texture so the press still shows,
+        // and a door's face can be any door texture.
         const part = (name: string) =>
           entry.action?.trigger === "switch" && isSwitch(name)
             ? switchTexture(name)
-            : wall(name);
+            : opening && (doorTextures as readonly string[]).includes(name)
+              ? name
+              : wall(name);
         const middle =
           side.middle !== noTexture &&
           !opening &&
@@ -740,7 +792,11 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
         if (Object.keys(value).length > 0) sides[id] = value;
       }
       if (line.flags & lineBlocksAll) entry.blocksAll = true;
-      if (entry.scrolls || (entry.action && usedFromFront(entry.action))) {
+      // The compiler puts a door behind its lines, so their front is set.
+      if (
+        !opening &&
+        (entry.scrolls || (entry.action && usedFromFront(entry.action)))
+      ) {
         entry.front = kept[0].id;
       }
     } else {
@@ -749,7 +805,17 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
       const visible = [side.middle, side.upper, side.lower].find(
         (name) => name !== noTexture,
       );
-      if (entry.action?.trigger === "switch" && isSwitch(visible ?? "")) {
+      const madeSwitch =
+        entry.action?.trigger === "switch" && isSwitch(visible ?? "");
+      // The compiler pegs door tracks and switch art to the floor unless the
+      // line says otherwise.
+      if (
+        (madeSwitch || doors.has(line.frontSector)) &&
+        !(flags & lineLowerUnpegged)
+      ) {
+        entry.lowerFixed = false;
+      }
+      if (madeSwitch) {
         const texture = switchTexture(visible!);
         switches.push({
           id: `w${switches.length}`,
@@ -770,8 +836,6 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
       const value = offsets(side);
       if (Object.keys(value).length > 0) sides[id] = value;
     }
-    const flags =
-      line.flags & lineReserved ? line.flags & vanillaLineFlags : line.flags;
     if (flags & lineBlocksEnemies) entry.blocksEnemies = true;
     if (flags & lineUpperUnpegged) entry.upperFixed = true;
     if (flags & lineLowerUnpegged) entry.lowerFixed = true;

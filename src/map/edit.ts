@@ -232,7 +232,9 @@ function updateLineSide(
 function unusedTag(map: GameMap) {
   const used = new Set([
     ...map.sectors.map((sector) => sector.tag),
-    ...Object.values(map.lines ?? {}).map((line) => line.action?.tag),
+    ...Object.values(map.lines ?? {}).map(
+      (line) => line.action?.tag ?? line.raw?.tag,
+    ),
   ]);
   let tag = 1;
   while (used.has(tag)) tag += 1;
@@ -244,14 +246,40 @@ function setLineTarget(
   wall: string,
   sectorId: string | null,
 ): GameMap {
-  const action = map.lines?.[wall]?.action;
-  if (!action) return map;
+  const { action, raw } = map.lines?.[wall] ?? {};
+  if (!action && !raw) return map;
   const sector = map.sectors.find((item) => item.id === sectorId);
-  if (!sector) return updateLine(map, wall, { action: { ...action, tag: 0 } });
-  const tag = sector.tag || unusedTag(map);
-  return updateLine(updateSector(map, sector.id, { tag }), wall, {
-    action: { ...action, tag },
+  const tag = sector ? sector.tag || unusedTag(map) : 0;
+  const tagged = sector ? updateSector(map, sector.id, { tag }) : map;
+  return updateLine(
+    tagged,
+    wall,
+    action ? { action: { ...action, tag } } : { raw: { ...raw!, tag } },
+  );
+}
+
+// A door's texture covers every face of it, so faces that chose their own
+// give that up.
+function setDoorTexture(map: GameMap, id: string, texture: string): GameMap {
+  const sector = map.sectors.find((item) => item.id === id);
+  if (!sector?.door) return map;
+  const walls = new Set(
+    sectorEdges(sector).map(({ from, to }) => wallKey(from, to)),
+  );
+  const painted = updateSector(map, id, {
+    door: { ...sector.door, texture },
   });
+  return Object.entries(map.lines ?? {}).reduce(
+    (next, [wall, line]) =>
+      walls.has(wall) && line.sides
+        ? Object.keys(line.sides).reduce(
+            (inner, side) =>
+              updateLineSide(inner, wall, side, { upper: undefined }),
+            next,
+          )
+        : next,
+    painted,
+  );
 }
 
 function setRoomWalls(map: GameMap, id: string, wallTexture: string): GameMap {
@@ -1269,6 +1297,7 @@ export {
   removeThings,
   roomCenter,
   roomDefaults,
+  setDoorTexture,
   setLineTarget,
   setRoomDoor,
   setRoomWalls,

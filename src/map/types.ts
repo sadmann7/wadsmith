@@ -130,6 +130,7 @@ interface LineSettings {
   mapped?: boolean;
   passUse?: boolean;
   solid?: boolean;
+  shut?: boolean;
   scrolls?: boolean;
   action?: LineAction;
   raw?: RawSpecial;

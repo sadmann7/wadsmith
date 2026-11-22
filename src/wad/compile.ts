@@ -1,4 +1,5 @@
-import { doorTrackTexture, sectorEffects, thingCatalog } from "@/map/catalog";
+import { sectorSpecialOf } from "@/map/boom";
+import { doorTrackTexture, thingCatalog } from "@/map/catalog";
 import {
   engineOrder,
   loopEdges,
@@ -10,7 +11,7 @@ import {
   wallPartTexture,
   wallTextureOf,
 } from "@/map/geometry";
-import { lineSpecial, lineUsesTag } from "@/map/lines";
+import { doorSpecial, lineSpecial, switchDoorSpecial } from "@/map/lines";
 import { higherLevel } from "@/map/complevel";
 import type {
   Complevel,
@@ -36,15 +37,7 @@ const lineSoundBlock = 0x0040;
 const lineHidden = 0x0080;
 const lineMapped = 0x0100;
 const linePassUse = 0x0200;
-const specialDoorRaise = 1;
-const specialDoorOpen = 31;
-const specialSwitchDoorRaise = 63;
-const specialSwitchDoorOpen = 61;
 const specialScrollLeft = 48;
-const specialFastDoorRaise = 117;
-const specialFastDoorOpen = 118;
-const specialSwitchFastDoorRaise = 114;
-const specialSwitchFastDoorOpen = 115;
 const thingSkillFlags: Record<ThingSkill, number> = {
   easy: 0x0001,
   medium: 0x0002,
@@ -267,7 +260,9 @@ function complevelLump(maps: GameMap[]): Lump {
 function sectorTags(map: GameMap, sectors: Sector[]) {
   const used = new Set([
     ...sectors.map((sector) => sector.tag ?? 0),
-    ...Object.values(map.lines ?? {}).map((line) => line.action?.tag ?? 0),
+    ...Object.values(map.lines ?? {}).map(
+      (line) => line.action?.tag ?? line.raw?.tag ?? 0,
+    ),
   ]);
   return sectors.map((sector, index) => {
     if (sector.tag) return sector.tag;
@@ -336,22 +331,17 @@ function compileLumps(map: GameMap, slot = mapLumpName): Lump[] {
       const door = detail ? undefined : backSector.door;
       const doorway = detail ? undefined : (door ?? frontSector.door);
       flags = lineTwoSided | (settings?.blocksAll ? lineBlocksPlayer : 0);
-      if (door?.opensBy === "use") {
-        special = door.fast
-          ? door.closes
-            ? specialFastDoorRaise
-            : specialFastDoorOpen
-          : door.closes
-            ? specialDoorRaise
-            : specialDoorOpen;
+      if (door?.opensBy === "use" && !settings?.shut) {
+        special = doorSpecial(door);
       }
+      // A door's face is the door's texture unless the side chose its own.
       const textures = (sector: Sector) =>
         detail
           ? { middle: sideOf(sector)?.middle }
           : {
-              upper:
-                door?.texture ??
-                wallPartTexture(map, sector, line.wall, "upper"),
+              upper: door
+                ? (sideOf(sector)?.upper ?? door.texture)
+                : wallPartTexture(map, sector, line.wall, "upper"),
               lower: wallPartTexture(map, sector, line.wall, "lower"),
               middle: doorway ? undefined : sideOf(sector)?.middle,
             };
@@ -366,7 +356,9 @@ function compileLumps(map: GameMap, slot = mapLumpName): Lump[] {
         sideOf(backSector),
       );
     } else if (frontSector.door) {
-      flags |= lineLowerUnpegged;
+      // Door tracks and switch art stay put as the door moves unless the line
+      // says otherwise.
+      if (settings?.lowerFixed !== false) flags |= lineLowerUnpegged;
       front = writeSide(
         line.frontSector,
         { middle: doorTrackTexture },
@@ -375,16 +367,10 @@ function compileLumps(map: GameMap, slot = mapLumpName): Lump[] {
     } else {
       const item = switches.get(line.wall);
       const target = sectors.find((sector) => sector.id === item?.door);
-      if (item) flags |= lineLowerUnpegged;
+      if (item && settings?.lowerFixed !== false) flags |= lineLowerUnpegged;
       if (item && target?.door) {
         wired = true;
-        special = target.door.fast
-          ? target.door.closes
-            ? specialSwitchFastDoorRaise
-            : specialSwitchFastDoorOpen
-          : target.door.closes
-            ? specialSwitchDoorRaise
-            : specialSwitchDoorOpen;
+        special = switchDoorSpecial(target.door);
         tag = doorTag(target.id);
       }
       front = writeSide(
@@ -396,7 +382,7 @@ function compileLumps(map: GameMap, slot = mapLumpName): Lump[] {
 
     if (settings?.action && !wired) {
       special = lineSpecial(settings.action) ?? 0;
-      tag = lineUsesTag(settings.action) ? settings.action.tag : 0;
+      tag = settings.action.tag;
     } else if (settings?.raw && !wired) {
       special = settings.raw.special;
       tag = settings.raw.tag;
@@ -456,11 +442,7 @@ function compileLumps(map: GameMap, slot = mapLumpName): Lump[] {
       .name(sector.floorTexture)
       .name(sector.ceilingTexture)
       .int16(sector.light)
-      .int16(
-        sector.effect
-          ? sectorEffects[sector.effect].special
-          : (sector.rawEffect ?? 0),
-      )
+      .int16(sectorSpecialOf(sector))
       .int16(tags[index]);
   });
 

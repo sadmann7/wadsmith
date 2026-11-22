@@ -230,7 +230,11 @@ function parseLineAction(value: unknown, label: string): LineAction {
   return parsed;
 }
 
-const sideTextures: readonly string[] = [...freedoomWalls, ...switchTextures];
+const sideTextures: readonly string[] = [
+  ...freedoomWalls,
+  ...switchTextures,
+  ...doorTextures,
+];
 
 function parseLineSide(value: unknown, label: string): LineSide {
   const side = record(value, label);
@@ -275,6 +279,7 @@ function parseLine(value: unknown, rooms: Set<string>): LineSettings {
       "mapped",
       "passUse",
       "solid",
+      "shut",
       "scrolls",
     ] as const
   ).flatMap((flag) => {

@@ -102,9 +102,11 @@ function SurfacePanel({
               </label>
             ))}
           </RadioGroup>
-          {info.paints === "wall" ? (
+          {info.paints === "wall" || info.paints === "door" ? (
             <Button onClick={() => onPaint(info.texture!, true)}>
-              Use on every wall in this room
+              {info.paints === "door"
+                ? "Use on the whole door"
+                : "Use on every wall in this room"}
             </Button>
           ) : null}
         </>
