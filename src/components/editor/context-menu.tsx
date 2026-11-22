@@ -35,6 +35,7 @@ import {
   type LucideIcon,
   Maximize,
   MousePointer2,
+  Paintbrush,
   PenLine,
   Plus,
   Replace,
@@ -52,6 +53,7 @@ import {
 import * as React from "react";
 
 import type { Transform } from "@/lib/map/fragment";
+import type { TextureKind } from "@/lib/map/texture-tools";
 import type { GameMap, Point, Thing, ThingKind } from "@/lib/map/types";
 
 import {
@@ -85,6 +87,7 @@ import {
   roomCenter,
   type RoomSide,
   setRoomDoor,
+  setRoomWalls,
   snapCorners,
   splitWall,
   switchKeyPrefix,
@@ -102,6 +105,8 @@ import {
   newLineAction,
   triggersFor,
 } from "@/lib/map/lines";
+import { describeSurface, paintSurface, surfaceKey } from "@/lib/map/surfaces";
+import { alignWalls } from "@/lib/map/texture-tools";
 import { validateMap } from "@/lib/map/validate";
 
 interface Selection {
@@ -123,12 +128,22 @@ interface EditActions {
   onPrefabs: (point: Point | null) => void;
 }
 
+// A wall's texture can be picked up and put on other walls, and a texture can
+// be swapped for another across the whole map.
+interface TextureActions {
+  picked: string | null;
+  widthOf: (texture: string) => number;
+  onPick: (texture: string) => void;
+  onReplace: (kind: TextureKind, from: string) => void;
+}
+
 interface MapContextMenuProps {
   controller: MenuController;
   map: GameMap;
   target: MapTarget | null;
   thingKind: ThingKind;
   edit: EditActions;
+  textures: TextureActions;
   onOpenChange: MenuProps["onOpenChange"];
   onCommit: (map: GameMap, selection?: Selection) => void;
   onSelect: (selection: Selection) => void;
@@ -633,6 +648,7 @@ function RoomMenu({ id, ...props }: RoomMenuProps) {
   );
   const container = containerOf(map, room);
   const holdsThing = map.things.some((thing) => sectorAt(map, thing) === room);
+  const { picked } = props.textures;
   const pillar = holdsThing ? null : makePillar(map, room.id);
   return (
     <>
@@ -678,6 +694,35 @@ function RoomMenu({ id, ...props }: RoomMenuProps) {
       >
         Make pillar
       </Item>
+      <SubMenu icon={Paintbrush} label="Texture">
+        <MenuItem
+          className={itemClass}
+          disabled={!picked || Boolean(room.door)}
+          onSelect={() =>
+            picked && onCommit(setRoomWalls(map, room.id, picked))
+          }
+        >
+          {picked
+            ? `Apply ${picked} to every wall`
+            : "Apply the picked texture"}
+        </MenuItem>
+        <Rule />
+        {(
+          [
+            ["wall", "walls", room.wallTexture],
+            ["flat", "floor", room.floorTexture],
+            ["flat", "ceiling", room.ceilingTexture],
+          ] as const
+        ).map(([kind, part, texture]) => (
+          <MenuItem
+            key={part}
+            className={itemClass}
+            onSelect={() => props.textures.onReplace(kind, texture)}
+          >
+            Replace the {part}' {texture} everywhere…
+          </MenuItem>
+        ))}
+      </SubMenu>
       <Rule />
       <EditItems edit={props.edit} point={point} />
       <Rule />
@@ -791,6 +836,13 @@ function WallMenu({ sector, wall, ...props }: WallMenuProps) {
     target.point ?? wallMiddle(map, wall),
     grid,
   );
+  const surface =
+    target.surface ??
+    surfaceKey({ kind: "wall", sector, wall, part: "middle" });
+  const shown = describeSurface(map, surface);
+  const texture = shown?.paints === "wall" ? shown.texture : null;
+  const { picked } = props.textures;
+  const aligned = alignWalls(map, sector, wall, props.textures.widthOf);
   const chooseAction = (kind: string) => {
     if (!getIsLineActionKind(kind)) {
       onCommit(
@@ -895,6 +947,39 @@ function WallMenu({ sector, wall, ...props }: WallMenuProps) {
       >
         Hide on automap
       </CheckItem>
+      {texture && !detail ? (
+        <SubMenu icon={Paintbrush} label="Texture">
+          <MenuItem
+            className={itemClass}
+            disabled={aligned === map}
+            onSelect={() => onCommit(aligned)}
+          >
+            Align along the room
+          </MenuItem>
+          <MenuItem
+            className={itemClass}
+            onSelect={() => props.textures.onPick(texture)}
+          >
+            Pick up {texture}
+          </MenuItem>
+          <MenuItem
+            className={itemClass}
+            disabled={!picked || picked === texture}
+            onSelect={() =>
+              picked && onCommit(paintSurface(map, surface, picked))
+            }
+          >
+            {picked ? `Apply ${picked}` : "Apply the picked texture"}
+          </MenuItem>
+          <Rule />
+          <MenuItem
+            className={itemClass}
+            onSelect={() => props.textures.onReplace("wall", texture)}
+          >
+            Replace {texture} everywhere…
+          </MenuItem>
+        </SubMenu>
+      ) : null}
       <Rule />
       <ShowItem {...props} />
       {detail ? (

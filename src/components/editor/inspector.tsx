@@ -311,6 +311,103 @@ export function SectorInspector({
   );
 }
 
+const mixed = "Mixed";
+
+interface RoomsInspectorProps {
+  map: GameMap;
+  rooms: Sector[];
+  assets: SceneAssets;
+  onChange: (patch: Partial<Sector>) => void;
+}
+
+export function RoomsInspector({
+  map,
+  rooms,
+  assets,
+  onChange,
+}: RoomsInspectorProps) {
+  const [first] = rooms;
+  // What every room agrees on, or null where they differ.
+  const shared = <Key extends "floor" | "ceiling" | "light">(key: Key) =>
+    rooms.every((room) => room[key] === first[key]) ? first[key] : null;
+  const texture = (key: "floorTexture" | "ceilingTexture" | "wallTexture") =>
+    rooms.every((room) => room[key] === first[key]) ? first[key] : mixed;
+  const context = `${rooms.length} rooms`;
+  const flats = { kind: "flat" as const, use: flatUse(map), context };
+  const light = shared("light");
+  // The field lists Mixed as a value, which choosing again changes nothing.
+  const paint =
+    (patch: (name: string) => Partial<Sector>) => (name: string) => {
+      if (name !== mixed) onChange(patch(name));
+    };
+  return (
+    <>
+      <InspectorSection title="Height" detail={context}>
+        <div className="flex items-center gap-2 [&>*]:min-w-0 [&>*]:flex-1">
+          <NumberSetting
+            label="Ceiling"
+            value={shared("ceiling")}
+            step={8}
+            min={-1024}
+            max={2048}
+            onChange={(ceiling) => onChange({ ceiling })}
+          />
+          <NumberSetting
+            label="Floor"
+            value={shared("floor")}
+            step={8}
+            min={-1024}
+            max={1024}
+            onChange={(floor) => onChange({ floor })}
+          />
+        </div>
+      </InspectorSection>
+      <InspectorSection title="Surfaces">
+        <TextureField
+          picture={assets.flat}
+          assets={assets}
+          label="Floor"
+          value={texture("floorTexture")}
+          options={floorTextures}
+          browse={flats}
+          light={light ?? first.light}
+          onChange={paint((floorTexture) => ({ floorTexture }))}
+        />
+        <TextureField
+          picture={assets.flat}
+          assets={assets}
+          label="Ceiling"
+          value={texture("ceilingTexture")}
+          options={ceilingTextures}
+          browse={flats}
+          light={light ?? first.light}
+          onChange={paint((ceilingTexture) => ({ ceilingTexture }))}
+        />
+        <TextureField
+          picture={assets.texture}
+          assets={assets}
+          label="Walls"
+          value={texture("wallTexture")}
+          options={wallTextures}
+          browse={{ kind: "wall", use: wallUse(map), context }}
+          light={light ?? first.light}
+          onChange={paint((wallTexture) => ({ wallTexture }))}
+        />
+      </InspectorSection>
+      <InspectorSection title="Behaviour">
+        <NumberSetting
+          label="Light level"
+          value={light}
+          step={8}
+          min={0}
+          max={255}
+          onChange={(next) => onChange({ light: next })}
+        />
+      </InspectorSection>
+    </>
+  );
+}
+
 interface LineInspectorProps {
   map: GameMap;
   wall: string;
@@ -322,6 +419,8 @@ interface LineInspectorProps {
   onSideChange: (patch: LineSide) => void;
   onTargetChange: (sector: string | null) => void;
   onAddSwitch?: () => void;
+  // Unset while the walls beside this one already carry its texture on.
+  onAlign?: () => void;
 }
 
 export function LineInspector({
@@ -335,6 +434,7 @@ export function LineInspector({
   onSideChange,
   onTargetChange,
   onAddSwitch,
+  onAlign,
 }: LineInspectorProps) {
   const line = describeLine(map, wall, sector);
   const { settings, twoSided, front, back } = line;
@@ -482,6 +582,15 @@ export function LineInspector({
             }
           />
         </div>
+        {detail ? null : (
+          <Button
+            disabled={!onAlign}
+            title="Carries this wall's texture on unbroken along the walls beside it"
+            onClick={onAlign}
+          >
+            Align along the room
+          </Button>
+        )}
         {roomWall ? (
           <Button
             onClick={() => onPaint(roomWall.part, roomWall.texture, true)}
@@ -1040,7 +1149,8 @@ function TextureField({
 
 interface NumberSettingProps {
   label: string;
-  value: number;
+  // Null leaves the field empty, for rooms that don't agree on the value.
+  value: number | null;
   step: number;
   min: number;
   max: number;
@@ -1061,6 +1171,7 @@ function NumberSetting({
       <NumberField
         label={label}
         value={value}
+        placeholder={value === null ? mixed : undefined}
         step={step}
         min={min}
         max={max}
