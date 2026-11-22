@@ -47,6 +47,22 @@ describe("doors and lifts in the 3D view", () => {
     expect(moverAt(wired, `wall:sector-1:${openWall}:lower`)).toBe("sector-2");
   });
 
+  it("leaves a room that is no door or lift where it is", () => {
+    expect(withMovers(testMap, ["sector-1", "gone"]).sectors[0].floor).toBe(
+      testMap.sectors[0].floor,
+    );
+    // The corridor is a lift here, and its wall into the door still stands
+    // for the door.
+    const wired = setLineTarget(
+      updateLine(testMap, openWall, {
+        action: { kind: "lift", trigger: "switch", repeat: true, tag: 0 },
+      }),
+      openWall,
+      "sector-2",
+    );
+    expect(moverAt(wired, `wall:sector-2:${doorWall}:upper`)).toBe("sector-4");
+  });
+
   it("finds the door behind a wall that wears its face", () => {
     expect(moverAt(testMap, `wall:sector-2:${doorWall}:upper`)).toBe(
       "sector-4",

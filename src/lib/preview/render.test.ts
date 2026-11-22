@@ -353,6 +353,76 @@ describe("the sky, open lines and movers", () => {
     expect(pick(0)).toBe(renderStarter()(160, 96));
   });
 
+  it("outlines a selected see-through texture round its span, not its holes", () => {
+    const fenced = updateLineSide(testMap, open, "sector-1", {
+      middle: "GRATE",
+    });
+    // Every other pixel is a hole.
+    const checkered = {
+      ...grate(1),
+      opaque: Uint8Array.from({ length: 64 * 128 }, (_, index) => index % 2),
+    };
+    const target = createRenderTarget(320, 200);
+    renderScene(target, fenced, startCamera(fenced), {
+      assets: withTextures({ GRATE: checkered }),
+      selected: `wall:sector-1:${open}:middle`,
+    });
+    const span = target.extent.filter((id) => id !== 0).length;
+    const outlined = target.colors.filter(
+      (color) => color === 0xff2b6aff,
+    ).length;
+    expect(span).toBeGreaterThan(1000);
+    expect(outlined).toBeGreaterThan(0);
+    expect(outlined).toBeLessThan(span / 4);
+  });
+
+  it("shows a taller room's walls above a lower one when both are open to the sky", () => {
+    const yard: GameMap = {
+      ...outdoors,
+      sectors: outdoors.sectors.map((sector) =>
+        sector.id === "sector-2" ? { ...sector, ceiling: 512 } : sector,
+      ),
+    };
+    // The start room's ceiling crosses the view at row 52, and the corridor's
+    // far wall rises well above it.
+    expect(colorAt(yard, 0, 160, 30).surface).toMatch(/^wall:sector-2:/);
+    expect(colorAt(outdoors, 0, 160, 30).surface).toBe("ceiling:sector-1");
+  });
+
+  it("runs a middle texture from the viewer's left on both sides of a line", () => {
+    const lined = defined(
+      addDetail(islandMap, [
+        { x: 96, y: 128 },
+        { x: 96, y: 384 },
+      ]),
+    ).map;
+    const line = wallKey(
+      ...(defined(lined.sectors[0].details)[0] as [string, string]),
+    );
+    const striped = updateLineSide(lined, line, "yard", { middle: "STRIPES" });
+    // Each column of the texture is its own color, and the shades keep a
+    // color's number, so a pixel says which column it shows.
+    const numbered: SceneAssets = {
+      ...withTextures({
+        STRIPES: {
+          ...grate(1),
+          pixels: Uint8Array.from({ length: 64 * 128 }, (_, index) =>
+            Math.floor(index / 128),
+          ),
+        },
+      }),
+      shades: Uint32Array.from({ length: 32 * 256 }, (_, index) => index & 255),
+    };
+    const columns = (camera: { x: number; y: number; angle: number }) => {
+      const target = createRenderTarget(320, 200);
+      renderScene(target, striped, camera, { assets: numbered });
+      return [150, 170].map((x) => target.colors[100 * 320 + x]);
+    };
+    // The line is 64 away on either side, so twenty pixels are eight units.
+    expect(columns({ x: 32, y: 288, angle: 0 })).toEqual([28, 36]);
+    expect(columns({ x: 160, y: 288, angle: 180 })).toEqual([28, 36]);
+  });
+
   it("shows a door open when asked, to look through it", () => {
     const target = createRenderTarget(320, 200);
     renderScene(target, testMap, startCamera(testMap), {

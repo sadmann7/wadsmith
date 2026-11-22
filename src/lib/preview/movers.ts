@@ -25,7 +25,7 @@ export function withMovers(map: GameMap, opened: readonly string[]): GameMap {
   }
   const known = cached.get(key);
   if (known) return known;
-  const open = new Set(opened);
+  const open = new Set(opened.filter((id) => getIsMover(map, id)));
   const beside = open.size > 0 ? neighbours(map) : null;
   const moved = {
     ...map,
@@ -50,21 +50,25 @@ export function withMovers(map: GameMap, opened: readonly string[]): GameMap {
   return moved;
 }
 
-// The door or lift a surface belongs to: a door's own room, the door behind a
-// wall that wears its face, or a room a lift action lowers.
+// A room that moves when worked: a door, or one a lift action lowers.
+export function getIsMover(map: GameMap, id: string) {
+  const sector = map.sectors.find((item) => item.id === id);
+  return Boolean(sector && (sector.door || liftTags(map).has(sector.tag ?? 0)));
+}
+
+// The door or lift a surface belongs to. A wall stands for the mover behind
+// it before the room it is in, so a door's face opens the door.
 export function moverAt(map: GameMap, key: string | null) {
   const surface = key ? parseSurface(key) : null;
   if (!surface || surface.kind === "thing") return null;
-  const sector = map.sectors.find((item) => item.id === surface.sector);
-  if (!sector) return null;
-  if (sector.door || liftTags(map).has(sector.tag ?? 0)) return sector.id;
-  if (surface.kind !== "wall") return null;
-  const behind = wallOwners(map)
-    .get(surface.wall)
-    ?.find((item) => item !== sector);
-  return behind && (behind.door || liftTags(map).has(behind.tag ?? 0))
-    ? behind.id
-    : null;
+  const behind =
+    surface.kind === "wall"
+      ? wallOwners(map)
+          .get(surface.wall)
+          ?.find((item) => item.id !== surface.sector)
+      : undefined;
+  if (behind && getIsMover(map, behind.id)) return behind.id;
+  return getIsMover(map, surface.sector) ? surface.sector : null;
 }
 
 const lifts = new WeakMap<GameMap, Set<number>>();

@@ -42,6 +42,9 @@ export interface RenderTarget {
   colors: Uint32Array;
   depth: Float32Array;
   pick: Uint16Array;
+  // The see-through texture whose span covers each pixel, holes included, so
+  // its outline runs round the span and not round every hole.
+  extent: Uint16Array;
   surfaces: string[];
   focal: number;
 }
@@ -107,6 +110,7 @@ export function createRenderTarget(
     colors: new Uint32Array(pixels.buffer),
     depth: new Float32Array(width * height),
     pick: new Uint16Array(width * height),
+    extent: new Uint16Array(width * height),
     surfaces: [""],
     focal: width / 2 / Math.tan(fieldOfView / 2),
   };
@@ -164,7 +168,7 @@ export function renderScene(
   camera: Camera,
   { assets, hovered, selected, ghost, sky, opened = noMovers }: SceneOptions,
 ) {
-  const { width, height, colors, depth: depths, pick, focal } = target;
+  const { width, height, colors, depth: depths, pick, extent, focal } = target;
   const { shades } = assets;
   const map = withMovers(sourceMap, opened);
   const skyPicture = sky ? assets.texture(sky) : null;
@@ -172,6 +176,8 @@ export function renderScene(
   colors.fill(skyColor);
   depths.fill(Infinity);
   pick.fill(0);
+  extent.fill(0);
+  const seeThrough = new Set<number>();
   target.surfaces = [""];
 
   const start = sectorAt(map, camera);
@@ -205,12 +211,11 @@ export function renderScene(
     let bottom = height - 1;
     let entered = "";
     const masked: MaskedColumn[] = [];
-    // The engine reads the sky by the way the column looks, and so mirrored.
+    // The engine reads the sky by the way the column looks, and so mirrored:
+    // a step of its turn first, then wrapped to the texture's width.
+    const turn = Math.atan2(-ray.y, ray.x) / (2 * Math.PI);
     const skyColumn = heavens
-      ? wrap(
-          (Math.atan2(-ray.y, ray.x) / (2 * Math.PI) + 1) * skyTurn,
-          heavens.width,
-        )
+      ? Math.floor((turn < 0 ? turn + 1 : turn) * skyTurn) % heavens.width
       : 0;
     // The sky is as bright at any distance, and takes the depth of whatever
     // it stands in for, so things in front of it still show.
@@ -260,7 +265,12 @@ export function renderScene(
     };
 
     for (let step = 0; step < maxPortals; step += 1) {
-      let hit: { wall: Wall; distance: number; along: number } | null = null;
+      let hit: {
+        wall: Wall;
+        distance: number;
+        along: number;
+        length: number;
+      } | null = null;
       for (const wall of walls.get(sector.id) ?? []) {
         if (wall.key === entered) continue;
         const ex = wall.b.x - wall.a.x;
@@ -273,13 +283,14 @@ export function renderScene(
         const along = (ox * ray.y - oy * ray.x) / denominator;
         if (distance > reached && along >= -1e-6 && along <= 1 + 1e-6) {
           if (!hit || distance < hit.distance) {
-            hit = { wall, distance, along: along * Math.hypot(ex, ey) };
+            const length = Math.hypot(ex, ey);
+            hit = { wall, distance, along: along * length, length };
           }
         }
       }
       if (!hit) break;
 
-      const { wall, distance, along } = hit;
+      const { wall, distance, along, length } = hit;
       const current: Sector = sector;
       const rowOf = (plane: number) =>
         Math.round(horizon - ((plane - eye) * focal) / distance);
@@ -410,11 +421,20 @@ export function renderScene(
         const peak =
           (wall.line?.lowerFixed ? lowerPlane + picture.height : upperPlane) +
           (wall.side?.offsetY ?? 0);
+        // A line inside a room is one wall seen from both sides, and the
+        // engine runs its texture from the viewer's left on each.
+        const behind =
+          next === current &&
+          (wall.b.x - wall.a.x) * (camera.y - wall.a.y) <
+            (wall.b.y - wall.a.y) * (camera.x - wall.a.x);
         masked.push({
           from: Math.max(top, ceilingRow, upperRow),
           to: Math.min(bottom, floorRow, lowerRow),
           distance,
-          column: wrap(along + (wall.side?.offsetX ?? 0), picture.width),
+          column: wrap(
+            (behind ? length - along : along) + (wall.side?.offsetX ?? 0),
+            picture.width,
+          ),
           picture,
           peak,
           level,
@@ -428,7 +448,16 @@ export function renderScene(
           ),
         });
       }
-      top = Math.max(top, Math.max(ceilingRow, upperRow));
+      // Two rooms open to the sky share one sky, so the opening between them
+      // reaches the further room's ceiling, above this room's or below.
+      const openSky =
+        heavens &&
+        current.ceilingTexture === skyFlat &&
+        next.ceilingTexture === skyFlat;
+      top = Math.max(
+        top,
+        openSky ? rowOf(next.ceiling) : Math.max(ceilingRow, upperRow),
+      );
       bottom = Math.min(bottom, Math.min(floorRow, lowerRow));
       if (top > bottom) break;
       entered = wall.key;
@@ -438,13 +467,15 @@ export function renderScene(
 
     for (const item of masked.toReversed()) {
       const { picture } = item;
+      seeThrough.add(item.id);
       for (let y = item.from; y <= item.to; y += 1) {
         const plane = eye + ((horizon - y - 0.5) * item.distance) / focal;
         const row = Math.floor(item.peak - plane);
         if (row < 0 || row >= picture.height) continue;
+        const index = y * width + x;
+        extent[index] = item.id;
         const source = item.column * picture.height + row;
         if (!picture.opaque[source]) continue;
-        const index = y * width + x;
         colors[index] = shades[item.level * 256 + picture.pixels[source]];
         depths[index] = item.distance;
         pick[index] = item.id;
@@ -522,7 +553,7 @@ export function renderScene(
 
   const hoveredId = hovered ? surfaceIds.get(hovered) : undefined;
   const selectedId = selected ? surfaceIds.get(selected) : undefined;
-  const getIsEdge = (x: number, y: number, id: number) => {
+  const getIsEdge = (x: number, y: number, id: number, ids: Uint16Array) => {
     for (let step = 1; step <= outlineWidth; step += 1) {
       for (const [nextX, nextY] of [
         [x - step, y],
@@ -532,7 +563,7 @@ export function renderScene(
       ]) {
         if (nextX < 0 || nextX >= width || nextY < 0 || nextY >= height)
           continue;
-        if (pick[nextY * width + nextX] !== id) return true;
+        if (ids[nextY * width + nextX] !== id) return true;
       }
     }
     return false;
@@ -541,9 +572,15 @@ export function renderScene(
     for (let y = 0; y < height; y += 1) {
       for (let x = 0; x < width; x += 1) {
         const index = y * width + x;
-        const id = pick[index];
+        // A see-through texture is outlined round its span, read from the
+        // extent, and any other surface round the pixels that show it.
+        const span = extent[index];
+        const spanned = span === selectedId || span === hoveredId;
+        const ids = spanned ? extent : pick;
+        const id = spanned ? span : pick[index];
         if (id !== selectedId && id !== hoveredId) continue;
-        if (getIsEdge(x, y, id)) {
+        if (!spanned && seeThrough.has(id)) continue;
+        if (getIsEdge(x, y, id, ids)) {
           colors[index] = id === selectedId ? selectedOutline : hoveredOutline;
         }
       }
