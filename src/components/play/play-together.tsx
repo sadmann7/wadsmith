@@ -32,6 +32,7 @@ import {
   skillNames,
 } from "@/lib/engine/coop";
 import { defaultGame, engineSlot, indexSlot } from "@/lib/engine/game";
+import { texturesOf } from "@/lib/engine/iwad";
 import {
   type LinkState,
   peerLinks,
@@ -179,12 +180,8 @@ export function PlayTogether({
       wad: compileMap(
         map,
         engineSlot(indexSlot(1), iwad?.game ?? defaultGame),
-        {
-          par,
-          music,
-          sky,
-          intertext,
-        },
+        { par, music, sky, intertext },
+        iwad ? texturesOf(iwad) : undefined,
       ),
       title,
       slot,

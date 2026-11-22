@@ -248,6 +248,31 @@ describe("episode order", () => {
     );
   });
 
+  it("checks a map again when the game's textures change", () => {
+    const [entry] = episodeMaps("p", "one");
+    const used = [
+      ...new Set(
+        entry.map.sectors.flatMap((sector) => [
+          sector.wallTexture,
+          sector.floorTexture,
+          sector.ceilingTexture,
+        ]),
+      ),
+    ];
+    const names = (textures: string[]) => ({
+      walls: textures,
+      flats: textures,
+      middles: textures,
+      textures,
+      custom: [],
+    });
+    expect(mapStatus(entry, null, { names: names([]) }).kind).toBe("error");
+    // Adding a resource brings new names without an edit to the map.
+    expect(mapStatus(entry, null, { names: names(used) }).label).toBe(
+      "No exit yet",
+    );
+  });
+
   it("holds a map whose build hasn't been checked", () => {
     expect(mapStatus(episodeMaps("p", "one")[0]).kind).toBe("checking");
   });

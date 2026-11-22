@@ -17,7 +17,7 @@ import {
 } from "@/lib/engine/game";
 import { type GameClient, startGameClient } from "@/lib/engine/game-client";
 import { HeldKeys } from "@/lib/engine/held-keys";
-import { loadIwad } from "@/lib/engine/iwad";
+import { loadIwad, texturesOf } from "@/lib/engine/iwad";
 import {
   clickFires,
   holdsGame,
@@ -389,14 +389,15 @@ function GameSession({
                   slot: engineSlot(indexSlot(index + 1), iwad.game),
                 })),
                 iwad.game,
+                texturesOf(iwad),
               )
             : map &&
-              compileMap(map, engineSlot(indexSlot(1), iwad.game), {
-                par,
-                music,
-                sky,
-                intertext,
-              }));
+              compileMap(
+                map,
+                engineSlot(indexSlot(1), iwad.game),
+                { par, music, sky, intertext },
+                texturesOf(iwad),
+              ));
         client = startGameClient({
           iwad: { game: iwad.game, data: iwad.data },
           files: files ?? {

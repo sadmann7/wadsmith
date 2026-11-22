@@ -484,6 +484,7 @@ describe("decompileMap", () => {
       walls: [],
       flats: [],
       middles: [],
+      custom: [],
       textures: [],
     });
     expect(bare.report.replacedTextures).toContain("STARTAN3");

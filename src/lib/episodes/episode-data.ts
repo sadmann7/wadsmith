@@ -487,21 +487,30 @@ function hubMap() {
   }, blankMap);
 }
 
-const checked = new Map<
-  string,
-  { revision: number; game: string; checks: ReturnType<typeof checkMap> }
->();
+interface CheckedMap {
+  revision: number;
+  game: string;
+  names: CheckContext["names"];
+  checks: ReturnType<typeof checkMap>;
+}
+
+const checked = new Map<string, CheckedMap>();
 
 // Every edit to a saved map bumps its revision, and new maps get new ids. A
-// change of game checks every map again.
+// change of game or of its textures checks every map again.
 function checksOf(entry: EpisodeMap, context?: CheckContext) {
   const game = context?.game?.id ?? "";
+  const names = context?.names;
   const known = checked.get(entry.id);
-  if (known?.revision === entry.mapRevision && known.game === game) {
+  if (
+    known?.revision === entry.mapRevision &&
+    known.game === game &&
+    known.names === names
+  ) {
     return known.checks;
   }
   const checks = checkMap(entry.map, context);
-  checked.set(entry.id, { revision: entry.mapRevision, game, checks });
+  checked.set(entry.id, { revision: entry.mapRevision, game, names, checks });
   return checks;
 }
 
