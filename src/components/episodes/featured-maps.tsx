@@ -1,4 +1,12 @@
-import { Copy, FolderOpen, HardDrive, Play, Undo2, Users } from "lucide-react";
+import {
+  Copy,
+  FolderOpen,
+  HardDrive,
+  Images,
+  Play,
+  Undo2,
+  Users,
+} from "lucide-react";
 import * as React from "react";
 
 import { AppShell, type SidebarProps } from "@/components/app-sidebar";
@@ -52,6 +60,8 @@ interface FeaturedMapsProps {
   ownIwad: boolean;
   onUseIwad: (file: File) => void;
   onUseBundledIwad: () => void;
+  resources: number;
+  onOpenTextures: () => void;
 }
 
 export function FeaturedMaps({
@@ -67,6 +77,8 @@ export function FeaturedMaps({
   ownIwad,
   onUseIwad,
   onUseBundledIwad,
+  resources,
+  onOpenTextures,
   selectedId,
   onSelect,
 }: FeaturedMapsProps) {
@@ -249,6 +261,10 @@ export function FeaturedMaps({
                 if (file) onUseIwad(file);
               }}
             />
+            <Button onClick={onOpenTextures}>
+              <Images size={14} aria-hidden="true" />
+              {resources > 0 ? `Textures (${resources})` : "Textures"}
+            </Button>
             <Button onClick={onOpenGame}>
               <Copy size={14} aria-hidden="true" />
               Open as an episode

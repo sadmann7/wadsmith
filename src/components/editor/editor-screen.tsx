@@ -69,6 +69,7 @@ import {
 } from "@/lib/editor/map-target";
 import { type EditorShortcut, editorShortcuts } from "@/lib/editor/shortcuts";
 import { defaultGame, engineSlot } from "@/lib/engine/game";
+import { texturesOf } from "@/lib/engine/iwad";
 import { thingCatalog, thingKinds } from "@/lib/map/catalog";
 import { checkMap, fixIssue, issueText } from "@/lib/map/checks";
 import {
@@ -353,7 +354,7 @@ export function EditorScreen({
   const assets = React.useMemo(() => {
     if (!iwad) return createFlatAssets();
     try {
-      return readWadAssets(iwad.data);
+      return readWadAssets(iwad.data, texturesOf(iwad).resources);
     } catch {
       return createFlatAssets();
     }
@@ -1841,12 +1842,13 @@ export function EditorScreen({
           context={context}
           onBuild={(fileName) => {
             try {
-              downloadWad(map, engineSlot(slot, iwadGame), fileName, {
-                par,
-                music,
-                sky,
-                intertext,
-              });
+              downloadWad(
+                map,
+                engineSlot(slot, iwadGame),
+                fileName,
+                { par, music, sky, intertext },
+                iwad ? texturesOf(iwad) : undefined,
+              );
             } catch (error) {
               return `Couldn't build the map. ${(error as Error).message}`;
             }
@@ -1999,10 +2001,11 @@ function downloadWad(
   slot: string,
   fileName: string,
   level: Parameters<typeof compileMap>[2],
+  textures: Parameters<typeof compileMap>[3],
 ) {
   downloadFile(
     fileName,
-    compileMap(map, slot, level).slice().buffer,
+    compileMap(map, slot, level, textures).slice().buffer,
     "application/octet-stream",
   );
 }

@@ -186,6 +186,7 @@ const freedoomNames: TextureNames = {
   walls: freedoomWalls,
   flats: freedoomFlats,
   middles: middleTextures,
+  custom: [],
   textures: [...middleTextures, ...doorTextures, ...switchTextures],
 };
 

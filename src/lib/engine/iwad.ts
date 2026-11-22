@@ -1,18 +1,34 @@
-import { readStoredFile, writeStoredFile } from "@/lib/episodes/episode-store";
-import { readLumps, WadFileError } from "@/lib/wad/inspect";
+import type { TextureSource } from "@/lib/wad/resources";
+
+import {
+  listStoredFiles,
+  readStoredFile,
+  writeStoredFile,
+} from "@/lib/episodes/episode-store";
+import { getIsWad, readLumps, WadFileError } from "@/lib/wad/inspect";
+import { getHasTextures } from "@/lib/wad/resources";
 
 import { defaultGame, type GameInfo, games } from "./game";
+
+// A texture WAD a person added, laid over the game's own textures.
+export interface Resource {
+  id: string;
+  name: string;
+  data: Uint8Array;
+}
 
 export interface Iwad {
   game: GameInfo;
   data: Uint8Array;
   // Whether the IWAD is one the person brought, rather than the bundled Freedoom.
   own: boolean;
+  resources: Resource[];
 }
 
 export const engineBase = "/engine/";
 
 const storedKey = "iwad";
+const resourcePrefix = "resource:";
 
 let iwad: Promise<Iwad> | null = null;
 const changes = new EventTarget();
@@ -75,6 +91,36 @@ export async function restoreBundledIwad() {
   announce();
 }
 
+// Like the IWAD, a resource stays in this browser.
+export async function addResource(name: string, data: Uint8Array) {
+  let textured = false;
+  try {
+    textured = getIsWad(data) && getHasTextures(data);
+  } catch {
+    textured = false;
+  }
+  if (!textured) {
+    throw new WadFileError(`${name} has no textures or flats in it.`);
+  }
+  const id = `${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 8)}`;
+  const key = `${resourcePrefix}${id}`;
+  await writeStoredFile(key, { key, name, data });
+  announce();
+  return { id, name, data } satisfies Resource;
+}
+
+export async function removeResource(id: string) {
+  await writeStoredFile(`${resourcePrefix}${id}`, null);
+  announce();
+}
+
+export function texturesOf(iwad: Iwad): TextureSource {
+  return {
+    iwad: iwad.data,
+    resources: iwad.resources.map((resource) => resource.data),
+  };
+}
+
 export function onIwadChange(listener: () => void) {
   changes.addEventListener("change", listener);
   return () => changes.removeEventListener("change", listener);
@@ -82,25 +128,36 @@ export function onIwadChange(listener: () => void) {
 
 // A stored IWAD the browser can no longer read falls back to Freedoom.
 async function readIwad(): Promise<Iwad> {
-  const stored = await readStoredFile(storedKey);
+  const [stored, files] = await Promise.all([
+    readStoredFile(storedKey),
+    listStoredFiles(resourcePrefix),
+  ]);
+  // The files come in key order, and a key starts with the time it was
+  // added, so a later resource lies over an earlier one.
+  const resources = files.map(({ key, name, data }) => ({
+    id: key.slice(resourcePrefix.length),
+    name,
+    data,
+  }));
   if (stored) {
     try {
       return {
         game: identifyIwad(stored.name, stored.data),
         data: stored.data,
         own: true,
+        resources,
       };
     } catch {
-      return fetchFreedoom();
+      return { ...(await fetchFreedoom()), resources };
     }
   }
-  return fetchFreedoom();
+  return { ...(await fetchFreedoom()), resources };
 }
 
 // Hosts don't compress WAD files, so setup:engine writes this one gzipped.
 const iwadFile = "freedoom-0.13.0.wad.gz";
 
-async function fetchFreedoom(): Promise<Iwad> {
+async function fetchFreedoom(): Promise<Omit<Iwad, "resources">> {
   const response = await fetch(`${engineBase}${iwadFile}`);
   if (!response.ok || !response.body) {
     throw new Error(`${iwadFile} is missing.`);

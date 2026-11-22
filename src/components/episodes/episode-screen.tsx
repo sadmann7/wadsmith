@@ -24,18 +24,26 @@ import { useIwad } from "@/hooks/use-iwad";
 import {
   defaultGame,
   engineSlot,
+  getIsMapLump,
   indexSlot,
   lumpSlotIndex,
   slotCount,
   slotName,
 } from "@/lib/engine/game";
 import {
+  addResource,
   adoptOwnIwad,
   identifyIwad,
   type Iwad,
   loadIwad,
+  removeResource,
   restoreBundledIwad,
+  texturesOf,
 } from "@/lib/engine/iwad";
+import {
+  type AddedTextures,
+  addTextureFiles,
+} from "@/lib/engine/texture-files";
 import {
   checkBuild,
   knownBuildProblem,
@@ -91,16 +99,19 @@ import {
   type GameFile,
   getIsWad,
   inspectWads,
+  readLumps,
   WadFileError,
   type WadSummary,
 } from "@/lib/wad/inspect";
 import { readMaps } from "@/lib/wad/read-map";
+import { getHasTextures } from "@/lib/wad/resources";
 import { getIsZip, unzip } from "@/lib/wad/zip";
 
 import { EpisodeBuildDialog } from "./episode-build-dialog";
 import { EpisodeHome } from "./episode-home";
 import { FeaturedMaps } from "./featured-maps";
 import { type MapDetails, MapDialog } from "./map-dialog";
+import { ResourcesDialog } from "./resources-dialog";
 import { type ImportedMap, WadImportDialog } from "./wad-import-dialog";
 import { WadPlayDialog } from "./wad-play-dialog";
 
@@ -144,7 +155,10 @@ export function EpisodeScreen() {
   // The game's own texture names, so the checks and the importer know what
   // it has.
   const names = React.useMemo(
-    () => (iwad ? readWadAssets(iwad.data).names : undefined),
+    () =>
+      iwad
+        ? readWadAssets(iwad.data, texturesOf(iwad).resources).names
+        : undefined,
     [iwad],
   );
   const context = React.useMemo<CheckContext>(
@@ -180,7 +194,10 @@ export function EpisodeScreen() {
     fileName: string;
     maps: ImportedMap[];
     slots: string[];
+    // The imported WADs that carry textures of their own.
+    textures: GameFile[];
   } | null>(null);
+  const [texturesOpen, setTexturesOpen] = React.useState(false);
   const [wadPick, setWadPick] = React.useState<{
     title: string;
     summary: WadSummary;
@@ -816,6 +833,34 @@ export function EpisodeScreen() {
     }
   };
 
+  const addTextures = async (files: File[]) => {
+    try {
+      setMessage(texturesMessage(await addTextureFiles(files)));
+    } catch {
+      setMessage("Couldn't add those textures.");
+    }
+  };
+
+  // A WAD that is already a resource, by name and size, isn't added twice.
+  const keepTextures = async (files: GameFile[]) => {
+    const known = iwad?.resources ?? [];
+    const added: string[] = [];
+    for (const file of files) {
+      if (
+        known.some(
+          (resource) =>
+            resource.name === file.name &&
+            resource.data.length === file.data.length,
+        )
+      ) {
+        continue;
+      }
+      await addResource(file.name, file.data);
+      added.push(file.name);
+    }
+    return added;
+  };
+
   const dropIwad = async () => {
     try {
       await restoreBundledIwad();
@@ -875,6 +920,27 @@ export function EpisodeScreen() {
       if (files.length === 0) {
         throw new WadFileError("Choose a map file, a WAD or a zip.");
       }
+      const textures = files.filter(getHasOwnTextures);
+      // A WAD of textures with no maps in it is a resource, not an import.
+      if (textures.length > 0 && !files.some(getHasMaps)) {
+        const added = await keepTextures(textures);
+        if (run !== importRun.current) return;
+        setMessage(
+          added.length > 0
+            ? `${added.join(", ")} ${added.length === 1 ? "was" : "were"} added to the textures. The texture picker lists what's in ${added.length === 1 ? "it" : "them"} under Custom.`
+            : "Those textures were already added.",
+        );
+        return;
+      }
+      // The maps are read with their own textures in reach, so walls keep
+      // the names the WAD gave them.
+      const importNames =
+        textures.length > 0 && iwad
+          ? readWadAssets(iwad.data, [
+              ...texturesOf(iwad).resources,
+              ...textures.map((file) => file.data),
+            ]).names
+          : names;
       const found = readMaps(files);
       const converted: ImportedMap[] = [];
       for (const [index, doom] of found.entries()) {
@@ -882,7 +948,7 @@ export function EpisodeScreen() {
         // Big WADs take a while, so the page gets a frame between maps.
         await new Promise((done) => setTimeout(done));
         if (run !== importRun.current) return;
-        converted.push({ slot: doom.slot, ...decompileMap(doom, names) });
+        converted.push({ slot: doom.slot, ...decompileMap(doom, importNames) });
       }
       const slots = freeSlots(await store.listMaps(episodeAt), undefined, game);
       if (run !== importRun.current) return;
@@ -899,6 +965,7 @@ export function EpisodeScreen() {
             : `${files[0].name} and ${files.length - 1} more`,
         maps: converted,
         slots,
+        textures,
       });
     } catch (error) {
       if (run !== importRun.current) return;
@@ -913,12 +980,14 @@ export function EpisodeScreen() {
   const saveImported = async (
     fileName: string,
     picked: { map: GameMap; slot: string }[],
+    textures: GameFile[],
   ) => {
     setWadImport(null);
     const base = fileName.replace(/\.[^.]+( and \d+ more)?$/, "");
     const nameOf = (map: GameMap) =>
       /^MAP\d\d$/.test(map.name ?? "") ? `${base} ${map.name}` : map.name;
     try {
+      await keepTextures(textures);
       for (const { map, slot } of picked) {
         await store.putMap(
           createMapEntry(episode.id, slot, { ...map, name: nameOf(map) }),
@@ -943,9 +1012,11 @@ export function EpisodeScreen() {
   const importFiles = async (picked: File[]) => {
     const maps = picked.filter((file) => /\.json$/i.test(file.name));
     for (const file of maps) await importMap(file);
+    const images = picked.filter(getIsImage);
+    if (images.length > 0) await addTextures(images);
     const rest: File[] = [];
     for (const file of picked) {
-      if (maps.includes(file)) continue;
+      if (maps.includes(file) || images.includes(file)) continue;
       if (await getIsIwad(file)) await adoptIwad(file);
       else rest.push(file);
     }
@@ -1020,6 +1091,7 @@ export function EpisodeScreen() {
             lumps: knownLumps(entry),
           })),
           game,
+          iwad ? texturesOf(iwad) : undefined,
         ).slice().buffer,
         "application/octet-stream",
       );
@@ -1228,9 +1300,19 @@ export function EpisodeScreen() {
           ownIwad={iwad?.own ?? false}
           onUseIwad={(file) => void adoptIwad(file)}
           onUseBundledIwad={() => void dropIwad()}
+          resources={iwad?.resources.length ?? 0}
+          onOpenTextures={() => setTexturesOpen(true)}
           selectedId={featuredId}
           onSelect={setFeaturedId}
         />
+        {texturesOpen ? (
+          <ResourcesDialog
+            resources={iwad?.resources ?? []}
+            onAdd={(files) => void addTextures(files)}
+            onRemove={(id) => void removeResource(id)}
+            onClose={() => setTexturesOpen(false)}
+          />
+        ) : null}
         {wadPick ? (
           <WadPlayDialog
             title={wadPick.title}
@@ -1270,7 +1352,9 @@ export function EpisodeScreen() {
           maps={wadImport.maps}
           slots={wadImport.slots}
           game={game}
-          onImport={(picked) => void saveImported(wadImport.fileName, picked)}
+          onImport={(picked) =>
+            void saveImported(wadImport.fileName, picked, wadImport.textures)
+          }
           onClose={() => setWadImport(null)}
         />
       ) : null}
@@ -1466,6 +1550,62 @@ async function getIsIwad(file: File) {
   } catch {
     return false;
   }
+}
+
+function getIsImage(file: File) {
+  return (
+    file.type.startsWith("image/") ||
+    /\.(png|jpe?g|gif|webp|bmp)$/i.test(file.name)
+  );
+}
+
+function getHasMaps(file: GameFile) {
+  try {
+    return readLumps(file).some((lump) => getIsMapLump(lump.name));
+  } catch {
+    return false;
+  }
+}
+
+function getHasOwnTextures(file: GameFile) {
+  try {
+    return getHasTextures(file.data);
+  } catch {
+    return false;
+  }
+}
+
+function texturesMessage({
+  images,
+  flats,
+  holed,
+  wads,
+  skipped,
+}: AddedTextures) {
+  const parts: string[] = [];
+  const open = images.filter(
+    (name) => holed.includes(name) && !flats.includes(name),
+  );
+  const listed = images.filter((name) => !open.includes(name));
+  if (listed.length > 0) {
+    parts.push(
+      `${listed.join(", ")} ${listed.length === 1 ? "is" : "are"} in the texture picker under Custom.`,
+    );
+  }
+  if (open.length > 0) {
+    parts.push(
+      `${open.join(", ")} ${open.length === 1 ? "has see-through parts, so it is" : "have see-through parts, so they are"} offered for open lines only.`,
+    );
+  }
+  if (wads.length > 0) {
+    parts.push(
+      `${wads.join(", ")} ${wads.length === 1 ? "was" : "were"} added to the textures.`,
+    );
+  }
+  for (const { name, reason } of skipped) {
+    parts.push(`${name} was left out. ${reason}`);
+  }
+  return parts.join(" ") || "There was nothing to add.";
 }
 
 async function readGameFiles(picked: File[]) {

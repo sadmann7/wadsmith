@@ -2455,6 +2455,7 @@ describe("the game's own things and textures", () => {
       "TLITE6_4",
     ],
     middles: [],
+    custom: [],
     textures: ["STARTAN3", "BROWN1", "METAL", "BIGDOOR2", "SW1STRTN"],
   };
 

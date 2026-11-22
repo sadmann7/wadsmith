@@ -6,12 +6,13 @@ export type TextureUse = Map<string, number>;
 
 // The names the game in use has: solid textures for walls, flats, the
 // textures for the middle of an open line with the see-through ones first,
-// and every texture whatever its use.
+// every texture whatever its use, and the ones that added resources bring.
 export interface TextureNames {
   walls: readonly string[];
   flats: readonly string[];
   middles: readonly string[];
   textures: readonly string[];
+  custom: readonly string[];
 }
 
 export function flatUse(map: GameMap) {

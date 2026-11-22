@@ -14,6 +14,13 @@ import {
   middleTextures,
 } from "@/lib/map/freedoom-textures";
 
+import {
+  drawPatch,
+  flatSize,
+  readTextureCatalog,
+  type TextureDefinition,
+} from "./resources";
+
 export interface Picture {
   width: number;
   height: number;
@@ -31,13 +38,7 @@ export interface SceneAssets {
   sprite: (kind: ThingKind) => Picture | null;
 }
 
-interface Lump {
-  offset: number;
-  size: number;
-}
-
 export const shadeLevels = 32;
-const flatSize = 64;
 
 // A sprite's name and frame, matched to its first lump facing front.
 const spriteFrames: Record<ThingKind, string | null> = {
@@ -177,27 +178,14 @@ export function gameFlatShade(light: number, distance: number) {
   return clampShade(lightStart(light, 0) - (Math.floor(160 / (band + 1)) >> 1));
 }
 
-export function readWadAssets(bytes: Uint8Array): SceneAssets {
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const lumps = new Map<string, Lump>();
-  const flats = new Map<string, Lump>();
-  const count = view.getInt32(4, true);
-  const directory = view.getInt32(8, true);
-  let inFlats = false;
-  for (let index = 0; index < count; index += 1) {
-    const entry = directory + index * 16;
-    const name = readName(bytes, entry + 8);
-    const lump = {
-      offset: view.getInt32(entry, true),
-      size: view.getInt32(entry + 4, true),
-    };
-    if (name === "F_START") inFlats = true;
-    else if (name === "F_END") inFlats = false;
-    else if (inFlats && lump.size === flatSize * flatSize) {
-      flats.set(name, lump);
-    }
-    lumps.set(name, lump);
-  }
+// Resources lay their textures and flats over the game's, a later one over
+// an earlier one.
+export function readWadAssets(
+  iwad: Uint8Array,
+  resources: Uint8Array[] = [],
+): SceneAssets {
+  const catalog = readTextureCatalog({ iwad, resources });
+  const { definitions, flats, lumps } = catalog;
 
   const required = (name: string) => {
     const lump = lumps.get(name);
@@ -205,61 +193,17 @@ export function readWadAssets(bytes: Uint8Array): SceneAssets {
     return lump;
   };
 
-  const palette = required("PLAYPAL").offset;
-  const colormap = required("COLORMAP").offset;
+  const palette = required("PLAYPAL");
+  const colormap = required("COLORMAP");
   const shades = new Uint32Array(shadeLevels * 256);
   for (let level = 0; level < shadeLevels; level += 1) {
     for (let color = 0; color < 256; color += 1) {
-      const mapped = bytes[colormap + level * 256 + color] * 3;
+      const mapped = colormap[level * 256 + color] * 3;
       shades[level * 256 + color] = packColor(
-        bytes[palette + mapped],
-        bytes[palette + mapped + 1],
-        bytes[palette + mapped + 2],
+        palette[mapped],
+        palette[mapped + 1],
+        palette[mapped + 2],
       );
-    }
-  }
-
-  const drawPatch = (
-    lump: Lump,
-    target: Picture,
-    originX: number,
-    originY: number,
-  ) => {
-    const start = lump.offset;
-    const width = view.getInt16(start, true);
-    for (let column = 0; column < width; column += 1) {
-      const x = originX + column;
-      let post = start + view.getInt32(start + 8 + column * 4, true);
-      while (bytes[post] !== 0xff) {
-        const top = bytes[post];
-        const length = bytes[post + 1];
-        for (let row = 0; row < length; row += 1) {
-          const y = originY + top + row;
-          if (x >= 0 && x < target.width && y >= 0 && y < target.height) {
-            const index = x * target.height + y;
-            target.pixels[index] = bytes[post + 3 + row];
-            target.opaque[index] = 1;
-          }
-        }
-        post += length + 4;
-      }
-    }
-  };
-
-  const patchLump = required("PNAMES").offset;
-  const patchNames = Array.from(
-    { length: view.getInt32(patchLump, true) },
-    (_, index) => readName(bytes, patchLump + 4 + index * 8),
-  );
-  const definitions = new Map<string, number>();
-  for (const name of ["TEXTURE1", "TEXTURE2"]) {
-    const lump = lumps.get(name);
-    if (!lump) continue;
-    const total = view.getInt32(lump.offset, true);
-    for (let index = 0; index < total; index += 1) {
-      const entry =
-        lump.offset + view.getInt32(lump.offset + 4 + index * 4, true);
-      definitions.set(readName(bytes, entry), entry);
     }
   }
 
@@ -268,29 +212,18 @@ export function readWadAssets(bytes: Uint8Array): SceneAssets {
   const flatCache = new Map<string, Picture>();
   const spriteCache = new Map<ThingKind, Picture | null>();
 
-  const compose = (entry: number) => {
-    const picture = createPicture(
-      view.getInt16(entry + 12, true),
-      view.getInt16(entry + 14, true),
-    );
-    const patches = view.getInt16(entry + 20, true);
-    for (let index = 0; index < patches; index += 1) {
-      const patch = entry + 22 + index * 10;
-      const lump = lumps.get(patchNames[view.getInt16(patch + 4, true)]);
-      if (lump) {
-        drawPatch(
-          lump,
-          picture,
-          view.getInt16(patch, true),
-          view.getInt16(patch + 2, true),
-        );
-      }
+  const compose = (definition: TextureDefinition) => {
+    const picture = createPicture(definition.width, definition.height);
+    for (const patch of definition.patches) {
+      const lump = lumps.get(patch.name);
+      if (lump) drawPatch(lump, picture, patch.x, patch.y);
     }
     return picture;
   };
 
-  // The first texture is the engine's placeholder and can't be drawn.
-  const all = [...definitions.keys()].slice(1).toSorted();
+  const all = [...definitions.keys()]
+    .filter((name) => name !== catalog.placeholder)
+    .toSorted();
   const flatNames = [...flats.keys()].toSorted();
   // A texture with a hole in it shows through, so it suits an open line and
   // not a solid wall. Telling them apart means drawing each one once.
@@ -317,13 +250,14 @@ export function readWadAssets(bytes: Uint8Array): SceneAssets {
         return sort().middles;
       },
       textures: all,
+      custom: [...catalog.customTextures, ...catalog.customFlats].toSorted(),
     },
     texture(name) {
       const cached = textureCache.get(name);
       if (cached) return cached;
-      const entry = definitions.get(name);
-      if (entry === undefined) return missing;
-      const picture = compose(entry);
+      const definition = definitions.get(name);
+      if (!definition || name === catalog.placeholder) return missing;
+      const picture = compose(definition);
       textureCache.set(name, picture);
       return picture;
     },
@@ -336,8 +270,7 @@ export function readWadAssets(bytes: Uint8Array): SceneAssets {
       picture.opaque.fill(1);
       for (let x = 0; x < flatSize; x += 1) {
         for (let y = 0; y < flatSize; y += 1) {
-          picture.pixels[x * flatSize + y] =
-            bytes[lump.offset + y * flatSize + x];
+          picture.pixels[x * flatSize + y] = lump[y * flatSize + x];
         }
       }
       flatCache.set(name, picture);
@@ -349,13 +282,15 @@ export function readWadAssets(bytes: Uint8Array): SceneAssets {
       const frame = spriteFrames[kind];
       const lump = frame === null ? undefined : spriteLump(lumps, frame);
       let picture: Picture | null = null;
-      if (lump) {
-        picture = createPicture(
-          view.getInt16(lump.offset, true),
-          view.getInt16(lump.offset + 2, true),
+      if (lump && lump.length >= 8) {
+        const view = new DataView(
+          lump.buffer,
+          lump.byteOffset,
+          lump.byteLength,
         );
-        picture.leftOffset = view.getInt16(lump.offset + 4, true);
-        picture.topOffset = view.getInt16(lump.offset + 6, true);
+        picture = createPicture(view.getInt16(0, true), view.getInt16(2, true));
+        picture.leftOffset = view.getInt16(4, true);
+        picture.topOffset = view.getInt16(6, true);
         drawPatch(lump, picture, 0, 0);
       }
       spriteCache.set(kind, picture);
@@ -374,16 +309,8 @@ function lightStart(light: number, contrast: number) {
   return (15 - band) * 4;
 }
 
-function readName(bytes: Uint8Array, offset: number) {
-  let name = "";
-  for (let index = 0; index < 8 && bytes[offset + index]; index += 1) {
-    name += String.fromCharCode(bytes[offset + index]);
-  }
-  return name.toUpperCase();
-}
-
 // Monster lumps can hold two frames in one name, like BSPIA1D1.
-function spriteLump(lumps: Map<string, Lump>, frame: string) {
+function spriteLump(lumps: Map<string, Uint8Array>, frame: string) {
   for (const [name, lump] of lumps) {
     if (name.length < 6) continue;
     if (name.startsWith(frame) && "01".includes(name[5])) return lump;
@@ -474,6 +401,7 @@ export function createFlatAssets(): SceneAssets {
       flats: freedoomFlats,
       middles: middleTextures,
       textures: [...middleTextures, ...doorTextures, ...switchTextures],
+      custom: [],
     },
     texture: tile,
     flat: tile,

@@ -26,6 +26,19 @@ export async function readStoredFile(key: string): Promise<StoredFile | null> {
   }
 }
 
+// Keys are compared as text, so every key that starts with the prefix sits
+// between the prefix and the prefix with the last character after it.
+export async function listStoredFiles(prefix: string): Promise<StoredFile[]> {
+  if (typeof indexedDB === "undefined") return [];
+  try {
+    return await withFiles<StoredFile[]>("readonly", (files) =>
+      files.getAll(IDBKeyRange.bound(prefix, `${prefix}\uffff`)),
+    );
+  } catch {
+    return [];
+  }
+}
+
 export async function writeStoredFile(key: string, file: StoredFile | null) {
   await withFiles<unknown>("readwrite", (files) =>
     file ? files.put({ ...file, key }) : files.delete(key),

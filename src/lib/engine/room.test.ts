@@ -14,6 +14,7 @@ import {
   type RoomTransport,
   unpackGame,
 } from "./room";
+import { encodeMessage } from "./room-socket";
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -69,6 +70,85 @@ describe("co-op room", () => {
       expect.objectContaining({ peer: 3, name: "jules", ready: true }),
     ]);
     expect(events.onRoster).toHaveBeenCalled();
+    host.close();
+  });
+
+  it("sends a big map no faster than the room server passes it on", async () => {
+    vi.useFakeTimers();
+    const hub = createHub();
+    const link = hub.transport();
+    // The room server's limits: 2 MiB at once, then 256 KiB a second.
+    const depth = 2 * 1024 * 1024;
+    let tokens = depth;
+    let last = Date.now();
+    let dropped = 0;
+    const big: CoopGame = {
+      ...game,
+      wad: new Uint8Array(2_500_000).map((_, index) => index % 251),
+    };
+    const host = hostRoom(
+      {
+        ...link,
+        post: (message) => {
+          const now = Date.now();
+          tokens = Math.min(depth, tokens + ((now - last) / 1000) * 262_144);
+          last = now;
+          const size = encodeMessage(message).length;
+          if (size > tokens) dropped += 1;
+          else tokens -= size;
+          link.post(message);
+        },
+      },
+      { game: big, name: "Sadman", version: "v1", maxPlayers: 3 },
+      hostEvents(),
+    );
+    const ana = guestEvents();
+    joinRoom(hub.transport(), "v1", ana).join("Ana");
+    const jules = guestEvents();
+    joinRoom(hub.transport(), "v1", jules).join("Jules");
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(ana.onGame).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(dropped).toBe(0);
+    expect(ana.onGame).toHaveBeenCalledTimes(1);
+    expect(jules.onGame).toHaveBeenCalledTimes(1);
+    const received = ana.onGame.mock.calls[0][0] as CoopGame;
+    expect(received.wad.length).toBe(big.wad.length);
+    expect(received.wad.every((byte, index) => byte === index % 251)).toBe(
+      true,
+    );
+    host.close();
+  });
+
+  it("stops sending the map to a guest who leaves", async () => {
+    vi.useFakeTimers();
+    const hub = createHub();
+    const link = hub.transport();
+    const chunks: number[] = [];
+    const host = hostRoom(
+      {
+        ...link,
+        post: (message) => {
+          if (message.type === "chunk") chunks.push(message.to);
+          link.post(message);
+        },
+      },
+      {
+        game: { ...game, wad: new Uint8Array(2_500_000) },
+        name: "Sadman",
+        version: "v1",
+        maxPlayers: 3,
+      },
+      hostEvents(),
+    );
+    const ana = joinRoom(hub.transport(), "v1", guestEvents());
+    ana.join("Ana");
+    await vi.advanceTimersByTimeAsync(1000);
+    const sent = chunks.length;
+    expect(sent).toBeGreaterThan(0);
+    ana.leave();
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(chunks.length).toBe(sent);
     host.close();
   });
 
