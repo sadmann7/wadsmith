@@ -397,6 +397,28 @@ describe("the sky, open lines and movers", () => {
     expect(hovered(fenced)).toBeLessThanOrEqual(hovered(testMap));
   });
 
+  it("outlines a thing in front of a see-through texture all the way round", () => {
+    const things = [
+      ...testMap.things,
+      { id: "imp-2", kind: "imp" as const, x: 200, y: 160, angle: 0 },
+    ];
+    const outlined = (map: GameMap) => {
+      const target = createRenderTarget(320, 200);
+      renderScene(target, map, startCamera(map), {
+        assets: withTextures({ GRATE: grate(1) }),
+        selected: "thing:imp-2",
+      });
+      return target.colors.filter((color) => color === 0xff2b6aff).length;
+    };
+    const fenced = updateLineSide(testMap, open, "sector-1", {
+      middle: "GRATE",
+    });
+    expect(outlined({ ...testMap, things })).toBeGreaterThan(0);
+    expect(outlined({ ...fenced, things })).toBe(
+      outlined({ ...testMap, things }),
+    );
+  });
+
   it("shows a taller room's walls above a lower one when both are open to the sky", () => {
     const yard: GameMap = {
       ...outdoors,

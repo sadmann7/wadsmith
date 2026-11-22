@@ -564,6 +564,7 @@ export function renderScene(
   const hoveredId = hovered ? surfaceIds.get(hovered) : undefined;
   const selectedId = selected ? surfaceIds.get(selected) : undefined;
   const getIsEdge = (x: number, y: number, id: number, ids: Uint16Array) => {
+    const own = depths[y * width + x];
     for (let step = 1; step <= outlineWidth; step += 1) {
       for (const [nextX, nextY] of [
         [x - step, y],
@@ -573,12 +574,14 @@ export function renderScene(
       ]) {
         if (nextX < 0 || nextX >= width || nextY < 0 || nextY >= height)
           continue;
-        const beside = ids[nextY * width + nextX];
+        const next = nextY * width + nextX;
+        const beside = ids[next];
+        if (beside === id) continue;
         // What shows through a see-through texture ends at its holes all
         // over, which is no edge of its own.
-        if (beside !== id && !(ids === pick && seeThrough.has(beside))) {
-          return true;
-        }
+        const isVeiled =
+          ids === pick && seeThrough.has(beside) && depths[next] < own;
+        if (!isVeiled) return true;
       }
     }
     return false;
