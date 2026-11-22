@@ -295,6 +295,8 @@ interface AppProps {
   navigation: React.ReactNode;
   onNewMap: () => void;
   onMapSettings: () => void;
+  // Opens the online copy's links, when this site has a server for them.
+  onShare?: () => void;
   onParChange: (par: number) => void;
   playing: boolean;
   onPlayingChange: (playing: boolean, coop: boolean) => void;
@@ -336,6 +338,7 @@ export function EditorScreen({
   navigation,
   onNewMap,
   onMapSettings,
+  onShare,
   onParChange,
   playing,
   onPlayingChange,
@@ -1369,6 +1372,7 @@ export function EditorScreen({
     if (action === "new") onNewMap();
     else if (action === "episodes") onOpenEpisodes();
     else if (action === "settings") onMapSettings();
+    else if (action === "share") onShare?.();
     else if (action === "open") fileInput.current?.click();
     else if (action === "save") {
       downloadFile(
@@ -1436,6 +1440,9 @@ export function EditorScreen({
                 <MenuItem value="episodes">Episode home</MenuItem>
                 <MenuItem value="new">New map…</MenuItem>
                 <MenuItem value="settings">Map settings…</MenuItem>
+                {onShare ? (
+                  <MenuItem value="share">Keep online…</MenuItem>
+                ) : null}
                 <MenuItem value="open">Replace with map file…</MenuItem>
                 <MenuItem value="save">Save map file</MenuItem>
                 <MenuSeparator />

@@ -1,13 +1,15 @@
 // The co-op room server. Each room is one Durable Object that passes every
 // message from a player to the room's other players. Messages are opaque to it,
 // except that a player names their number once they have one, so a dropped
-// connection can still be announced as that player leaving.
+// connection can still be announced as that player leaving. Under /maps, the
+// same Worker keeps the online copies of maps.
 import { DurableObject } from "cloudflare:workers";
 
 import { ConnectionLimits } from "./limits";
+import { handleMaps, MapCopy, type MapsEnv } from "./maps";
 import { allowedOrigin } from "./origin";
 
-interface Env {
+interface Env extends MapsEnv {
   ROOMS: DurableObjectNamespace<Room>;
   ALLOWED_ORIGINS: string;
   ROOM_IDLE_SECONDS?: string;
@@ -153,17 +155,29 @@ class Room extends DurableObject<Env> {
 }
 
 export default {
-  fetch(request, env) {
+  async fetch(request, env) {
+    const origin = request.headers.get("Origin") ?? "";
+    const allowed = allowedOrigin(origin, env.ALLOWED_ORIGINS);
+    const maps = await handleMaps(
+      request,
+      env,
+      allowed
+        ? {
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Methods": "GET, POST, PUT, OPTIONS",
+            "Access-Control-Allow-Headers": "Authorization, Content-Type",
+            "Access-Control-Max-Age": "86400",
+            Vary: "Origin",
+          }
+        : { Vary: "Origin" },
+    );
+    if (maps) return maps;
     const match = roomPath.exec(new URL(request.url).pathname);
     if (!match) return new Response("Not found.", { status: 404 });
     if (request.headers.get("Upgrade") !== "websocket") {
       return new Response("Expected a WebSocket.", { status: 426 });
     }
-    if (
-      !allowedOrigin(request.headers.get("Origin") ?? "", env.ALLOWED_ORIGINS)
-    ) {
-      return new Response("Forbidden.", { status: 403 });
-    }
+    if (!allowed) return new Response("Forbidden.", { status: 403 });
     return env.ROOMS.get(env.ROOMS.idFromName(match[1])).fetch(request);
   },
 } satisfies ExportedHandler<Env>;
@@ -180,4 +194,4 @@ function identifiedPeer(message: string) {
   }
 }
 
-export { Room };
+export { MapCopy, Room };

@@ -25,6 +25,7 @@ import { clearPlaytest } from "@/lib/editor/playtests";
 import {
   defaultGame,
   engineSlot,
+  type GameInfo,
   getIsMapLump,
   indexSlot,
   lumpSlotIndex,
@@ -50,6 +51,12 @@ import {
   knownBuildProblem,
   knownLumps,
 } from "@/lib/episodes/build-checks";
+import {
+  cloudBase,
+  createCloudApi,
+  sharedTarget,
+  syncMap,
+} from "@/lib/episodes/cloud";
 import {
   bySlot,
   createEpisode,
@@ -113,6 +120,7 @@ import { EpisodeHome } from "./episode-home";
 import { FeaturedMaps } from "./featured-maps";
 import { type MapDetails, MapDialog } from "./map-dialog";
 import { ResourcesDialog } from "./resources-dialog";
+import { ShareDialog } from "./share-dialog";
 import { type ImportedMap, WadImportDialog } from "./wad-import-dialog";
 import { WadPlayDialog } from "./wad-play-dialog";
 
@@ -135,6 +143,10 @@ type SaveStatus = "saving" | "saved" | "failed";
 type HomeView = "episodes" | "featured";
 
 const channelName = "wadsmith";
+// Edits wait this long for more before going to the online copy.
+const cloudDelayMs = 1500;
+const cloudUrl = cloudBase();
+const cloudApi = cloudUrl ? createCloudApi(cloudUrl) : null;
 const saveFailure = "Your browser couldn't save that change.";
 
 let preparing: ReturnType<typeof openPreparedStore> | null = null;
@@ -199,6 +211,18 @@ export function EpisodeScreen() {
     textures: GameFile[];
   } | null>(null);
   const [texturesOpen, setTexturesOpen] = React.useState(false);
+  const [sharing, setSharing] = React.useState(false);
+  // The open map's online copy: why it can't be reached, and a newer copy
+  // that clashes with edits made here.
+  const [cloudProblem, setCloudProblem] = React.useState<string | null>(null);
+  const [clash, setClash] = React.useState<{
+    revision: number;
+    map: GameMap;
+  } | null>(null);
+  // A wait before each map's next sync, so a burst of edits goes as one.
+  const cloudTimers = React.useRef(
+    new Map<string, ReturnType<typeof setTimeout>>(),
+  );
   const [wadPick, setWadPick] = React.useState<{
     title: string;
     summary: WadSummary;
@@ -273,11 +297,105 @@ export function EpisodeScreen() {
     [refresh],
   );
 
+  // Brings a map and its online copy together: sends edits made here, takes a
+  // newer copy when nothing here clashes with it, and otherwise asks. It runs
+  // for the map it was asked about even once another map is open, so a push
+  // that lands after leaving still records its revision.
+  const runCloudSync = React.useCallback(
+    async (active: EpisodeStore, mapId: string) => {
+      if (!cloudApi) return;
+      const opened = () =>
+        sessionRef.current?.id === mapId ? sessionRef.current : null;
+      await opened()?.saver.flush();
+      const entry = await active.getMap(mapId);
+      if (!entry?.cloud || entry.broken) return;
+      let outcome: Awaited<ReturnType<typeof syncMap>>;
+      try {
+        outcome = await syncMap(cloudApi, entry.cloud, entry.map);
+      } catch (error) {
+        if (opened()) setCloudProblem((error as Error).message);
+        return;
+      }
+      if (opened()) setCloudProblem(null);
+      if (outcome.kind === "same") return;
+      if (outcome.kind === "conflict") {
+        // A map that isn't open asks when it next opens.
+        if (opened())
+          setClash({ revision: outcome.revision, map: outcome.map });
+        return;
+      }
+      if (outcome.kind === "pushed") {
+        // Edits made while the copy was on its way scheduled a sync of their
+        // own, which runs next and sends them.
+        await active.updateMap(mapId, (latest) =>
+          // A map no longer kept online stays that way.
+          latest.cloud?.id === entry.cloud?.id
+            ? {
+                ...latest,
+                cloud:
+                  latest.mapRevision === entry.mapRevision
+                    ? outcome.link
+                    : { ...outcome.link, pending: true },
+              }
+            : latest,
+        );
+        return;
+      }
+      const pulled = await active.updateMap(mapId, (latest) =>
+        latest.cloud?.pending || latest.cloud?.id !== entry.cloud?.id
+          ? latest
+          : {
+              ...latest,
+              map: outcome.map,
+              mapRevision: latest.mapRevision + 1,
+              editedAt: Date.now(),
+              cloud: outcome.link,
+            },
+      );
+      if (!pulled) return;
+      const current = opened();
+      if (pulled.cloud?.pending) {
+        if (current) {
+          setClash({ revision: outcome.link.revision, map: outcome.map });
+        }
+        return;
+      }
+      announce(mapId);
+      if (!current) return;
+      current.saver.adopt(pulled);
+      setDetails(detailsOf(pulled));
+      for (const listener of externalListeners.current) listener(pulled.map);
+    },
+    [announce],
+  );
+  const cloudQueue = React.useRef<Promise<void>>(Promise.resolve());
+  const syncCloud = React.useCallback(
+    (active: EpisodeStore, mapId: string) => {
+      cloudQueue.current = cloudQueue.current
+        .then(() => runCloudSync(active, mapId))
+        .catch(() => {});
+      return cloudQueue.current;
+    },
+    [runCloudSync],
+  );
+
   const startSession = React.useCallback(
     (active: EpisodeStore, entry: EpisodeMap) => {
       const saver = createMapSaver(active, entry, {
         onStatus: setSaveStatus,
-        onSaved: (saved) => announce(saved.id),
+        onSaved: (saved) => {
+          announce(saved.id);
+          if (!saved.cloud) return;
+          const timers = cloudTimers.current;
+          clearTimeout(timers.get(saved.id));
+          timers.set(
+            saved.id,
+            setTimeout(() => {
+              timers.delete(saved.id);
+              void syncCloud(active, saved.id);
+            }, cloudDelayMs),
+          );
+        },
         onMissing: () =>
           void closeSession(active, "This map was deleted in another tab."),
       });
@@ -293,10 +411,31 @@ export function EpisodeScreen() {
       setSaveStatus("saved");
       setMapPlaying(false);
       setBuildingEpisode(null);
+      setClash(null);
+      setCloudProblem(null);
       selectEpisode(entry.episodeId);
+      if (entry.cloud) void syncCloud(active, entry.id);
     },
-    [announce, closeSession, selectEpisode],
+    [announce, closeSession, selectEpisode, syncCloud],
   );
+
+  // Another device may have changed the copy while this tab was away, and a
+  // connection that came back can send what waited.
+  React.useEffect(() => {
+    if (!store) return;
+    const resume = () => {
+      const open = sessionRef.current;
+      if (open && document.visibilityState === "visible") {
+        void syncCloud(store, open.id);
+      }
+    };
+    document.addEventListener("visibilitychange", resume);
+    window.addEventListener("online", resume);
+    return () => {
+      document.removeEventListener("visibilitychange", resume);
+      window.removeEventListener("online", resume);
+    };
+  }, [store, syncCloud]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -307,6 +446,9 @@ export function EpisodeScreen() {
       .then(async ({ store: opened, ready }) => {
         if (cancelled) return;
         run = ++routeRun.current;
+        const shared = sharedTarget(location.pathname, location.hash);
+        // The secret stays out of the address bar and history once read.
+        if (shared) history.replaceState(null, "", location.pathname);
         const parsed = parseRoute(location.pathname);
         const play = parsed.kind !== "home" && parsed.play && !coopEntry();
         setStore(opened);
@@ -333,7 +475,21 @@ export function EpisodeScreen() {
         if (location.pathname === "/") setHomeId(wanted);
         await refresh(opened, wanted);
         if (stale()) return;
-        if (missing) {
+        if (shared) {
+          const found_ = await openShared(
+            opened,
+            shared,
+            wanted,
+            currentContext().game,
+          );
+          if (stale()) return;
+          if (typeof found_ === "string") setMessage(found_);
+          else {
+            await refresh(opened, found_.episodeId);
+            if (stale()) return;
+            startSession(opened, found_);
+          }
+        } else if (missing) {
           setMessage(
             "That episode isn't in this browser. Episodes are saved per browser, so import its backup to bring it here.",
           );
@@ -804,10 +960,12 @@ export function EpisodeScreen() {
           ...levelDetails(form),
           map: withComplevel({ ...entry.map, name: form.name }, form.complevel),
           editedAt: Date.now(),
+          ...(entry.cloud && { cloud: { ...entry.cloud, pending: true } }),
         };
       });
       if (!saved) return "This map no longer exists.";
       announce(id);
+      if (saved.cloud) void syncCloud(store, id);
       if (sessionRef.current?.id === id) setDetails(detailsOf(saved));
       else await refresh(store, saved.episodeId);
       return null;
@@ -1157,6 +1315,7 @@ export function EpisodeScreen() {
           navigation={<SidebarDrawer {...sidebar} />}
           onNewMap={() => openDialog("new")}
           onMapSettings={() => openDialog("settings")}
+          onShare={cloudApi ? () => setSharing(true) : undefined}
           onParChange={(par) => void setPar(session.id, par)}
           playing={mapPlaying}
           onPlayingChange={(next, hosted) => {
@@ -1186,6 +1345,113 @@ export function EpisodeScreen() {
             onClose={() => setMapDialog(null)}
             onSubmit={createMap}
           />
+        ) : null}
+        {sharing && current ? (
+          <ShareDialog
+            name={details.name}
+            link={current.cloud ?? null}
+            problem={cloudProblem}
+            onShare={async () => {
+              if (!cloudApi) return;
+              await session.saver.flush();
+              const latest = await store.getMap(session.id);
+              if (!latest) throw new Error("This map no longer exists.");
+              const made = await cloudApi.create(latest.map);
+              await store.updateMap(session.id, (entry) => ({
+                ...entry,
+                // Edits made while the copy was made still have to follow.
+                cloud: {
+                  ...made,
+                  ...(entry.mapRevision !== latest.mapRevision && {
+                    pending: true,
+                  }),
+                },
+              }));
+              announce(session.id);
+              await refresh(store, session.episodeId);
+              void syncCloud(store, session.id);
+            }}
+            onStop={() =>
+              void attempt(async () => {
+                await store.updateMap(session.id, (entry) => ({
+                  ...entry,
+                  cloud: undefined,
+                }));
+                setCloudProblem(null);
+                setClash(null);
+                await refresh(store, session.episodeId);
+              })
+            }
+            onClose={() => setSharing(false)}
+          />
+        ) : null}
+        {clash ? (
+          <AlertDialog open>
+            <AlertDialogBackdrop />
+            <AlertDialogContent className="w-[460px]">
+              <AlertDialogTitle>
+                This map changed on another device
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                It was edited there and here since this browser last saw the
+                online copy. Keep one version; the other is replaced.
+              </AlertDialogDescription>
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button
+                  onClick={() => {
+                    const theirs = clash;
+                    setClash(null);
+                    void attempt(async () => {
+                      const saved = await store.updateMap(
+                        session.id,
+                        (entry) => ({
+                          ...entry,
+                          map: theirs.map,
+                          mapRevision: entry.mapRevision + 1,
+                          editedAt: Date.now(),
+                          cloud: entry.cloud && {
+                            ...entry.cloud,
+                            revision: theirs.revision,
+                            pending: undefined,
+                          },
+                        }),
+                      );
+                      if (!saved) return;
+                      announce(saved.id);
+                      if (sessionRef.current?.id !== saved.id) return;
+                      session.saver.adopt(saved);
+                      setDetails(detailsOf(saved));
+                      for (const listener of externalListeners.current) {
+                        listener(saved.map);
+                      }
+                    });
+                  }}
+                >
+                  Use the other device's
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    const theirs = clash;
+                    setClash(null);
+                    void attempt(async () => {
+                      await store.updateMap(session.id, (entry) => ({
+                        ...entry,
+                        cloud: entry.cloud && {
+                          ...entry.cloud,
+                          revision: theirs.revision,
+                          pending: true,
+                        },
+                      }));
+                      await syncCloud(store, session.id);
+                    });
+                  }}
+                >
+                  Keep this one
+                </Button>
+              </div>
+            </AlertDialogContent>
+          </AlertDialog>
         ) : null}
         {mapDialog === "settings" && current ? (
           <MapDialog
@@ -1547,6 +1813,54 @@ function levelsOf(ordered: EpisodeMap[]): Level[] {
     intertext: entry.intertext,
     lumps: knownLumps(entry),
   }));
+}
+
+// The map a shared link names: the one this browser already keeps for it, or
+// a new one in the episode last open. An edit link keeps the new map tied to
+// the online copy, and a view link makes a copy of its own.
+async function openShared(
+  store: EpisodeStore,
+  target: { id: string; secret?: string },
+  episodeId: string,
+  game?: GameInfo,
+): Promise<EpisodeMap | string> {
+  if (!cloudApi) return "This copy of Wadsmith has no server for online maps.";
+  for (const episode of await store.listEpisodes()) {
+    const known = (await store.listMaps(episode.id)).find(
+      (entry) => entry.cloud?.id === target.id && !entry.broken,
+    );
+    if (!known) continue;
+    if (!target.secret || known.cloud?.secret === target.secret) return known;
+    if (known.cloud?.secret) continue;
+    const upgraded = await store.updateMap(known.id, (entry) => ({
+      ...entry,
+      cloud: entry.cloud && { ...entry.cloud, secret: target.secret },
+    }));
+    return upgraded ?? "That map couldn't be opened.";
+  }
+  let online: Awaited<ReturnType<typeof cloudApi.read>>;
+  try {
+    online = await cloudApi.read(target.id);
+  } catch (error) {
+    return (error as Error).message;
+  }
+  if (!online) return "That shared map no longer exists.";
+  const [slot] = freeSlots(await store.listMaps(episodeId), undefined, game);
+  if (!slot) {
+    return "This episode has no free slot for the shared map. Open another episode and try the link again.";
+  }
+  const entry = {
+    ...createMapEntry(episodeId, slot, online.map),
+    ...(target.secret && {
+      cloud: {
+        id: target.id,
+        secret: target.secret,
+        revision: online.revision,
+      },
+    }),
+  };
+  await store.putMap(entry);
+  return entry;
 }
 
 function soloFeatured(id: string | undefined) {
