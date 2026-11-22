@@ -183,6 +183,68 @@ describe("map editor parts", () => {
     );
   });
 
+  it("take a lone corner out of its walls in corner mode", () => {
+    let result = null as GameMap | null;
+    const instance = mapEditor({
+      id,
+      map: testMap,
+      editMode: "vertices",
+      selection: ["v6"],
+      onMapChange: (next) => {
+        result = next;
+      },
+    });
+    instance.api.keydown(press("Delete"));
+    expect(defined(result).vertices.v6).toBeUndefined();
+    expect(defined(result).sectors[0].vertices).toEqual([
+      "v1",
+      "v15",
+      "v16",
+      "v2",
+      "v3",
+      "v4",
+      "v5",
+    ]);
+  });
+
+  it("join a corner dropped onto the middle of a wall", () => {
+    let result = null as GameMap | null;
+    const instance = mapEditor({
+      id,
+      map: testMap,
+      onMapChange: (next) => {
+        result = next;
+      },
+    });
+    const { store } = instance.part("handle", { value: "v12" });
+    // The arena's corner at 512,384 lands on the start room's bottom wall.
+    store.set({ moving: { keys: ["v12"], dx: -256, dy: -64 } });
+    store.set({ moving: null });
+    instance.api.move.moveBy(["v12"], -256, -64, { reason: "drag" });
+    expect(defined(result).sectors[0].vertices).toContain("v12");
+  });
+
+  it("split a room with a line drawn from wall to wall", () => {
+    let result = null as GameMap | null;
+    const instance = mapEditor({
+      id,
+      map: testMap,
+      tool: "line",
+      onMapChange: (next) => {
+        result = next;
+      },
+    });
+    const { store } = instance.part("handle", { value: "v1" });
+    store.set({
+      drawing: [
+        { x: 0, y: 256 },
+        { x: 384, y: 256 },
+      ],
+    });
+    instance.api.keydown(press("Enter"));
+    expect(defined(result).sectors).toHaveLength(testMap.sectors.length + 1);
+  });
+
   it("wake the measure as a wall is drawn and when a wall is selected", () => {
     const instance = mapEditor({ id, map: testMap, tool: "draw" });
     let heard = 0;

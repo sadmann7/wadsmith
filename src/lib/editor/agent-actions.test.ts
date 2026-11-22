@@ -70,14 +70,14 @@ describe("agent actions", () => {
   });
 
   it("refuses an edit that would break the map and changes nothing", () => {
-    // A room drawn across the corridor and the start room.
+    // A room whose walls cross each other.
     expect(() =>
       runAgentAction(testMap, "addRoom", [
         [
-          { x: 320, y: 120 },
-          { x: 460, y: 120 },
-          { x: 460, y: 200 },
-          { x: 320, y: 200 },
+          { x: 1100, y: 0 },
+          { x: 1228, y: 128 },
+          { x: 1228, y: 0 },
+          { x: 1100, y: 128 },
         ],
       ]),
     ).toThrow(/would break the map/);

@@ -41,6 +41,40 @@ export function joinWalls(map: GameMap, ids: string[]): GameMap {
   return next;
 }
 
+// On the wall's length, and at neither of its ends.
+export function getIsWithin(a: Point, b: Point, point: Point) {
+  return (
+    cross(a, b, point) === 0 &&
+    point.x >= Math.min(a.x, b.x) &&
+    point.x <= Math.max(a.x, b.x) &&
+    point.y >= Math.min(a.y, b.y) &&
+    point.y <= Math.max(a.y, b.y) &&
+    !(point.x === a.x && point.y === a.y) &&
+    !(point.x === b.x && point.y === b.y)
+  );
+}
+
+// Where two walls cut through each other, on whole units, or null when they
+// only touch or miss. A crossing within a unit of a wall's end is that end,
+// so no wall a unit long is left over.
+export function crossing(a: Point, b: Point, c: Point, d: Point): Point | null {
+  const d1 = cross(c, d, a);
+  const d2 = cross(c, d, b);
+  const d3 = cross(a, b, c);
+  const d4 = cross(a, b, d);
+  if (d1 * d2 >= 0 || d3 * d4 >= 0) return null;
+  const along = d1 / (d1 - d2);
+  const at = {
+    x: Math.round(a.x + (b.x - a.x) * along),
+    y: Math.round(a.y + (b.y - a.y) * along),
+  };
+  return (
+    [a, b, c, d].find(
+      (end) => Math.abs(end.x - at.x) <= 1 && Math.abs(end.y - at.y) <= 1,
+    ) ?? at
+  );
+}
+
 // Only the walls near the rooms are looked at, so a room drawn in one corner
 // of a big map costs the same as on a small one.
 function findCut(map: GameMap, rooms: Set<string>, skipped: Set<string>) {
@@ -109,38 +143,4 @@ function findCut(map: GameMap, rooms: Set<string>, skipped: Set<string>) {
 
 function cutKey({ walls, at }: Cut) {
   return `${walls.join("+")}@${at.x},${at.y}`;
-}
-
-// On the wall's length, and at neither of its ends.
-function getIsWithin(a: Point, b: Point, point: Point) {
-  return (
-    cross(a, b, point) === 0 &&
-    point.x >= Math.min(a.x, b.x) &&
-    point.x <= Math.max(a.x, b.x) &&
-    point.y >= Math.min(a.y, b.y) &&
-    point.y <= Math.max(a.y, b.y) &&
-    !(point.x === a.x && point.y === a.y) &&
-    !(point.x === b.x && point.y === b.y)
-  );
-}
-
-// Where two walls cut through each other, on whole units, or null when they
-// only touch or miss. A crossing within a unit of a wall's end is that end,
-// so no wall a unit long is left over.
-function crossing(a: Point, b: Point, c: Point, d: Point): Point | null {
-  const d1 = cross(c, d, a);
-  const d2 = cross(c, d, b);
-  const d3 = cross(a, b, c);
-  const d4 = cross(a, b, d);
-  if (d1 * d2 >= 0 || d3 * d4 >= 0) return null;
-  const along = d1 / (d1 - d2);
-  const at = {
-    x: Math.round(a.x + (b.x - a.x) * along),
-    y: Math.round(a.y + (b.y - a.y) * along),
-  };
-  return (
-    [a, b, c, d].find(
-      (end) => Math.abs(end.x - at.x) <= 1 && Math.abs(end.y - at.y) <= 1,
-    ) ?? at
-  );
 }

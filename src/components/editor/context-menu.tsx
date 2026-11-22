@@ -105,6 +105,7 @@ import {
   newLineAction,
   triggersFor,
 } from "@/lib/map/lines";
+import { removeCorner } from "@/lib/map/reshape";
 import {
   describeSurface,
   paintSurface,
@@ -591,6 +592,10 @@ function CornersMenu({ ids, ...props }: CornersMenuProps) {
     wall.split("|").includes(ids[0]),
   ).length;
   const snapped = corners.every(({ x, y }) => x % grid === 0 && y % grid === 0);
+  const removed = ids.reduce(
+    (current, id) => removeCorner(current, id) ?? current,
+    map,
+  );
   return (
     <>
       <Heading>
@@ -612,6 +617,13 @@ function CornersMenu({ ids, ...props }: CornersMenuProps) {
         }
       >
         Select connected rooms
+      </Item>
+      <Item
+        icon={Trash2}
+        disabled={removed === map}
+        onSelect={() => onCommit(removed, { keys: [], sector: null })}
+      >
+        {corners.length === 1 ? "Delete corner" : "Delete corners"}
       </Item>
       <TransformMenu edit={props.edit} />
       <Rule />
@@ -842,6 +854,7 @@ function WallMenu({ sector, wall, ...props }: WallMenuProps) {
     target.point ?? wallMiddle(map, wall),
     grid,
   );
+  const middle = splitWall(map, wall, wallMiddle(map, wall), 1);
   // The parts of this side that show a wall texture. The map doesn't say
   // which part of an open wall was pressed, so there it is every part the
   // rooms' heights leave showing.
@@ -920,6 +933,15 @@ function WallMenu({ sector, wall, ...props }: WallMenuProps) {
         }
       >
         Add corner here
+      </Item>
+      <Item
+        icon={Plus}
+        disabled={!middle}
+        onSelect={() =>
+          middle && onCommit(middle.map, { keys: [middle.id], sector: null })
+        }
+      >
+        Split in the middle
       </Item>
       <SubMenu icon={Zap} label="Action" disabled={line.wiredSwitch}>
         <Choices

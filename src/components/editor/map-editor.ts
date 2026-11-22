@@ -39,8 +39,6 @@ import {
 } from "@/lib/editor/map-target";
 import { getIsPlayerStart } from "@/lib/map/catalog";
 import {
-  addDetail,
-  addRoom,
   addSwitch,
   addThing,
   applyPositions,
@@ -52,6 +50,7 @@ import {
   removeSwitch,
   roomCenter,
   snapPoint,
+  splitWall,
   switchKeyPrefix,
   thingKeyPrefix,
   updateSwitch,
@@ -67,7 +66,12 @@ import {
   sectorVertices,
   wallKey,
 } from "@/lib/map/geometry";
-import { joinWalls } from "@/lib/map/join";
+import {
+  drawLines,
+  drawRoom,
+  joinCornersToWalls,
+  removeCorner,
+} from "@/lib/map/reshape";
 import { type DrawShape, shapeCorners } from "@/lib/map/shapes";
 
 export type MapTool = "select" | "draw" | "line" | "thing" | "switch";
@@ -361,13 +365,13 @@ export const mapEditor = definePrimitive({
           }
         }
         const moved = applyPositions(store.get().map, next);
-        // A corner dropped onto another joins it.
+        // A corner dropped onto another, or onto a wall, joins it.
         const corners = (keys ?? []).filter(
           (key) => !key.startsWith(thingKeyPrefix),
         );
         const joined =
           details.reason === "drag" && corners.length > 0
-            ? mergeCorners(moved, corners)
+            ? mergeCorners(joinCornersToWalls(moved, corners), corners)
             : moved;
         const done = change("map", joined, details);
         if (done && joined !== moved) select([]);
@@ -540,12 +544,10 @@ export const mapEditor = definePrimitive({
       return snapPoint({ x, y }, grid());
     };
 
-    // A room drawn against or across walls already there shares corners with
-    // them from the start.
     const addDrawnRoom = (corners: Point[]) => {
-      const room = addRoom(store.get().map, corners, {}, 1);
+      const room = drawRoom(store.get().map, corners, {}, 1);
       store.set({ drawing: [], cursor: null });
-      change("map", joinWalls(room.map, [room.id]), { reason: "draw" });
+      change("map", room.map, { reason: "draw" });
       select([], room.id);
       change("tool", "select", { reason: "draw" });
     };
@@ -558,11 +560,11 @@ export const mapEditor = definePrimitive({
     // A line that no room can hold stays as a draft to adjust or throw away.
     const finishLine = () => {
       const { drawing, map } = store.get();
-      const added = drawing.length >= 2 ? addDetail(map, drawing, 1) : null;
+      const added = drawing.length >= 2 ? drawLines(map, drawing, 1) : null;
       if (!added) return;
       store.set({ drawing: [], cursor: null });
       change("map", added.map, { reason: "draw" });
-      select([], added.id);
+      select([], added.rooms[0] ?? null);
       change("tool", "select", { reason: "draw" });
     };
 
@@ -662,24 +664,53 @@ export const mapEditor = definePrimitive({
           (kind !== undefined && !getIsPlayerStart(kind))
         );
       });
+      // In corner mode, corners picked on their own, not as part of a whole
+      // room, come out of their walls.
+      const roomCorners = new Set(
+        map.sectors
+          .filter((sector) => parts.sectors.includes(sector.id))
+          .flatMap(sectorVertices),
+      );
+      const corners =
+        store.get().editMode === "vertices"
+          ? selection.filter(
+              (key) => map.vertices[key] && !roomCorners.has(key),
+            )
+          : [];
       if (
         things.length === 0 &&
         switches.length === 0 &&
-        parts.sectors.length === 0
+        parts.sectors.length === 0 &&
+        corners.length === 0
       ) {
         return false;
       }
-      change(
-        "map",
-        removeParts(switches.reduce(removeSwitch, map), {
-          sectors: parts.sectors,
-          things,
-        }),
-        { reason: "delete" },
+      const removed = removeParts(switches.reduce(removeSwitch, map), {
+        sectors: parts.sectors,
+        things,
+      });
+      const next = corners.reduce(
+        (current, id) => removeCorner(current, id) ?? current,
+        removed,
       );
+      if (next === map) return false;
+      change("map", next, { reason: "delete" });
       select([]);
       return true;
     };
+
+    // A corner added on the wall nearest the point, in corner and line mode.
+    const insertCorner = (point: Point) => {
+      const { map, editMode, viewport: view } = store.get();
+      if (editMode !== "vertices" && editMode !== "lines") return false;
+      const wall = wallNear(map, point, wallReach / view.zoom);
+      const split = wall && splitWall(map, wall.wall, point, grid());
+      if (!split) return false;
+      change("map", split.map, { reason: "draw" });
+      select([split.id]);
+      return true;
+    };
+    let pointer: Point | null = null;
 
     // Shift and a drag over the map adds what the box holds to the selection:
     // corners and things in vertex mode, whole rooms and things in sector
@@ -912,7 +943,8 @@ export const mapEditor = definePrimitive({
       doubleClick(event: MouseEvent) {
         if (store.get().tool !== "select") return;
         if ((event.target as Element).closest("[data-map-control]")) return;
-        moveCamera(viewport.toCanvas(event.clientX, event.clientY));
+        const at = viewport.toCanvas(event.clientX, event.clientY);
+        if (!insertCorner(at)) moveCamera(at);
       },
       pressCamera(event: PointerEvent, el: HTMLElement) {
         const camera = context.options().camera;
@@ -1030,6 +1062,7 @@ export const mapEditor = definePrimitive({
         viewport.pointerdown(event);
       },
       pointerleave() {
+        pointer = null;
         reportPointer?.(null);
       },
       pointermove(event: PointerEvent) {
@@ -1044,6 +1077,7 @@ export const mapEditor = definePrimitive({
           touchPress.held = false;
           context.options().onContextTarget?.(null);
         }
+        pointer = viewport.toCanvas(event.clientX, event.clientY);
         reportPointer?.(pointFromEvent(event));
         const { tool } = store.get();
         if (tool === "draw" || tool === "line") {
@@ -1134,6 +1168,10 @@ export const mapEditor = definePrimitive({
         if (
           ((event.key === "Delete" || event.key === "Backspace") &&
             deleteSelection()) ||
+          (event.key === "Insert" &&
+            tool === "select" &&
+            pointer !== null &&
+            insertCorner(pointer)) ||
           (tool === "select" && nudgeSelection(event))
         ) {
           event.preventDefault();
