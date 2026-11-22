@@ -14,8 +14,10 @@
     "typecheck": "next typegen && tsc --noEmit && tsc --noEmit -p rooms",
     "test": "vitest run",
     "lint": "oxlint --deny-warnings .",
-    "format": "oxfmt",
+    "lint:fix": "oxlint --fix .",
+    "format": "oxfmt --write",
     "format:check": "oxfmt --check",
+    "check": "pnpm lint && pnpm format:check && pnpm typecheck",
     "start": "next start"
   },
   "dependencies": {
