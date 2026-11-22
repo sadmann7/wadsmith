@@ -3,15 +3,15 @@ import * as React from "react";
 
 import { cn } from "@/lib/cn";
 
-function Slider({
-  label,
-  className,
-  children,
-  ...props
-}: Omit<React.ComponentProps<typeof SliderPrimitive.Slider>, "children"> & {
+interface SliderProps extends Omit<
+  React.ComponentProps<typeof SliderPrimitive.Slider>,
+  "children"
+> {
   label: string;
   children?: React.ReactNode;
-}) {
+}
+
+function Slider({ label, className, children, ...props }: SliderProps) {
   return (
     <SliderPrimitive.Slider
       className={cn("flex flex-col gap-1.5", className)}

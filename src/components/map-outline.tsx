@@ -1,23 +1,25 @@
 import * as React from "react";
 
-import { wallOwners } from "@/map/geometry";
-import type { GameMap } from "@/map/types";
+import { wallOwners } from "@/lib/map/geometry";
+import type { GameMap } from "@/lib/map/types";
 
-function MapOutline({
-  map,
-  className,
-  label,
-  solidColor = "color-mix(in oklab, var(--color-muted-foreground) 60%, transparent)",
-  openColor = "var(--color-input)",
-  children,
-}: {
+interface MapOutlineProps {
   map: GameMap;
   className?: string;
   label?: string;
   solidColor?: string;
   openColor?: string;
   children?: (size: number) => React.ReactNode;
-}) {
+}
+
+export function MapOutline({
+  map,
+  className,
+  label,
+  solidColor = "color-mix(in oklab, var(--color-muted-foreground) 60%, transparent)",
+  openColor = "var(--color-input)",
+  children,
+}: MapOutlineProps) {
   const { walls, box } = React.useMemo(() => {
     const points = Object.values(map.vertices);
     const xs = points.map((point) => point.x);
@@ -66,5 +68,3 @@ function MapOutline({
     </svg>
   );
 }
-
-export { MapOutline };

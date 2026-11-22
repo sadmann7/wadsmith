@@ -7,9 +7,9 @@ import {
   sectorHoles,
   sectorPolygon,
   wallOwners,
-} from "@/map/geometry";
-import { endsLevel, lineUsesTag, movesSector } from "@/map/lines";
-import type { GameMap, Sector } from "@/map/types";
+} from "@/lib/map/geometry";
+import { endsLevel, lineUsesTag, movesSector } from "@/lib/map/lines";
+import type { GameMap, Sector } from "@/lib/map/types";
 
 type SectorKind =
   | "floor"
@@ -32,7 +32,7 @@ const kindColors: Record<SectorKind, string> = {
   secret: "var(--color-map-sector-secret)",
 };
 
-function sectorKinds(map: GameMap) {
+export function sectorKinds(map: GameMap) {
   const lines = Object.entries(map.lines ?? {});
   const moved = new Set(
     lines.flatMap(([, line]) =>
@@ -66,16 +66,14 @@ function sectorKinds(map: GameMap) {
   return new Map(map.sectors.map((sector) => [sector.id, kindOf(sector)]));
 }
 
-// A filled plan of a map, coloured by what each room does, for map pickers.
-function MapPlan({
-  map,
-  className,
-  label,
-}: {
+interface MapPlanProps {
   map: GameMap;
   className?: string;
   label?: string;
-}) {
+}
+
+// A filled plan of a map, coloured by what each room does, for map pickers.
+export function MapPlan({ map, className, label }: MapPlanProps) {
   const { viewBox, rooms, walls } = React.useMemo(() => {
     const points = Object.values(map.vertices);
     const xs = points.map((point) => point.x);
@@ -135,5 +133,3 @@ function MapPlan({
     </svg>
   );
 }
-
-export { MapPlan, sectorKinds };

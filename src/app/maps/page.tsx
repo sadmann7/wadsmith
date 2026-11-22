@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { EditorLoader } from "@/editor/editor-loader";
+import { EditorLoader } from "@/components/editor-loader";
 
 export const metadata: Metadata = {
   title: "Featured maps",

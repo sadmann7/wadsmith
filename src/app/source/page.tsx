@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import type { Metadata } from "next";
 
-import { StandaloneShell } from "@/episodes/standalone-shell";
+import { StandaloneShell } from "@/components/standalone-shell";
 import { Alert } from "@/components/ui/alert";
 
 export const metadata: Metadata = {
@@ -52,13 +52,12 @@ const engineFiles = "/engine/";
 const linkClass =
   "text-foreground underline decoration-muted-foreground/60 underline-offset-4 hover:decoration-foreground";
 
-function Section({
-  title,
-  children,
-}: {
+interface SectionProps {
   title: string;
   children: React.ReactNode;
-}) {
+}
+
+function Section({ title, children }: SectionProps) {
   return (
     <section className="grid gap-3 border-t border-border pt-6">
       <h2 className="m-0 font-mono text-xs font-medium tracking-wide text-muted-foreground uppercase">

@@ -46,6 +46,7 @@
         ]
       }
     ],
-    "wadsmith/comment-style": "error"
+    "wadsmith/comment-style": "error",
+    "wadsmith/no-inline-props": "error"
   }
 }

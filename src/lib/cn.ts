@@ -1,12 +1,12 @@
 import { cn as merge, type ClassValue } from "cn";
 
-function cn(...classes: ClassValue[]): string;
-function cn<State>(
+export function cn(...classes: ClassValue[]): string;
+export function cn<State>(
   ...classes: (ClassValue | ((state: State) => ClassValue))[]
 ): string | ((state: State) => string);
 // A UI SDK part's class name can be a function of its state, so the merged
 // class names become one too.
-function cn<State>(
+export function cn<State>(
   ...classes: (ClassValue | ((state: State) => ClassValue))[]
 ) {
   const join = (state: State) =>
@@ -19,5 +19,3 @@ function cn<State>(
     ? join
     : join(undefined as State);
 }
-
-export { cn };

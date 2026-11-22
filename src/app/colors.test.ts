@@ -8,7 +8,7 @@ const root = join(import.meta.dirname, "..");
 const allowed = new Set([
   "app/layout.tsx",
   "app/opengraph-image.tsx",
-  "map/catalog.ts",
+  "lib/map/catalog.ts",
 ]);
 const rawColor =
   /#[0-9a-f]{3,8}\b|\b(?:oklch|oklab|lch|lab|hwb|rgba?|hsla?)\(/i;

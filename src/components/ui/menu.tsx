@@ -16,13 +16,13 @@ function MenuContent({
   );
 }
 
-function MenuItem({
-  variant = "default",
-  className,
-  ...props
-}: React.ComponentProps<typeof MenuPrimitive.MenuItem> & {
+interface MenuItemProps extends React.ComponentProps<
+  typeof MenuPrimitive.MenuItem
+> {
   variant?: "default" | "destructive";
-}) {
+}
+
+function MenuItem({ variant = "default", className, ...props }: MenuItemProps) {
   return (
     <MenuPrimitive.MenuItem
       className={cn(
