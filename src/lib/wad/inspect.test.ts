@@ -7,7 +7,7 @@ import { starterMap } from "@/lib/map/starter-map";
 import { compileLumps, compileMap } from "./compile";
 import { inspectWads, readLumps, WadFileError } from "./inspect";
 import { packTestWad as pack } from "./test-wad";
-import { isZip, unzip } from "./zip";
+import { getIsZip, unzip } from "./zip";
 
 const encode = (value: string) => new TextEncoder().encode(value);
 
@@ -143,8 +143,8 @@ describe("unzip", () => {
       { name: "pack/map.deh", data: encode("Doom version = 21\n") },
       { name: "__MACOSX/pack/._map.wad", data: encode("metadata") },
     ]);
-    expect(isZip(zip)).toBe(true);
-    expect(isZip(wad)).toBe(false);
+    expect(getIsZip(zip)).toBe(true);
+    expect(getIsZip(wad)).toBe(false);
     const files = await unzip({ name: "pack.zip", data: zip });
     expect(files.map((file) => file.name)).toEqual(["map.wad", "map.deh"]);
     expect(files[0].data).toEqual(wad);

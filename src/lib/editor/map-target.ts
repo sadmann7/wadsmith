@@ -26,13 +26,13 @@ export type MapTarget = {
   | { kind: "empty" }
 );
 
-export function isKeyboardMenu(event: MouseEvent) {
+export function getIsKeyboardMenu(event: MouseEvent) {
   const { pointerType } = event as PointerEvent;
   return event.button !== 2 && pointerType !== "touch" && pointerType !== "pen";
 }
 
 // macOS reports Control-click as the primary button before its context menu.
-export function isSecondaryPress(event: MouseEvent) {
+export function getIsSecondaryPress(event: MouseEvent) {
   return (
     event.button === 2 ||
     (event.button === 0 &&
@@ -41,14 +41,14 @@ export function isSecondaryPress(event: MouseEvent) {
   );
 }
 
-export function isDragging(event: MouseEvent) {
+export function getIsDragging(event: MouseEvent) {
   return event.button === 2 && (event.buttons & 5) !== 0;
 }
 
 // The menu reads button 2 as a pointer press and anything else as the keyboard.
 export function normalizeControlClick(event: React.MouseEvent) {
   const { nativeEvent } = event;
-  if (nativeEvent.button !== 0 || !isSecondaryPress(nativeEvent)) return;
+  if (nativeEvent.button !== 0 || !getIsSecondaryPress(nativeEvent)) return;
   event.preventDefault();
   event.stopPropagation();
   event.target.dispatchEvent(
@@ -73,7 +73,7 @@ export function openMenuFromKey(event: KeyboardEvent) {
   return true;
 }
 
-export function canStand(map: GameMap, point: Point | null) {
+export function getCanStand(map: GameMap, point: Point | null) {
   const sector = point ? sectorAt(map, point) : null;
   return Boolean(sector && !sector.door);
 }

@@ -29,9 +29,9 @@ import type { SceneCamera } from "@/lib/preview/scene-camera";
 
 import { defined } from "@/lib/defined";
 import {
-  isDragging,
-  isKeyboardMenu,
-  isSecondaryPress,
+  getIsDragging,
+  getIsKeyboardMenu,
+  getIsSecondaryPress,
   type MapTarget,
   openMenuFromKey,
   targetForKeys,
@@ -643,7 +643,7 @@ export const mapEditor = definePrimitive({
         state.moving ||
         state.connecting ||
         stopCameraDrag ||
-        isDragging(event)
+        getIsDragging(event)
       ) {
         return null;
       }
@@ -651,7 +651,7 @@ export const mapEditor = definePrimitive({
       if (element.closest("[data-map-control]")) return null;
       const key =
         element.closest<HTMLElement>("[data-map-key]")?.dataset.mapKey;
-      const keyboard = isKeyboardMenu(event);
+      const keyboard = getIsKeyboardMenu(event);
       if (keyboard && (!key || key === "camera")) return selectedTarget();
       const at = viewport.toCanvas(event.clientX, event.clientY);
       const point = keyboard ? null : snapPoint(at, grid());
@@ -759,7 +759,7 @@ export const mapEditor = definePrimitive({
         if (
           !camera ||
           event.button !== 0 ||
-          isSecondaryPress(event) ||
+          getIsSecondaryPress(event) ||
           store.get().tool !== "select"
         ) {
           return;
@@ -799,7 +799,7 @@ export const mapEditor = definePrimitive({
       fitMap,
       contextmenu(event: MouseEvent) {
         const { tool, drawing } = store.get();
-        if ((tool === "draw" || tool === "line") && !isKeyboardMenu(event)) {
+        if ((tool === "draw" || tool === "line") && !getIsKeyboardMenu(event)) {
           store.set({ drawing: drawing.slice(0, -1) });
         }
         context.options().onContextTarget?.(targetAt(event));
@@ -891,7 +891,7 @@ export const mapEditor = definePrimitive({
           touchPress = { event, held: true };
           context.options().onContextTarget?.(targetAt(event));
         }
-        if (isSecondaryPress(event)) return;
+        if (getIsSecondaryPress(event)) return;
         const target = event.target as Element;
         if (target.closest("[data-map-control], [data-map-key]")) return;
         const { tool, editMode, map, viewport: view } = store.get();
@@ -1015,7 +1015,7 @@ export const mapEditor = definePrimitive({
         viewport.keydown(event);
       },
       pressPort(event: PointerEvent, key: string, el: HTMLElement) {
-        if (event.button !== 0 || isSecondaryPress(event)) return;
+        if (event.button !== 0 || getIsSecondaryPress(event)) return;
         if (store.get().tool !== "select") return;
         if (key.startsWith(doorKeyPrefix)) {
           select([], key.slice(doorKeyPrefix.length));
@@ -1037,7 +1037,7 @@ export const mapEditor = definePrimitive({
         }
       },
       pressHandle(event: PointerEvent, key: string, el: HTMLElement) {
-        if (event.button !== 0 || isSecondaryPress(event)) return;
+        if (event.button !== 0 || getIsSecondaryPress(event)) return;
         const { tool } = store.get();
         if (tool === "thing" && key.startsWith(thingKeyPrefix)) {
           change("tool", "select", { reason: "draw" });

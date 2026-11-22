@@ -109,7 +109,7 @@ const textureGrid = definePrimitive({
           onApply?.(key);
           return;
         }
-        if (event.key === "Backspace" || isTypedKey(event)) {
+        if (event.key === "Backspace" || getIsTypedKey(event)) {
           event.preventDefault();
           onType?.(event.key === "Backspace" ? null : event.key);
           return;
@@ -157,7 +157,7 @@ const textureGrid = definePrimitive({
   }),
 });
 
-function isTypedKey(event: KeyboardEvent) {
+function getIsTypedKey(event: KeyboardEvent) {
   return (
     event.key.length === 1 &&
     event.key !== " " &&

@@ -53,7 +53,7 @@ const codePointer = (names: string) =>
 
 const text = new TextDecoder("latin1");
 
-export function isWad(data: Uint8Array) {
+export function getIsWad(data: Uint8Array) {
   const magic = text.decode(data.subarray(0, 4));
   return magic === "PWAD" || magic === "IWAD";
 }
@@ -61,7 +61,7 @@ export function isWad(data: Uint8Array) {
 export function readLumps(file: GameFile): Lump[] {
   const { data } = file;
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-  if (data.length < 12 || !isWad(data)) {
+  if (data.length < 12 || !getIsWad(data)) {
     throw new WadFileError(`${file.name} isn't a WAD file.`);
   }
   const count = view.getInt32(4, true);
@@ -86,8 +86,8 @@ export function readLumps(file: GameFile): Lump[] {
 // Maps for the other kind of Doom can't play on the game's IWAD.
 export function inspectWads(files: GameFile[], game?: GameInfo): WadSummary {
   const sorted = files.toSorted((a, b) => a.name.localeCompare(b.name));
-  const wads = sorted.filter((file) => isWad(file.data));
-  const patches = sorted.filter((file) => !isWad(file.data));
+  const wads = sorted.filter((file) => getIsWad(file.data));
+  const patches = sorted.filter((file) => !getIsWad(file.data));
   for (const file of patches) {
     if (!/\.(deh|bex)$/i.test(file.name)) {
       throw new WadFileError(

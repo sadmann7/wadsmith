@@ -863,6 +863,6 @@ export const thingKinds = Object.keys(thingCatalog) as ThingKind[];
 export const deathmatchStarts = 4;
 
 // A map has one of each player start, but any number of deathmatch starts.
-export function isPlayerStart(kind: ThingKind) {
+export function getIsPlayerStart(kind: ThingKind) {
   return thingCatalog[kind].category === "start" && kind !== "deathmatch-start";
 }

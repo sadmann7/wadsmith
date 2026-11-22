@@ -40,7 +40,6 @@ export function decodeMessage(data: string | ArrayBuffer): RoomMessage | null {
   }
 }
 
-// Reaches the room server, which passes each message to the room's other players.
 export function socketTransport(url: string): RoomTransport {
   const socket = new WebSocket(url);
   socket.binaryType = "arraybuffer";

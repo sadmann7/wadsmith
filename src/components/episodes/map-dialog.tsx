@@ -87,7 +87,6 @@ export function MapDialog({
     entry?.map.complevel ?? "vanilla",
   );
   const iwad = useIwad();
-  // The game's music lumps and sky textures, read once per IWAD.
   const lumps = React.useMemo(
     () =>
       iwad

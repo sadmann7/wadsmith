@@ -14,7 +14,7 @@ import {
   createMapSaver,
   episodeMaps,
   freeSlots,
-  isSlotConflict,
+  getIsSlotConflict,
   lastMapKey,
   mapFromTemplate,
   mapStatus,
@@ -132,7 +132,7 @@ describe("episode storage", () => {
     await store.putMap(createMapEntry("p", "MAP01", starterMap));
     await expect(
       store.putMap(createMapEntry("p", "MAP01", starterMap)),
-    ).rejects.toSatisfy(isSlotConflict);
+    ).rejects.toSatisfy(getIsSlotConflict);
   });
 
   it("creates the first episode and map together", async () => {

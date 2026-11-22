@@ -73,7 +73,6 @@ interface MapPlanProps {
   label?: string;
 }
 
-// A filled plan of a map, coloured by what each room does, for map pickers.
 export function MapPlan({ map, className, label }: MapPlanProps) {
   const { viewBox, rooms, walls } = React.useMemo(() => {
     const points = Object.values(map.vertices);

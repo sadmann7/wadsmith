@@ -49,15 +49,15 @@ import * as React from "react";
 import type { GameMap, Point, Thing, ThingKind } from "@/lib/map/types";
 
 import {
-  canStand,
+  getCanStand,
   type MapTarget,
   targetExists,
   viewOfTarget,
   wallMiddle,
 } from "@/lib/editor/map-target";
 import { thingIcons } from "@/lib/editor/thing-icons";
-import { isGeneralized } from "@/lib/map/boom";
-import { isPlayerStart, thingCatalog, thingKinds } from "@/lib/map/catalog";
+import { getIsGeneralized } from "@/lib/map/boom";
+import { getIsPlayerStart, thingCatalog, thingKinds } from "@/lib/map/catalog";
 import {
   addRoomOnSide,
   addSwitch,
@@ -90,7 +90,7 @@ import { containerOf, sectorAt, wallOwners } from "@/lib/map/geometry";
 import {
   describeLine,
   fitLineAction,
-  isLineActionKind,
+  getIsLineActionKind,
   lineActionGroups,
   lineActionKinds,
   newLineAction,
@@ -239,7 +239,7 @@ function ThingsMenu({ ids, ...props }: ThingsMenuProps) {
       <Item
         icon={Copy}
         hint={formatShortcut("mod+d")}
-        disabled={things.every((thing) => isPlayerStart(thing.kind))}
+        disabled={things.every((thing) => getIsPlayerStart(thing.kind))}
         onSelect={() => {
           const copies = duplicateThings(map, ids);
           onCommit(copies.map, {
@@ -422,7 +422,7 @@ function CameraItem({ map, point, onMoveCamera }: CameraItemProps) {
     <Item
       icon={Video}
       hint="C"
-      disabled={!canStand(map, point)}
+      disabled={!getCanStand(map, point)}
       onSelect={() => point && onMoveCamera(point)}
     >
       Move camera here
@@ -581,7 +581,7 @@ function PlaceItem({ map, point, thingKind, onCommit }: PlaceItemProps) {
   return (
     <Item
       icon={thingIcons[thingKind].icon}
-      disabled={!canStand(map, point)}
+      disabled={!getCanStand(map, point)}
       onSelect={() => {
         if (!point) return;
         const placed = addThing(map, thingKind, point, 0, 1);
@@ -662,11 +662,11 @@ function WallMenu({ sector, wall, ...props }: WallMenuProps) {
     grid,
   );
   const chooseAction = (kind: string) => {
-    if (!isLineActionKind(kind)) {
+    if (!getIsLineActionKind(kind)) {
       onCommit(
         updateLine(map, wall, {
           action: undefined,
-          raw: raw && isGeneralized(raw.special) ? undefined : raw,
+          raw: raw && getIsGeneralized(raw.special) ? undefined : raw,
         }),
       );
       return;

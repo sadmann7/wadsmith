@@ -2,7 +2,7 @@ import { Check } from "lucide-react";
 
 import type { GameMap } from "@/lib/map/types";
 
-import { hasExit } from "@/lib/map/checks";
+import { getHasExit } from "@/lib/map/checks";
 import { roomDefaults } from "@/lib/map/edit";
 import { sectorAt } from "@/lib/map/geometry";
 
@@ -30,7 +30,7 @@ export function NewMapPanel({ map, corners, drawing }: NewMapPanelProps) {
     {
       title: "Add an exit",
       hint: "Optional, a line with an exit action",
-      done: hasExit(map),
+      done: getHasExit(map),
       optional: true,
     },
   ];

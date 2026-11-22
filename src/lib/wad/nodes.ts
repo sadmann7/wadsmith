@@ -125,14 +125,14 @@ export function buildNodes(
     return { kind: "split", a, b } as const;
   };
 
-  const isConvex = (segs: Seg[]) =>
+  const getIsConvex = (segs: Seg[]) =>
     segs.every((seg) => {
       const partition = partitionOf(seg);
       return segs.every((other) => classify(partition, other).kind === "right");
     });
 
-  const isLeaf = (segs: Seg[]) =>
-    segs.every((seg) => seg.sector === segs[0].sector) && isConvex(segs);
+  const getIsLeaf = (segs: Seg[]) =>
+    segs.every((seg) => seg.sector === segs[0].sector) && getIsConvex(segs);
 
   // Rounded split points can lay one sector's wall over another's, leaving a
   // convex area with no width between them. The sector with the most wall
@@ -297,7 +297,7 @@ export function buildNodes(
 
   const build = (segs: Seg[]): { child: number; box: Box } => {
     const box = boxOf(segs);
-    const leaf = isLeaf(segs);
+    const leaf = getIsLeaf(segs);
     let tolerance = onLineTolerance;
     let partition = leaf ? null : choosePartition(segs, tolerance);
     if (!leaf && !partition) {
@@ -306,7 +306,7 @@ export function buildNodes(
     }
     const split = partition && splitSegs(partition, segs, tolerance);
     if (!partition || !split || !split.right.length || !split.left.length) {
-      if (!leaf && !isConvex(segs)) {
+      if (!leaf && !getIsConvex(segs)) {
         throw new Error("The map could not be split into convex areas.");
       }
       subsectors.push({ count: segs.length, first: orderedSegs.length });

@@ -400,7 +400,7 @@ export function renderScene(
 
   const hoveredId = hovered ? surfaceIds.get(hovered) : undefined;
   const selectedId = selected ? surfaceIds.get(selected) : undefined;
-  const isEdge = (x: number, y: number, id: number) => {
+  const getIsEdge = (x: number, y: number, id: number) => {
     for (let step = 1; step <= outlineWidth; step += 1) {
       for (const [nextX, nextY] of [
         [x - step, y],
@@ -421,7 +421,7 @@ export function renderScene(
         const index = y * width + x;
         const id = pick[index];
         if (id !== selectedId && id !== hoveredId) continue;
-        if (isEdge(x, y, id)) {
+        if (getIsEdge(x, y, id)) {
           colors[index] = id === selectedId ? selectedOutline : hoveredOutline;
         }
       }
