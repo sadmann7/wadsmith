@@ -1,7 +1,7 @@
 import * as React from "react";
 
-import type { GameMap } from "../map/types";
-import type { Lump } from "../wad/compile";
+import type { GameMap } from "@/map/types";
+import type { Lump } from "@/wad/compile";
 import type { BuildCheckRequest, BuildCheckResult } from "./build-worker";
 import { buildMap, type EpisodeMap } from "./episode-data";
 

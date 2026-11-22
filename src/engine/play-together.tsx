@@ -1,9 +1,9 @@
 import { Check, Copy, Lock, Play, Plus, TriangleAlert } from "lucide-react";
 import * as React from "react";
 
-import { deathmatchStarts } from "../map/catalog";
-import type { GameMap } from "../map/types";
-import { compileMap } from "../wad/compile";
+import { deathmatchStarts } from "@/map/catalog";
+import type { GameMap } from "@/map/types";
+import { compileMap } from "@/wad/compile";
 import {
   appVersion,
   coopPlayers,
@@ -41,15 +41,15 @@ import {
   type RoomPlayer,
 } from "./room";
 import type { NetworkMode, Skill } from "./runtime";
-import { Button } from "../components/ui/button";
-import { Input } from "../components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogBackdrop,
   DialogContent,
   DialogTitle,
-} from "../components/ui/dialog";
-import { Alert } from "../components/ui/alert";
+} from "@/components/ui/dialog";
+import { Alert } from "@/components/ui/alert";
 
 type HostedGame = { session: CoopSession; close: () => void };
 

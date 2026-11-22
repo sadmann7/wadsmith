@@ -8,7 +8,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-} from "../components/ui/dialog";
+} from "@/components/ui/dialog";
 
 type Key = { text: string; spoken?: string };
 type Shortcut = { keys: Key[]; does: string };

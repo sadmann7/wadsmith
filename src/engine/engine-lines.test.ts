@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import { thingCatalog } from "../map/catalog";
+import { thingCatalog } from "@/map/catalog";
 import {
   addThing,
   setLineTarget,
@@ -8,10 +8,10 @@ import {
   updateLine,
   updateSector,
   updateThing,
-} from "../map/edit";
-import { starterMap } from "../map/starter-map";
-import { testMap } from "../map/test-map";
-import type { GameMap, LineAction } from "../map/types";
+} from "@/map/edit";
+import { starterMap } from "@/map/starter-map";
+import { testMap } from "@/map/test-map";
+import type { GameMap, LineAction } from "@/map/types";
 import { doomKeys, keysByCode, type DoomGame } from "./runtime";
 import {
   doorFloor,

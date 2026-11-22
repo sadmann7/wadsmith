@@ -2,7 +2,7 @@ import * as SelectPrimitive from "@ui-sdk/react/select";
 import { Check } from "lucide-react";
 import * as React from "react";
 
-import { cn } from "../../lib/cn";
+import { cn } from "@/lib/cn";
 
 const popupClass =
   "z-20 max-h-(--available-height) overflow-y-auto rounded-[7px] border border-input bg-muted p-1 shadow-popover";

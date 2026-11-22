@@ -1,11 +1,11 @@
 import { Play } from "lucide-react";
 import * as React from "react";
 
-import { skillNames } from "../engine/coop";
-import { Choice } from "../engine/coop-ui";
-import type { Complevel, GameFiles, Skill } from "../engine/runtime";
-import type { WadSummary } from "../wad/inspect";
-import { Button } from "../components/ui/button";
+import { skillNames } from "@/engine/coop";
+import { Choice } from "@/engine/coop-ui";
+import type { Complevel, GameFiles, Skill } from "@/engine/runtime";
+import type { WadSummary } from "@/wad/inspect";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectCheck,
@@ -14,8 +14,8 @@ import {
   SelectLabel,
   SelectTrigger,
   SelectValue,
-} from "../components/ui/select";
-import { FieldItem, Label } from "../components/ui/field";
+} from "@/components/ui/select";
+import { FieldItem, Label } from "@/components/ui/field";
 import {
   Dialog,
   DialogBackdrop,
@@ -25,7 +25,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "../components/ui/dialog";
+} from "@/components/ui/dialog";
 
 const complevelNames: Record<Complevel, string> = {
   vanilla: "Vanilla",

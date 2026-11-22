@@ -1,7 +1,7 @@
 import * as ButtonPrimitive from "@ui-sdk/react/button";
 import * as React from "react";
 
-import { cn } from "../../lib/cn";
+import { cn } from "@/lib/cn";
 
 const variants = {
   default:

@@ -7,9 +7,9 @@ import {
   sectorHoles,
   sectorPolygon,
   wallOwners,
-} from "../map/geometry";
-import { endsLevel, movesSector } from "../map/lines";
-import type { GameMap, Sector } from "../map/types";
+} from "@/map/geometry";
+import { endsLevel, movesSector } from "@/map/lines";
+import type { GameMap, Sector } from "@/map/types";
 
 type SectorKind =
   | "floor"

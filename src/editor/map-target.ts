@@ -1,15 +1,15 @@
 import * as React from "react";
 
-import { roomCenter, thingKeyPrefix, switchKeyPrefix } from "../map/edit";
+import { roomCenter, thingKeyPrefix, switchKeyPrefix } from "@/map/edit";
 import {
   interiorPoint,
   sectorAt,
   sectorEdges,
   wallKey,
   wallOwners,
-} from "../map/geometry";
-import { parseSurface, surfaceKey } from "../map/surfaces";
-import type { GameMap, Point, Sector } from "../map/types";
+} from "@/map/geometry";
+import { parseSurface, surfaceKey } from "@/map/surfaces";
+import type { GameMap, Point, Sector } from "@/map/types";
 
 type MapTarget = {
   point: Point | null;

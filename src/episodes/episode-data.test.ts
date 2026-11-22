@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { checkMap } from "../map/checks";
-import { starterMap } from "../map/starter-map";
-import { serializeMap } from "../map/storage";
-import { validateMap } from "../map/validate";
-import { compileEpisode } from "../wad/compile";
+import { checkMap } from "@/map/checks";
+import { starterMap } from "@/map/starter-map";
+import { serializeMap } from "@/map/storage";
+import { validateMap } from "@/map/validate";
+import { compileEpisode } from "@/wad/compile";
 import {
   buildProblem,
   createMapEntry,

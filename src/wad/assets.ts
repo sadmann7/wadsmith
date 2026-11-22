@@ -1,5 +1,5 @@
-import { thingCatalog, thingKinds } from "../map/catalog";
-import type { ThingKind } from "../map/types";
+import { thingCatalog, thingKinds } from "@/map/catalog";
+import type { ThingKind } from "@/map/types";
 
 type Picture = {
   width: number;

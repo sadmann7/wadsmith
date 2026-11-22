@@ -1,9 +1,9 @@
 import { Radio, RadioGroup } from "@ui-sdk/react/radio";
 import * as React from "react";
 
-import type { SurfaceInfo } from "../map/surfaces";
-import { gameWallShade, type Picture, type SceneAssets } from "../wad/assets";
-import { Button } from "../components/ui/button";
+import type { SurfaceInfo } from "@/map/surfaces";
+import { gameWallShade, type Picture, type SceneAssets } from "@/wad/assets";
+import { Button } from "@/components/ui/button";
 
 const swatchSize = 48;
 const tileSize = 64;

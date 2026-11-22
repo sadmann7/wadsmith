@@ -56,9 +56,9 @@ import {
   type MapTarget,
 } from "./map-target";
 import type { EditMode, MapTool, MapViewStatus } from "./map-editor";
-import { PlayTogether, type HostedGame } from "../engine/play-together";
-import { GameView, type PlayerSpot } from "../engine/play-panel";
-import { thingCatalog } from "../map/catalog";
+import { PlayTogether, type HostedGame } from "@/engine/play-together";
+import { GameView, type PlayerSpot } from "@/engine/play-panel";
+import { thingCatalog } from "@/map/catalog";
 import {
   addPlayerStarts,
   addNote,
@@ -79,38 +79,38 @@ import {
   updateSwitch,
   updateThings,
   type RoomSide,
-} from "../map/edit";
-import { describeLine } from "../map/lines";
+} from "@/map/edit";
+import { describeLine } from "@/map/lines";
 import {
   MapFileError,
   maxFileBytes,
   parseMapFile,
   serializeMap,
-} from "../map/storage";
-import type { GameMap, Point, ThingCategory, ThingKind } from "../map/types";
-import { checkMap, fixIssue, issueText } from "../map/checks";
+} from "@/map/storage";
+import type { GameMap, Point, ThingCategory, ThingKind } from "@/map/types";
+import { checkMap, fixIssue, issueText } from "@/map/checks";
 import { MapSwitcher, type EpisodeEntry, type MapHealth } from "./map-switcher";
-import { loadIwad } from "../engine/iwad";
-import { SceneCamera } from "../preview/scene-camera";
-import { SceneCanvas, type DraftSource } from "../preview/scene-editor";
-import { SurfacePanel } from "../preview/surface-panel";
+import { loadIwad } from "@/engine/iwad";
+import { SceneCamera } from "@/preview/scene-camera";
+import { SceneCanvas, type DraftSource } from "@/preview/scene-editor";
+import { SurfacePanel } from "@/preview/surface-panel";
 import {
   describeSurface,
   paintSurface,
   parseSurface,
   surfaceKey,
-} from "../map/surfaces";
+} from "@/map/surfaces";
 import {
   loopEdges,
   sectorAt,
   sectorLoops,
   wallKey,
   wallOwners,
-} from "../map/geometry";
-import { createFlatAssets, readWadAssets } from "../wad/assets";
-import { compileMap } from "../wad/compile";
-import { Button, buttonVariants } from "../components/ui/button";
-import { Input } from "../components/ui/input";
+} from "@/map/geometry";
+import { createFlatAssets, readWadAssets } from "@/wad/assets";
+import { compileMap } from "@/wad/compile";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   createMenuController,
   Menu,
@@ -123,12 +123,12 @@ import {
   MenuRadioItem,
   MenuSeparator,
   MenuTrigger,
-} from "../components/ui/menu";
+} from "@/components/ui/menu";
 
 import {
   SegmentedControl,
   SegmentedControlItem,
-} from "../components/ui/segmented-control";
+} from "@/components/ui/segmented-control";
 
 const modeHints: Record<EditMode, string> = {
   vertices:

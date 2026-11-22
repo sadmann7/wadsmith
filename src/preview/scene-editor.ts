@@ -14,22 +14,22 @@ import {
   removeThing,
   snapPoint,
   updateThing,
-} from "../map/edit";
-import { thingCatalog } from "../map/catalog";
-import { sectorAt } from "../map/geometry";
+} from "@/map/edit";
+import { thingCatalog } from "@/map/catalog";
+import { sectorAt } from "@/map/geometry";
 import {
   describeSurface,
   moveSurfaceHeight,
   parseSurface,
-} from "../map/surfaces";
+} from "@/map/surfaces";
 import {
   isDragging,
   isKeyboardMenu,
   isSecondaryPress,
   openMenuFromKey,
-} from "../editor/map-target";
-import type { GameMap, Point, ThingKind } from "../map/types";
-import type { SceneAssets } from "../wad/assets";
+} from "@/editor/map-target";
+import type { GameMap, Point, ThingKind } from "@/map/types";
+import type { SceneAssets } from "@/wad/assets";
 import type { SceneCamera } from "./scene-camera";
 import {
   cameraBasis,

@@ -31,7 +31,7 @@ import {
   updateSector,
   updateThing,
   updateThings,
-} from "../map/edit";
+} from "@/map/edit";
 import {
   canStand,
   targetExists,
@@ -40,7 +40,7 @@ import {
   targetForSurface,
   viewOfTarget,
   wallTarget,
-} from "../editor/map-target";
+} from "@/editor/map-target";
 import {
   containerOf,
   interiorPoint,
@@ -48,7 +48,7 @@ import {
   sectorAt,
   wallKey,
   wallOwners,
-} from "../map/geometry";
+} from "@/map/geometry";
 import {
   describeLine,
   fitLineAction,
@@ -57,23 +57,23 @@ import {
   lineActions,
   newLineAction,
   triggersFor,
-} from "../map/lines";
-import { mapBalance } from "../map/balance";
+} from "@/map/lines";
+import { mapBalance } from "@/map/balance";
 import {
   ceilingTextures,
   floorTextures,
   thingCatalog,
   thingKinds,
   wallTextures,
-} from "../map/catalog";
-import { buildChecks, checkMap, fixIssue, issueText } from "../map/checks";
-import { wadFileName } from "../editor/build-dialog";
-import { freedoomFlats, freedoomWalls } from "../map/freedoom-textures";
-import { wallUse } from "../map/textures";
-import { islandMap, testMap } from "../map/test-map";
-import { parseMapFile, serializeMap } from "../map/storage";
-import type { GameMap, LineAction } from "../map/types";
-import { validateMap } from "../map/validate";
+} from "@/map/catalog";
+import { buildChecks, checkMap, fixIssue, issueText } from "@/map/checks";
+import { wadFileName } from "@/editor/build-dialog";
+import { freedoomFlats, freedoomWalls } from "@/map/freedoom-textures";
+import { wallUse } from "@/map/textures";
+import { islandMap, testMap } from "@/map/test-map";
+import { parseMapFile, serializeMap } from "@/map/storage";
+import type { GameMap, LineAction } from "@/map/types";
+import { validateMap } from "@/map/validate";
 import { buildLevel, compileLumps, compileMap, toDoom } from "./compile";
 import { buildNodes, subsectorFlag } from "./nodes";
 

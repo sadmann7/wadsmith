@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import { thingKinds } from "../map/catalog";
-import { addThing, updateSector } from "../map/edit";
-import { starterMap } from "../map/starter-map";
-import { compileMap } from "../wad/compile";
+import { thingKinds } from "@/map/catalog";
+import { addThing, updateSector } from "@/map/edit";
+import { starterMap } from "@/map/starter-map";
+import { compileMap } from "@/wad/compile";
 import { doomKeys, screenSize, type Screen } from "./runtime";
 import {
   engineWarnings,

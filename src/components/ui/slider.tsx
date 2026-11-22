@@ -1,7 +1,7 @@
 import * as SliderPrimitive from "@ui-sdk/react/slider";
 import * as React from "react";
 
-import { cn } from "../../lib/cn";
+import { cn } from "@/lib/cn";
 
 function Slider({
   label,

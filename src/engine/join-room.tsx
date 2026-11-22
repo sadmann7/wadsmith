@@ -36,8 +36,8 @@ import {
   type RoomInfo,
   type RoomPlayer,
 } from "./room";
-import { Button } from "../components/ui/button";
-import { Input } from "../components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 const slowFindMs = 4000;
 

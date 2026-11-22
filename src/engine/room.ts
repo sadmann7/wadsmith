@@ -1,4 +1,4 @@
-import type { GameMap } from "../map/types";
+import type { GameMap } from "@/map/types";
 import type { NetworkMode, Skill } from "./runtime";
 
 // The host numbers the players in a room, and the engine addresses them by

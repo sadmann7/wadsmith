@@ -1,7 +1,7 @@
 import * as InputPrimitive from "@ui-sdk/react/input";
 import * as React from "react";
 
-import { cn } from "../../lib/cn";
+import { cn } from "@/lib/cn";
 
 type InputProps = React.ComponentProps<typeof InputPrimitive.Input>;
 

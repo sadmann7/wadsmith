@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { testMap } from "../map/test-map";
+import { testMap } from "@/map/test-map";
 import {
   formatRoomCode,
   hostRoom,

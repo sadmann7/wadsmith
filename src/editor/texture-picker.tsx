@@ -2,13 +2,13 @@ import { Toggle, ToggleGroup } from "@ui-sdk/react/toggle";
 import { Search } from "lucide-react";
 import * as React from "react";
 
-import { freedoomFlats, freedoomWalls } from "../map/freedoom-textures";
-import type { TextureUse } from "../map/textures";
-import { TextureSwatch } from "../preview/surface-panel";
-import type { Picture, SceneAssets } from "../wad/assets";
+import { freedoomFlats, freedoomWalls } from "@/map/freedoom-textures";
+import type { TextureUse } from "@/map/textures";
+import { TextureSwatch } from "@/preview/surface-panel";
+import type { Picture, SceneAssets } from "@/wad/assets";
 import { TextureGrid, TextureTile } from "./texture-grid";
-import { Button } from "../components/ui/button";
-import { InputGroup, InputGroupInput } from "../components/ui/input";
+import { Button } from "@/components/ui/button";
+import { InputGroup, InputGroupInput } from "@/components/ui/input";
 import {
   Dialog,
   DialogBackdrop,
@@ -17,7 +17,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "../components/ui/dialog";
+} from "@/components/ui/dialog";
 
 type TextureKind = "flat" | "wall";
 

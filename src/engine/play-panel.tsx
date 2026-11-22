@@ -1,8 +1,8 @@
 import { createLocalStorage } from "@ui-sdk/core";
 import * as React from "react";
 
-import type { GameMap, Point } from "../map/types";
-import { compileEpisode, compileMap, type Lump } from "../wad/compile";
+import type { GameMap, Point } from "@/map/types";
+import { compileEpisode, compileMap, type Lump } from "@/wad/compile";
 import type { NetworkState } from "./doom-worker";
 import { startGameClient, type GameClient } from "./game-client";
 import { EndGameConfirm, GameHud, GameTopBar, type ScoreRow } from "./game-hud";
@@ -30,7 +30,7 @@ import {
   type Skill,
 } from "./runtime";
 import { hostPeer, type RoomPlayer } from "./room";
-import { Alert } from "../components/ui/alert";
+import { Alert } from "@/components/ui/alert";
 
 type SoundSettings = { volume: number; muted: boolean };
 

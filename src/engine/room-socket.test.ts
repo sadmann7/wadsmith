@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { testMap } from "../map/test-map";
+import { testMap } from "@/map/test-map";
 import type { RoomMessage } from "./room";
 import { decodeMessage, encodeMessage } from "./room-socket";
 

@@ -2,9 +2,9 @@ import { Checkbox, CheckboxIndicator } from "@ui-sdk/react/checkbox";
 import { Check } from "lucide-react";
 import * as React from "react";
 
-import type { GameMap } from "../map/types";
-import type { ImportReport } from "../wad/decompile";
-import { Button } from "../components/ui/button";
+import type { GameMap } from "@/map/types";
+import type { ImportReport } from "@/wad/decompile";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogBackdrop,
@@ -14,7 +14,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "../components/ui/dialog";
+} from "@/components/ui/dialog";
 
 type ImportedMap = { slot: string; map: GameMap; report: ImportReport };
 

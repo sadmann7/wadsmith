@@ -2,32 +2,32 @@
 
 import * as React from "react";
 
-import { wadFileName } from "../editor/build-dialog";
-import { App } from "../editor/editor-app";
-import { PlayTogether, type HostedGame } from "../engine/play-together";
-import { GameView, type Level } from "../engine/play-panel";
-import { loadIwad } from "../engine/iwad";
-import type { GameFiles, Skill } from "../engine/runtime";
-import { featuredMaps, type FeaturedMap } from "../map/featured";
+import { wadFileName } from "@/editor/build-dialog";
+import { App } from "@/editor/editor-app";
+import { PlayTogether, type HostedGame } from "@/engine/play-together";
+import { GameView, type Level } from "@/engine/play-panel";
+import { loadIwad } from "@/engine/iwad";
+import type { GameFiles, Skill } from "@/engine/runtime";
+import { featuredMaps, type FeaturedMap } from "@/map/featured";
 import {
   MapFileError,
   maxFileBytes,
   parseMapFile,
   serializeMap,
-} from "../map/storage";
-import type { GameMap } from "../map/types";
-import { validateMap } from "../map/validate";
-import { compileEpisode, compileMap } from "../wad/compile";
-import { decompileMap } from "../wad/decompile";
+} from "@/map/storage";
+import type { GameMap } from "@/map/types";
+import { validateMap } from "@/map/validate";
+import { compileEpisode, compileMap } from "@/wad/compile";
+import { decompileMap } from "@/wad/decompile";
 import {
   WadFileError,
   inspectWads,
   isWad,
   type GameFile,
   type WadSummary,
-} from "../wad/inspect";
-import { readMaps } from "../wad/read-map";
-import { isZip, unzip } from "../wad/zip";
+} from "@/wad/inspect";
+import { readMaps } from "@/wad/read-map";
+import { isZip, unzip } from "@/wad/zip";
 import { MapDialog, type MapDetails } from "./map-dialog";
 import {
   bySlot,
@@ -65,15 +65,15 @@ import { WadImportDialog, type ImportedMap } from "./wad-import-dialog";
 import { WadPlayDialog } from "./wad-play-dialog";
 import { findEpisode, parseRoute, pathOf, type Route } from "./routes";
 import { createMemoryStore, openEpisodeStore } from "./episode-store";
-import { Button } from "../components/ui/button";
+import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
   AlertDialogBackdrop,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogTitle,
-} from "../components/ui/alert-dialog";
-import { Alert } from "../components/ui/alert";
+} from "@/components/ui/alert-dialog";
+import { Alert } from "@/components/ui/alert";
 
 type Session = {
   id: string;

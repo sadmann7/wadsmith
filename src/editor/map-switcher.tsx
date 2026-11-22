@@ -7,7 +7,7 @@ import {
   MenuItem,
   MenuSeparator,
   MenuTrigger,
-} from "../components/ui/menu";
+} from "@/components/ui/menu";
 
 type MapHealth = "ready" | "warning" | "error" | "checking";
 

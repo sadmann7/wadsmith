@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import { addThing, setRoomDoor } from "../map/edit";
-import { testMap } from "../map/test-map";
+import { addThing, setRoomDoor } from "@/map/edit";
+import { testMap } from "@/map/test-map";
 import { keysByCode } from "./runtime";
 import {
   doorIndex,

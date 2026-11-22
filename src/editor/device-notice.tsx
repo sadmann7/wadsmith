@@ -1,7 +1,7 @@
 import { createLocalStorage } from "@ui-sdk/core";
 import { Monitor } from "lucide-react";
 import * as React from "react";
-import { Button } from "../components/ui/button";
+import { Button } from "@/components/ui/button";
 
 const savedNotice = createLocalStorage("wadsmith:device-notice");
 // Phones and tablets without a keyboard or mouse can't edit or play.

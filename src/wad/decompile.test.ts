@@ -3,13 +3,13 @@ import { resolve } from "node:path";
 
 import { beforeAll, describe, expect, it } from "vitest";
 
-import { thingCatalog } from "../map/catalog";
-import { sectorAt, wallKey } from "../map/geometry";
-import { starterMap } from "../map/starter-map";
-import { parseMapFile, serializeMap } from "../map/storage";
-import { testMap } from "../map/test-map";
-import type { GameMap } from "../map/types";
-import { validateMap } from "../map/validate";
+import { thingCatalog } from "@/map/catalog";
+import { sectorAt, wallKey } from "@/map/geometry";
+import { starterMap } from "@/map/starter-map";
+import { parseMapFile, serializeMap } from "@/map/storage";
+import { testMap } from "@/map/test-map";
+import type { GameMap } from "@/map/types";
+import { validateMap } from "@/map/validate";
 import { buildLevel, compileEpisode, compileMap } from "./compile";
 import { decompileMap } from "./decompile";
 import { WadFileError } from "./inspect";

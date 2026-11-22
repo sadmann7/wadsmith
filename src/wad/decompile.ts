@@ -4,18 +4,18 @@ import {
   switchTextures,
   thingCatalog,
   thingKinds,
-} from "../map/catalog";
+} from "@/map/catalog";
 import {
   freedoomFlats,
   freedoomWalls,
   middleTextures,
-} from "../map/freedoom-textures";
+} from "@/map/freedoom-textures";
 import {
   pointInPolygon,
   sectorVertices,
   signedArea,
   wallKey,
-} from "../map/geometry";
+} from "@/map/geometry";
 import {
   closesDoor,
   isFast,
@@ -25,7 +25,7 @@ import {
   movesSector,
   opensDoor,
   usedFromFront,
-} from "../map/lines";
+} from "@/map/lines";
 import type {
   DoorSettings,
   GameMap,
@@ -39,7 +39,7 @@ import type {
   Thing,
   ThingKind,
   ThingSkill,
-} from "../map/types";
+} from "@/map/types";
 import type { DoomMap } from "./read-map";
 
 type ImportReport = {
