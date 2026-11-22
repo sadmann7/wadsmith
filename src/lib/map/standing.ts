@@ -12,6 +12,7 @@ export function standingSpot(map: GameMap, point: Point): Point | null {
   for (let pass = 0; pass < passes; pass += 1) {
     const room = sectorAt(map, spot);
     if (!room || room.door) return null;
+    if (room.ceiling - room.floor < playerHeight) return null;
     const pushed = pushOff(map, spot, room.floor);
     if (pushed === spot) {
       return { x: Math.round(spot.x), y: Math.round(spot.y) };
@@ -27,13 +28,16 @@ const playerRadius = 16;
 
 // Kept between the box and a wall, so rounding the spot can't close the gap.
 const margin = 1;
+// A push lands a hair short of its mark in floating point, which is close
+// enough and no reason to push again.
+const settled = 1e-6;
 
 // The spot moved clear of every wall that would stop a player standing on
 // the floor, or the same spot when none is in the way.
 function pushOff(map: GameMap, spot: Point, floor: number) {
   let next = spot;
   for (const [key, owners] of wallOwners(map)) {
-    if (!getIsBlocking(owners, floor)) continue;
+    if (!map.lines?.[key]?.blocksAll && !getIsBlocking(owners, floor)) continue;
     const [a, b] = key.split("|").map((id) => map.vertices[id]);
     if (!a || !b) continue;
     const near = nearestOn(a, b, next);
@@ -45,7 +49,7 @@ function pushOff(map: GameMap, spot: Point, floor: number) {
     // How far the box reaches toward the wall, which is further at an angle.
     const reach =
       (playerRadius * (Math.abs(dx) + Math.abs(dy))) / distance + margin;
-    if (distance >= reach) continue;
+    if (distance + settled >= reach) continue;
     const scale = reach / distance;
     next = { x: near.x + dx * scale, y: near.y + dy * scale };
   }
@@ -56,7 +60,8 @@ const playerHeight = 56;
 const maxStep = 24;
 
 // A wall with nothing behind it stops a player, and so does one onto a door
-// or a room too high to step up to or too low to fit under.
+// or a room too high to step up to or too low to fit under. A line set to
+// block everything does too, whatever is behind it.
 function getIsBlocking(owners: Sector[], floor: number) {
   const [front, back] = owners;
   if (!back) return true;

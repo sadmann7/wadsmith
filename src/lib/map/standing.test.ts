@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { updateSector } from "./edit";
+import type { GameMap } from "./types";
+
+import { updateLine, updateSector } from "./edit";
 import { standingSpot } from "./standing";
 import { testMap } from "./test-map";
 
@@ -38,6 +40,47 @@ describe("a spot to stand on", () => {
       x: 529,
       y: 160,
     });
+  });
+
+  it("settles beside a slanted wall and a door jamb", () => {
+    const slanted: GameMap = {
+      vertices: {
+        a: { x: 1000, y: 1000 },
+        b: { x: 1400, y: 1100 },
+        c: { x: 1500, y: 1500 },
+        d: { x: 1050, y: 1400 },
+      },
+      sectors: [{ ...testMap.sectors[0], vertices: ["a", "b", "c", "d"] }],
+      things: [],
+      switches: [],
+    };
+    // Five units inside the first wall, which runs at a slant.
+    expect(standingSpot(slanted, { x: 1042.8, y: 1015.3 })).not.toBeNull();
+    for (let step = 20; step < 180; step += 1) {
+      const along = step / 200;
+      const near = standingSpot(slanted, {
+        x: 1000 + 400 * along + 2,
+        y: 1000 + 100 * along + 6,
+      });
+      expect(near).not.toBeNull();
+      // A spot found is one the next look leaves where it is.
+      expect(near && standingSpot(slanted, near)).toEqual(near);
+    }
+    // In the arena, a unit off its west wall beside the door.
+    expect(standingSpot(testMap, { x: 513, y: 95 })).not.toBeNull();
+  });
+
+  it("steps back from a line that blocks everything", () => {
+    const fenced = updateLine(testMap, "v3|v4", { blocksAll: true });
+    expect(standingSpot(fenced, { x: 380, y: 160 })).toEqual({
+      x: 367,
+      y: 160,
+    });
+  });
+
+  it("finds no spot under a ceiling too low to stand under", () => {
+    const low = updateSector(testMap, "sector-1", { ceiling: 48 });
+    expect(standingSpot(low, { x: 96, y: 160 })).toBeNull();
   });
 
   it("finds no spot outside the map, in a door or where nothing fits", () => {
