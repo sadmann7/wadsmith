@@ -13,6 +13,7 @@ import { compileMap } from "@/lib/wad/compile";
 
 import { NetInbox } from "./net-inbox";
 import { doomKeys } from "./runtime";
+import { RunRecorder } from "./trail";
 
 const engineDirectory = resolve(import.meta.dirname, "../../../public/engine");
 const ready = existsSync(resolve(engineDirectory, "woof.js"));
@@ -29,6 +30,8 @@ interface Snapshot {
   gameTic: number;
   players: { x: number; y: number }[];
   scores: { slot: number; peer: number; frags: number; kills: number }[];
+  // The trail events since the last snapshot.
+  trail: number[];
 }
 
 const workers: Worker[] = [];
@@ -97,6 +100,15 @@ describe.skipIf(!ready)("network game through shared memory", () => {
     );
     guest.key(false, doomKeys.up);
     expect(moved?.players[1].x).toBeGreaterThan(startX + 64);
+
+    // The host's engine runs both players, so its trail holds the guest's
+    // path too.
+    const recorder = new RunRecorder();
+    recorder.add(Int32Array.from(host.trail()));
+    const run = recorder.run();
+    expect(run?.players).toEqual([0, 1]);
+    const walked = run?.paths.findLast((path) => path.player === 1);
+    expect(walked?.points.at(-2)).toBeGreaterThan(startX + 32);
 
     const agreed = await waitFor(
       bothIn,
@@ -182,8 +194,14 @@ function createRoom(map = coopMap, mode: "coop" | "deathmatch" = "coop") {
         worker.postMessage({ type, id });
         setTimeout(() => done(null), ms);
       });
+    const trail: number[] = [];
     return {
-      query: () => ask<Snapshot>("query"),
+      query: async () => {
+        const snapshot = await ask<Snapshot>("query");
+        if (snapshot) trail.push(...snapshot.trail);
+        return snapshot;
+      },
+      trail: () => trail,
       launch: () => ask<boolean>("launch"),
       key: (pressed: boolean, key: number) =>
         worker.postMessage({ type: "key", pressed, key }),

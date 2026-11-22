@@ -73,6 +73,11 @@ import {
   targetForSurface,
   viewOfTarget,
 } from "@/lib/editor/map-target";
+import {
+  clearPlaytest,
+  loadPlaytest,
+  savePlaytest,
+} from "@/lib/editor/playtests";
 import { type EditorShortcut, editorShortcuts } from "@/lib/editor/shortcuts";
 import { defaultGame, defaultSky, engineSlot } from "@/lib/engine/game";
 import { texturesOf } from "@/lib/engine/iwad";
@@ -105,6 +110,7 @@ import {
   updateSector,
   updateSwitch,
   updateThings,
+  withPlayerStart,
 } from "@/lib/map/edit";
 import {
   type CopiedPiece,
@@ -127,7 +133,14 @@ import {
 import { describeLine } from "@/lib/map/lines";
 import { lineLinks, type MapLink, sectorLinks } from "@/lib/map/links";
 import { gradient, gradientEnds, type SurfaceLook } from "@/lib/map/look";
+import {
+  formatTics,
+  keepRun,
+  type PlaytestRun,
+  type SavedPlaytest,
+} from "@/lib/map/playtest";
 import { type DrawShape, polygonSides } from "@/lib/map/shapes";
+import { standingSpot } from "@/lib/map/standing";
 import {
   MapFileError,
   maxFileBytes,
@@ -166,6 +179,7 @@ import {
 import { MapCanvas } from "./map-canvas";
 import { type EpisodeEntry, type MapHealth, MapSwitcher } from "./map-switcher";
 import { NewMapPanel } from "./new-map-panel";
+import { PlaytestPanel } from "./playtest-panel";
 import { PrefabsDialog } from "./prefabs-dialog";
 import { type DraftSource, SceneCanvas } from "./scene-editor";
 import { ShortcutSheet } from "./shortcut-sheet";
@@ -276,6 +290,7 @@ interface AppProps {
   navigation: React.ReactNode;
   onNewMap: () => void;
   onMapSettings: () => void;
+  onParChange: (par: number) => void;
   playing: boolean;
   onPlayingChange: (playing: boolean, coop: boolean) => void;
   episode: {
@@ -290,6 +305,8 @@ interface AppProps {
 interface PlayedGame {
   map: GameMap;
   coop: HostedGame | null;
+  // Started where the 3D camera stood and not at the player start.
+  fromCamera?: boolean;
 }
 
 const saveLabels: Record<AppProps["saveStatus"], string> = {
@@ -314,6 +331,7 @@ export function EditorScreen({
   navigation,
   onNewMap,
   onMapSettings,
+  onParChange,
   playing,
   onPlayingChange,
   episode,
@@ -348,6 +366,19 @@ export function EditorScreen({
     setFollowed(playing);
     setGame(playing ? (game ?? { map, coop: null }) : null);
   }
+  // The last playtest of this map, and whether the map shows it.
+  const [playtest, setPlaytest] = React.useState<SavedPlaytest | null>(null);
+  const [showTrail, setShowTrail] = React.useState(true);
+  const mapId = episode.currentId;
+  React.useEffect(() => {
+    let stale = false;
+    void loadPlaytest(mapId).then((saved) => {
+      if (!stale && saved) setPlaytest((current) => current ?? saved);
+    });
+    return () => {
+      stale = true;
+    };
+  }, [mapId]);
   const hosted = game?.coop ?? null;
   React.useEffect(() => () => hosted?.close(), [hosted]);
   const [mapVersion, setMapVersion] = React.useState(0);
@@ -1236,6 +1267,32 @@ export function EditorScreen({
     dismissWelcome();
   };
 
+  const playFromCamera = () => {
+    const { x, y, angle } = camera.position;
+    // The camera can stand against a wall, where a player would be stuck.
+    const spot = standingSpot(map, { x, y });
+    if (!spot) {
+      setNotice(
+        "A player has no room to stand there. Walk the 3D view into a room to play from it.",
+      );
+      return;
+    }
+    if (!canPlay || buildProblem()) return;
+    setGame({
+      map: withPlayerStart(map, spot, angle),
+      coop: null,
+      fromCamera: true,
+    });
+    onPlayingChange(true, false);
+  };
+
+  const keepPlaytest = (run: PlaytestRun) => {
+    const saved = keepRun(playtest, run, !game?.fromCamera);
+    setPlaytest(saved);
+    setShowTrail(true);
+    void savePlaytest(mapId, saved).catch(() => undefined);
+  };
+
   const dismissWelcome = () => {
     if (welcomed) return;
     setWelcomed(true);
@@ -1275,6 +1332,9 @@ export function EditorScreen({
     commit(next);
     setSelection([]);
     setScenePicked([]);
+    // The last playtest was of the map this one takes the place of.
+    setPlaytest(null);
+    void clearPlaytest(mapId).catch(() => undefined);
     setActiveSector(null);
     setSurface(null);
     setFileError(null);
@@ -1635,6 +1695,7 @@ export function EditorScreen({
                       focusRequest={focusRequest}
                       callouts={callouts}
                       links={links}
+                      trail={showTrail ? (playtest?.run ?? null) : null}
                       drawShape={drawShape}
                       drawSides={drawSides}
                       drawRequest={drawRequest}
@@ -1708,6 +1769,14 @@ export function EditorScreen({
                     {visibleLayout === "scene" ? (
                       <Button onClick={findCameraOnMap}>Find on map</Button>
                     ) : null}
+                    <Button
+                      disabled={!canPlay}
+                      title="Play the map from where the 3D view stands"
+                      onClick={playFromCamera}
+                    >
+                      <Play size={14} aria-hidden="true" />
+                      Play from here
+                    </Button>
                   </div>
                 </section>
               </ResizablePanel>
@@ -2051,6 +2120,20 @@ export function EditorScreen({
               drawing={tool === "draw"}
             />
 
+            {playtest ? (
+              <PlaytestPanel
+                saved={playtest}
+                shown={showTrail}
+                par={par}
+                onShownChange={setShowTrail}
+                onParChange={onParChange}
+                onClear={() => {
+                  setPlaytest(null);
+                  void clearPlaytest(mapId).catch(() => undefined);
+                }}
+              />
+            ) : null}
+
             {map.notes?.length ? (
               <section
                 className="inspector-section"
@@ -2073,6 +2156,14 @@ export function EditorScreen({
                       />
                       <span className="min-w-0 wrap-break-word">
                         {note.text}
+                        {note.tic === undefined ? null : (
+                          <span
+                            className="ml-1.5 font-mono text-xs text-muted-foreground"
+                            title="How far into the playtest it was left"
+                          >
+                            {formatTics(note.tic)}
+                          </span>
+                        )}
                       </span>
                       <button
                         type="button"
@@ -2375,8 +2466,11 @@ export function EditorScreen({
           sky={sky}
           intertext={intertext}
           onExit={exitGame}
-          onAddNote={(point, text) => commit(addNote(map, point, text))}
+          onAddNote={(point, text, moment) =>
+            commit(addNote(map, point, text, moment))
+          }
           onEditSpot={editPlayedSpot}
+          onRun={keepPlaytest}
         />
       ) : null}
     </>

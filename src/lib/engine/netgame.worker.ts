@@ -80,6 +80,7 @@ port.on("message", (command: Command) => {
         frags: game.status().frags,
         gameTic: game.gameTic(),
         players: [0, 1].map((player) => game.playerPosition(player)),
+        trail: [...(game.takeTrail() ?? [])],
       },
     });
   }
