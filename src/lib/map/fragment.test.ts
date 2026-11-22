@@ -4,7 +4,13 @@ import { defined } from "@/lib/defined";
 
 import type { GameMap, LineAction } from "./types";
 
-import { addDetail, addRoom, setLineTarget, updateLine } from "./edit";
+import {
+  addDetail,
+  addRoom,
+  setLineTarget,
+  updateLine,
+  updateSector,
+} from "./edit";
 import {
   copyParts,
   parseFragment,
@@ -207,6 +213,28 @@ describe("copy and paste", () => {
     ]);
   });
 
+  it("drops a raw special whose tagged room stays behind in another map", () => {
+    const fake = updateSector(
+      updateLine(testMap, openWall, { raw: { special: 242, tag: 7 } }),
+      "sector-3",
+      { tag: 7 },
+    );
+    const piece = defined(
+      copyParts(fake, { sectors: ["sector-1", "sector-2"], things: [] }),
+    );
+    const at = { x: 0, y: 3000 };
+    const raws = (map: GameMap) =>
+      Object.values(map.lines ?? {}).flatMap((line) => line.raw ?? []);
+    // With no tag it would act on every room that has none.
+    expect(raws(defined(pasteParts(fake, piece, at, 32)).map)).toEqual([
+      { special: 242, tag: 7 },
+    ]);
+    expect(raws(defined(pasteParts(fake, piece, at, 32, true)).map)).toEqual([
+      { special: 242, tag: 7 },
+      { special: 242, tag: 7 },
+    ]);
+  });
+
   it("leaves out whatever a piece says about corners that aren't its own", () => {
     const fragment = defined(
       copyParts(testMap, { sectors: ["sector-3"], things: [] }),
@@ -405,6 +433,49 @@ describe("turning, flipping and resizing", () => {
       }
     }
     expect(turned.vertices).toEqual(wide.map.vertices);
+  });
+
+  it("turns a square that sits off the grid in place", () => {
+    const square48 = addRoom(
+      empty,
+      [
+        { x: 16, y: 0 },
+        { x: 64, y: 0 },
+        { x: 64, y: 48 },
+        { x: 16, y: 48 },
+      ],
+      {},
+      1,
+    );
+    const corners = square48.map.sectors[0].vertices;
+    const spots = (map: GameMap) =>
+      Object.values(map.vertices)
+        .map((point) => `${point.x},${point.y}`)
+        .toSorted();
+    let turned = square48.map;
+    for (let turn = 0; turn < 4; turn += 1) {
+      turned = defined(
+        transformParts(turned, corners, { kind: "rotate", degrees: 90 }, 32),
+      );
+      expect(spots(turned)).toEqual(spots(square48.map));
+    }
+    expect(turned.vertices).toEqual(square48.map.vertices);
+    const back = defined(
+      transformParts(
+        defined(
+          transformParts(
+            square48.map,
+            corners,
+            { kind: "rotate", degrees: 90 },
+            32,
+          ),
+        ),
+        corners,
+        { kind: "rotate", degrees: -90 },
+        32,
+      ),
+    );
+    expect(back.vertices).toEqual(square48.map.vertices);
   });
 
   it("flips a room where it stands and turns a lone thing on the spot", () => {

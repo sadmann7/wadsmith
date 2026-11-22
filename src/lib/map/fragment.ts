@@ -272,6 +272,9 @@ export function pasteParts(
     const renamed = wall(key);
     if (!renamed) continue;
     const { sides, front, action, raw, ...rest } = line;
+    // A raw special whose tag was dropped would act on every room with no
+    // tag, so it goes with its tag.
+    const special = raw && tags.get(raw.tag) === 0 ? undefined : raw;
     const face = front ? sectorIds.get(front) : undefined;
     const faces = Object.entries(sides ?? {}).flatMap(([id, side]) => {
       const owner = sectorIds.get(id);
@@ -282,7 +285,9 @@ export function pasteParts(
       ...(action
         ? { action: { ...action, tag: tags.get(action.tag) ?? action.tag } }
         : {}),
-      ...(raw ? { raw: { ...raw, tag: tags.get(raw.tag) ?? raw.tag } } : {}),
+      ...(special
+        ? { raw: { ...special, tag: tags.get(special.tag) ?? special.tag } }
+        : {}),
       ...(face ? { front: face } : {}),
       ...(faces.length > 0 ? { sides: Object.fromEntries(faces) } : {}),
     };
@@ -492,43 +497,33 @@ export function parseFragment(text: string): CopiedPiece | null {
 }
 
 // A quarter turn about a point of the half grid whose two steps add up to a
-// whole one sends every grid point to a grid point. The nearest such point to
-// the middle is the pivot, and of several as near, the one nearest the first
+// whole one sends every grid point to a grid point. The pivot is the nearest
+// such point to the middle, and of several as near, the one nearest the first
 // thing moved, which turns with the rest and so picks the same pivot again.
 function turnPivot(box: Box, anchor: Point, grid: number): Point {
   const middle = {
     x: (box.left + box.right) / 2,
     y: (box.top + box.bottom) / 2,
   };
-  if (box.left === box.right && box.top === box.bottom) return middle;
+  // A square turns onto itself about its own middle, on the grid or off it.
+  if (box.right - box.left === box.bottom - box.top) return middle;
   const half = grid / 2;
   const across = Math.floor(middle.x / half);
   const down = Math.floor(middle.y / half);
-  let best = middle;
-  let score: number[] | null = null;
+  const spots: { spot: Point; near: number; held: number }[] = [];
   for (let a = across - 1; a <= across + 2; a += 1) {
     for (let b = down - 1; b <= down + 2; b += 1) {
       if ((a + b) % 2 !== 0) continue;
       const spot = { x: a * half, y: b * half };
-      const rank = [far(spot, middle), far(spot, anchor), spot.x, spot.y];
-      if (score === null || getIsLower(rank, score)) {
-        best = spot;
-        score = rank;
-      }
+      spots.push({ spot, near: far(spot, middle), held: far(spot, anchor) });
     }
   }
-  return best;
+  spots.sort((one, other) => one.near - other.near || one.held - other.held);
+  return spots[0].spot;
 }
 
 function far(from: Point, to: Point) {
   return (from.x - to.x) ** 2 + (from.y - to.y) ** 2;
-}
-
-function getIsLower(rank: number[], than: number[]) {
-  for (const [at, value] of rank.entries()) {
-    if (value !== than[at]) return value < than[at];
-  }
-  return false;
 }
 
 const faceStep = 45;

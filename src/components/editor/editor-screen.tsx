@@ -57,7 +57,7 @@ import {
 } from "@/components/ui/segmented-control";
 import { useIwad } from "@/hooks/use-iwad";
 import { agent } from "@/lib/editor/agent";
-import { heldFragment, holdFragment } from "@/lib/editor/clipboard";
+import { heldFragment, holdFragment, originOf } from "@/lib/editor/clipboard";
 import {
   type MapTarget,
   normalizeControlClick,
@@ -481,12 +481,14 @@ export function EditorScreen({
   // The rooms and things the selection stands for, which copy, cut, paste
   // and the transforms work on.
   // A selected wall isn't its room, and a room left active in another mode
-  // isn't what that mode works on.
+  // isn't what that mode works on. A room's own menu works on that room.
   const pickedRoom =
-    (editMode === "vertices" || editMode === "sectors") &&
-    (surface ? parseSurface(surface)?.kind !== "wall" : true)
-      ? activeSector
-      : null;
+    contextMenuOpen && menuTarget?.kind === "room"
+      ? menuTarget.sector
+      : (editMode === "vertices" || editMode === "sectors") &&
+          (surface ? parseSurface(surface)?.kind !== "wall" : true)
+        ? activeSector
+        : null;
   const { parts, canCopy, transformKeys } = React.useMemo(() => {
     const parts = selectedParts(map, selection, pickedRoom);
     const picked = new Set(parts.things);
@@ -522,7 +524,7 @@ export function EditorScreen({
         piece.fragment,
         at,
         grid,
-        piece.origin === episode.currentId,
+        piece.origin === originOf(episode.currentId),
       );
     if (!pasted) {
       setNotice("There is nothing to paste. Copy a room or a thing first.");
@@ -567,7 +569,7 @@ export function EditorScreen({
   const duplicateSelection = () => {
     const fragment = parts.sectors.length > 0 ? copyParts(map, parts) : null;
     if (fragment) {
-      pasteFragment({ fragment, origin: episode.currentId }, null);
+      pasteFragment({ fragment, origin: originOf(episode.currentId) }, null);
       return;
     }
     const copies = duplicateThings(map, selectedThingIds);

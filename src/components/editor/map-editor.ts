@@ -1035,7 +1035,6 @@ export const mapEditor = definePrimitive({
           const parts = pickedParts();
           const surface = root();
           if (room && surface && parts.sectors.includes(room.id)) {
-            event.preventDefault();
             carried = [
               ...new Set([
                 ...partKeys(map, parts),
@@ -1045,6 +1044,9 @@ export const mapEditor = definePrimitive({
               ]),
             ];
             move.pointerdown(event, carried[0], surface);
+            // The move turns away a press that is already cancelled, so the
+            // page's text selection is held off only after it has begun.
+            event.preventDefault();
             return;
           }
         }
