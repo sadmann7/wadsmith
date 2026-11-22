@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  endsGame,
   engineSlot,
   games,
   lumpSlotIndex,
@@ -29,6 +30,14 @@ describe("game slots", () => {
     expect(lumpSlotIndex("E2M5")).toBe(14);
     expect(lumpSlotIndex("MAP14")).toBe(14);
     expect(lumpSlotIndex("THINGS")).toBeNull();
+  });
+
+  it("knows the maps the engine ends the game on", () => {
+    expect(endsGame("MAP30")).toBe(true);
+    expect(endsGame("E1M8")).toBe(true);
+    expect(endsGame("E4M8")).toBe(true);
+    expect(endsGame("E1M9")).toBe(false);
+    expect(endsGame("MAP07")).toBe(false);
   });
 
   it("warps and reads the engine's position the game's way", () => {

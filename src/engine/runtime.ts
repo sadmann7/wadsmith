@@ -121,6 +121,7 @@ interface GameEvents {
 
 interface GameStatus {
   inLevel: boolean;
+  inFinale: boolean;
   episode: number;
   map: number;
   health: number;
@@ -165,6 +166,7 @@ const widescreen16by9 = 3;
 const classicScreen: Screen = { resolution: "classic", widescreen: false };
 const netSlots = [0, 1, 2, 3];
 const levelState = 0;
+const finaleState = 2;
 
 // Woof's own conveniences and visual extras are switched off, so a playtest looks
 // and plays like the classic game a map is built for.
@@ -451,6 +453,7 @@ class DoomGame {
     const { module } = this;
     return {
       inLevel: module._wadsmith_game_state() === levelState,
+      inFinale: module._wadsmith_game_state() === finaleState,
       episode: module._wadsmith_game_episode(),
       map: module._wadsmith_game_map(),
       health: module._wadsmith_health(),

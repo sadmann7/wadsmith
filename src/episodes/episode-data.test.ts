@@ -311,7 +311,13 @@ describe("episode maps", () => {
     const entry = createMapEntry(episode.id, "MAP03", starterMap, {
       description: "Hub",
       par: 135,
+      music: "D_RUNNIN",
+      sky: "SKY3",
+      intertext: "Onward.",
     });
+    expect(createMapEntry(episode.id, "MAP04", starterMap)).not.toHaveProperty(
+      "music",
+    );
     const backup = parseEpisodeBackup(serializeEpisode(episode, [entry]));
     expect(backup.episode.name).toBe("Ashfall");
     expect(backup.episode.id).not.toBe(episode.id);
@@ -319,10 +325,16 @@ describe("episode maps", () => {
       slot: "MAP03",
       description: "Hub",
       par: 135,
+      music: "D_RUNNIN",
+      sky: "SKY3",
+      intertext: "Onward.",
       map: starterMap,
       episodeId: backup.episode.id,
     });
     expect(backup.maps[0].id).not.toBe(entry.id);
+    const file = JSON.parse(serializeEpisode(episode, [entry]));
+    file.maps[0].music = "not a lump";
+    expect(() => parseEpisodeBackup(JSON.stringify(file))).toThrow("lump");
   });
 
   it("rejects a backup with repeated slots", () => {
@@ -338,10 +350,12 @@ describe("episode maps", () => {
       { slot: "MAP01", map: starterMap },
       { slot: "MAP03", map: starterMap },
     ]);
-    const text = String.fromCharCode(...wad.slice(-23 * 16));
+    // Two maps of eleven lumps, their UMAPINFO and the COMPLVL lump.
+    const text = String.fromCharCode(...wad.slice(-24 * 16));
     expect(text).toContain("MAP01");
     expect(text).toContain("MAP03");
+    expect(text).toContain("UMAPINFO");
     expect(text).toContain("COMPLVL");
-    expect(new DataView(wad.buffer).getInt32(4, true)).toBe(23);
+    expect(new DataView(wad.buffer).getInt32(4, true)).toBe(24);
   });
 });

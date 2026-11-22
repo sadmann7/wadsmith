@@ -1,3 +1,10 @@
+import {
+  defaultGame,
+  engineSlot,
+  indexSlot,
+  slotCount,
+  type GameInfo,
+} from "@/engine/game";
 import { sectorSpecialOf } from "@/map/boom";
 import { doorTrackTexture, thingCatalog } from "@/map/catalog";
 import {
@@ -256,10 +263,16 @@ function complevelLump(maps: GameMap[]): Lump {
   };
 }
 
-// A Doom 1 game ends an episode after its eighth map and sends the ninth
-// back into it, so every slot from the first map to the last names the slot
-// after it, gaps included: a gap plays the game's own level there, as on
-// Doom II, and the engine finds the entry by episode and map.
+interface EpisodeLevel {
+  slot: string;
+  map: GameMap;
+  lumps?: Lump[] | null;
+  par?: number | null;
+  music?: string;
+  sky?: string;
+  intertext?: string;
+}
+
 const episodeSlot = /^E(\d)M(\d)$/;
 const mostEpisodeSlots = 36;
 
@@ -268,22 +281,72 @@ function slotAfter(slot: string) {
   return map < 9 ? `E${episode}M${map + 1}` : `E${episode + 1}M1`;
 }
 
-function umapinfoLump(slots: string[]): Lump[] {
-  const chained = slots.filter((slot) => episodeSlot.test(slot));
-  if (chained.length < 2) return [];
-  const last = chained.at(-1)!;
-  const entries: string[] = [];
-  for (
+// UMAPINFO strings can't hold their own quote, and the engine's font and the
+// reader take one byte per character.
+function quoted(text: string) {
+  return `"${text.replaceAll('"', "'").replaceAll("\\", "/")}"`;
+}
+
+const latin1 = (text: string) =>
+  Uint8Array.from(text, (c) => (c.charCodeAt(0) < 256 ? c.charCodeAt(0) : 63));
+
+// A map named after its slot has no title of its own.
+const slotNamed = /^(MAP\d\d|E\dM\d)$/i;
+
+// A Doom 1 game ends an episode after its eighth map and sends the ninth back
+// into it, so there every slot from the first map to the last names the slot
+// after it, gaps included; a gap then plays the game's own level, as on Doom II.
+function umapinfoLump(levels: EpisodeLevel[], game: GameInfo): Lump[] {
+  const bySlot = new Map(levels.map((level) => [level.slot, level]));
+  // An entry makes the engine look for the map after it, which the game's
+  // last slot doesn't have, so that one ends the game instead.
+  const lastInGame = engineSlot(indexSlot(slotCount(game)), game);
+  const chained = levels
+    .map((level) => level.slot)
+    .filter((slot) => episodeSlot.test(slot));
+  const slots: string[] = [];
+  if (chained.length >= 2) {
+    const last = chained.at(-1)!;
     let slot = chained[0];
-    slot !== last && entries.length < mostEpisodeSlots;
-    slot = slotAfter(slot)
-  ) {
-    entries.push(`MAP ${slot}\n{\n  next = "${slotAfter(slot)}"\n}\n`);
+    while (slot !== last && slots.length < mostEpisodeSlots) {
+      slots.push(slot);
+      slot = slotAfter(slot);
+    }
+    slots.push(last);
+  } else {
+    slots.push(...levels.map((level) => level.slot));
   }
-  const text = entries.join("\n");
-  return [
-    { name: "UMAPINFO", data: Uint8Array.from(text, (c) => c.charCodeAt(0)) },
-  ];
+  const entries = slots.flatMap((slot) => {
+    const level = bySlot.get(slot);
+    // The engine's own next map after a ninth doesn't exist, so a ninth names
+    // the next episode's first.
+    const follows =
+      slot !== lastInGame &&
+      (slot.endsWith("M9") || (chained.length >= 2 && slot !== chained.at(-1)));
+    const lines = [
+      ...(slot === lastInGame && level ? ["endgame = true"] : []),
+      ...(follows ? [`next = "${slotAfter(slot)}"`] : []),
+      ...(level?.map.name && !slotNamed.test(level.map.name)
+        ? [`levelname = ${quoted(level.map.name)}`]
+        : []),
+      ...(level?.par ? [`partime = ${level.par}`] : []),
+      ...(level?.music ? [`music = "${level.music}"`] : []),
+      ...(level?.sky ? [`skytexture = "${level.sky}"`] : []),
+      ...(level?.intertext
+        ? [
+            `intertext = ${level.intertext
+              .split(/\r?\n/)
+              .map(quoted)
+              .join(", ")}`,
+          ]
+        : []),
+    ];
+    return lines.length > 0
+      ? [`MAP ${slot}\n{\n${lines.map((line) => `  ${line}`).join("\n")}\n}\n`]
+      : [];
+  });
+  if (entries.length === 0) return [];
+  return [{ name: "UMAPINFO", data: latin1(entries.join("\n")) }];
 }
 
 // A switch's door gets a tag no line or sector in the map has chosen.
@@ -527,22 +590,28 @@ function packWad(lumps: Lump[]) {
   return output;
 }
 
-function compileMap(map: GameMap, slot = mapLumpName) {
-  return packWad([...compileLumps(map, slot), complevelLump([map])]);
+function compileMap(
+  map: GameMap,
+  slot = mapLumpName,
+  level: Omit<EpisodeLevel, "slot" | "map" | "lumps"> = {},
+) {
+  return packWad([
+    ...compileLumps(map, slot),
+    ...umapinfoLump([{ slot, map, ...level }], defaultGame),
+    complevelLump([map]),
+  ]);
 }
 
 // Lumps built ahead of time keep their data and take the slot they're packed
 // under.
-function compileEpisode(
-  maps: { slot: string; map: GameMap; lumps?: Lump[] | null }[],
-) {
+function compileEpisode(maps: EpisodeLevel[], game: GameInfo = defaultGame) {
   return packWad([
     ...maps.flatMap(({ slot, map, lumps }) =>
       lumps
         ? [{ name: slot, data: new Uint8Array() }, ...lumps.slice(1)]
         : compileLumps(map, slot),
     ),
-    ...umapinfoLump(maps.map(({ slot }) => slot)),
+    ...umapinfoLump(maps, game),
     complevelLump(maps.map(({ map }) => map)),
   ]);
 }
@@ -554,5 +623,6 @@ export {
   compileMap,
   mapLumpName,
   toDoom,
+  type EpisodeLevel,
   type Lump,
 };

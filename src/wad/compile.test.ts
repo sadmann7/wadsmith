@@ -94,6 +94,7 @@ import {
   toDoom,
 } from "./compile";
 import { inspectWads, readLumps } from "./inspect";
+import { readMaps } from "./read-map";
 import { buildNodes, subsectorFlag } from "./nodes";
 
 const lShape: GameMap = {
@@ -171,8 +172,8 @@ describe("compileMap", () => {
     const wad = compileMap(testMap);
     const view = new DataView(wad.buffer);
     expect(String.fromCharCode(...wad.slice(0, 4))).toBe("PWAD");
-    expect(view.getInt32(4, true)).toBe(12);
-    const names = Array.from({ length: 12 }, (_, index) => {
+    expect(view.getInt32(4, true)).toBe(13);
+    const names = Array.from({ length: 13 }, (_, index) => {
       const start = view.getInt32(8, true) + index * 16 + 8;
       return String.fromCharCode(...wad.slice(start, start + 8)).replace(
         /\0+$/,
@@ -191,6 +192,7 @@ describe("compileMap", () => {
       "SECTORS",
       "REJECT",
       "BLOCKMAP",
+      "UMAPINFO",
       "COMPLVL",
     ]);
   });
@@ -2428,20 +2430,25 @@ describe("the game's own things and textures", () => {
     textures: ["STARTAN3", "BROWN1", "METAL", "BIGDOOR2", "SW1STRTN"],
   };
 
+  const umapinfo = (wad: Uint8Array) => {
+    const info = readLumps({ name: "e.wad", data: wad }).find(
+      (lump) => lump.name === "UMAPINFO",
+    );
+    return info ? new TextDecoder().decode(info.data) : null;
+  };
+  const nameless: GameMap = { ...testMap, name: undefined };
+
   it("chains a Doom 1 episode's maps past the eighth with UMAPINFO", () => {
     const lumpNames = (wad: Uint8Array) =>
       readLumps({ name: "e.wad", data: wad }).map((lump) => lump.name);
     const doomOne = compileEpisode([
-      { slot: "E1M7", map: testMap },
-      { slot: "E1M9", map: testMap },
-      { slot: "E2M1", map: testMap },
+      { slot: "E1M7", map: nameless },
+      { slot: "E1M9", map: nameless },
+      { slot: "E2M1", map: nameless },
     ]);
-    const info = readLumps({ name: "e.wad", data: doomOne }).find(
-      (lump) => lump.name === "UMAPINFO",
-    )!;
     // A gap plays the game's own level, which then carries on to the next
     // slot like any other.
-    expect(new TextDecoder().decode(info.data)).toBe(
+    expect(umapinfo(doomOne)).toBe(
       [
         'MAP E1M7\n{\n  next = "E1M8"\n}\n',
         'MAP E1M8\n{\n  next = "E1M9"\n}\n',
@@ -2449,11 +2456,79 @@ describe("the game's own things and textures", () => {
       ].join("\n"),
     );
     expect(lumpNames(doomOne).at(-1)).toBe("COMPLVL");
+    // The game's last slot ends the game, since nothing follows it.
+    expect(
+      umapinfo(
+        compileEpisode(
+          [
+            { slot: "E4M8", map: nameless },
+            { slot: "E4M9", map: { ...testMap, name: "Last" } },
+          ],
+          games.doom,
+        ),
+      ),
+    ).toBe(
+      [
+        'MAP E4M8\n{\n  next = "E4M9"\n}\n',
+        'MAP E4M9\n{\n  endgame = true\n  levelname = "Last"\n}\n',
+      ].join("\n"),
+    );
+    expect(
+      umapinfo(
+        compileEpisode(
+          [{ slot: "MAP32", map: { ...testMap, name: "Last" } }],
+          games.doom2,
+        ),
+      ),
+    ).toBe('MAP MAP32\n{\n  endgame = true\n  levelname = "Last"\n}\n');
+    // The engine has no E1M10, so a last ninth map goes on to E2M1.
+    expect(
+      umapinfo(
+        compileEpisode([
+          { slot: "E1M8", map: nameless },
+          { slot: "E1M9", map: nameless },
+        ]),
+      ),
+    ).toBe(
+      [
+        'MAP E1M8\n{\n  next = "E1M9"\n}\n',
+        'MAP E1M9\n{\n  next = "E2M1"\n}\n',
+      ].join("\n"),
+    );
     const doomTwo = compileEpisode([
-      { slot: "MAP01", map: testMap },
-      { slot: "MAP02", map: testMap },
+      { slot: "MAP01", map: nameless },
+      { slot: "MAP02", map: nameless },
     ]);
     expect(lumpNames(doomTwo)).not.toContain("UMAPINFO");
+  });
+
+  it("writes each map's name, par, music, sky and text into UMAPINFO", () => {
+    const wad = compileEpisode([
+      {
+        slot: "MAP01",
+        map: { ...testMap, name: 'The "Entry"' },
+        par: 95,
+        music: "D_RUNNIN",
+        sky: "SKY2",
+        intertext: "You made it out.\n\nNow the real work starts.",
+      },
+      { slot: "MAP02", map: nameless },
+      { slot: "MAP03", map: { ...testMap, name: "Quiet" }, par: null },
+    ]);
+    expect(umapinfo(wad)).toBe(
+      [
+        "MAP MAP01\n{",
+        "  levelname = \"The 'Entry'\"",
+        "  partime = 95",
+        '  music = "D_RUNNIN"',
+        '  skytexture = "SKY2"',
+        '  intertext = "You made it out.", "", "Now the real work starts."',
+        "}\n",
+        'MAP MAP03\n{\n  levelname = "Quiet"\n}\n',
+      ].join("\n"),
+    );
+    const [first] = readMaps([{ name: "e.wad", data: wad }]);
+    expect(first.title).toBe("The 'Entry'");
   });
 
   it("flags Doom II's things in a Doom 1 game", () => {

@@ -377,6 +377,9 @@ function PlayTogether({
   title,
   slot,
   par,
+  music,
+  sky,
+  intertext,
   initialMode,
   onAddStarts,
   onStart,
@@ -386,6 +389,9 @@ function PlayTogether({
   title: string;
   slot: string;
   par: number | null;
+  music?: string;
+  sky?: string;
+  intertext?: string;
   initialMode?: NetworkMode;
   onAddStarts?: (players: number) => void;
   onStart: (game: HostedGame) => void;
@@ -468,7 +474,16 @@ function PlayTogether({
       map,
       mode: settings.mode,
       skill: settings.skill,
-      wad: compileMap(map, engineSlot(indexSlot(1), iwad?.game ?? defaultGame)),
+      wad: compileMap(
+        map,
+        engineSlot(indexSlot(1), iwad?.game ?? defaultGame),
+        {
+          par,
+          music,
+          sky,
+          intertext,
+        },
+      ),
       title,
       slot,
       par,

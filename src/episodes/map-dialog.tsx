@@ -2,16 +2,20 @@ import * as React from "react";
 
 import { Choice } from "@/engine/coop-ui";
 import { engineSlot, slotCount, type GameInfo } from "@/engine/game";
+import { useIwad } from "@/engine/use-iwad";
 import { MapOutline } from "@/components/map-outline";
 import { complevelLabels, complevels } from "@/map/complevel";
 import type { Complevel } from "@/map/types";
 import { MapPlan } from "@/components/map-plan";
 import { featuredMaps, type FeaturedMap } from "@/map/featured";
+import { readWadAssets } from "@/wad/assets";
+import { readLumps } from "@/wad/inspect";
 import {
   formatPar,
   freeSlots,
   mapName,
   maxDescriptionLength,
+  maxIntertextLength,
   maxNameLength,
   parsePar,
   templates,
@@ -45,9 +49,62 @@ interface MapDetails {
   slot: string;
   description: string;
   par: number | null;
+  music?: string;
+  sky?: string;
+  intertext?: string;
   complevel: Complevel;
   template: MapTemplate;
   featured: FeaturedMap | null;
+}
+
+// The game's own choice, which UMAPINFO leaves alone.
+const gamesOwn = "default";
+
+function LumpChoice({
+  label,
+  value,
+  names,
+  loaded,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  names: readonly string[];
+  loaded: boolean;
+  onChange: (value: string) => void;
+}) {
+  const items = [
+    { value: gamesOwn, label: "Game's own" },
+    ...(value && !names.includes(value)
+      ? [{ value, label: loaded ? `${value} (not in this game)` : value }]
+      : []),
+    ...names.map((name) => ({ value: name, label: name })),
+  ];
+  return (
+    <Select
+      value={value || gamesOwn}
+      items={items}
+      onValueChange={(next) => {
+        if (next) onChange(next === gamesOwn ? "" : next);
+      }}
+    >
+      <FieldItem>
+        <SelectLabel>{label}</SelectLabel>
+        <SelectTrigger>
+          <SelectValue />
+          <span aria-hidden="true">▾</span>
+        </SelectTrigger>
+      </FieldItem>
+      <SelectContent>
+        {items.map((item) => (
+          <SelectItem key={item.value} value={item.value}>
+            {item.label}
+            <SelectCheck />
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
 }
 
 function MapDialog({
@@ -70,8 +127,36 @@ function MapDialog({
     entry?.description ?? "",
   );
   const [par, setPar] = React.useState(formatPar(entry?.par ?? null));
+  const [music, setMusic] = React.useState(entry?.music ?? "");
+  const [sky, setSky] = React.useState(entry?.sky ?? "");
+  const [intertext, setIntertext] = React.useState(entry?.intertext ?? "");
   const [complevel, setComplevel] = React.useState<Complevel>(
     entry?.map.complevel ?? "vanilla",
+  );
+  const iwad = useIwad();
+  // The game's music lumps and sky textures, read once per IWAD.
+  const lumps = React.useMemo(
+    () =>
+      iwad
+        ? readLumps({ name: iwad.game.file, data: iwad.data }).map(
+            (lump) => lump.name,
+          )
+        : [],
+    [iwad],
+  );
+  const musicNames = React.useMemo(
+    () =>
+      [...new Set(lumps.filter((name) => name.startsWith("D_")))].toSorted(),
+    [lumps],
+  );
+  const skyNames = React.useMemo(
+    () =>
+      iwad
+        ? readWadAssets(iwad.data).names.textures.filter((name) =>
+            name.startsWith("SKY"),
+          )
+        : [],
+    [iwad],
   );
   const [template, setTemplate] = React.useState<MapTemplate>("room");
   const [source, setSource] = React.useState<"template" | "featured">(
@@ -95,6 +180,9 @@ function MapDialog({
       slot,
       description: description.trim(),
       par: parValue,
+      music: music || undefined,
+      sky: sky || undefined,
+      intertext: intertext.trim() || undefined,
       complevel,
       template,
       featured: source === "featured" ? featured : null,
@@ -174,6 +262,30 @@ function MapDialog({
                     placeholder="2:15"
                     value={par}
                     onValueChange={setPar}
+                  />
+                </Field>
+                <LumpChoice
+                  label="Music"
+                  value={music}
+                  names={musicNames}
+                  loaded={iwad !== null}
+                  onChange={setMusic}
+                />
+                <LumpChoice
+                  label="Sky"
+                  value={sky}
+                  names={skyNames}
+                  loaded={iwad !== null}
+                  onChange={setSky}
+                />
+                <Field className="col-span-2">
+                  <FieldLabel>Text after the map</FieldLabel>
+                  <textarea
+                    className="min-h-[72px] w-full min-w-0 resize-y rounded-[3px] border border-input bg-input/30 px-2 py-1 shadow-xs placeholder:text-muted-foreground"
+                    maxLength={maxIntertextLength}
+                    placeholder="Shown over the intermission before the next map."
+                    value={intertext}
+                    onChange={(event) => setIntertext(event.target.value)}
                   />
                 </Field>
                 <FieldItem className="col-span-2">
