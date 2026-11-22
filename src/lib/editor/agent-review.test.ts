@@ -4,6 +4,7 @@ import { sectorAt } from "@/lib/map/geometry";
 import { testMap } from "@/lib/map/test-map";
 
 import {
+  agentActions,
   agentRisk,
   agentStepSummary,
   getIsAgentAskFirst,
@@ -117,5 +118,21 @@ describe("placing things for an agent", () => {
     expect(() =>
       runAgentAction(testMap, "placeThing", ["mancubus", "Arena door"]),
     ).toThrow(/No room left in Arena door/);
+  });
+});
+
+describe("the actions as browser tools", () => {
+  it("stay inside Chrome's WebMCP size guidance", () => {
+    for (const action of agentActions) {
+      expect(action.name.length, action.name).toBeLessThanOrEqual(30);
+      expect(action.description.length, action.name).toBeLessThanOrEqual(500);
+      for (const param of action.params) {
+        expect(param.name.length).toBeLessThanOrEqual(30);
+        expect(
+          param.description.length,
+          `${action.name}.${param.name}`,
+        ).toBeLessThanOrEqual(150);
+      }
+    }
   });
 });

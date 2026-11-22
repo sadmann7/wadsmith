@@ -57,10 +57,10 @@ describe("the wadsmith MCP server over standard input and output", () => {
       ceiling: 192,
     });
     await call("placeThing", { kind: "imp", room: "Arena", angle: 180 });
-    const { walls, box } = await call("describeRoom", { room: "Arena" });
-    const rooms = await call("listRooms");
+    const room = await call("describeRoom", { room: "Arena" });
+    const { walls, box } = room;
     const corners = Object.fromEntries(
-      rooms.flatMap((room) => room.corners.map((item) => [item.id, item])),
+      room.corners.map((item) => [item.id, item]),
     );
     const far = walls.find(({ wall, opensOnto }) => {
       const [a, b] = wall.split("|").map((corner) => corners[corner]);
