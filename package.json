@@ -9,7 +9,7 @@
     "build": "next build",
     "setup:engine": "node scripts/setup-engine.mjs",
     "dev:rooms": "wrangler dev --config rooms/wrangler.jsonc",
-    "dev:coop": "concurrently -n next,rooms \"NEXT_PUBLIC_ROOMS_URL=ws://localhost:8787 next dev\" \"pnpm dev:rooms\"",
+    "dev:coop": "concurrently -n next,rooms \"next dev\" \"pnpm dev:rooms\"",
     "typecheck": "next typegen && tsc --noEmit && tsc --noEmit -p rooms",
     "test": "vitest run",
     "lint": "oxlint",

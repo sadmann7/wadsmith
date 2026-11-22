@@ -287,7 +287,7 @@ function Lobby({
         <p className="m-0 text-sm text-muted-foreground">
           {roomsUrl
             ? "Anyone with the link can join until you start."
-            : "Opens in other tabs of this browser profile until you start. Run pnpm dev:coop to share it further."}
+            : "Opens in other tabs of this browser profile until you start. Set up the room server in the README to share it further."}
         </p>
       </div>
       {lost ? (

@@ -1,9 +1,42 @@
-node_modules
-.next
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# next.js
+/.next/
+/out/
 next-env.d.ts
+
+# engine build and downloads, written by pnpm setup:engine
+/.cache/
+/public/engine/
+
+# cloudflare and vercel
+/.wrangler/
+.dev.vars*
+.vercel
+
+# testing
+/coverage
+
+# env files, except .env.example
+.env
+.env*.local
+
+# typescript
 *.tsbuildinfo
-.cache
-.wrangler
-public/engine
+
+# debug
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# misc
 .DS_Store
+*.pem
+
+# agent plans, kept out of harness-specific folders
+/plans/

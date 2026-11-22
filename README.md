@@ -14,7 +14,7 @@ pnpm dev
 
 `setup:engine` compiles a pinned commit of [Woof](https://github.com/fabiangreffrath/woof) to WebAssembly with the changes in `engine/woof.patch`, and downloads a checksummed [Freedoom](https://freedoom.github.io/) release into `public/engine`.
 
-Co-op rooms run on a Cloudflare Worker in `rooms/`. Run `pnpm dev:coop` to start it next to the app and play across browsers or Chrome profiles. With plain `pnpm dev`, co-op works between tabs of one browser. Players connect directly over WebRTC when their networks allow it, and through the room otherwise.
+Co-op rooms run on a Cloudflare Worker in `rooms/`. Copy `.env.example` to `.env`, then run `pnpm dev:coop` to start it next to the app and play across browsers or Chrome profiles. Without `NEXT_PUBLIC_ROOMS_URL`, co-op works between tabs of one browser. Players connect directly over WebRTC when their networks allow it, and through the room otherwise.
 
 Set `NEXT_PUBLIC_SITE_URL` to the full public URL, including `https://`, when deploying outside Vercel, so social previews use the right image URLs.
 
