@@ -137,6 +137,49 @@ describe("renderScene", () => {
     expect(back.y).toBeCloseTo(point.y);
   });
 
+  it("tilts the view with pitch and raises the eye with lift", () => {
+    const target = createRenderTarget(320, 200);
+    const camera = startCamera(testMap);
+    const point = { x: 250, y: 200 };
+    const level = defined(projectPoint(target, testMap, camera, point, 0));
+    const tilted = defined(
+      projectPoint(target, testMap, { ...camera, pitch: 0.1 }, point, 0),
+    );
+    expect(tilted.y - level.y).toBeCloseTo(20);
+    const raised = defined(
+      projectPoint(target, testMap, { ...camera, lift: 40 }, point, 0),
+    );
+    expect(raised.y).toBeGreaterThan(level.y);
+    const back = defined(
+      pointOnPlane(
+        target,
+        testMap,
+        { ...camera, pitch: 0.1, lift: 40 },
+        160,
+        190,
+        0,
+      ),
+    );
+    const again = defined(
+      projectPoint(
+        target,
+        testMap,
+        { ...camera, pitch: 0.1, lift: 40 },
+        back,
+        0,
+      ),
+    );
+    expect(again.y).toBeCloseTo(190);
+  });
+
+  it("sees wider rather than closer in a wider view", () => {
+    const narrow = createRenderTarget(320, 200);
+    const wide = createRenderTarget(640, 200);
+    expect(wide.focal).toBe(narrow.focal);
+    const camera = startCamera(testMap);
+    expect(renderScene(wide, testMap, camera, { assets })).not.toBe(false);
+  });
+
   it("finds no floor above the horizon", () => {
     const target = createRenderTarget(320, 200);
     const camera = startCamera(testMap);

@@ -18,8 +18,16 @@ export class SceneCamera {
   }
 
   set position(next: Camera) {
-    const { x, y, angle } = this.current;
-    if (next.x === x && next.y === y && next.angle === angle) return;
+    const { x, y, angle, pitch, lift } = this.current;
+    if (
+      next.x === x &&
+      next.y === y &&
+      next.angle === angle &&
+      next.pitch === pitch &&
+      next.lift === lift
+    ) {
+      return;
+    }
     this.current = next;
     for (const listener of this.listeners) listener();
   }

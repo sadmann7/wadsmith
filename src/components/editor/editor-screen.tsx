@@ -1194,7 +1194,7 @@ export function EditorScreen({
       onContextMenuCapture={normalizeControlClick}
     >
       <SceneCanvas
-        aria-label="3D view. Click a surface to select it, and drag a wall to move its texture. W, A, S and D walk, N and P step through surfaces, and O opens the door or lift under the pointer."
+        aria-label="3D view. Click a surface to select it, and drag a wall to move its texture. W, A, S and D walk, Space and C fly up and down, Z looks with the mouse, N and P step through surfaces, and O opens the door or lift under the pointer."
         className="screen scene"
         map={map}
         assets={assets}
@@ -1236,6 +1236,13 @@ export function EditorScreen({
     return info?.sector ? [{ key, info }] : [];
   });
   const pickedKeys = pickedSurfaces.map((item) => item.key);
+
+  const sceneKeys = (
+    <p className="scene-keys m-0" aria-hidden="true">
+      WASD walk · Space C fly · Z mouse look · Wheel height, Shift 1, Alt light
+      · ⇧A align · , . turn thing
+    </p>
+  );
 
   const sceneStatus = (
     <p className="scene-status" role="status">
@@ -2039,6 +2046,7 @@ export function EditorScreen({
                   </div>
                   <div className="scene-bar">
                     {sceneStatus}
+                    {sceneKeys}
                     {visibleLayout === "scene" ? (
                       <Button onClick={findCameraOnMap}>Find on map</Button>
                     ) : null}

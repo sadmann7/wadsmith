@@ -120,17 +120,26 @@ interface SceneState {
   opened: string[];
   width: number;
   height: number;
+  // The pointer is locked to the view, which looks where the mouse goes and
+  // acts on what the crosshair is over.
+  looking: boolean;
 }
 
 const touchSlop = 4;
 const noSurfaces: string[] = [];
-const lightLimit = 255;
 const lightStep = 16;
 
 const moveSpeed = 260;
 const turnSpeed = 120;
+const riseSpeed = 160;
+// Degrees of turn, and shares of the view's height of tilt, for each pixel
+// the mouse moves while it looks.
+const lookTurn = 0.15;
+const lookTilt = 0.002;
+const mostTilt = 0.5;
+const thingTurn = 45;
 const placeDistances = [128, 96, 64, 32];
-const walkKeys = /^(Arrow(Up|Down|Left|Right)|Key[WASD])$/;
+const walkKeys = /^(Arrow(Up|Down|Left|Right)|Key[WASDC]|Space)$/;
 
 const sceneEditor = definePrimitive({
   name: "scene-editor",
@@ -172,6 +181,7 @@ const sceneEditor = definePrimitive({
     opened: [],
     width: options.renderWidth ?? 320,
     height: options.renderHeight ?? 200,
+    looking: false,
   }),
   sync: (options) => ({
     ...(options.map ? { map: options.map } : {}),
@@ -183,7 +193,7 @@ const sceneEditor = definePrimitive({
     picked: options.picked ?? noSurfaces,
     ...(options.placing ? {} : { ghost: null }),
   }),
-  live: ["hovered"],
+  live: ["hovered", "looking"],
   api: (context) => {
     const { store } = context;
     const change = createChange(context);
@@ -221,6 +231,18 @@ const sceneEditor = definePrimitive({
     });
 
     const cameraState = () => context.options().camera;
+
+    // The camera as the frame sees it: a flight height kept inside the room
+    // the camera now stands in, wherever it was flown to before.
+    const eyeCamera = (map: GameMap) => {
+      const view = cameraState();
+      if (!view) return null;
+      const { position } = view;
+      return {
+        ...position,
+        lift: liftWithin(map, position, position.lift ?? 0),
+      };
+    };
     const grid = () => context.options().grid ?? gridSize;
 
     const draw = () => {
@@ -247,7 +269,7 @@ const sceneEditor = definePrimitive({
         target,
         map,
         {
-          ...view.position,
+          ...(eyeCamera(viewMap() ?? map) ?? view.position),
           eye: frozenEye ?? undefined,
         },
         {
@@ -261,21 +283,40 @@ const sceneEditor = definePrimitive({
         },
       );
       output.putImageData(image, 0, 0);
+      // The crosshair takes the page's text color.
+      if (store.get().looking && canvas) {
+        drawCrosshair(output, target, getComputedStyle(canvas).color);
+        // What the crosshair is over changes as the camera turns or walks,
+        // so it is read again from each frame.
+        const middle =
+          Math.floor(target.height / 2) * target.width +
+          Math.floor(target.width / 2);
+        const aimed = target.surfaces[target.pick[middle]] || null;
+        if (aimed !== store.get().hovered || store.get().ghost) {
+          store.set({ hovered: aimed, ghost: null });
+        }
+      }
     };
 
     const scheduleDraw = () => {
       drawFrame ||= requestAnimationFrame(draw);
     };
 
+    // Where the pointer is, or the middle of the view while the mouse looks.
+    const aimAt = (event: MouseEvent) => {
+      if (!canvas) return { x: 0, y: 0 };
+      const box = canvas.getBoundingClientRect();
+      return store.get().looking
+        ? { x: box.left + box.width / 2, y: box.top + box.height / 2 }
+        : { x: event.clientX, y: event.clientY };
+    };
+
     const surfaceAt = (event: MouseEvent) => {
       if (!canvas || !target) return null;
       const box = canvas.getBoundingClientRect();
-      const x = Math.floor(
-        ((event.clientX - box.left) / box.width) * target.width,
-      );
-      const y = Math.floor(
-        ((event.clientY - box.top) / box.height) * target.height,
-      );
+      const aim = aimAt(event);
+      const x = Math.floor(((aim.x - box.left) / box.width) * target.width);
+      const y = Math.floor(((aim.y - box.top) / box.height) * target.height);
       if (x < 0 || y < 0 || x >= target.width || y >= target.height) {
         return null;
       }
@@ -289,9 +330,10 @@ const sceneEditor = definePrimitive({
     const targetPoint = (event: MouseEvent) => {
       if (!canvas || !target) return null;
       const box = canvas.getBoundingClientRect();
+      const aim = aimAt(event);
       return {
-        x: ((event.clientX - box.left) / box.width) * target.width,
-        y: ((event.clientY - box.top) / box.height) * target.height,
+        x: ((aim.x - box.left) / box.width) * target.width,
+        y: ((aim.y - box.top) / box.height) * target.height,
       };
     };
 
@@ -309,7 +351,7 @@ const sceneEditor = definePrimitive({
       const point = pointOnPlane(
         target,
         map,
-        view.position,
+        eyeCamera(map) ?? view.position,
         at.x,
         at.y,
         floor.floor,
@@ -401,7 +443,8 @@ const sceneEditor = definePrimitive({
         return;
       }
       const plane = sectorAt(shown, thing)?.floor ?? 0;
-      const feet = projectPoint(target, shown, view.position, thing, plane);
+      const eye = eyeCamera(shown) ?? view.position;
+      const feet = projectPoint(target, shown, eye, thing, plane);
       if (!feet) return;
       const element = canvas;
       const output = target;
@@ -419,7 +462,7 @@ const sceneEditor = definePrimitive({
           const point = pointOnPlane(
             output,
             shown,
-            view.position,
+            eye,
             ((x - box.left) / box.width) * output.width - offset.x,
             ((y - box.top) / box.height) * output.height - offset.y,
             plane,
@@ -581,10 +624,25 @@ const sceneEditor = definePrimitive({
       );
     };
 
+    // Page Up and Page Down move the selected floor or ceiling a grid step,
+    // three with Shift, and with Alt change its room's light, as in the map.
     const nudge = (event: KeyboardEvent, direction: number) => {
       const { map, selected } = store.get();
-      if (!map || !selected || !getCanMoveHeight(selected)) return;
-      const step = gridSize * (event.shiftKey ? 3 : 1);
+      if (!map || !selected) return;
+      if (event.altKey) {
+        const sector = describeSurface(map, selected)?.sector;
+        if (!sector) return;
+        const light = lightOf(sector.light + direction * lightStep);
+        if (light !== sector.light) {
+          change("map", updateSector(map, sector.id, { light }), {
+            reason: "height-key",
+            event,
+          });
+        }
+        return;
+      }
+      if (!getCanMoveHeight(selected)) return;
+      const step = grid() * (event.shiftKey ? 3 : 1);
       const next = moveSurfaceHeight(map, selected, direction * step);
       if (next !== map) change("map", next, { reason: "height-key", event });
     };
@@ -609,7 +667,7 @@ const sceneEditor = definePrimitive({
       walkFrame = requestAnimationFrame((now) => {
         walkFrame = 0;
         const view = cameraState();
-        const map = shownMap();
+        const map = viewMap();
         if (held.size === 0 || !view || !map) return;
         const seconds = Math.min(0.05, (now - previous) / 1000);
         const pressed = (...codes: string[]) =>
@@ -620,6 +678,7 @@ const sceneEditor = definePrimitive({
           Number(pressed("ArrowUp", "KeyW")) -
           Number(pressed("ArrowDown", "KeyS"));
         const strafe = Number(pressed("KeyD")) - Number(pressed("KeyA"));
+        const rise = Number(pressed("Space")) - Number(pressed("KeyC"));
         const angle = view.position.angle + turn * turnSpeed * seconds;
         const radians = (angle * Math.PI) / 180;
         const forward = { x: Math.cos(radians), y: -Math.sin(radians) };
@@ -632,9 +691,22 @@ const sceneEditor = definePrimitive({
             view.position.y +
             (forward.y * advance + forward.x * strafe) * distance,
         };
+        const spot = sectorAt(map, next) ? next : view.position;
         view.position = {
-          ...(sectorAt(map, next) ? next : view.position),
+          ...view.position,
+          ...spot,
           angle,
+          // The height flown to is kept as it is while walking, so a low
+          // room on the way doesn't bring the eye down for good.
+          lift:
+            rise === 0
+              ? view.position.lift
+              : liftWithin(
+                  map,
+                  spot,
+                  liftWithin(map, spot, view.position.lift ?? 0) +
+                    rise * riseSpeed * seconds,
+                ),
         };
         view.walked = true;
         scheduleDraw();
@@ -659,17 +731,67 @@ const sceneEditor = definePrimitive({
         const stopDraft = context
           .options()
           .draftSource?.((draftMap) => store.set({ draftMap }));
+        const onLock = () => {
+          const locked = document.pointerLockElement === element;
+          // A lock asked for before the view lost focus lands too late.
+          if (locked && document.activeElement !== element) {
+            document.exitPointerLock();
+            return;
+          }
+          store.set({ looking: locked });
+        };
+        document.addEventListener("pointerlockchange", onLock);
+        // The picture takes the shape of the panel, as many rows as asked for
+        // and as many columns as that shape needs, so nothing is letterboxed.
+        const resized = new ResizeObserver(() => {
+          const rows = store.get().height;
+          const wide = element.clientWidth / (element.clientHeight || 1);
+          if (!element.clientWidth || !element.clientHeight) return;
+          const columns = Math.max(
+            minColumns,
+            Math.min(maxColumns, Math.round(rows * wide)),
+          );
+          if (columns === store.get().width) return;
+          store.set({ width: columns });
+          target = createRenderTarget(columns, rows);
+          image = new ImageData(target.pixels, columns, rows);
+          scheduleDraw();
+        });
+        resized.observe(element);
         scheduleDraw();
         return () => {
           stopStore();
           stopCamera?.();
           stopDraft?.();
+          document.removeEventListener("pointerlockchange", onLock);
+          resized.disconnect();
+          if (document.pointerLockElement === element) {
+            document.exitPointerLock();
+          }
           canvas = null;
           target = null;
           image = null;
         };
       },
       pointermove(event: PointerEvent) {
+        const view = cameraState();
+        if (store.get().looking && view) {
+          view.position = {
+            ...view.position,
+            angle: view.position.angle - event.movementX * lookTurn,
+            pitch: Math.max(
+              -mostTilt,
+              Math.min(
+                mostTilt,
+                (view.position.pitch ?? 0) - event.movementY * lookTilt,
+              ),
+            ),
+          };
+          view.walked = true;
+          const hovered = surfaceAt(event)?.key ?? null;
+          if (hovered !== store.get().hovered) store.set({ hovered });
+          return;
+        }
         if (
           touchPress &&
           Math.abs(event.clientX - touchPress.x) +
@@ -695,6 +817,8 @@ const sceneEditor = definePrimitive({
         store.set({ hovered: null, ghost: null });
       },
       contextmenu(event: MouseEvent) {
+        // A menu needs the pointer back.
+        if (document.pointerLockElement === canvas) document.exitPointerLock();
         reportContext(event);
       },
       pointerdown(event: PointerEvent) {
@@ -709,6 +833,17 @@ const sceneEditor = definePrimitive({
         const hit = surfaceAt(event);
         const key = hit?.key ?? null;
         const surface = key ? parseSurface(key) : null;
+        // While the mouse looks, a click acts on the crosshair's surface and
+        // drags nothing.
+        if (store.get().looking) {
+          if (store.get().placing && surface?.kind !== "thing") {
+            const point = floorPointAt(event);
+            if (point) place(point, "press", event);
+          } else if (key && event.altKey) paste(key, event);
+          else if (key && event.shiftKey) pick(key);
+          else select(key, "press");
+          return;
+        }
         if (store.get().placing && surface?.kind !== "thing") {
           const point = floorPointAt(event);
           if (point) place(point, "press", event);
@@ -743,6 +878,10 @@ const sceneEditor = definePrimitive({
         const view = cameraState();
         const shown = viewMap();
         const owner = view && shown ? sectorAt(shown, view.position) : null;
+        const flown =
+          shown && view
+            ? liftWithin(shown, view.position, view.position.lift ?? 0)
+            : 0;
         const startY = event.clientY;
         const { focal, height } = target;
         const rowsPerPixel = height / canvas.getBoundingClientRect().height;
@@ -754,7 +893,7 @@ const sceneEditor = definePrimitive({
           onStart: () => {
             dragging = true;
             store.set({
-              frozenEye: owner ? owner.floor + 41 : null,
+              frozenEye: owner ? owner.floor + standingEye + flown : null,
             });
           },
           onMove: ({ y }) => {
@@ -797,19 +936,18 @@ const sceneEditor = definePrimitive({
         );
         wheeled = { ...turns, surface: hovered };
         if (notches === 0) return;
-        // The wheel moves a floor or ceiling a step a notch, and with Shift
-        // it makes the surface's room a step brighter or darker.
-        const light = Math.max(
-          0,
-          Math.min(lightLimit, info.sector.light - notches * lightStep),
-        );
+        // The wheel moves a floor or ceiling a grid step a notch, or one
+        // unit with Shift, and with Alt it makes the surface's room a step
+        // brighter or darker.
+        const light = lightOf(info.sector.light - notches * lightStep);
         let next = map;
-        if (!event.shiftKey) {
-          if (getCanMoveHeight(hovered)) {
-            next = moveSurfaceHeight(map, hovered, -notches * gridSize);
+        if (event.altKey) {
+          if (light !== info.sector.light) {
+            next = updateSector(map, info.sector.id, { light });
           }
-        } else if (light !== info.sector.light) {
-          next = updateSector(map, info.sector.id, { light });
+        } else if (getCanMoveHeight(hovered)) {
+          const step = event.shiftKey ? 1 : grid();
+          next = moveSurfaceHeight(map, hovered, -notches * step);
         }
         if (next !== map) change("map", next, { reason: "wheel", event });
       },
@@ -848,6 +986,41 @@ const sceneEditor = definePrimitive({
           change("map", flooded, { reason: "paint", event });
           return;
         }
+        if (!command && event.code === "KeyZ" && !event.repeat && canvas) {
+          event.preventDefault();
+          if (store.get().looking) document.exitPointerLock();
+          else void canvas.requestPointerLock()?.catch?.(() => undefined);
+          return;
+        }
+        // Shift and A carries the aimed wall's texture on along the walls
+        // beside it, as Align along the room does.
+        if (!command && event.shiftKey && event.code === "KeyA" && map) {
+          event.preventDefault();
+          const info = describeSurface(map, aimed());
+          if (info?.surface.kind !== "wall" || !info.sector) return;
+          const aligned = alignWalls(
+            map,
+            info.sector.id,
+            info.surface.wall,
+            (name) => store.get().assets?.texture(name).width ?? 1,
+          );
+          if (aligned !== map) {
+            change("map", aligned, { reason: "paint", event });
+          }
+          return;
+        }
+        if (thing && map && (event.key === "," || event.key === ".")) {
+          event.preventDefault();
+          const turn = event.key === "," ? thingTurn : -thingTurn;
+          change(
+            "map",
+            updateThing(map, thing.id, {
+              angle: (((thing.angle + turn) % 360) + 360) % 360,
+            }),
+            { reason: "thing-key", event },
+          );
+          return;
+        }
         if (event.key === "Enter" && placing) {
           event.preventDefault();
           placeAhead(event);
@@ -862,7 +1035,7 @@ const sceneEditor = definePrimitive({
             event,
           });
           select(null, "key");
-        } else if (walkKeys.test(event.code)) {
+        } else if (!command && walkKeys.test(event.code)) {
           event.preventDefault();
           held.add(event.code);
           if (!walkFrame) walk(performance.now());
@@ -895,6 +1068,7 @@ const sceneEditor = definePrimitive({
       blur() {
         shiftHeld = false;
         held.clear();
+        if (document.pointerLockElement === canvas) document.exitPointerLock();
       },
     };
   },
@@ -908,6 +1082,7 @@ const sceneEditor = definePrimitive({
       }),
       live: live<SceneState, unknown, {}>((state) => {
         const surface = state.hovered ? parseSurface(state.hovered) : null;
+        if (state.looking) return { "data-hover": "look" };
         let hover: string | undefined;
         if (state.ghost) hover = "place";
         else if (surface?.kind === "thing") hover = "thing";
@@ -950,6 +1125,45 @@ const offsetLimit = 32767;
 
 function clampOffset(value: number) {
   return Math.max(-offsetLimit, Math.min(offsetLimit, Math.round(value)));
+}
+
+const minColumns = 64;
+const maxColumns = 1600;
+
+const lightLimit = 255;
+
+function lightOf(value: number) {
+  return Math.max(0, Math.min(lightLimit, value));
+}
+
+const standingEye = 41;
+
+// How close the eye comes to a floor or a ceiling while flying.
+const eyeRoom = 8;
+
+// How far above standing height the eye may fly in the room at a spot, kept
+// clear of its floor and ceiling.
+function liftWithin(map: GameMap, point: Point, lift: number) {
+  const room = sectorAt(map, point);
+  if (!room) return lift;
+  const lowest = eyeRoom - standingEye;
+  const highest = Math.max(
+    lowest,
+    room.ceiling - room.floor - eyeRoom - standingEye,
+  );
+  return Math.max(lowest, Math.min(highest, lift));
+}
+
+function drawCrosshair(
+  output: CanvasRenderingContext2D,
+  target: RenderTarget,
+  color: string,
+) {
+  const x = Math.floor(target.width / 2);
+  const y = Math.floor(target.height / 2);
+  output.fillStyle = color;
+  output.fillRect(x - 6, y, 13, 1);
+  output.fillRect(x, y - 6, 1, 13);
 }
 
 function standable(map: GameMap, point: Point) {

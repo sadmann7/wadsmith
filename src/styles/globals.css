@@ -515,9 +515,19 @@
   }
 
   .scene-frame .scene {
-    width: min(100cqw, calc(100cqh * 8 / 5));
-    height: auto;
+    width: 100cqw;
+    height: 100cqh;
+    aspect-ratio: auto;
     border-radius: 0;
+  }
+
+  .scene[data-hover="look"] {
+    cursor: none;
+  }
+
+  .scene-keys {
+    color: var(--color-muted-foreground);
+    font: 11px var(--font-mono);
   }
 
   .scene-bar {
