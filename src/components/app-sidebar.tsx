@@ -31,6 +31,7 @@ import { pathOf, type Route } from "@/lib/episodes/routes";
 import { featuredMaps } from "@/lib/map/featured";
 import { blankMap } from "@/lib/map/starter-map";
 
+import { LogoMark } from "./logo";
 import { MapOutline } from "./map-outline";
 import { MapPlan } from "./map-plan";
 
@@ -64,7 +65,8 @@ export function AppSidebar({
           current={false}
           onNavigate={onNavigate}
         >
-          <span className="text-[17px] font-bold tracking-[0.12em] text-primary">
+          <LogoMark className="size-5 shrink-0" />
+          <span className="text-[15px] font-bold tracking-[0.06em]">
             WADSMITH
           </span>
         </SidebarLink>
