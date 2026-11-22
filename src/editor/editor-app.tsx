@@ -18,6 +18,7 @@ import {
   CircleDot,
   Ellipsis,
   Pentagon,
+  Check,
   PenLine,
   Route,
   Play,
@@ -70,6 +71,7 @@ import {
   setRoomWalls,
   switchKeyPrefix,
   gridSize,
+  gridSizes,
   thingKeyPrefix,
   updateLine,
   updateLineSide,
@@ -112,12 +114,17 @@ import { Input } from "../components/ui/input";
 import {
   createMenuController,
   Menu,
+  MenuCheckboxItem,
   MenuContent,
   MenuContextTrigger,
   MenuItem,
+  MenuItemIndicator,
+  MenuRadioGroup,
+  MenuRadioItem,
   MenuSeparator,
   MenuTrigger,
 } from "../components/ui/menu";
+
 import {
   SegmentedControl,
   SegmentedControlItem,
@@ -207,6 +214,24 @@ function loadLayout() {
 
 function saveLayout(view: ViewLayout, sizes: number[], dock: boolean) {
   savedLayout.set(JSON.stringify({ view, sizes, dock }));
+}
+
+type GridSetting = { size: number; snap: boolean };
+
+const savedGrid = createLocalStorage("wadsmith:grid");
+
+function loadGrid(): GridSetting {
+  try {
+    const saved = JSON.parse(savedGrid.get() ?? "null");
+    return {
+      size: (gridSizes as readonly number[]).includes(saved?.size)
+        ? (saved.size as number)
+        : gridSize,
+      snap: saved?.snap !== false,
+    };
+  } catch {
+    return { size: gridSize, snap: true };
+  }
 }
 
 // Without storage the card would come back on every visit.
@@ -330,6 +355,23 @@ function App({
 }: AppProps) {
   const [map, setMap] = React.useState(initialMap);
   const [tool, setTool] = React.useState<MapTool>("select");
+  const [gridSetting, setGridSetting] = React.useState(loadGrid);
+  // Snapping off still lands on whole units, which is all the engine stores.
+  const grid = gridSetting.snap ? gridSetting.size : 1;
+  const changeGrid = React.useCallback((next: GridSetting) => {
+    setGridSetting(next);
+    savedGrid.set(JSON.stringify(next));
+  }, []);
+  const stepGrid = React.useCallback(
+    (direction: 1 | -1) => {
+      const at = gridSizes.indexOf(
+        gridSetting.size as (typeof gridSizes)[number],
+      );
+      const next = gridSizes[at + direction];
+      if (next !== undefined) changeGrid({ size: next, snap: true });
+    },
+    [changeGrid, gridSetting.size],
+  );
   const [thingKind, setThingKind] = React.useState<ThingKind>("imp");
   const [activeSector, setActiveSector] = React.useState<string | null>(
     "sector-3",
@@ -621,6 +663,21 @@ function App({
     shortcut("drawLine", modeKeys),
   );
   useShortcut(
+    editorShortcuts.gridSmaller.keys,
+    () => stepGrid(-1),
+    shortcut("gridSmaller", modeKeys),
+  );
+  useShortcut(
+    editorShortcuts.gridLarger.keys,
+    () => stepGrid(1),
+    shortcut("gridLarger", modeKeys),
+  );
+  useShortcut(
+    editorShortcuts.snap.keys,
+    () => changeGrid({ ...gridSetting, snap: !gridSetting.snap }),
+    shortcut("snap", modeKeys),
+  );
+  useShortcut(
     editorShortcuts.look.keys,
     () => {
       const pointer = mapPointer.current;
@@ -795,6 +852,7 @@ function App({
         selected={surfaceInfo ? surface : null}
         linked={sceneInfo ? sceneSelection : null}
         placing={tool === "thing" ? thingKind : null}
+        grid={grid}
         renderWidth={640}
         renderHeight={400}
         onMapChange={(next) => commit(next)}
@@ -1316,6 +1374,7 @@ function App({
                       map={map}
                       tool={tool}
                       editMode={editMode}
+                      grid={grid}
                       onWallSelect={(wallSector, wall) =>
                         selectSurface(
                           surfaceKey({
@@ -1585,10 +1644,13 @@ function App({
                         const wall = freeWallAt(map, line.wall)!;
                         const a = map.vertices[wall.from];
                         const b = map.vertices[wall.to];
-                        const added = addSwitch(map, wall, {
-                          x: (a.x + b.x) / 2,
-                          y: (a.y + b.y) / 2,
-                        });
+                        const added = addSwitch(
+                          map,
+                          wall,
+                          { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
+                          null,
+                          grid,
+                        );
                         commit(added.map);
                         setSurface(null);
                         setSelection([`${switchKeyPrefix}${added.id}`]);
@@ -1626,6 +1688,7 @@ function App({
                 map={map}
                 things={selectedThings}
                 placing={thingKind}
+                grid={grid}
                 onChange={(patch) =>
                   commit(
                     updateThings(
@@ -1756,8 +1819,52 @@ function App({
               {map.sectors.length} sectors · {map.things.length} things
             </span>
             <span ref={pointerStatus}>X - Y -</span>
-            <span>Grid {gridSize}</span>
-            <span>Snap on</span>
+            <Menu>
+              <MenuTrigger
+                className={buttonVariants({
+                  variant: "text",
+                  className: "min-h-5 px-1 font-mono text-[11px]",
+                })}
+                title={`Grid size and snapping (${editorShortcuts.gridSmaller.keys} ${editorShortcuts.gridLarger.keys} ${editorShortcuts.snap.keys.toUpperCase()})`}
+              >
+                Grid {gridSetting.size} · Snap {gridSetting.snap ? "on" : "off"}
+              </MenuTrigger>
+              <MenuContent align="end">
+                <MenuRadioGroup
+                  value={String(gridSetting.size)}
+                  onValueChange={(value) =>
+                    changeGrid({ size: Number(value), snap: true })
+                  }
+                >
+                  {gridSizes.map((size) => (
+                    <MenuRadioItem
+                      key={size}
+                      value={String(size)}
+                      closeOnSelect
+                    >
+                      Grid {size}
+                      <MenuItemIndicator className="ml-auto text-primary">
+                        <Check size={14} />
+                      </MenuItemIndicator>
+                    </MenuRadioItem>
+                  ))}
+                </MenuRadioGroup>
+                <MenuSeparator />
+                <MenuCheckboxItem
+                  value="snap"
+                  checked={gridSetting.snap}
+                  onCheckedChange={(snap) =>
+                    changeGrid({ ...gridSetting, snap })
+                  }
+                  closeOnSelect
+                >
+                  Snap to grid
+                  <MenuItemIndicator className="ml-auto text-primary">
+                    <Check size={14} />
+                  </MenuItemIndicator>
+                </MenuCheckboxItem>
+              </MenuContent>
+            </Menu>
             <span ref={zoomStatus}>Zoom 100%</span>
             <span role="status">{saveLabels[saveStatus]}</span>
           </div>
@@ -1768,6 +1875,7 @@ function App({
         map={map}
         target={menuTarget}
         thingKind={thingKind}
+        grid={grid}
         onOpenChange={(open, details) => {
           const target = menuTargetRef.current;
           if (open && !target) {

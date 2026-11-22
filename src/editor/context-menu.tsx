@@ -59,7 +59,6 @@ import {
   fillHole,
   flipDetailLine,
   freeWallAt,
-  gridSize,
   makePillar,
   removeDetailLine,
   removeHole,
@@ -111,6 +110,7 @@ type MapContextMenuProps = {
   onFindCamera: () => void;
   onFitMap: () => void;
   onDrawRoom: (point: Point) => void;
+  grid: number;
 };
 
 type BodyProps = Omit<MapContextMenuProps, "controller" | "onOpenChange">;
@@ -346,7 +346,7 @@ function PlaceItem({
       disabled={!canStand(map, point)}
       onSelect={() => {
         if (!point) return;
-        const placed = addThing(map, thingKind, point);
+        const placed = addThing(map, thingKind, point, 0, 1);
         onCommit(placed.map, {
           keys: [`${thingKeyPrefix}${placed.id}`],
           sector: null,
@@ -570,7 +570,7 @@ function WallMenu({
   wall,
   ...props
 }: BodyProps & { sector: string; wall: string; target: MapTarget }) {
-  const { map, target, onCommit } = props;
+  const { map, target, onCommit, grid } = props;
   const line = describeLine(map, wall, sector);
   const { action, blocksEnemies, hidden } = line.settings;
   const free = freeWallAt(map, wall);
@@ -606,6 +606,8 @@ function WallMenu({
             map,
             free,
             target.point ?? wallMiddle(map, wall),
+            null,
+            grid,
           );
           onCommit(added.map, {
             keys: [`${switchKeyPrefix}${added.id}`],
@@ -697,15 +699,13 @@ function CornersMenu({
   ids,
   ...props
 }: BodyProps & { ids: string[]; target: MapTarget }) {
-  const { map, target, onCommit, onSelect } = props;
+  const { map, target, onCommit, onSelect, grid } = props;
   const corners = ids.flatMap((id) => map.vertices[id] ?? []);
   if (corners.length === 0) return null;
   const walls = [...wallOwners(map).keys()].filter((wall) =>
     wall.split("|").includes(ids[0]),
   ).length;
-  const snapped = corners.every(
-    ({ x, y }) => x % gridSize === 0 && y % gridSize === 0,
-  );
+  const snapped = corners.every(({ x, y }) => x % grid === 0 && y % grid === 0);
   return (
     <>
       <Heading>
@@ -716,7 +716,7 @@ function CornersMenu({
       <Item
         icon={Grid3x3}
         disabled={snapped}
-        onSelect={() => onCommit(snapCorners(map, ids))}
+        onSelect={() => onCommit(snapCorners(map, ids, grid))}
       >
         Snap to grid
       </Item>

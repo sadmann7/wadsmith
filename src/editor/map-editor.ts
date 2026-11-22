@@ -113,6 +113,7 @@ type MapEditorOptions = {
   onContextTarget?: (target: MapTarget | null) => void;
   onDrawingChange?: (corners: number) => void;
   contextMenuOpen?: boolean;
+  grid?: number;
 };
 
 type MapEditorState = {
@@ -401,6 +402,7 @@ const mapEditor = definePrimitive({
     onContextTarget: "callback",
     onDrawingChange: "callback",
     contextMenuOpen: "boolean",
+    grid: "number",
   },
   controlled: ["map", "tool", "activeSector", "selection"],
   state: (options: MapEditorOptions): MapEditorState => {
@@ -455,20 +457,45 @@ const mapEditor = definePrimitive({
       maxZoom: () => 4,
     });
 
+    const grid = () => context.options().grid ?? gridSize;
+
+    // A drop lands the pressed item on the grid and carries the rest of the
+    // selection by the same offset, so a shape drawn on a finer grid keeps its
+    // form. The helper would round every item on its own.
+    let dropping: string[] | null = null;
     const move = createMove<MapEditorState>(context, {
       key: "positions",
       draft: "moving",
-      step: () => gridSize,
-      largeStep: () => gridSize * 8,
+      step: () => (dropping ? 1 : grid()),
+      largeStep: () => grid() * 8,
       scale: () => store.get().viewport.zoom,
       disabled: (key) =>
         store.get().tool !== "select" || key.startsWith(switchKeyPrefix),
       group: (key) => {
         const { selection } = store.get();
-        return selection.includes(key) ? selection : [key];
+        return selection.includes(key)
+          ? [key, ...selection.filter((item) => item !== key)]
+          : [key];
       },
-      set: (positions, details) =>
-        change("map", applyPositions(store.get().map, positions), details),
+      set: (positions, details) => {
+        const keys = dropping;
+        dropping = null;
+        const current = store.get().positions;
+        const anchor = keys?.[0];
+        let next = positions;
+        if (details.reason === "drag" && keys && anchor && current[anchor]) {
+          const at = snapPoint(positions[anchor], grid());
+          const dx = at.x - current[anchor].x;
+          const dy = at.y - current[anchor].y;
+          if (dx === 0 && dy === 0) return false;
+          next = { ...positions };
+          for (const key of keys) {
+            const from = current[key];
+            if (from) next[key] = { x: from.x + dx, y: from.y + dy };
+          }
+        }
+        return change("map", applyPositions(store.get().map, next), details);
+      },
     });
 
     const connect = createConnect<MapEditorState>(context, {
@@ -506,6 +533,14 @@ const mapEditor = definePrimitive({
     const stopWatching = store.subscribe(() => {
       const { moving, map, positions } = store.get();
       if (moving === lastDraft) return;
+      // The drop commits right after the draft clears; a cancelled drag
+      // commits nothing, so the keys are let go once that moment has passed.
+      if (!moving && lastDraft) {
+        dropping = lastDraft.keys;
+        queueMicrotask(() => {
+          dropping = null;
+        });
+      }
       lastDraft = moving;
       const { onDraftMapChange } = context.options();
       if (!moving) {
@@ -606,13 +641,15 @@ const mapEditor = definePrimitive({
     context.onOptions(({ drawRequest: request }) => {
       if (!request || request.id === drawRequest) return;
       drawRequest = request.id;
-      store.set({ drawing: [snapPoint(request.point)], cursor: null });
+      store.set({ drawing: [snapPoint(request.point, grid())], cursor: null });
       change("tool", "draw", { reason: "draw" });
     });
     context.onDestroy(() => stopCameraDrag?.());
 
     const moveCamera = (point: Point) =>
-      context.options().camera?.moveTo(store.get().map, snapPoint(point));
+      context
+        .options()
+        .camera?.moveTo(store.get().map, snapPoint(point, grid()));
 
     const select = (selection: string[], sector: string | null = null) => {
       change("selection", selection, { reason: "select" });
@@ -622,13 +659,13 @@ const mapEditor = definePrimitive({
 
     const pointFromEvent = (event: MouseEvent) => {
       const { x, y } = viewport.toCanvas(event.clientX, event.clientY);
-      return snapPoint({ x, y });
+      return snapPoint({ x, y }, grid());
     };
 
     const finishRoom = () => {
       const { drawing, map } = store.get();
       if (drawing.length < 3) return;
-      const room = addRoom(map, drawing);
+      const room = addRoom(map, drawing, {}, 1);
       store.set({ drawing: [], cursor: null });
       change("map", room.map, { reason: "draw" });
       select([], room.id);
@@ -638,7 +675,7 @@ const mapEditor = definePrimitive({
     // A line that no room can hold stays as a draft to adjust or throw away.
     const finishLine = () => {
       const { drawing, map } = store.get();
-      const added = drawing.length >= 2 ? addDetail(map, drawing) : null;
+      const added = drawing.length >= 2 ? addDetail(map, drawing, 1) : null;
       if (!added) return;
       store.set({ drawing: [], cursor: null });
       change("map", added.map, { reason: "draw" });
@@ -687,7 +724,7 @@ const mapEditor = definePrimitive({
         (key) => key in positions && !key.startsWith(switchKeyPrefix),
       );
       if (keys.length === 0) return false;
-      const by = event.shiftKey ? gridSize * 8 : gridSize;
+      const by = event.shiftKey ? grid() * 8 : grid();
       move.moveBy(keys, direction.x * by, direction.y * by, {
         reason: "move-key",
         event,
@@ -775,7 +812,7 @@ const mapEditor = definePrimitive({
       const keyboard = isKeyboardMenu(event);
       if (keyboard && (!key || key === "camera")) return selectedTarget();
       const at = viewport.toCanvas(event.clientX, event.clientY);
-      const point = keyboard ? null : snapPoint(at);
+      const point = keyboard ? null : snapPoint(at, grid());
       if (key?.startsWith(doorKeyPrefix)) {
         return {
           kind: "room",
@@ -1062,14 +1099,14 @@ const mapEditor = definePrimitive({
         } else if (tool === "line") {
           clickLine(point);
         } else if (tool === "thing") {
-          const placed = addThing(map, thingKind, point);
+          const placed = addThing(map, thingKind, point, 0, 1);
           change("map", placed.map, { reason: "place" });
           select([`${thingKeyPrefix}${placed.id}`]);
         } else if (tool === "switch") {
           const at = viewport.toCanvas(event.clientX, event.clientY);
           const wall = freeWallNear(map, at, switchReach / view.zoom);
           if (!wall) return;
-          const added = addSwitch(map, wall, at);
+          const added = addSwitch(map, wall, at, null, grid());
           change("map", added.map, { reason: "place" });
           select([`${switchKeyPrefix}${added.id}`]);
           change("tool", "select", { reason: "draw" });

@@ -66,6 +66,7 @@ type SceneOptions = {
   placing?: ThingKind | null;
   renderWidth?: number;
   renderHeight?: number;
+  grid?: number;
   onMapChange?: (
     map: GameMap,
     details: ChangeDetails<SceneChangeReason>,
@@ -115,6 +116,7 @@ const sceneEditor = definePrimitive({
     placing: "value",
     renderWidth: "number",
     renderHeight: "number",
+    grid: "number",
     onMapChange: "callback",
     onSelectedChange: "callback",
   },
@@ -160,6 +162,7 @@ const sceneEditor = definePrimitive({
     };
 
     const cameraState = () => context.options().camera;
+    const grid = () => context.options().grid ?? gridSize;
 
     const draw = () => {
       drawFrame = 0;
@@ -247,7 +250,7 @@ const sceneEditor = definePrimitive({
         floor.floor,
       );
       if (!point) return null;
-      const snapped = snapPoint(point);
+      const snapped = snapPoint(point, grid());
       return standable(map, snapped) ? snapped : null;
     };
 
@@ -260,7 +263,7 @@ const sceneEditor = definePrimitive({
           ? view.position.angle
           : view.position.angle + 180;
       const facing = (((Math.round(angle / 45) * 45) % 360) + 360) % 360;
-      const added = addThing(map, placing, point, facing);
+      const added = addThing(map, placing, point, facing, 1);
       // A new player start must not pull the camera away from the person placing it.
       view.walked = true;
       change("map", added.map, { reason: "place", event });
@@ -273,10 +276,13 @@ const sceneEditor = definePrimitive({
       if (!map || !view) return;
       const { forward } = cameraBasis(view.position);
       for (const distance of placeDistances) {
-        const point = snapPoint({
-          x: view.position.x + forward.x * distance,
-          y: view.position.y + forward.y * distance,
-        });
+        const point = snapPoint(
+          {
+            x: view.position.x + forward.x * distance,
+            y: view.position.y + forward.y * distance,
+          },
+          grid(),
+        );
         if (standable(map, point)) {
           place(point, "key", event);
           return;
@@ -307,8 +313,8 @@ const sceneEditor = definePrimitive({
       event.preventDefault();
       const horizontal = Math.abs(direction.x) >= Math.abs(direction.y);
       const point = {
-        x: thing.x + (horizontal ? Math.sign(direction.x) * gridSize : 0),
-        y: thing.y + (horizontal ? 0 : Math.sign(direction.y) * gridSize),
+        x: thing.x + (horizontal ? Math.sign(direction.x) * grid() : 0),
+        y: thing.y + (horizontal ? 0 : Math.sign(direction.y) * grid()),
       };
       if (standable(map, point)) {
         view.walked = true;
@@ -351,7 +357,7 @@ const sceneEditor = definePrimitive({
             plane,
           );
           if (!point) return;
-          const snapped = snapPoint(point);
+          const snapped = snapPoint(point, grid());
           if (!standable(map, snapped)) return;
           moved = snapped.x !== thing.x || snapped.y !== thing.y;
           store.set({ draftMap: updateThing(map, thing.id, snapped) });

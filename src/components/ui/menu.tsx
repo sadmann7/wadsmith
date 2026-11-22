@@ -38,6 +38,30 @@ function MenuItem({
   );
 }
 
+function MenuRadioItem({
+  className,
+  ...props
+}: React.ComponentProps<typeof MenuPrimitive.MenuRadioItem>) {
+  return (
+    <MenuPrimitive.MenuRadioItem
+      className={cn(itemClass, "data-[highlighted]:bg-accent", className)}
+      {...props}
+    />
+  );
+}
+
+function MenuCheckboxItem({
+  className,
+  ...props
+}: React.ComponentProps<typeof MenuPrimitive.MenuCheckboxItem>) {
+  return (
+    <MenuPrimitive.MenuCheckboxItem
+      className={cn(itemClass, "data-[highlighted]:bg-accent", className)}
+      {...props}
+    />
+  );
+}
+
 function MenuSeparator({
   className,
   ...props
@@ -50,7 +74,13 @@ function MenuSeparator({
   );
 }
 
-export { MenuContent, MenuItem, MenuSeparator };
+export {
+  MenuCheckboxItem,
+  MenuContent,
+  MenuItem,
+  MenuRadioItem,
+  MenuSeparator,
+};
 
 export {
   createMenuController,
@@ -58,5 +88,7 @@ export {
   MenuContextTrigger,
   MenuGroup,
   MenuGroupLabel,
+  MenuItemIndicator,
+  MenuRadioGroup,
   MenuTrigger,
 } from "@ui-sdk/react/menu";

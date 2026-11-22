@@ -114,6 +114,43 @@ describe("map editor parts", () => {
     expect(parts.heard()).toEqual(["wall v9|v10"]);
   });
 
+  it("drop the pressed corner on the grid and carry the rest along", () => {
+    let result: GameMap | null = null;
+    const map = moved(testMap, "v15", 3);
+    const instance = mapEditor({
+      id,
+      map,
+      onMapChange: (next) => {
+        result = next;
+      },
+    });
+    const { store } = instance.part("handle", { value: "v1" });
+    const keys = ["v1", "v15"];
+    store.set({ moving: { keys, dx: 5, dy: 0 } });
+    store.set({ moving: null });
+    instance.api.move.moveBy(keys, 5, 0, { reason: "drag" });
+    expect(result!.vertices.v1).toEqual({ x: 8, y: 0 });
+    expect(result!.vertices.v15).toEqual({ x: 171, y: 0 });
+  });
+
+  it("commit nothing for a drop that lands where it started", () => {
+    let changes = 0;
+    const instance = mapEditor({
+      id,
+      map: testMap,
+      onMapChange: () => {
+        changes += 1;
+      },
+    });
+    const { store } = instance.part("handle", { value: "v1" });
+    store.set({ moving: { keys: ["v1"], dx: 3, dy: 0 } });
+    store.set({ moving: null });
+    expect(instance.api.move.moveBy(["v1"], 3, 0, { reason: "drag" })).toBe(
+      false,
+    );
+    expect(changes).toBe(0);
+  });
+
   it("wake no shape for the same map rendered again", () => {
     const instance = mapEditor({ id, map: testMap });
     const parts = listen(instance);
