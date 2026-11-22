@@ -8,12 +8,14 @@ import {
   definePrimitive,
   dragThreshold,
   live,
+  selects,
   type ChangeDetails,
   type ConnectDraft,
   type MoveDraft,
   type Viewport,
 } from "@ui-sdk/core";
 import { createParts } from "@ui-sdk/react/primitive";
+import * as React from "react";
 
 import { thingKinds } from "../map/catalog";
 import {
@@ -192,6 +194,15 @@ function pointOf(state: MapEditorState, key: string): Point {
     : base;
 }
 
+function centroid(state: MapEditorState, corners: readonly string[]): Point {
+  const points = corners.map((corner) => pointOf(state, corner));
+  const count = points.length || 1;
+  return {
+    x: points.reduce((sum, point) => sum + point.x, 0) / count,
+    y: points.reduce((sum, point) => sum + point.y, 0) / count,
+  };
+}
+
 function portPoint(state: MapEditorState, key: string): Point {
   if (key.startsWith(switchKeyPrefix)) {
     const id = key.slice(switchKeyPrefix.length);
@@ -202,13 +213,7 @@ function portPoint(state: MapEditorState, key: string): Point {
     return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
   }
   const id = key.slice(doorKeyPrefix.length);
-  const vertices = sectorById(state.map, id)?.vertices ?? [];
-  const points = vertices.map((vertex) => pointOf(state, vertex));
-  const count = points.length || 1;
-  return {
-    x: points.reduce((sum, point) => sum + point.x, 0) / count,
-    y: points.reduce((sum, point) => sum + point.y, 0) / count,
-  };
+  return centroid(state, sectorById(state.map, id)?.vertices ?? []);
 }
 
 // The parts of a horizontal line that fall inside a polygon, left to right.
@@ -230,11 +235,9 @@ function spansAt(points: Point[], y: number) {
 
 // A label sits near the top of its room, on a part of that band the room
 // covers, so an L-shaped room doesn't label the room tucked into its corner.
-function labelPoint(state: MapEditorState, id: string): Point {
-  const center = portPoint(state, `${doorKeyPrefix}${id}`);
-  const points = (sectorById(state.map, id)?.vertices ?? []).map((key) =>
-    pointOf(state, key),
-  );
+function labelPoint(state: MapEditorState, corners: readonly string[]): Point {
+  const center = centroid(state, corners);
+  const points = corners.map((key) => pointOf(state, key));
   const y =
     Math.min(...points.map((point) => point.y)) +
     labelInset / state.viewport.zoom;
@@ -272,14 +275,54 @@ function connectingAttrs(state: MapEditorState) {
   };
 }
 
-function polygonPoints(state: MapEditorState, id: string) {
-  const sector = sectorById(state.map, id);
-  return (sector?.vertices ?? [])
-    .map((vertex) => {
-      const point = pointOf(state, vertex);
+function polygonPoints(state: MapEditorState, corners: readonly string[]) {
+  return corners
+    .map((corner) => {
+      const point = pointOf(state, corner);
       return `${point.x},${point.y}`;
     })
     .join(" ");
+}
+
+type KeyedProps = { value: string };
+type SectorProps = { value: string; corners: string[]; door: boolean };
+type WallProps = { value: string; from: string; to: string };
+type LabelProps = { value: string; corners: string[] };
+
+const none: readonly never[] = [];
+
+// A key a slot reads in full, so every change to it reaches all of its parts.
+const whole = { values: () => none, moved: () => true };
+
+// Every state key, as one a slot's parts never read. A slot's `selects` starts
+// from this and names the keys its parts do read, and how, so a pan wakes no
+// part and a drag wakes the parts of what it moves.
+const readsNothing = {
+  map: none,
+  positions: none,
+  viewport: none,
+  moving: none,
+  connecting: none,
+  tool: none,
+  editMode: none,
+  thingKind: none,
+  activeSector: none,
+  selection: none,
+  drawing: none,
+  cursor: none,
+  cameraPosition: none,
+  highlightedWall: none,
+} satisfies Record<keyof MapEditorState, readonly never[]>;
+
+function movedDraft(
+  before: MoveDraft | null,
+  after: MoveDraft | null,
+  notify: (key: string) => void,
+) {
+  for (const key of before?.keys ?? []) notify(key);
+  if (after && after.keys !== before?.keys) {
+    for (const key of after.keys) notify(key);
+  }
 }
 
 function draftPoints(state: MapEditorState) {
@@ -1111,28 +1154,41 @@ const mapEditor = definePrimitive({
         style: api.viewport.style(state),
       })),
     }),
-    sector: slot<{ value: string }>({
-      props: { value: "string" },
-      attrs: (state, { key }) => ({
-        points: polygonPoints(state, key),
-        "data-active": state.activeSector === key ? "" : undefined,
-        "data-door": sectorById(state.map, key)?.door ? "" : undefined,
+    sector: slot<SectorProps>({
+      props: { value: "string", corners: "list", door: "boolean" },
+      selects: selects<MapEditorState, any, SectorProps>({
+        ...readsNothing,
+        positions: ({ props }) => props.corners,
+        moving: whole,
+        activeSector: ({ key }) => [key],
       }),
-      live: live<MapEditorState, any, { value: string }>((state, { key }) => ({
-        points: polygonPoints(state, key),
+      attrs: (state, { key, props }) => ({
+        points: polygonPoints(state, props.corners),
+        "data-active": state.activeSector === key ? "" : undefined,
+        "data-door": props.door ? "" : undefined,
+      }),
+      live: live<MapEditorState, any, SectorProps>((state, { props }) => ({
+        points: polygonPoints(state, props.corners),
       })),
     }),
-    wall: slot<{ value: string; from: string; to: string }>({
+    wall: slot<WallProps>({
       props: { value: "string", from: "string", to: "string" },
+      selects: selects<MapEditorState, any, WallProps>({
+        ...readsNothing,
+        positions: ({ props }) => [props.from, props.to],
+        moving: {
+          values: ({ props }) => [props.from, props.to],
+          moved: movedDraft,
+        },
+        highlightedWall: ({ key }) => [key],
+      }),
       attrs: (state, { key, props }) => ({
         ...wallAttrs(state, props.from, props.to),
         "data-selected": state.highlightedWall === key ? "" : undefined,
       }),
-      live: live<
-        MapEditorState,
-        any,
-        { value: string; from: string; to: string }
-      >((state, { props }) => wallAttrs(state, props.from, props.to)),
+      live: live<MapEditorState, any, WallProps>((state, { props }) =>
+        wallAttrs(state, props.from, props.to),
+      ),
     }),
     draft: slot({
       attrs: (state) => ({ points: draftPoints(state) }),
@@ -1140,8 +1196,14 @@ const mapEditor = definePrimitive({
         points: draftPoints(state),
       })),
     }),
-    handle: slot<{ value: string }>({
+    handle: slot<KeyedProps>({
       props: { value: "string" },
+      selects: selects<MapEditorState, any, KeyedProps>({
+        ...readsNothing,
+        positions: ({ key }) => [key],
+        moving: { values: ({ key }) => [key], moved: movedDraft },
+        selection: ({ key }) => [key],
+      }),
       attrs: (state, { key }) => {
         const at = state.positions[key] ?? { x: 0, y: 0 };
         return {
@@ -1168,8 +1230,16 @@ const mapEditor = definePrimitive({
           api.pressHandle(event, key, el!),
       },
     }),
-    port: slot<{ value: string }>({
+    port: slot<KeyedProps>({
       props: { value: "string" },
+      selects: selects<MapEditorState, any, KeyedProps>({
+        ...readsNothing,
+        map: whole,
+        positions: whole,
+        moving: whole,
+        connecting: whole,
+        selection: ({ key }) => [key],
+      }),
       attrs: (state, { key }) => {
         const at = portPoint(state, key);
         return {
@@ -1199,15 +1269,17 @@ const mapEditor = definePrimitive({
           api.pressPort(event, key, el!),
       },
     }),
-    wire: slot<{ value: string; from: string; to: string }>({
+    wire: slot<WallProps>({
       props: { value: "string", from: "string", to: "string" },
+      selects: selects<MapEditorState, any, WallProps>({
+        ...readsNothing,
+        map: whole,
+        positions: whole,
+        moving: whole,
+      }),
       attrs: (state, { props }) =>
         lineAttrs(portPoint(state, props.from), portPoint(state, props.to)),
-      live: live<
-        MapEditorState,
-        any,
-        { value: string; from: string; to: string }
-      >((state, { props }) =>
+      live: live<MapEditorState, any, WallProps>((state, { props }) =>
         lineAttrs(portPoint(state, props.from), portPoint(state, props.to)),
       ),
     }),
@@ -1215,10 +1287,16 @@ const mapEditor = definePrimitive({
       attrs: (state) => connectingAttrs(state),
       live: live<MapEditorState, any, {}>((state) => connectingAttrs(state)),
     }),
-    label: slot<{ value: string }>({
-      props: { value: "string" },
-      attrs: (state, { key }) => {
-        const at = labelPoint(state, key);
+    label: slot<LabelProps>({
+      props: { value: "string", corners: "list" },
+      selects: selects<MapEditorState, any, LabelProps>({
+        ...readsNothing,
+        positions: ({ props }) => props.corners,
+        moving: whole,
+        viewport: whole,
+      }),
+      attrs: (state, { props }) => {
+        const at = labelPoint(state, props.corners);
         return {
           style: css({
             position: "absolute",
@@ -1227,8 +1305,8 @@ const mapEditor = definePrimitive({
           }),
         };
       },
-      live: live<MapEditorState, any, { value: string }>((state, { key }) => {
-        const at = labelPoint(state, key);
+      live: live<MapEditorState, any, LabelProps>((state, { props }) => {
+        const at = labelPoint(state, props.corners);
         return { style: `left:${at.x}px;top:${at.y}px` };
       }),
     }),
@@ -1305,12 +1383,14 @@ const parts = createParts(mapEditor, {
 
 const MapEditor = parts.Root;
 const MapWorld = parts.World;
-const MapSector = parts.Sector;
-const MapWall = parts.Wall;
+// Thousands of these render on a big map and an edit changes a few, so each
+// renders again only when its own props change.
+const MapSector = React.memo(parts.Sector);
+const MapWall = React.memo(parts.Wall);
 const MapDraft = parts.Draft;
-const MapHandle = parts.Handle;
-const MapPort = parts.Port;
-const MapWire = parts.Wire;
+const MapHandle = React.memo(parts.Handle);
+const MapPort = React.memo(parts.Port);
+const MapWire = React.memo(parts.Wire);
 const MapConnecting = parts.Connecting;
 const MapFit = parts.Fit;
 const MapLabel = parts.Label;
@@ -1335,6 +1415,7 @@ export {
   MapWall,
   MapWire,
   MapWorld,
+  mapEditor,
   type EditMode,
   type MapTool,
   type MapViewStatus,

@@ -2,6 +2,24 @@ import type { GameMap, Point, Sector } from "./types";
 
 type Edge = { from: string; to: string };
 
+type Box = { left: number; top: number; right: number; bottom: number };
+
+type Outline = { polygon: Point[]; box: Box };
+
+type SectorIndex = {
+  outlines: Map<Sector, Outline>;
+  cells: Map<number, Sector[]>;
+};
+
+const cellSize = 512;
+const cellOffset = 1024;
+const cellRow = 4096;
+
+// Maps are replaced on every edit, never changed in place, so what's worked
+// out for one stays right for as long as it's in use.
+const ownerCache = new WeakMap<GameMap, Map<string, Sector[]>>();
+const indexCache = new WeakMap<GameMap, SectorIndex>();
+
 function sectorEdges(sector: Sector): Edge[] {
   return sector.vertices.map((from, index) => ({
     from,
@@ -31,6 +49,8 @@ function wallPartTexture(
 }
 
 function wallOwners(map: GameMap) {
+  const cached = ownerCache.get(map);
+  if (cached) return cached;
   const owners = new Map<string, Sector[]>();
   for (const sector of map.sectors) {
     for (const { from, to } of sectorEdges(sector)) {
@@ -38,6 +58,7 @@ function wallOwners(map: GameMap) {
       owners.set(key, [...(owners.get(key) ?? []), sector]);
     }
   }
+  ownerCache.set(map, owners);
   return owners;
 }
 
@@ -52,6 +73,74 @@ function signedArea(polygon: Point[]) {
     area += point.x * next.y - next.x * point.y;
   });
   return area / 2;
+}
+
+function boxOf(points: Point[]): Box {
+  const box = {
+    left: Infinity,
+    top: Infinity,
+    right: -Infinity,
+    bottom: -Infinity,
+  };
+  for (const point of points) {
+    box.left = Math.min(box.left, point.x);
+    box.top = Math.min(box.top, point.y);
+    box.right = Math.max(box.right, point.x);
+    box.bottom = Math.max(box.bottom, point.y);
+  }
+  return box;
+}
+
+function inBox(box: Box, point: Point) {
+  return (
+    point.x >= box.left &&
+    point.x <= box.right &&
+    point.y >= box.top &&
+    point.y <= box.bottom
+  );
+}
+
+function cellOf(x: number, y: number) {
+  return (
+    (Math.floor(x / cellSize) + cellOffset) * cellRow +
+    Math.floor(y / cellSize) +
+    cellOffset
+  );
+}
+
+// Each sector is filed under the grid cells its bounds cover, in map order, so
+// a point is tested against the few sectors around it, not every one on the
+// map. A sector with a missing corner has no outline and is never found.
+function sectorIndex(map: GameMap): SectorIndex {
+  const cached = indexCache.get(map);
+  if (cached) return cached;
+  const outlines = new Map<Sector, Outline>();
+  const cells = new Map<number, Sector[]>();
+  for (const sector of map.sectors) {
+    const polygon = sectorPolygon(map, sector);
+    if (polygon.length === 0 || polygon.some((point) => !point)) continue;
+    const box = boxOf(polygon);
+    outlines.set(sector, { polygon, box });
+    const left = Math.floor(box.left / cellSize);
+    const right = Math.floor(box.right / cellSize);
+    const top = Math.floor(box.top / cellSize);
+    const bottom = Math.floor(box.bottom / cellSize);
+    for (let x = left; x <= right; x += 1) {
+      for (let y = top; y <= bottom; y += 1) {
+        const key = (x + cellOffset) * cellRow + y + cellOffset;
+        const filed = cells.get(key);
+        if (filed) filed.push(sector);
+        else cells.set(key, [sector]);
+      }
+    }
+  }
+  const index = { outlines, cells };
+  indexCache.set(map, index);
+  return index;
+}
+
+function sectorBox(map: GameMap, sector: Sector): Box | undefined {
+  return sectorIndex(map).outlines.get(sector)?.box;
 }
 
 function pointInPolygon(point: Point, polygon: Point[]) {
@@ -100,15 +189,18 @@ function segmentsIntersect(a: Point, b: Point, c: Point, d: Point) {
 }
 
 function sectorAt(map: GameMap, point: Point) {
-  return map.sectors.find((sector) =>
-    pointInPolygon(point, sectorPolygon(map, sector)),
-  );
+  const { outlines, cells } = sectorIndex(map);
+  return cells.get(cellOf(point.x, point.y))?.find((sector) => {
+    const { polygon, box } = outlines.get(sector)!;
+    return inBox(box, point) && pointInPolygon(point, polygon);
+  });
 }
 
 export {
   cross,
   pointInPolygon,
   sectorAt,
+  sectorBox,
   sectorEdges,
   sectorPolygon,
   segmentsIntersect,
@@ -117,5 +209,6 @@ export {
   wallOwners,
   wallPartTexture,
   wallTextureOf,
+  type Box,
   type Edge,
 };

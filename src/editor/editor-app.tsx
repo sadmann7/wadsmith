@@ -87,7 +87,6 @@ import {
 import type { GameMap, Point, ThingCategory, ThingKind } from "../map/types";
 import { checkMap, fixIssue, issueText } from "../map/checks";
 import { MapSwitcher, type EpisodeEntry, type MapHealth } from "./map-switcher";
-import { validateMap } from "../map/validate";
 import { loadIwad } from "../engine/iwad";
 import { SceneCamera } from "../preview/scene-camera";
 import { SceneCanvas, type DraftSource } from "../preview/scene-editor";
@@ -389,9 +388,12 @@ function App({
     createUndoStack(initialMap, { limit: 200, groupDelay: 500 }),
   );
 
-  const issues = React.useMemo(() => validateMap(map), [map]);
-  const canPlay = issues.length === 0;
   const checks = React.useMemo(() => checkMap(map), [map]);
+  const issues = React.useMemo(
+    () => checks.filter((issue) => issue.severity === "error"),
+    [checks],
+  );
+  const canPlay = issues.length === 0;
   const liveHealth: MapHealth = checks.some(
     (issue) => issue.severity === "error",
   )
