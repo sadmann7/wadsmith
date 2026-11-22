@@ -122,12 +122,18 @@ function statusIndex(game: GameInfo, episode: number, map: number) {
   return game.episodes === 0 ? map : (episode - 1) * mapsPerEpisode + map;
 }
 
+// The engine ends the game on these maps and never leaves their finale.
+function endsGame(slot: string) {
+  return slot === "MAP30" || /^E\dM8$/.test(slot);
+}
+
 function statusSlot(game: GameInfo, episode: number, map: number) {
   return slotName(statusIndex(game, episode, map), game.episodes > 0);
 }
 
 export {
   defaultGame,
+  endsGame,
   engineSlot,
   games,
   indexSlot,

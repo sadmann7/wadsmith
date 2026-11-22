@@ -734,13 +734,19 @@ describe("readMaps", () => {
       ),
       lump("UMAPINFO", 'map MAP02\n{\n  levelname = "Filtration Tunnels"\n}\n'),
     ]);
+    // The episode's own UMAPINFO names every map; later files win.
     expect(maps.map((map) => map.title)).toEqual([
       "Hydroelectric Plant",
       "Filtration Tunnels",
-      undefined,
+      "Starter map",
     ]);
     expect(decompileMap(maps[0]).map.name).toBe("Hydroelectric Plant");
-    expect(decompileMap(maps[2]).map.name).toBe("MAP03");
+    expect(decompileMap(maps[2]).map.name).toBe("Starter map");
+    const doomOne = readMaps([
+      { name: "d.wad", data: compileMap(starterMap, "E1M1") },
+      lump("UMAPINFO", 'map E1M1\n{\n  levelname = "Hangar"\n}\n'),
+    ]);
+    expect(doomOne[0].title).toBe("Hangar");
   });
 
   it("explains WADs the editor can't open", () => {

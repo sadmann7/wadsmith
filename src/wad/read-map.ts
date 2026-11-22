@@ -46,7 +46,7 @@ interface DoomMap {
 const noSide = 0xffff;
 const text = new TextDecoder("latin1");
 const levelString = /^\s*HUSTR_(\d+)\s*=\s*(.*?)\s*$/gim;
-const levelInfo = /^\s*map\s+(MAP\d\d)\s*\{([^}]*)\}/gim;
+const levelInfo = /^\s*map\s+(MAP\d\d|E\dM\d)\s*\{([^}]*)\}/gim;
 const levelName = /^\s*levelname\s*=\s*"([^"]*)"/im;
 
 function name(bytes: Uint8Array) {

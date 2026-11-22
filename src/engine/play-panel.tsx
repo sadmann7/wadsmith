@@ -6,8 +6,10 @@ import { compileEpisode, compileMap, type Lump } from "@/wad/compile";
 import { inspectWads } from "@/wad/inspect";
 import {
   defaultGame,
+  endsGame,
   engineSlot,
   indexSlot,
+  slotCount,
   statusIndex,
   statusSlot,
   type GameInfo,
@@ -148,6 +150,9 @@ interface Level {
   title: string;
   slot: string;
   par: number | null;
+  music?: string;
+  sky?: string;
+  intertext?: string;
   lumps?: Lump[] | null;
 }
 
@@ -176,6 +181,9 @@ function GameSession({
   title,
   slot,
   par,
+  music,
+  sky,
+  intertext,
   episode,
   sound,
   onSoundChange,
@@ -290,12 +298,18 @@ function GameSession({
           (episode
             ? compileEpisode(
                 episode.map((entry, index) => ({
+                  ...entry,
                   slot: engineSlot(indexSlot(index + 1), iwad.game),
-                  map: entry.map,
-                  lumps: entry.lumps,
                 })),
+                iwad.game,
               )
-            : map && compileMap(map, engineSlot(indexSlot(1), iwad.game)));
+            : map &&
+              compileMap(map, engineSlot(indexSlot(1), iwad.game), {
+                par,
+                music,
+                sky,
+                intertext,
+              }));
         client = startGameClient({
           iwad: { game: iwad.game, data: iwad.data },
           files: files ?? {
@@ -320,7 +334,21 @@ function GameSession({
               ticsChangedAt = performance.now();
             }
             const reached = statusIndex(iwad.game, next.episode, next.map);
+            const total = episode?.length ?? 1;
+            // Text after the last map shows in the engine's finale, so the
+            // game ends once the engine moves on past the maps played. An ending
+            // map never leaves its finale and the last slot has nothing after
+            // it, so there the game still ends at the tally.
+            const lastText =
+              Boolean(episode ? episode.at(-1)?.intertext : intertext) &&
+              total < slotCount(iwad.game) &&
+              !endsGame(engineSlot(indexSlot(total), iwad.game));
             if (next.inLevel && netStarted) {
+              if (!files && reached > total) {
+                client?.stop();
+                setFinished(true);
+                return;
+              }
               reachedLevel = true;
               lastInLevel = next;
               if (episode) {
@@ -330,14 +358,29 @@ function GameSession({
                 setLevelIndex(Math.min(reached, episode.length) - 1);
               }
             }
+            // The taps that move past the tally would skip the text after a
+            // map, which the player reads and dismisses in their own time.
+            if (next.inFinale) {
+              clearInterval(advanceTimer.current);
+              advanceTimer.current = undefined;
+              setBetween(null);
+            }
             if (reachedLevel && !next.inLevel && !files) {
-              if (!episode || reached >= episode.length) {
+              if (reached >= total && !lastText) {
                 client?.stop();
                 setFinished(true);
                 return;
               }
-              // The engine clears the level's time once its tally starts.
-              if (advanceTimer.current === undefined) setBetween(lastInLevel);
+              // The engine clears the level's time once its tally starts. The
+              // last map's tally runs on its own, since no level follows it.
+              if (
+                episode &&
+                reached < total &&
+                advanceTimer.current === undefined &&
+                !next.inFinale
+              ) {
+                setBetween(lastInLevel);
+              }
             }
             setStatus(next);
           },
@@ -403,7 +446,20 @@ function GameSession({
       client?.stop();
       gameRef.current = null;
     };
-  }, [map, files, episode, screen, width, height, coop, skill]);
+  }, [
+    map,
+    files,
+    episode,
+    screen,
+    width,
+    height,
+    coop,
+    skill,
+    par,
+    music,
+    sky,
+    intertext,
+  ]);
 
   React.useEffect(() => () => clearInterval(advanceTimer.current), []);
 
@@ -854,6 +910,9 @@ function GameView({
   title,
   slot,
   par,
+  music,
+  sky,
+  intertext,
   onExit,
   onAddNote,
   onEditSpot,
@@ -867,6 +926,9 @@ function GameView({
   title: string;
   slot: string;
   par: number | null;
+  music?: string;
+  sky?: string;
+  intertext?: string;
   onExit: () => void;
   onAddNote?: (point: Point, text: string) => void;
   onEditSpot?: (spot: PlayerSpot) => void;
@@ -908,6 +970,9 @@ function GameView({
         title={title}
         slot={slot}
         par={par}
+        music={music}
+        sky={sky}
+        intertext={intertext}
         episode={episode}
         sound={sound}
         onSoundChange={(next) => {

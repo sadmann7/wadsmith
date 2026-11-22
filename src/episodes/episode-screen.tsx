@@ -53,6 +53,7 @@ import {
   episodeMaps,
   freeSlots,
   isSlotConflict,
+  levelDetails,
   lastMapKey,
   lastEpisodeKey,
   mapFromTemplate,
@@ -104,6 +105,9 @@ interface SessionDetails {
   name: string;
   slot: string;
   par: number | null;
+  music?: string;
+  sky?: string;
+  intertext?: string;
 }
 type SaveStatus = "saving" | "saved" | "failed";
 type HomeView = "episodes" | "featured";
@@ -159,6 +163,9 @@ function levelsOf(ordered: EpisodeMap[]): Level[] {
     title: mapName(entry),
     slot: entry.slot,
     par: entry.par,
+    music: entry.music,
+    sky: entry.sky,
+    intertext: entry.intertext,
     lumps: knownLumps(entry),
   }));
 }
@@ -200,7 +207,14 @@ function coopEntry() {
 }
 
 function detailsOf(entry: EpisodeMap): SessionDetails {
-  return { name: mapName(entry), slot: entry.slot, par: entry.par };
+  return {
+    name: mapName(entry),
+    slot: entry.slot,
+    par: entry.par,
+    music: entry.music,
+    sky: entry.sky,
+    intertext: entry.intertext,
+  };
 }
 
 function problemOf(error: unknown, slot: string) {
@@ -855,7 +869,7 @@ function EpisodeScreen() {
           : mapFromTemplate(form.template, form.name),
         form.complevel,
       ),
-      { description: form.description, par: form.par },
+      form,
     );
     try {
       await store.putMap(entry);
@@ -871,14 +885,19 @@ function EpisodeScreen() {
 
   const updateMap = async (id: string, form: MapDetails) => {
     try {
-      const saved = await store.updateMap(id, (entry) => ({
-        ...entry,
-        slot: form.slot,
-        description: form.description,
-        par: form.par,
-        map: withComplevel({ ...entry.map, name: form.name }, form.complevel),
-        editedAt: Date.now(),
-      }));
+      const saved = await store.updateMap(id, (entry) => {
+        const { music, sky, intertext, ...rest } = entry;
+        void music;
+        void sky;
+        void intertext;
+        return {
+          ...rest,
+          slot: form.slot,
+          ...levelDetails(form),
+          map: withComplevel({ ...entry.map, name: form.name }, form.complevel),
+          editedAt: Date.now(),
+        };
+      });
       if (!saved) return "This map no longer exists.";
       announce(id);
       if (sessionRef.current?.id === id) setDetails(detailsOf(saved));
@@ -1121,6 +1140,7 @@ function EpisodeScreen() {
             slot: engineSlot(entry.slot, game),
             lumps: knownLumps(entry),
           })),
+          game,
         ).slice().buffer,
         "application/octet-stream",
       );
@@ -1161,6 +1181,9 @@ function EpisodeScreen() {
           mapName={details.name}
           slot={details.slot}
           par={details.par}
+          music={details.music}
+          sky={details.sky}
+          intertext={details.intertext}
           saveStatus={store.durable ? saveStatus : "session"}
           onSave={onSave}
           watchExternal={watchExternal}
@@ -1432,7 +1455,7 @@ function EpisodeScreen() {
                   ...structuredClone(entry.map),
                   name: `${mapName(entry)} copy`,
                 },
-                { description: entry.description, par: entry.par },
+                entry,
               ),
             );
             await refresh(store, entry.episodeId);

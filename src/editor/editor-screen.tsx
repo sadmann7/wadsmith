@@ -303,10 +303,15 @@ function downloadFile(name: string, data: BlobPart, type: string) {
   URL.revokeObjectURL(url);
 }
 
-function downloadWad(map: GameMap, slot: string, fileName: string) {
+function downloadWad(
+  map: GameMap,
+  slot: string,
+  fileName: string,
+  level: Parameters<typeof compileMap>[2],
+) {
   downloadFile(
     fileName,
-    compileMap(map, slot).slice().buffer,
+    compileMap(map, slot, level).slice().buffer,
     "application/octet-stream",
   );
 }
@@ -316,6 +321,9 @@ interface AppProps {
   mapName: string;
   slot: string;
   par: number | null;
+  music?: string;
+  sky?: string;
+  intertext?: string;
   saveStatus: "saving" | "saved" | "failed" | "session";
   onSave: (map: GameMap) => void;
   watchExternal: (listener: (map: GameMap) => void) => () => void;
@@ -351,6 +359,9 @@ function EditorScreen({
   mapName,
   slot,
   par,
+  music,
+  sky,
+  intertext,
   saveStatus,
   onSave,
   watchExternal,
@@ -1945,7 +1956,12 @@ function EditorScreen({
           context={context}
           onBuild={(fileName) => {
             try {
-              downloadWad(map, engineSlot(slot, iwadGame), fileName);
+              downloadWad(map, engineSlot(slot, iwadGame), fileName, {
+                par,
+                music,
+                sky,
+                intertext,
+              });
             } catch (error) {
               return `Couldn't build the map. ${(error as Error).message}`;
             }
@@ -1968,6 +1984,9 @@ function EditorScreen({
           title={mapName}
           slot={slot}
           par={par}
+          music={music}
+          sky={sky}
+          intertext={intertext}
           onAddStarts={(players) => commit(addPlayerStarts(map, players))}
           onStart={(hosted) => {
             setCoopLobby(false);
@@ -1984,6 +2003,9 @@ function EditorScreen({
           title={mapName}
           slot={slot}
           par={par}
+          music={music}
+          sky={sky}
+          intertext={intertext}
           onExit={exitGame}
           onAddNote={(point, text) => commit(addNote(map, point, text))}
           onEditSpot={editPlayedSpot}

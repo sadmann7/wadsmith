@@ -18,17 +18,26 @@ interface Episode {
   createdAt: number;
 }
 
+// Music, sky and intermission text are the game's own unless set; they travel
+// in the episode's UMAPINFO lump.
 interface EpisodeMap {
   id: string;
   episodeId: string;
   slot: string;
   description: string;
   par: number | null;
+  music?: string;
+  sky?: string;
+  intertext?: string;
   editedAt: number;
   mapRevision: number;
   map: GameMap;
   broken?: boolean;
 }
+
+type LevelDetails = Partial<
+  Pick<EpisodeMap, "description" | "par" | "music" | "sky" | "intertext">
+>;
 
 type MapTemplate = "blank" | "room" | "hub";
 
@@ -64,6 +73,10 @@ const backupVersion = 1;
 const maxBackupBytes = 64 * 1024 * 1024;
 const maxNameLength = 80;
 const maxDescriptionLength = 160;
+const maxIntertextLength = 2000;
+// Longer than any par the dialog accepts, and still a plain number in a lump.
+const maxPar = 99_999;
+const lumpName = /^[A-Z0-9_\-\\[\]]{1,8}$/;
 // Doom II has 32 map slots; Ultimate Doom's four episodes hold 36.
 const maxSlots = 36;
 const firstEpisodeId = "first-project";
@@ -209,18 +222,28 @@ function withComplevel(map: GameMap, complevel: Complevel): GameMap {
   return next;
 }
 
+// Unset details stay off the entry, so a saved map carries only what it set.
+function levelDetails(details: LevelDetails) {
+  return {
+    description: details.description ?? "",
+    par: details.par ?? null,
+    ...(details.music ? { music: details.music } : {}),
+    ...(details.sky ? { sky: details.sky } : {}),
+    ...(details.intertext ? { intertext: details.intertext } : {}),
+  };
+}
+
 function createMapEntry(
   episodeId: string,
   slot: string,
   map: GameMap,
-  details: Partial<Pick<EpisodeMap, "description" | "par">> = {},
+  details: LevelDetails = {},
 ): EpisodeMap {
   return {
     id: newId(),
     episodeId,
     slot,
-    description: details.description ?? "",
-    par: details.par ?? null,
+    ...levelDetails(details),
     editedAt: Date.now(),
     mapRevision: 0,
     map,
@@ -407,10 +430,13 @@ function serializeEpisode(episode: Episode, maps: EpisodeMap[]) {
     project: { name: episode.name },
     maps: bySlot(maps)
       .filter((entry) => !entry.broken)
-      .map(({ slot, description, par, map }) => ({
+      .map(({ slot, description, par, music, sky, intertext, map }) => ({
         slot,
         description,
         par,
+        ...(music ? { music } : {}),
+        ...(sky ? { sky } : {}),
+        ...(intertext ? { intertext } : {}),
         map,
       })),
   });
@@ -450,15 +476,30 @@ function parseEpisodeBackup(text: string) {
     }
     used.add(slot);
     const par =
-      Number.isInteger(value.par) && (value.par as number) > 0
+      Number.isInteger(value.par) &&
+      (value.par as number) > 0 &&
+      (value.par as number) <= maxPar
         ? (value.par as number)
         : null;
+    const name = (field: unknown) => {
+      if (field === undefined) return undefined;
+      if (typeof field !== "string" || !lumpName.test(field)) {
+        throw new MapFileError("The episode names a lump that can't exist.");
+      }
+      return field;
+    };
     return createMapEntry(episode.id, slot, parseMap(value.map), {
       par,
       description:
         typeof value.description === "string"
           ? value.description.slice(0, maxDescriptionLength)
           : "",
+      music: name(value.music),
+      sky: name(value.sky),
+      intertext:
+        typeof value.intertext === "string"
+          ? value.intertext.trim().slice(0, maxIntertextLength) || undefined
+          : undefined,
     });
   });
   return { episode, maps };
@@ -497,8 +538,10 @@ export {
   mapName,
   mapSlots,
   mapStatus,
+  levelDetails,
   maxBackupBytes,
   maxDescriptionLength,
+  maxIntertextLength,
   maxNameLength,
   parsePar,
   parseEpisodeBackup,
@@ -509,6 +552,7 @@ export {
   templates,
   withComplevel,
   type EpisodeStart,
+  type LevelDetails,
   type MapTemplate,
   type Episode,
   type EpisodeMap,
