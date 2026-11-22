@@ -44,6 +44,16 @@ export const editorShortcuts = {
     description: "Flip the selection left to right",
     area: "map",
   },
+  flipWalls: {
+    keys: "f",
+    description: "Flip the selected walls to face the other way",
+    area: "map",
+  },
+  swapSides: {
+    keys: "shift+f",
+    description: "Swap what the selected walls' two sides show",
+    area: "map",
+  },
   joinRooms: {
     keys: "j",
     description: "Join the selected rooms into one",

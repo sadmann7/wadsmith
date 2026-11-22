@@ -83,7 +83,7 @@ import {
   joinCornersToWalls,
   removeCorner,
 } from "@/lib/map/reshape";
-import { type DrawShape, shapeCorners } from "@/lib/map/shapes";
+import { type DrawShape, gridCells, shapeCorners } from "@/lib/map/shapes";
 
 export type MapTool = "select" | "draw" | "line" | "thing" | "switch";
 export type EditMode = "vertices" | "lines" | "sectors" | "things";
@@ -588,6 +588,22 @@ export const mapEditor = definePrimitive({
       change("tool", "select", { reason: "draw" });
     };
 
+    // A grid of rooms is drawn a cell at a time, each sharing the walls of
+    // the ones before it.
+    const addDrawnGrid = (from: Point, to: Point) => {
+      let next = store.get().map;
+      const ids: string[] = [];
+      for (const cell of gridCells(from, to, grid())) {
+        const room = drawRoom(next, cell, {}, 1);
+        next = room.map;
+        ids.push(room.id);
+      }
+      store.set({ drawing: [], cursor: null });
+      change("map", next, { reason: "draw" });
+      select(ids.map((id) => `${roomKeyPrefix}${id}`));
+      change("tool", "select", { reason: "draw" });
+    };
+
     const finishRoom = () => {
       const { drawing, drawShape } = store.get();
       if (drawShape === "outline" && drawing.length >= 3) addDrawnRoom(drawing);
@@ -625,7 +641,8 @@ export const mapEditor = definePrimitive({
       if (drawShape !== "outline") {
         const corners =
           first && shapeCorners(drawShape, drawSides, first, point, grid());
-        if (corners) addDrawnRoom(corners);
+        if (corners && drawShape === "grid") addDrawnGrid(first, point);
+        else if (corners) addDrawnRoom(corners);
         else if (!first) store.set({ drawing: [point] });
         return;
       }
@@ -1995,7 +2012,9 @@ function measureOf(state: MapEditorState) {
     return {
       at: cursor,
       text:
-        drawShape === "rectangle"
+        drawShape === "rectangle" ||
+        drawShape === "ellipse" ||
+        drawShape === "grid"
           ? `${wide} × ${tall}`
           : `${Math.round(Math.hypot(wide, tall) * 2)} across`,
     };

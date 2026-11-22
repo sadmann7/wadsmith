@@ -151,6 +151,9 @@ interface EditActions {
   onTransform: (transform: Transform) => void;
   onTransformBy: () => void;
   onPrefabs: (point: Point | null) => void;
+  onCurve: (wall: string) => void;
+  onFlip: (wall: string, sides: boolean) => void;
+  onStairs: (room: string) => void;
 }
 
 // A wall's texture can be picked up and put on other walls, and a texture can
@@ -742,6 +745,13 @@ function RoomMenu({ id, ...props }: RoomMenuProps) {
       >
         Make pillar
       </Item>
+      <Item
+        icon={Shapes}
+        disabled={Boolean(room.door)}
+        onSelect={() => props.edit.onStairs(room.id)}
+      >
+        Build stairs…
+      </Item>
       <SubMenu icon={Paintbrush} label="Texture">
         <MenuItem
           className={itemClass}
@@ -1012,6 +1022,27 @@ function WallMenu({ sector, wall, ...props }: WallMenuProps) {
       >
         Split in the middle
       </Item>
+      <Item icon={Shapes} onSelect={() => props.edit.onCurve(wall)}>
+        Curve…
+      </Item>
+      {line.back && !detail && !line.front.door && !line.back.door ? (
+        <>
+          <Item
+            icon={FlipHorizontal2}
+            hint={formatShortcut(editorShortcuts.flipWalls.keys)}
+            onSelect={() => props.edit.onFlip(wall, false)}
+          >
+            Flip line
+          </Item>
+          <Item
+            icon={FlipHorizontal2}
+            hint={formatShortcut(editorShortcuts.swapSides.keys)}
+            onSelect={() => props.edit.onFlip(wall, true)}
+          >
+            Swap sides' textures
+          </Item>
+        </>
+      ) : null}
       <SubMenu icon={Zap} label="Action" disabled={line.wiredSwitch}>
         <Choices
           value={action?.kind ?? "none"}

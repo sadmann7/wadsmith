@@ -175,6 +175,14 @@ import {
   type TextureKind,
 } from "@/lib/map/texture-tools";
 import { flatUse, wallUse } from "@/lib/map/textures";
+import { validateMap } from "@/lib/map/validate";
+import {
+  curveWalls,
+  flipWalls,
+  splitIntoSteps,
+  stairRooms,
+  swapWallSides,
+} from "@/lib/map/wall-tools";
 import { SceneCamera } from "@/lib/preview/scene-camera";
 import { createFlatAssets, readWadAssets } from "@/lib/wad/assets";
 import { compileMap } from "@/lib/wad/compile";
@@ -205,6 +213,7 @@ import { NewMapPanel } from "./new-map-panel";
 import { PlaytestPanel } from "./playtest-panel";
 import { PrefabsDialog } from "./prefabs-dialog";
 import { type DraftSource, SceneCanvas } from "./scene-editor";
+import { CurveDialog, StairsDialog } from "./shape-dialogs";
 import { ShortcutSheet } from "./shortcut-sheet";
 import { SurfacePanel } from "./surface-panel";
 import { TexturePicker } from "./texture-picker";
@@ -234,6 +243,9 @@ const shapeHints: Record<Exclude<DrawShape, "outline">, string> = {
     "Click one corner, then the opposite one. Choose another shape in the status bar.",
   polygon:
     "Click the middle, then where one corner goes. Choose another shape in the status bar.",
+  ellipse:
+    "Click one corner of the box round it, then the opposite one. Choose another shape in the status bar.",
+  grid: "Click one corner, then the opposite one, for rooms about 128 across. Choose another shape in the status bar.",
 };
 
 const noLinks: MapLink[] = [];
@@ -425,6 +437,8 @@ export function EditorScreen({
   // the selection alone may not say once the menu has closed.
   const [transforming, setTransforming] = React.useState<string[] | null>(null);
   const [finding, setFinding] = React.useState(false);
+  const [curving, setCurving] = React.useState<string[] | null>(null);
+  const [stairs, setStairs] = React.useState<string[] | null>(null);
   const [replacing, setReplacing] = React.useState<{
     kind: TextureKind;
     from: string;
@@ -874,6 +888,59 @@ export function EditorScreen({
     editorShortcuts.find.keys,
     () => setFinding(true),
     shortcut("find", notTyping),
+  );
+
+  // The walls a wall's own tool works on: every selected wall when it is
+  // one of them, or else just that one.
+  const wallsWith = (wall: string) =>
+    selectedWalls.includes(wall) ? selectedWalls : [wall];
+  const selectedOrShown = () => {
+    if (selectedWalls.length > 0) return selectedWalls;
+    const shown = surface ? parseSurface(surface) : null;
+    return shown?.kind === "wall" ? [shown.wall] : [];
+  };
+
+  // An edit from a tool lands unless it would give the map a problem it
+  // didn't have, which the notice names instead.
+  const commitTool = (next: GameMap, refusal: string) => {
+    if (next === map) return false;
+    // Ids name walls and rooms, which a tool renames, so problems are
+    // counted by kind.
+    const before = problemKinds(map);
+    if (
+      [...problemKinds(next)].some(
+        ([kind, count]) => count > (before.get(kind) ?? 0),
+      )
+    ) {
+      setNotice(refusal);
+      return false;
+    }
+    setNotice("");
+    commit(next);
+    return true;
+  };
+
+  const flipSelection = (walls: string[], sides: boolean) => {
+    const next = sides ? swapWallSides(map, walls) : flipWalls(map, walls);
+    if (next === map) {
+      setNotice(
+        sides
+          ? "Only a wall between two rooms, neither a door, swaps sides, and these already look the same."
+          : "Only a wall between two rooms, neither a door, turns round.",
+      );
+      return;
+    }
+    commit(next);
+  };
+  useShortcut(
+    editorShortcuts.flipWalls.keys,
+    () => flipSelection(selectedOrShown(), false),
+    shortcut("flipWalls", () => modeKeys() && selectedOrShown().length > 0),
+  );
+  useShortcut(
+    editorShortcuts.swapSides.keys,
+    () => flipSelection(selectedOrShown(), true),
+    shortcut("swapSides", () => modeKeys() && selectedOrShown().length > 0),
   );
 
   const joinSelection = () => {
@@ -2555,18 +2622,22 @@ export function EditorScreen({
                       }
                     }}
                   >
-                    {["outline", "rectangle", ...polygonSides.map(String)].map(
-                      (value) => (
-                        <MenuRadioItem key={value} value={value} closeOnSelect>
-                          {Number.isFinite(Number(value))
-                            ? shapeLabel("polygon", Number(value))
-                            : shapeLabel(value as DrawShape, 0)}
-                          <MenuItemIndicator className="ml-auto text-primary">
-                            <Check size={14} />
-                          </MenuItemIndicator>
-                        </MenuRadioItem>
-                      ),
-                    )}
+                    {[
+                      "outline",
+                      "rectangle",
+                      "ellipse",
+                      "grid",
+                      ...polygonSides.map(String),
+                    ].map((value) => (
+                      <MenuRadioItem key={value} value={value} closeOnSelect>
+                        {Number.isFinite(Number(value))
+                          ? shapeLabel("polygon", Number(value))
+                          : shapeLabel(value as DrawShape, 0)}
+                        <MenuItemIndicator className="ml-auto text-primary">
+                          <Check size={14} />
+                        </MenuItemIndicator>
+                      </MenuRadioItem>
+                    ))}
                   </MenuRadioGroup>
                 </MenuContent>
               </Menu>
@@ -2664,6 +2735,15 @@ export function EditorScreen({
           onTransformBy: () => setTransforming(transformKeys),
           onPrefabs: (point) =>
             setPrefabsAt({ point, selected: copyParts(map, parts) }),
+          onCurve: (wall) => setCurving(wallsWith(wall)),
+          onFlip: (wall, sides) => flipSelection(wallsWith(wall), sides),
+          onStairs: (room) =>
+            setStairs(
+              selectedRooms.some((item) => item.id === room) &&
+                selectedRooms.length > 1
+                ? selectedRooms.map((item) => item.id)
+                : [room],
+            ),
         }}
         textures={{
           picked: look?.kind === "wall" ? look.texture : null,
@@ -2729,6 +2809,68 @@ export function EditorScreen({
             );
           }}
           onClose={() => setReplacing(null)}
+        />
+      ) : null}
+      {curving ? (
+        <CurveDialog
+          walls={curving.length}
+          onApply={(segments, distance) => {
+            const curved = curveWalls(map, curving, segments, distance);
+            if (curved === map) {
+              setNotice("Those walls can't bend that way, or carry a switch.");
+              return;
+            }
+            // The walls picked are now runs of new ones.
+            if (
+              commitTool(
+                curved,
+                "That curve would cross another wall. Try a smaller bulge.",
+              )
+            ) {
+              setSurface(null);
+              setSelection([]);
+            }
+          }}
+          onClose={() => setCurving(null)}
+        />
+      ) : null}
+      {stairs ? (
+        <StairsDialog
+          rooms={stairs.length}
+          onApply={(steps, height, ceilings) => {
+            if (stairs.length > 1) {
+              const stepped = stairRooms(map, stairs, height, ceilings);
+              if (!stepped) {
+                setNotice(
+                  "Stairs need rooms in one run, each joined to the next, without branches.",
+                );
+                return;
+              }
+              commitTool(
+                stepped,
+                "Those steps would leave a room with its ceiling below its floor.",
+              );
+              return;
+            }
+            const cut = splitIntoSteps(map, stairs[0], steps, height, ceilings);
+            if (!cut) {
+              setNotice(
+                "That room can't be cut into steps without reaching into another.",
+              );
+              return;
+            }
+            if (
+              commitTool(
+                cut.map,
+                "Those steps would leave a room with its ceiling below its floor.",
+              )
+            ) {
+              setSurface(null);
+              setActiveSector(null);
+              setSelection(cut.rooms.map((id) => `${roomKeyPrefix}${id}`));
+            }
+          }}
+          onClose={() => setStairs(null)}
         />
       ) : null}
       {finding ? (
@@ -2896,6 +3038,8 @@ function createDraftChannel() {
 function shapeLabel(shape: DrawShape, sides: number) {
   if (shape === "outline") return "Outline";
   if (shape === "rectangle") return "Rectangle";
+  if (shape === "ellipse") return "Ellipse";
+  if (shape === "grid") return "Grid of rooms";
   return `${sides} sides`;
 }
 
@@ -2904,6 +3048,15 @@ function shortcut(name: EditorShortcut, when?: () => boolean) {
     description: editorShortcuts[name].description,
     when: () => !document.querySelector(".game-stage") && (when?.() ?? true),
   };
+}
+
+function problemKinds(map: GameMap) {
+  const counts = new Map<string, number>();
+  for (const issue of validateMap(map)) {
+    const kind = issue.id.split(":")[0];
+    counts.set(kind, (counts.get(kind) ?? 0) + 1);
+  }
+  return counts;
 }
 
 function notTyping() {
