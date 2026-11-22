@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import {
   formatTics,
+  killersOf,
   percentOf,
   runSummary,
   type SavedPlaytest,
@@ -45,6 +46,18 @@ export function PlaytestPanel({
         ]
       : []),
     ["Deaths", String(deaths)],
+    ...(deaths > 0
+      ? [
+          [
+            "Killed by",
+            killersOf(run)
+              .map(({ name, count }) =>
+                count > 1 ? `${name} ×${count}` : name,
+              )
+              .join(", "),
+          ],
+        ]
+      : []),
     ["Damage taken", String(damage)],
     ["Pickups", String(pickups)],
   ];

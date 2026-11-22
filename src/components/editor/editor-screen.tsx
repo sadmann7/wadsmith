@@ -140,6 +140,7 @@ import {
   type SavedPlaytest,
 } from "@/lib/map/playtest";
 import { type DrawShape, polygonSides } from "@/lib/map/shapes";
+import { standingSpot } from "@/lib/map/standing";
 import {
   MapFileError,
   maxFileBytes,
@@ -1302,14 +1303,17 @@ export function EditorScreen({
 
   const playFromCamera = () => {
     const { x, y, angle } = camera.position;
-    const room = sectorAt(map, { x, y });
-    if (!room || room.door) {
-      setNotice("Walk the 3D view into a room to play from there.");
+    // The camera can stand against a wall, where a player would be stuck.
+    const spot = standingSpot(map, { x, y });
+    if (!spot) {
+      setNotice(
+        "A player has no room to stand there. Walk the 3D view into a room to play from it.",
+      );
       return;
     }
     if (!canPlay || buildProblem()) return;
     setGame({
-      map: withPlayerStart(map, { x, y }, angle),
+      map: withPlayerStart(map, spot, angle),
       coop: null,
       fromCamera: true,
     });
@@ -1362,6 +1366,9 @@ export function EditorScreen({
     commit(next);
     setSelection([]);
     setScenePicked([]);
+    // The last playtest was of the map this one takes the place of.
+    setPlaytest(null);
+    void clearPlaytest(mapId).catch(() => undefined);
     setActiveSector(null);
     setSurface(null);
     setFileError(null);

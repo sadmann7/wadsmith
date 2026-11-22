@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import { updateSector } from "@/lib/map/edit";
-import { describeMark, parseRun, runSummary } from "@/lib/map/playtest";
+import { killersOf, markThing, parseRun, runSummary } from "@/lib/map/playtest";
 
 import { doomKeys } from "./runtime";
 import {
@@ -69,6 +69,29 @@ describe("a run recorder", () => {
     expect(run?.marks).toEqual([
       { kind: "death", player: 0, x: 2008, y: 0, tic: 20, value: 3004 },
     ]);
+  });
+
+  it("keeps the exit's result when the engine loads the next map", () => {
+    const recorder = new RunRecorder();
+    recorder.add(
+      events(
+        [0, 0, -1, 1, 1, 2],
+        [0, 1, 0, 0, 0, 100],
+        [4, 1, 0, 8, 0, 100],
+        [90, 5, -1, 2, 1, 0],
+        [90, 6, 0, 2, 1, 0],
+        // After the tally and its text, the game's own second map starts.
+        [0, 0, -1, 1, 2, 2],
+        [0, 1, 0, 5000, 5000, 100],
+        [4, 1, 0, 5008, 5000, 100],
+      ),
+    );
+    const run = recorder.run();
+    expect(run?.result?.tics).toBe(90);
+    expect(run?.paths.map((path) => path.points)).toEqual([[0, 0, 8, 0]]);
+    // Nothing later is taken either.
+    recorder.add(events([8, 3, 0, 5008, 5000, 0]));
+    expect(recorder.run()?.marks).toEqual([]);
   });
 
   it("counts a burst of hits in one place as one mark", () => {
@@ -148,7 +171,7 @@ describe.skipIf(!ready)("the engine's trail", () => {
     expect(points.at(-2)).toBeGreaterThan(420);
     expect(run?.players).toEqual([0]);
     const pickup = run?.marks.find((mark) => mark.kind === "pickup");
-    expect(pickup && describeMark(pickup)).toBe("Picked up Shotgun");
+    expect(pickup && markThing(pickup)).toBe("Shotgun");
     expect(Math.abs((pickup?.x ?? 0) - 448)).toBeLessThan(64);
     expect(pickup?.y).toBe(160);
     expect(run?.result).toBeNull();
@@ -169,6 +192,6 @@ describe.skipIf(!ready)("the engine's trail", () => {
     expect(damage).toBeGreaterThanOrEqual(100);
     const death = run?.marks.find((mark) => mark.kind === "death");
     expect(death).toMatchObject({ player: 0, x: 96, y: 160, value: 0 });
-    expect(death && describeMark(death)).toBe("Died");
+    expect(run && killersOf(run)).toEqual([{ name: "The level", count: 1 }]);
   }, 60_000);
 });

@@ -485,8 +485,6 @@ function thingLook(kind: ThingKind) {
   return look;
 }
 
-// Zoom in quarter octaves, rounded up, so the canvas renders again only when
-// the zoom crosses a step.
 // Doom gives its four players a color each, and a path wears its player's.
 const trailColors = 4;
 
@@ -518,6 +516,8 @@ function TrailMark({ mark, size }: TrailMarkProps) {
   );
 }
 
+// Zoom in quarter octaves, rounded up, so the canvas renders again only when
+// the zoom crosses a step.
 function zoomStep(zoom: number) {
   return 2 ** (Math.ceil(Math.log2(zoom) * 4) / 4);
 }

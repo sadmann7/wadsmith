@@ -2,9 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import { withPlayerStart } from "./edit";
 import {
-  describeMark,
   formatTics,
   keepRun,
+  killersOf,
+  markThing,
   parsePlaytest,
   percentOf,
   type PlaytestRun,
@@ -61,16 +62,30 @@ describe("playtest results", () => {
     expect(percentOf(5, 4)).toBe(100);
   });
 
-  it("names what a mark stands for", () => {
+  it("names what killed the players, the most frequent first", () => {
     const [death] = run(null).marks;
-    expect(describeMark(death)).toBe("Died to Imp");
-    expect(describeMark({ ...death, value: 0 })).toBe("Died");
-    expect(describeMark({ ...death, kind: "damage", value: 12 })).toBe(
-      "Took 12 damage",
+    expect(markThing(death)).toBe("Imp");
+    expect(markThing({ ...death, kind: "pickup", value: 2011 })).toBe(
+      "Stimpack",
     );
-    expect(describeMark({ ...death, kind: "pickup", value: 2011 })).toBe(
-      "Picked up Stimpack",
-    );
+    const deadly = {
+      ...run(null),
+      marks: [
+        { ...death, value: 0 },
+        death,
+        { ...death, value: -1 },
+        death,
+        // A thing the editor doesn't know counts as the level.
+        { ...death, value: 9999 },
+        { ...death, kind: "damage" as const, value: 3001 },
+      ],
+    };
+    expect(killersOf(deadly)).toEqual([
+      { name: "The level", count: 2 },
+      { name: "Imp", count: 2 },
+      { name: "A player", count: 1 },
+    ]);
+    expect(killersOf({ ...run(null), marks: [] })).toEqual([]);
   });
 
   it("reads a stored playtest and refuses what isn't one", () => {

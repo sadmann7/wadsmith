@@ -10,8 +10,8 @@ export interface RunPath {
 export type RunMarkKind = "damage" | "death" | "pickup";
 
 // Something that happened to a player at a spot. The value is the damage
-// taken, the Doom type of what killed the player (0 when the level did), or
-// the Doom type of the thing picked up.
+// taken, the Doom type of the thing picked up, or what killed the player: a
+// thing's Doom type, -1 for a player and 0 for the level itself.
 export interface RunMark {
   kind: RunMarkKind;
   player: number;
@@ -53,6 +53,7 @@ export interface SavedPlaytest {
 export const ticsPerSecond = 35;
 
 const parStep = 5;
+const killedByPlayer = -1;
 const kindsByType = new Map(
   thingKinds.map((kind) => [thingCatalog[kind].doomType, kind]),
 );
@@ -86,13 +87,28 @@ export function suggestedPar(tics: number) {
   return Math.max(parStep, Math.ceil(seconds / parStep) * parStep);
 }
 
-// What a mark says when it is pointed at.
-export function describeMark(mark: RunMark) {
+// The thing a pickup or a death names by its Doom type, or null when the
+// editor has no such thing.
+export function markThing(mark: RunMark) {
   const kind = kindsByType.get(mark.value);
-  const name = kind ? thingCatalog[kind].label : null;
-  if (mark.kind === "damage") return `Took ${mark.value} damage`;
-  if (mark.kind === "pickup") return `Picked up ${name ?? "an item"}`;
-  return name ? `Died to ${name}` : "Died";
+  return kind ? thingCatalog[kind].label : null;
+}
+
+// What killed the players and how often, the most frequent first. A crusher,
+// a damaging floor and a fall from a barrel's blast all count as the level.
+export function killersOf(run: PlaytestRun) {
+  const counts = new Map<string, number>();
+  for (const mark of run.marks) {
+    if (mark.kind !== "death") continue;
+    const name =
+      mark.value === killedByPlayer
+        ? "A player"
+        : (markThing(mark) ?? "The level");
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  return [...counts]
+    .toSorted((a, b) => b[1] - a[1])
+    .map(([name, count]) => ({ name, count }));
 }
 
 // A new run takes the last one's place, and the fastest exit is kept. A run

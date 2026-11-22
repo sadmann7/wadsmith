@@ -44,15 +44,24 @@ export class RunRecorder {
   private readonly marks: RunMark[] = [];
   private readonly walking = new Map<number, RunPath>();
   private points = 0;
+  private level: string | null = null;
+  private left = false;
   private totals = { kills: 0, secrets: 0, items: 0 };
   private result: RunResult | null = null;
 
   add(events: Int32Array) {
     for (let at = 0; at + trailFields <= events.length; at += trailFields) {
+      if (this.left) return;
       const [tic, kind, player, x, y, value] = events.subarray(at);
       // The engine's y runs up and the editor's runs down.
       const point = { x, y: 0 - y };
       if (kind === kinds.start) {
+        // A start names its episode and map. Past the exit the engine loads
+        // the game's next map, which is no part of this playtest.
+        const level = `${x}:${y}`;
+        this.left = this.level !== null && this.level !== level;
+        if (this.left) return;
+        this.level = level;
         this.walking.clear();
         this.result = null;
       } else if (kind === kinds.step) {
