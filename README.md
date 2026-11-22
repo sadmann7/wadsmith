@@ -53,10 +53,10 @@ Your map saves in this browser as you edit. Use **File** to start a new map, sav
 
 ## Agents
 
-An agent can build a whole map. Every edit the editor makes is an action it can call: rooms, pillars, doors, lines and their actions, textures, things with their flags, switches and notes. Read actions describe the map, list its rooms and things, and return its errors, warnings and balance. An edit that would break the map is refused and changes nothing, a problem with a known fix is fixed on the way, and each edit answers with what the map still needs.
+An agent can build a whole map. Its actions cover rooms, pillars, doors, corners, lines and their actions, flags and sides, textures, things with their flags, switches and notes. Read actions describe the map, list its rooms and things, and return its errors, warnings and balance. An edit that would break the map is refused and changes nothing, a problem with a known fix is fixed on the way, and each edit answers with what the map still needs.
 
 - **In the page:** `window.agent` is the UI SDK agent bridge. `agent.snapshot()` lists the Map component's actions, and `agent.act({ steps: [{ ref: "Map", action: "help" }] })` returns each one with what it takes.
-- **Outside the page:** the `wadsmith` MCP server offers the same actions as tools, with `openMap`, `saveMap` and `exportWad` for files. Claude Code picks it up from `.mcp.json`. For another client, run `node --experimental-transform-types scripts/wadsmith-mcp.mjs`, and add `--map file.json` to open that file and save it after every edit.
+- **Outside the page:** the `wadsmith` MCP server offers the same actions as tools, with `newMap`, `openMap`, `saveMap` and `exportWad` for files. Once `pnpm setup:engine` has run, it checks texture names against Freedoom's. Claude Code picks it up from `.mcp.json`. For another client, run `node --experimental-transform-types scripts/wadsmith-mcp.mjs`, and add `--map file.json` to open that file and save it after every edit.
 
 To build a map from a sentence, open the repo in Claude Code and ask for one:
 

@@ -12,6 +12,7 @@ import type {
 } from "@/lib/map/types";
 
 import { mapBalance } from "@/lib/map/balance";
+import { sectorSpecialPatch } from "@/lib/map/boom";
 import {
   ceilingTextures,
   doorTextures,
@@ -78,7 +79,11 @@ import {
 } from "@/lib/map/lines";
 import { describeSurface, paintSurface } from "@/lib/map/surfaces";
 import { replaceTexture } from "@/lib/map/texture-tools";
-import { inspectMap, type MapIssue } from "@/lib/map/validate";
+import {
+  type CheckContext,
+  inspectMap,
+  type MapIssue,
+} from "@/lib/map/validate";
 
 type ParamType = "string" | "number" | "boolean" | "points" | "strings";
 
@@ -99,7 +104,11 @@ export interface AgentAction {
   description: string;
   reads?: boolean;
   params: AgentParam[];
-  run: (map: GameMap, args: Args) => { map?: GameMap; result?: unknown };
+  run: (
+    map: GameMap,
+    args: Args,
+    context: CheckContext,
+  ) => { map?: GameMap; result?: unknown };
 }
 
 // What an action did: the map as it now stands, what the action reported,
@@ -229,7 +238,7 @@ export const agentActions: AgentAction[] = [
       "An overview of the map: its rooms, how many things of each kind, and what it still needs.",
     reads: true,
     params: [],
-    run: (map) => ({
+    run: (map, _args, context) => ({
       result: {
         name: map.name ?? null,
         complevel: map.complevel ?? "vanilla",
@@ -240,7 +249,7 @@ export const agentActions: AgentAction[] = [
         things: countBy(map.things.map((thing) => thing.kind)),
         switches: map.switches.length,
         notes: map.notes?.length ?? 0,
-        todo: problems(inspectMap(map).errors),
+        todo: problems(inspectMap(map, context).errors),
       },
     }),
   },
@@ -318,8 +327,8 @@ export const agentActions: AgentAction[] = [
         choices: skills,
       }),
     ],
-    run: (map, args) => {
-      const issues = checkMap(map);
+    run: (map, args, context) => {
+      const issues = checkMap(map, context);
       const of = (severity: "error" | "warning") =>
         issues
           .filter((issue) => issue.severity === severity)
@@ -436,6 +445,11 @@ export const agentActions: AgentAction[] = [
     run: (map, args) => {
       const sector = findRoom(map, args.room);
       const { wallTexture, ...patch } = looks(args, sector);
+      if (args.effect !== undefined && args.special !== undefined) {
+        throw new Error("Give a room an effect or a special, not both.");
+      }
+      // An effect and a special are one number in the game, so either one
+      // takes the other's place.
       const effect =
         args.effect === undefined
           ? {}
@@ -446,6 +460,7 @@ export const agentActions: AgentAction[] = [
               ]) === "none"
                 ? undefined
                 : args.effect) as SectorEffect | undefined,
+              rawEffect: undefined,
             };
       const tag =
         args.tag === undefined
@@ -454,7 +469,7 @@ export const agentActions: AgentAction[] = [
       const special =
         args.special === undefined
           ? {}
-          : { rawEffect: number(args, "special", 0, 65535) || undefined };
+          : sectorSpecialPatch(number(args, "special", 0, 65535));
       const updated = updateSector(map, sector.id, {
         ...patch,
         ...effect,
@@ -524,7 +539,9 @@ export const agentActions: AgentAction[] = [
         opensBy: choice(args, "opensBy", ["use", "switch"], "use"),
         closes: flag(args, "closes") ?? true,
         ...(flag(args, "fast") && { fast: true }),
-        ...(args.texture !== undefined && { texture: text(args, "texture") }),
+        ...(args.texture !== undefined && {
+          texture: choice(args, "texture", doorTextures),
+        }),
       };
       return { map: setRoomDoor(map, findRoom(map, args.room).id, door) };
     },
@@ -1090,11 +1107,13 @@ export const agentActionNames = agentActions.map((action) => action.name);
 
 // Runs an action on a map. The arguments come in the action's own order, as
 // an agent bridge step sends them, or by name, as an MCP tool call does. An
-// edit that would break the map throws, and the map stays as it was.
+// edit that would break the map throws, and the map stays as it was. With
+// the game's texture names in the context, a name it lacks breaks the map.
 export function runAgentAction(
   map: GameMap,
   name: string,
   input: unknown[] | Args = [],
+  context: CheckContext = {},
 ): AgentOutcome {
   const action = byName.get(name);
   if (!action) {
@@ -1103,11 +1122,11 @@ export function runAgentAction(
     );
   }
   const args = named(action, input);
-  const { map: next, result } = action.run(map, args);
+  const { map: next, result } = action.run(map, args, context);
   if (!next || next === map) {
     return { map, result: result ?? null, fixed: [], todo: [] };
   }
-  const settled = settle(map, next);
+  const settled = settle(map, next, context);
   return { ...settled, result: result ?? null };
 }
 
@@ -1160,11 +1179,11 @@ const fixPasses = 8;
 
 // Fixes what the edit broke where a fix is known, and refuses it where one
 // isn't. Problems the map already had stay for the agent to see in checkMap.
-function settle(before: GameMap, after: GameMap) {
+function settle(before: GameMap, after: GameMap, context: CheckContext) {
   let map = after;
   const fixed: string[] = [];
   for (let pass = 0; pass < fixPasses; pass += 1) {
-    const fresh = freshErrors(before, map);
+    const fresh = freshErrors(before, map, context);
     if (fresh.length === 0) break;
     const repaired = fresh.reduce<{ map: GameMap; issue: MapIssue } | null>(
       (found, issue) => {
@@ -1178,7 +1197,7 @@ function settle(before: GameMap, after: GameMap) {
     fixed.push(repaired.issue.message);
     map = repaired.map;
   }
-  const left = freshErrors(before, map);
+  const left = freshErrors(before, map, context);
   if (left.length > 0) {
     throw new Error(
       `That would break the map, so nothing changed. ${problems(left).join(" ")}`,
@@ -1188,27 +1207,65 @@ function settle(before: GameMap, after: GameMap) {
     map,
     fixed,
     todo: problems(
-      inspectMap(map).errors.filter((issue) => unfinished.test(issue.id)),
+      inspectMap(map, context).errors.filter((issue) =>
+        unfinished.test(issue.id),
+      ),
     ),
   };
 }
 
 // The errors a map has that the one before it didn't. Checks the earlier map
 // was too broken to run say nothing about this edit, so they don't count.
-function freshErrors(before: GameMap, after: GameMap) {
-  const was = inspectMap(before);
-  const now = inspectMap(after);
+function freshErrors(before: GameMap, after: GameMap, context: CheckContext) {
+  const was = inspectMap(before, context);
+  const now = inspectMap(after, context);
   const old = new Set(was.errors.map((issue) => issue.id));
   const unknown = new Set([
     ...(was.layers.rooms ? [] : (now.layers.rooms ?? [])),
     ...(was.layers.things ? [] : (now.layers.things ?? [])),
   ]);
-  return now.errors.filter(
+  const fresh = now.errors.filter(
     (issue) =>
       !old.has(issue.id) &&
       !unknown.has(issue.id) &&
       !unfinished.test(issue.id),
   );
+  // The map check leaves where things stand until nothing else is wrong,
+  // which an unfinished map never is, so the gate looks for itself.
+  const placed = new Set(misplaced(before).map((issue) => issue.id));
+  const seen = new Set(fresh.map((issue) => issue.id));
+  return [
+    ...fresh,
+    ...misplaced(after).filter(
+      (issue) => !placed.has(issue.id) && !seen.has(issue.id),
+    ),
+  ];
+}
+
+// Things outside every room, which never spawn, and player starts inside a
+// shut door, which can't move.
+function misplaced(map: GameMap): MapIssue[] {
+  return map.things.flatMap((thing) => {
+    const room = sectorAt(map, thing);
+    if (!room) {
+      return [
+        {
+          id: `outside:${thing.id}`,
+          message: `${thing.id} is outside every room.`,
+          target: thing.id,
+        },
+      ];
+    }
+    return room.door && getIsPlayerStart(thing.kind)
+      ? [
+          {
+            id: `in-door:${thing.id}`,
+            message: `${thing.id} is inside a closed door.`,
+            target: thing.id,
+          },
+        ]
+      : [];
+  });
 }
 
 // Each problem once, as several walls can raise the same one.

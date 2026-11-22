@@ -1726,6 +1726,7 @@ export function EditorScreen({
                         )
                       }
                       onAgentAction={logAgentAction}
+                      checkContext={context}
                       onToolChange={setTool}
                       onActiveSectorChange={setActiveSector}
                       onSelectionChange={(next) => {

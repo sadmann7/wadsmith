@@ -323,6 +323,58 @@ describe("agent actions", () => {
     expect(tamed?.skills).toBeUndefined();
   });
 
+  it("keeps things inside rooms while the map is unfinished", () => {
+    const square = (x: number) => [
+      [x, 0],
+      [x + 128, 0],
+      [x + 128, 128],
+      [x, 128],
+    ];
+    const { map } = build(blank, [
+      ["addRoom", [square(0)]],
+      ["addRoom", [square(512)]],
+      ["placeThing", ["imp", "sector-2"]],
+    ]);
+    // No player start yet, and removing the imp's room would strand it.
+    expect(() => runAgentAction(map, "removeRoom", ["sector-2"])).toThrow(
+      /imp-1 is outside every room/,
+    );
+  });
+
+  it("checks texture names against the game's when it knows them", () => {
+    const context = {
+      names: {
+        walls: ["STARTAN3"],
+        flats: ["FLOOR4_8", "CEIL3_5"],
+        middles: [],
+        textures: ["STARTAN3", "BROWN1", "METAL", "BIGDOOR2", "SW1STRTN"],
+        custom: [],
+      },
+    };
+    const known = runAgentAction(
+      testMap,
+      "updateRoom",
+      { room: "Start room", wallTexture: "BROWN1" },
+      context,
+    );
+    expect(known.map.sectors[0].wallTexture).toBe("BROWN1");
+    expect(() =>
+      runAgentAction(
+        testMap,
+        "updateRoom",
+        { room: "Start room", wallTexture: "NOPE" },
+        context,
+      ),
+    ).toThrow(/has no texture called NOPE/);
+    // Without the game's names, any name goes.
+    expect(
+      runAgentAction(testMap, "updateRoom", {
+        room: "Start room",
+        wallTexture: "NOPE",
+      }).map.sectors[0].wallTexture,
+    ).toBe("NOPE");
+  });
+
   it("reads the map without changing it", () => {
     const overview = runAgentAction(testMap, "describeMap");
     expect(overview.map).toBe(testMap);

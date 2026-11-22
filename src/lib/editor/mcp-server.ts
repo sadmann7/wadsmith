@@ -1,7 +1,7 @@
 import type { GameMap } from "@/lib/map/types";
 
 import { parseMapFile, serializeMap } from "@/lib/map/storage";
-import { validateMap } from "@/lib/map/validate";
+import { type CheckContext, validateMap } from "@/lib/map/validate";
 import { compileMap } from "@/lib/wad/compile";
 
 import { agentActions, type AgentParam, runAgentAction } from "./agent-actions";
@@ -15,6 +15,8 @@ export interface McpFiles {
 export interface McpServerOptions {
   files: McpFiles;
   map?: GameMap;
+  // The game the map is for and its texture names, checked on every edit.
+  context?: CheckContext;
   // A file the map is written to after every edit.
   autosave?: string;
 }
@@ -81,7 +83,12 @@ const blankMap: GameMap = {
 // A Model Context Protocol server that holds one map and offers every agent
 // action as a tool, with tools to open, save and build the map as files. It
 // answers one JSON-RPC message at a time and knows nothing of its transport.
-export function createMcpServer({ files, map, autosave }: McpServerOptions) {
+export function createMcpServer({
+  files,
+  map,
+  autosave,
+  context = {},
+}: McpServerOptions) {
   let current = map ?? blankMap;
 
   const change = (next: GameMap) => {
@@ -106,7 +113,7 @@ export function createMcpServer({ files, map, autosave }: McpServerOptions) {
       files.write(target, serializeMap(current));
       return `Saved the map to ${target}.`;
     }
-    const errors = validateMap(current);
+    const errors = validateMap(current, context);
     if (errors.length > 0) {
       throw new Error(
         `The map has errors, so no WAD was built. ${errors.map((issue) => issue.message).join(" ")}`,
@@ -122,7 +129,12 @@ export function createMcpServer({ files, map, autosave }: McpServerOptions) {
       return fileTool(name, args);
     }
     const before = current;
-    const { map: next, ...outcome } = runAgentAction(before, name, args);
+    const { map: next, ...outcome } = runAgentAction(
+      before,
+      name,
+      args,
+      context,
+    );
     if (next === before) return outcome.result;
     change(next);
     return outcome;

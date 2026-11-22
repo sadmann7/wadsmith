@@ -18,6 +18,7 @@ import { createParts } from "@ui-sdk/react/primitive";
 import * as React from "react";
 
 import type { GameMap, Point, Sector, ThingKind } from "@/lib/map/types";
+import type { CheckContext } from "@/lib/map/validate";
 import type { Camera } from "@/lib/preview/render";
 import type { SceneCamera } from "@/lib/preview/scene-camera";
 
@@ -121,6 +122,8 @@ interface MapEditorOptions {
   // An agent's edit landed: which action, what was fixed on the way and what
   // the map still needs.
   onAgentAction?: (action: string, outcome: AgentReport) => void;
+  // The game's texture names, so an agent's edit can't use one it lacks.
+  checkContext?: CheckContext;
   onDrawingChange?: (corners: number) => void;
   contextMenuOpen?: boolean;
   grid?: number;
@@ -248,6 +251,7 @@ export const mapEditor = definePrimitive({
     lookAtRequest: "value",
     onContextTarget: "callback",
     onAgentAction: "callback",
+    checkContext: "value",
     onDrawingChange: "callback",
     contextMenuOpen: "boolean",
     grid: "number",
@@ -827,7 +831,17 @@ export const mapEditor = definePrimitive({
         name,
         (...args: unknown[]) => {
           const { map } = store.get();
-          const { map: next, ...outcome } = runAgentAction(map, name, args);
+          // The editor names the map from its settings, which would undo a
+          // name set here.
+          if (name === "setMapDetails" && args.some(getHasName)) {
+            throw new Error("Rename the map from Map settings in the editor.");
+          }
+          const { map: next, ...outcome } = runAgentAction(
+            map,
+            name,
+            args,
+            context.options().checkContext,
+          );
           if (next === map) return outcome.result;
           change("map", next, { reason: "agent" });
           const made = next.sectors.find(
@@ -1438,6 +1452,13 @@ export const mapEditor = definePrimitive({
     items: (api) => api.rooms(),
   },
 });
+
+function getHasName(value: unknown, index: number) {
+  return (
+    (index === 0 && typeof value === "string") ||
+    (typeof value === "object" && value !== null && "name" in value)
+  );
+}
 
 function lookTarget(state: MapEditorState): Point | null {
   const { map, activeSector, selection } = state;

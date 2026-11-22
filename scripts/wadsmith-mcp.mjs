@@ -28,6 +28,15 @@ registerHooks({
 
 const { createMcpServer } = await import("@/lib/editor/mcp-server");
 const { parseMapFile } = await import("@/lib/map/storage");
+const { readWadAssets } = await import("@/lib/wad/assets");
+const { defaultGame } = await import("@/lib/engine/game");
+
+// Freedoom's textures, once pnpm setup:engine has fetched it, so the map
+// uses only names the game has.
+const iwad = resolve(root, "public/engine/freedoom2.wad");
+const context = existsSync(iwad)
+  ? { game: defaultGame, names: readWadAssets(readFileSync(iwad)).names }
+  : {};
 
 const flag = process.argv.indexOf("--map");
 const autosave = flag > 0 ? process.argv[flag + 1] : undefined;
@@ -41,6 +50,7 @@ const files = {
 const server = createMcpServer({
   files,
   autosave,
+  context,
   map:
     autosave && existsSync(resolve(autosave))
       ? parseMapFile(files.read(autosave))
