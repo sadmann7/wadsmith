@@ -497,7 +497,7 @@ function CoopJoin({ code }: { code: string }) {
               ? "Finding the room…"
               : roomsUrl
                 ? "Still looking for this room. Check the link, and that the host still has the room open."
-                : "Still looking for this room. The host's tab has to stay open in this browser."}
+                : "Still looking for this room. Without pnpm dev:coop, rooms only reach tabs in the host's browser profile."}
           </p>
           {state.slow ? <Button onClick={backHome}>Stop looking</Button> : null}
         </div>
