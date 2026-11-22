@@ -20,7 +20,7 @@ registerHooks({
 const { startDoom } = await import("./runtime");
 const { NetInbox } = await import("./net-inbox");
 
-type Setup = {
+interface Setup {
   role: "host" | "guest";
   mode: "coop" | "deathmatch";
   host: number;
@@ -28,7 +28,7 @@ type Setup = {
   inbox: SharedArrayBuffer;
   map: Uint8Array;
   engineDirectory: string;
-};
+}
 
 type Command =
   | { type: "query"; id: number }

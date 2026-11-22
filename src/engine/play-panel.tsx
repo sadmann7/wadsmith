@@ -32,7 +32,10 @@ import {
 import { hostPeer, type RoomPlayer } from "./room";
 import { Alert } from "@/components/ui/alert";
 
-type SoundSettings = { volume: number; muted: boolean };
+interface SoundSettings {
+  volume: number;
+  muted: boolean;
+}
 
 const savedSound = createLocalStorage("wadsmith:sound");
 const savedResolution = createLocalStorage("wadsmith:resolution");
@@ -84,7 +87,7 @@ function spotOf({ x, y }: GameStatus): Point {
 }
 
 /** How a playtest takes part in a co-op game through its room. */
-type CoopSession = {
+interface CoopSession {
   role: "host" | "guest";
   peer: number;
   mode: NetworkMode;
@@ -97,7 +100,7 @@ type CoopSession = {
   announceStall: (peers: number[]) => void;
   listenStall: (receive: (peers: number[]) => void) => void;
   onServerReady: () => void;
-};
+}
 
 type GameExit = "editor" | "maps" | "episode" | "leave";
 
@@ -131,13 +134,13 @@ const gameExits: Record<
   },
 };
 
-type Level = {
+interface Level {
   map: GameMap;
   title: string;
   slot: string;
   par: number | null;
   lumps?: Lump[] | null;
-};
+}
 
 type GameSessionProps = Omit<Level, "map"> & {
   map: GameMap | null;

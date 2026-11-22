@@ -11,15 +11,18 @@ import {
   type Skill,
 } from "./runtime";
 
-type SoundLevel = { volume: number; muted: boolean };
+interface SoundLevel {
+  volume: number;
+  muted: boolean;
+}
 
-type WorkerNetwork = {
+interface WorkerNetwork {
   role: "host" | "guest";
   mode: NetworkMode;
   host: number;
   peer: number;
   inbox: SharedArrayBuffer;
-};
+}
 
 type NetworkState = ReturnType<DoomGame["network"]>;
 

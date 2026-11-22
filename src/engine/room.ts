@@ -8,7 +8,7 @@ const repeatEveryMs = 1000;
 const pingEveryMs = 2000;
 const chunkBytes = 16 * 1024;
 
-type CoopGame = {
+interface CoopGame {
   map: GameMap;
   mode: NetworkMode;
   skill: Skill;
@@ -16,17 +16,17 @@ type CoopGame = {
   title: string;
   slot: string;
   par: number | null;
-};
+}
 
-type RoomPlayer = {
+interface RoomPlayer {
   peer: number;
   name: string;
   ready: boolean;
   progress: number;
   ping: number | null;
-};
+}
 
-type RoomInfo = {
+interface RoomInfo {
   title: string;
   host: string;
   mode: NetworkMode;
@@ -35,17 +35,17 @@ type RoomInfo = {
   players: RoomPlayer[];
   maxPlayers: number;
   started: boolean;
-};
+}
 
 type Refusal = "full" | "started" | "version";
 type Ending = "host-left" | "lost" | "removed";
 
 // WebRTC's offer, answer and network candidates, passed through the room.
-type PeerSignal = {
+interface PeerSignal {
   description?: RTCSessionDescriptionInit;
   candidate?: RTCIceCandidateInit;
   relayOnly?: true;
-};
+}
 
 type RoomMessage =
   | { type: "peek"; nonce: string }
@@ -75,12 +75,12 @@ type RoomMessage =
   | { type: "dropped" };
 
 // A transport delivers "dropped" itself when it loses its connection.
-type RoomTransport = {
+interface RoomTransport {
   post: (message: RoomMessage) => void;
   listen: (handler: (message: RoomMessage) => void) => void;
   identify: (peer: number) => void;
   close: () => void;
-};
+}
 
 // Reaches other tabs of this browser, when no room server is set.
 function tabTransport(code: string): RoomTransport {
@@ -138,20 +138,20 @@ function unpackGame(packed: Uint8Array): CoopGame {
   return { ...rest, wad: packed.slice(4 + length) };
 }
 
-type HostSettings = {
+interface HostSettings {
   game: CoopGame;
   name: string;
   version: string;
   maxPlayers: number;
-};
+}
 
-type HostRoomEvents = {
+interface HostRoomEvents {
   onRoster: (players: RoomPlayer[]) => void;
   onLeft: (peer: number) => void;
   onPacket: (from: number, data: Uint8Array) => void;
   onSignal: (from: number, signal: PeerSignal) => void;
   onDropped: () => void;
-};
+}
 
 function hostRoom(
   transport: RoomTransport,
@@ -309,7 +309,7 @@ function hostRoom(
   };
 }
 
-type GuestRoomEvents = {
+interface GuestRoomEvents {
   onInfo: (info: RoomInfo) => void;
   onJoined: (peer: number) => void;
   onRefused: (reason: Refusal) => void;
@@ -321,7 +321,7 @@ type GuestRoomEvents = {
   onPacket: (from: number, data: Uint8Array) => void;
   onSignal: (from: number, signal: PeerSignal) => void;
   onClosed: (ending: Ending) => void;
-};
+}
 
 // A guest first asks the room what it holds, then joins under a name. Both
 // repeat until answered, since the host's page may still be opening.

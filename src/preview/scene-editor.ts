@@ -50,7 +50,7 @@ type SceneChangeReason =
   | "thing-key"
   | "delete";
 
-type SceneOptions = {
+interface SceneOptions {
   map?: GameMap;
   assets?: SceneAssets;
   camera?: SceneCamera;
@@ -75,9 +75,9 @@ type SceneOptions = {
     selected: string | null,
     details: ChangeDetails<"press" | "key">,
   ) => void;
-};
+}
 
-type SceneState = {
+interface SceneState {
   map: GameMap | null;
   assets: SceneAssets | null;
   selected: string | null;
@@ -89,7 +89,7 @@ type SceneState = {
   ghost: Point | null;
   width: number;
   height: number;
-};
+}
 
 const touchSlop = 4;
 const moveSpeed = 260;

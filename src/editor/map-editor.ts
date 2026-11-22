@@ -66,11 +66,11 @@ import type {
 
 type MapTool = "select" | "draw" | "line" | "thing" | "switch";
 type EditMode = "vertices" | "lines" | "sectors" | "things";
-type MapViewStatus = {
+interface MapViewStatus {
   pointer: Point | null;
   zoom: number;
   view: { left: number; top: number; right: number; bottom: number };
-};
+}
 
 type MapChangeReason =
   | "drag"
@@ -82,7 +82,7 @@ type MapChangeReason =
   | "connect-key"
   | "agent";
 
-type MapEditorOptions = {
+interface MapEditorOptions {
   map?: GameMap;
   tool?: MapTool;
   editMode?: EditMode;
@@ -114,9 +114,9 @@ type MapEditorOptions = {
   onDrawingChange?: (corners: number) => void;
   contextMenuOpen?: boolean;
   grid?: number;
-};
+}
 
-type MapEditorState = {
+interface MapEditorState {
   map: GameMap;
   positions: Record<string, Point>;
   viewport: Viewport;
@@ -131,7 +131,7 @@ type MapEditorState = {
   cursor: Point | null;
   cameraPosition: Camera | null;
   highlightedWall: string | null;
-};
+}
 
 const emptyMap: GameMap = {
   vertices: {},
@@ -289,15 +289,24 @@ function sectorPath(
   );
 }
 
-type KeyedProps = { value: string };
-type SectorProps = {
+interface KeyedProps {
+  value: string;
+}
+interface SectorProps {
   value: string;
   corners: string[];
   holes?: string[][];
   door: boolean;
-};
-type WallProps = { value: string; from: string; to: string };
-type LabelProps = { value: string; corners: string[] };
+}
+interface WallProps {
+  value: string;
+  from: string;
+  to: string;
+}
+interface LabelProps {
+  value: string;
+  corners: string[];
+}
 
 const none: readonly never[] = [];
 

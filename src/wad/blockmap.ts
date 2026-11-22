@@ -2,7 +2,10 @@ import type { Point } from "@/map/types";
 
 const blockSize = 128;
 
-type BlockLine = { start: Point; end: Point };
+interface BlockLine {
+  start: Point;
+  end: Point;
+}
 
 function lineTouchesBox(
   { start, end }: BlockLine,

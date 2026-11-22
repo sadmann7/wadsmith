@@ -7,15 +7,18 @@ import { DurableObject } from "cloudflare:workers";
 import { ConnectionLimits } from "./limits";
 import { allowedOrigin } from "./origin";
 
-type Env = {
+interface Env {
   ROOMS: DurableObjectNamespace<Room>;
   ALLOWED_ORIGINS: string;
   ROOM_IDLE_SECONDS?: string;
   ROOM_LIFETIME_SECONDS?: string;
   ROOM_MESSAGES_PER_SECOND?: string;
-};
+}
 
-type Attachment = { peer: number | null; seen: number };
+interface Attachment {
+  peer: number | null;
+  seen: number;
+}
 
 const hostPeer = 1;
 const maxSockets = 8;

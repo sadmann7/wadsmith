@@ -7,15 +7,22 @@ import { buildMap, type EpisodeMap } from "./episode-data";
 
 type Build = Pick<BuildCheckResult, "problem" | "lumps">;
 
-type Check = {
+interface Check {
   revision: number;
   result: Promise<string | null>;
   build?: Build;
-};
+}
 
-type Job = { id: number; map: GameMap; done: (build: Build) => void };
+interface Job {
+  id: number;
+  map: GameMap;
+  done: (build: Build) => void;
+}
 
-type Builder = { worker: Worker; job: Job | null };
+interface Builder {
+  worker: Worker;
+  job: Job | null;
+}
 
 // Building a big map's nodes takes seconds, so it runs off the page's thread
 // once per saved revision, on a few workers at once.

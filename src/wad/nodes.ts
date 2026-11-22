@@ -1,24 +1,29 @@
 import type { Point } from "@/map/types";
 
-type NodeLine = {
+interface NodeLine {
   start: number;
   end: number;
   frontSector: number;
   backSector: number | null;
-};
+}
 
-type Seg = {
+interface Seg {
   start: number;
   end: number;
   line: number;
   side: 0 | 1;
   sector: number;
   offset: number;
-};
+}
 
-type Box = { top: number; bottom: number; left: number; right: number };
+interface Box {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+}
 
-type BspNode = {
+interface BspNode {
   x: number;
   y: number;
   dx: number;
@@ -27,25 +32,28 @@ type BspNode = {
   leftBox: Box;
   rightChild: number;
   leftChild: number;
-};
+}
 
-type Subsector = { count: number; first: number };
+interface Subsector {
+  count: number;
+  first: number;
+}
 
-type BspResult = {
+interface BspResult {
   vertices: Point[];
   segs: Seg[];
   subsectors: Subsector[];
   nodes: BspNode[];
-};
+}
 
-type Partition = {
+interface Partition {
   line: number;
   x: number;
   y: number;
   dx: number;
   dy: number;
   length: number;
-};
+}
 
 const subsectorFlag = 0x8000;
 const onLineTolerance = 0.75;

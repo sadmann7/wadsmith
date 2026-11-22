@@ -64,7 +64,12 @@ function wallsOf(map: GameMap) {
   });
 }
 
-type Area = { left: number; top: number; right: number; bottom: number };
+interface Area {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
 
 // The view grown by a cell of at least half its size on every side and
 // snapped to those cells, so panning renders again only after crossing one.

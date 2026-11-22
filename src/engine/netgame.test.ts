@@ -18,7 +18,7 @@ const hostPeer = 1;
 const guestPeer = 2;
 const relayDelayMs = 20;
 
-type Snapshot = {
+interface Snapshot {
   connected: boolean;
   waitingPlayers: number;
   playersInGame: number;
@@ -28,7 +28,7 @@ type Snapshot = {
   gameTic: number;
   players: { x: number; y: number }[];
   scores: { slot: number; peer: number; frags: number; kills: number }[];
-};
+}
 
 const workers: Worker[] = [];
 

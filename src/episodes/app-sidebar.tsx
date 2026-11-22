@@ -170,14 +170,14 @@ function NewEpisodeDialog({
   );
 }
 
-type SidebarProps = {
+interface SidebarProps {
   episodes: Episode[];
   counts: Record<string, number>;
   current: Route | null;
   durable: boolean;
   onNavigate?: (route: Route) => void;
   onCreateEpisode?: (name: string, start: EpisodeStart) => void;
-};
+}
 
 const rowClass =
   "relative flex items-center gap-2.5 rounded-[3px] px-2 py-1.5 text-sm text-foreground no-underline hover:bg-muted hover:text-foreground aria-[current=page]:bg-muted aria-[current=page]:font-semibold aria-[current=page]:text-foreground";

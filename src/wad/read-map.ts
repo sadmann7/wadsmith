@@ -1,7 +1,7 @@
 import type { Point } from "@/map/types";
 import { WadFileError, readLumps, type GameFile } from "./inspect";
 
-type DoomLine = {
+interface DoomLine {
   start: number;
   end: number;
   flags: number;
@@ -9,18 +9,18 @@ type DoomLine = {
   tag: number;
   front: number | null;
   back: number | null;
-};
+}
 
-type DoomSide = {
+interface DoomSide {
   offsetX: number;
   offsetY: number;
   upper: string;
   lower: string;
   middle: string;
   sector: number;
-};
+}
 
-type DoomSector = {
+interface DoomSector {
   floor: number;
   ceiling: number;
   floorTexture: string;
@@ -28,11 +28,11 @@ type DoomSector = {
   light: number;
   special: number;
   tag: number;
-};
+}
 
 type DoomThing = Point & { angle: number; type: number; flags: number };
 
-type DoomMap = {
+interface DoomMap {
   slot: string;
   vertices: Point[];
   lines: DoomLine[];
@@ -40,7 +40,7 @@ type DoomMap = {
   sectors: DoomSector[];
   things: DoomThing[];
   title?: string;
-};
+}
 
 const mapLump = /^MAP(0[1-9]|[12][0-9]|3[0-2])$/;
 const noSide = 0xffff;

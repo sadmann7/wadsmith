@@ -9,7 +9,7 @@ import {
 } from "@ui-sdk/core";
 import { createParts } from "@ui-sdk/react/primitive";
 
-type TextureGridOptions = {
+interface TextureGridOptions {
   value?: string;
   names?: readonly string[];
   onValueChange?: (value: string, details: ChangeDetails<"keyboard">) => void;
@@ -17,9 +17,12 @@ type TextureGridOptions = {
   onReveal?: (value: string) => void;
   onLeave?: () => void;
   onType?: (text: string | null) => void;
-};
+}
 
-type TextureGridState = { value: string; focused: string | null };
+interface TextureGridState {
+  value: string;
+  focused: string | null;
+}
 
 const moveSpatially = spatialMove();
 

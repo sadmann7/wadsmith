@@ -36,14 +36,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-type MapDetails = {
+interface MapDetails {
   name: string;
   slot: string;
   description: string;
   par: number | null;
   template: MapTemplate;
   featured: FeaturedMap | null;
-};
+}
 
 function MapDialog({
   maps,

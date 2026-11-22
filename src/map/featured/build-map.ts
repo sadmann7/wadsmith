@@ -10,7 +10,7 @@ import type {
 
 type Corner = [number, number];
 
-type RoomSpec = {
+interface RoomSpec {
   name: string;
   points: Corner[];
   floor: number;
@@ -22,33 +22,36 @@ type RoomSpec = {
   effect?: SectorEffect;
   tag?: number;
   door?: DoorSettings;
-};
+}
 
-type ThingSpec = {
+interface ThingSpec {
   kind: ThingKind;
   at: Corner;
   angle?: number;
   skills?: ThingSkill[];
   ambush?: boolean;
-};
+}
 
-type SwitchSpec = {
+interface SwitchSpec {
   room: string;
   wall: [Corner, Corner];
   texture: string;
   door?: string;
-};
+}
 
-type LineSpec = { wall: [Corner, Corner]; settings: LineSettings };
+interface LineSpec {
+  wall: [Corner, Corner];
+  settings: LineSettings;
+}
 
-type MapSpec = {
+interface MapSpec {
   name: string;
   scale?: number;
   rooms: RoomSpec[];
   things: ThingSpec[];
   switches?: SwitchSpec[];
   lines?: LineSpec[];
-};
+}
 
 function rect(x: number, y: number, width: number, height: number): Corner[] {
   return [

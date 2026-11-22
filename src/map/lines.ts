@@ -8,7 +8,10 @@ import type {
   Sector,
 } from "./types";
 
-type Specials = { once?: number; repeat?: number };
+interface Specials {
+  once?: number;
+  repeat?: number;
+}
 
 type ActionGroup =
   | "Doors"
@@ -22,13 +25,13 @@ type ActionGroup =
   | "Lights"
   | "Level";
 
-type ActionDefinition = {
+interface ActionDefinition {
   label: string;
   group: ActionGroup;
   target?: string;
   triggers: Partial<Record<LineTrigger, Specials>>;
   keys?: Partial<Record<LineTrigger, Record<KeyColor, Specials>>>;
-};
+}
 
 const lineActions: Record<LineActionKind, ActionDefinition> = {
   "door-raise": {

@@ -14,7 +14,7 @@ import type {
   Skill,
 } from "./runtime";
 
-type GameClientOptions = {
+interface GameClientOptions {
   iwad: Uint8Array;
   files: GameFiles;
   sound: SoundLevel;
@@ -34,7 +34,7 @@ type GameClientOptions = {
     send: (to: number, data: Uint8Array) => void;
     onState: (state: NetworkState) => void;
   };
-};
+}
 
 const audioWorklet = `
 class DoomAudio extends AudioWorkletProcessor {

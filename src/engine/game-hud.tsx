@@ -31,13 +31,24 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 
-type SoundSettings = { volume: number; muted: boolean };
+interface SoundSettings {
+  volume: number;
+  muted: boolean;
+}
 
-type OtherPlayer = { peer: number; x: number; y: number };
+interface OtherPlayer {
+  peer: number;
+  x: number;
+  y: number;
+}
 
-type NextLevel = { map: GameMap; title: string; slot: string };
+interface NextLevel {
+  map: GameMap;
+  title: string;
+  slot: string;
+}
 
-type ScoreRow = {
+interface ScoreRow {
   peer: number;
   name: string;
   host: boolean;
@@ -48,7 +59,7 @@ type ScoreRow = {
   items: number;
   secrets: number;
   ping: number | null;
-};
+}
 
 const ticsPerSecond = 35;
 const ammoNames = ["Bullets", "Shells", "Cells", "Rockets"];

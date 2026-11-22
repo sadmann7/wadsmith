@@ -1,11 +1,14 @@
-type Point = { x: number; y: number };
+interface Point {
+  x: number;
+  y: number;
+}
 
-type DoorSettings = {
+interface DoorSettings {
   opensBy: "use" | "switch";
   closes: boolean;
   fast?: boolean;
   texture: string;
-};
+}
 
 type SectorEffect =
   | "flicker"
@@ -24,7 +27,7 @@ type SectorEffect =
   | "door-close-30"
   | "door-open-300";
 
-type Sector = {
+interface Sector {
   id: string;
   name: string;
   vertices: string[];
@@ -40,7 +43,7 @@ type Sector = {
   door?: DoorSettings;
   effect?: SectorEffect;
   tag?: number;
-};
+}
 
 type LineActionKind =
   | "door-raise"
@@ -92,23 +95,23 @@ type LineTrigger = "door" | "switch" | "walk" | "shoot";
 
 type KeyColor = "blue" | "yellow" | "red";
 
-type LineAction = {
+interface LineAction {
   kind: LineActionKind;
   trigger: LineTrigger;
   repeat: boolean;
   key?: KeyColor;
   tag: number;
-};
+}
 
-type LineSide = {
+interface LineSide {
   offsetX?: number;
   offsetY?: number;
   upper?: string;
   lower?: string;
   middle?: string;
-};
+}
 
-type LineSettings = {
+interface LineSettings {
   blocksAll?: boolean;
   blocksEnemies?: boolean;
   upperFixed?: boolean;
@@ -118,7 +121,7 @@ type LineSettings = {
   action?: LineAction;
   sides?: Record<string, LineSide>;
   front?: string;
-};
+}
 
 type ThingKind =
   | "player"
@@ -257,18 +260,18 @@ type Thing = Point & {
   ambush?: boolean;
 };
 
-type MapSwitch = {
+interface MapSwitch {
   id: string;
   sector: string;
   from: string;
   to: string;
   texture: string;
   door: string | null;
-};
+}
 
 type MapNote = Point & { id: string; text: string };
 
-type GameMap = {
+interface GameMap {
   name?: string;
   vertices: Record<string, Point>;
   sectors: Sector[];
@@ -276,7 +279,7 @@ type GameMap = {
   switches: MapSwitch[];
   lines?: Record<string, LineSettings>;
   notes?: MapNote[];
-};
+}
 
 export type {
   DoorSettings,

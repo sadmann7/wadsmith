@@ -5,7 +5,10 @@ import { compileLumps, compileMap } from "./compile";
 import { WadFileError, inspectWads, readLumps } from "./inspect";
 import { isZip, unzip } from "./zip";
 
-type Lump = { name: string; data: Uint8Array };
+interface Lump {
+  name: string;
+  data: Uint8Array;
+}
 
 const encode = (value: string) => new TextEncoder().encode(value);
 

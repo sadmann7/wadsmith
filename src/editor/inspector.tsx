@@ -275,7 +275,11 @@ function TextureField({
   );
 }
 
-type Choice = { value: string; label: string; short?: string };
+interface Choice {
+  value: string;
+  label: string;
+  short?: string;
+}
 
 function ChoiceField({
   label,

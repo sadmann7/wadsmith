@@ -10,8 +10,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-type Key = { text: string; spoken?: string };
-type Shortcut = { keys: Key[]; does: string };
+interface Key {
+  text: string;
+  spoken?: string;
+}
+interface Shortcut {
+  keys: Key[];
+  does: string;
+}
 
 function key(text: string, spoken?: string): Key {
   return { text, spoken };

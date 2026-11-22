@@ -31,7 +31,7 @@ import {
 
 type Camera = Point & { angle: number; eye?: number };
 
-type RenderTarget = {
+interface RenderTarget {
   width: number;
   height: number;
   pixels: Uint8ClampedArray<ArrayBuffer>;
@@ -40,16 +40,16 @@ type RenderTarget = {
   pick: Uint16Array;
   surfaces: string[];
   focal: number;
-};
+}
 
-type SceneOptions = {
+interface SceneOptions {
   assets: SceneAssets;
   hovered?: string | null;
   selected?: string | null;
   ghost?: (Point & { kind: ThingKind }) | null;
-};
+}
 
-type Wall = {
+interface Wall {
   a: Point;
   b: Point;
   key: string;
@@ -57,7 +57,7 @@ type Wall = {
   switchTexture: string | null;
   line: LineSettings | undefined;
   side: LineSide | undefined;
-};
+}
 
 const eyeHeight = 41;
 const fieldOfView = Math.PI / 2;

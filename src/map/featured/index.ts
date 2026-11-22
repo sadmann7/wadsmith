@@ -8,7 +8,7 @@ import { slagChannel } from "./slag-channel";
 
 type FeaturedMode = "single" | "coop" | "deathmatch";
 
-type FeaturedMap = {
+interface FeaturedMap {
   id: string;
   title: string;
   slot: string;
@@ -19,7 +19,7 @@ type FeaturedMap = {
   blurb: string;
   tags: string[];
   map: GameMap;
-};
+}
 
 const featuredMaps: FeaturedMap[] = [
   {

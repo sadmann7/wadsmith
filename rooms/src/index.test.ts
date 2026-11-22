@@ -30,11 +30,11 @@ afterAll(async () => {
   await worker?.stop();
 });
 
-type Client = {
+interface Client {
   socket: WebSocket;
   received: (string | ArrayBuffer)[];
   next: () => Promise<string | ArrayBuffer>;
-};
+}
 
 function connect(room: string, from = origin) {
   return new Promise<Client>((done, fail) => {
