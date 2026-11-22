@@ -217,13 +217,57 @@ export function setLineTarget(
   const { action, raw } = map.lines?.[wall] ?? {};
   if (!action && !raw) return map;
   const sector = map.sectors.find((item) => item.id === sectorId);
-  const tag = sector ? sector.tag || unusedTag(map) : 0;
+  const tag = sector ? sector.tag || freeTag(map) : 0;
   const tagged = sector ? updateSector(map, sector.id, { tag }) : map;
   return updateLine(
     tagged,
     wall,
     action ? { action: { ...action, tag } } : { raw: { ...defined(raw), tag } },
   );
+}
+
+// The lowest tag no room or line action uses yet.
+export function freeTag(map: GameMap) {
+  const used = new Set([
+    ...map.sectors.map((sector) => sector.tag),
+    ...Object.values(map.lines ?? {}).map(
+      (line) => line.action?.tag ?? line.raw?.tag,
+    ),
+  ]);
+  let tag = 1;
+  while (used.has(tag)) tag += 1;
+  return tag;
+}
+
+export const roomLimits = {
+  floor: { min: -1024, max: 1024 },
+  ceiling: { min: -1024, max: 2048 },
+  light: { min: 0, max: 255 },
+};
+
+export type RoomNumber = keyof typeof roomLimits;
+
+// Moves each room's floor, ceiling or light by the same amount from where it
+// is. A room already past a limit stays, and never moves against the step,
+// and a door has no ceiling height of its own.
+export function shiftRooms(
+  map: GameMap,
+  ids: string[],
+  key: RoomNumber,
+  delta: number,
+): GameMap {
+  const { min, max } = roomLimits[key];
+  return ids.reduce((next, id) => {
+    const room = next.sectors.find((sector) => sector.id === id);
+    if (!room || (room.door && key === "ceiling")) return next;
+    const value =
+      delta > 0
+        ? Math.max(room[key], Math.min(max, room[key] + delta))
+        : Math.min(room[key], Math.max(min, room[key] + delta));
+    return value === room[key]
+      ? next
+      : updateSector(next, id, { [key]: value });
+  }, map);
 }
 
 // A door's texture covers every face of it, so faces that chose their own
@@ -679,18 +723,6 @@ function setLine(map: GameMap, wall: string, line: LineSettings | undefined) {
     ...map,
     lines: withoutUnset({ ...map.lines, [wall]: line && withoutUnset(line) }),
   };
-}
-
-function unusedTag(map: GameMap) {
-  const used = new Set([
-    ...map.sectors.map((sector) => sector.tag),
-    ...Object.values(map.lines ?? {}).map(
-      (line) => line.action?.tag ?? line.raw?.tag,
-    ),
-  ]);
-  let tag = 1;
-  while (used.has(tag)) tag += 1;
-  return tag;
 }
 
 const copyOffsets = [

@@ -338,6 +338,27 @@ describe("map editor parts", () => {
     expect(defined(result).vertices.v13).toEqual({ x: 496, y: 104 });
   });
 
+  it("raise floors, ceilings and light with Page Up, Home and Alt", () => {
+    let result = null as GameMap | null;
+    const instance = mapEditor({
+      id,
+      map: testMap,
+      editMode: "sectors",
+      selection: ["room:sector-1", "room:sector-2"],
+      onMapChange: (next, details) => {
+        expect(details.reason).toBe("height-key");
+        result = next;
+      },
+    });
+    instance.api.keydown(press("PageUp"));
+    expect(defined(result).sectors[0].floor).toBe(8);
+    expect(defined(result).sectors[1].floor).toBe(-8);
+    instance.api.keydown(press("End", { shiftKey: true }));
+    expect(defined(result).sectors[0].ceiling).toBe(104);
+    instance.api.keydown(press("PageDown", { altKey: true }));
+    expect(defined(result).sectors[0].light).toBe(160);
+  });
+
   it("clear the selection with Escape", () => {
     let picked: string[] | null = null;
     const instance = mapEditor({

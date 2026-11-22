@@ -52,6 +52,7 @@ import {
   removeSwitch,
   roomCenter,
   roomKeyPrefix,
+  shiftRooms,
   snapPoint,
   splitWall,
   switchKeyPrefix,
@@ -95,6 +96,7 @@ export interface MapViewStatus {
 type MapChangeReason =
   | "drag"
   | "move-key"
+  | "height-key"
   | "imperative"
   | "draw"
   | "place"
@@ -189,6 +191,13 @@ const arrowSteps: Record<string, Point> = {
   ArrowRight: { x: 1, y: 0 },
 };
 const wallReach = 14;
+const lightStep = 16;
+const heightKeys: Record<string, 1 | -1> = {
+  PageUp: 1,
+  PageDown: -1,
+  Home: 1,
+  End: -1,
+};
 const defaultSides = 8;
 
 interface LiveApi {
@@ -825,6 +834,34 @@ export const mapEditor = definePrimitive({
       }
     };
 
+    // Page Up and Page Down raise and lower the floors of the picked rooms, or
+    // of the room under the pointer, Home and End their ceilings, and with
+    // Alt they change the light. Shift takes three steps.
+    const shiftHeights = (event: KeyboardEvent) => {
+      const way = heightKeys[event.key];
+      if (!way || event.ctrlKey || event.metaKey) return false;
+      const { map, selection, editMode } = store.get();
+      if (editMode === "things") return false;
+      let rooms = pickedRooms(map, selection, pickedRoom());
+      if (rooms.length === 0 && pointer) {
+        const under = sectorAt(map, pointer);
+        rooms = under ? [under.id] : [];
+      }
+      if (rooms.length === 0) return false;
+      const ends = event.key === "Home" || event.key === "End";
+      if (event.altKey && ends) return false;
+      const key = event.altKey ? "light" : ends ? "ceiling" : "floor";
+      const step = key === "light" ? lightStep : grid();
+      const next = shiftRooms(
+        map,
+        rooms,
+        key,
+        way * step * (event.shiftKey ? 3 : 1),
+      );
+      if (next !== map) change("map", next, { reason: "height-key", event });
+      return true;
+    };
+
     // Select all picks everything the mode works on, and inverting swaps
     // what is picked for what isn't.
     const everything = () => {
@@ -1421,6 +1458,10 @@ export const mapEditor = definePrimitive({
           );
           if (all || invert) {
             selectEverything(invert);
+            event.preventDefault();
+            return;
+          }
+          if (shiftHeights(event)) {
             event.preventDefault();
             return;
           }

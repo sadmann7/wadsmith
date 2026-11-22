@@ -22,6 +22,10 @@ export const editorShortcuts = {
     description: "Swap what is selected for what isn't",
     area: "map",
   },
+  find: {
+    keys: "mod+shift+f",
+    description: "Find and select by texture, tag, action or thing type",
+  },
   undo: { keys: "mod+z", description: "Undo" },
   redo: { keys: "mod+shift+z", description: "Redo" },
   duplicate: { keys: "mod+d", description: "Duplicate the selection" },

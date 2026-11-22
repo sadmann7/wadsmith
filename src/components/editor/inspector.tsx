@@ -11,6 +11,7 @@ import type {
   DoorSettings,
   GameMap,
   KeyColor,
+  LineActionKind,
   LineSettings,
   LineSide,
   LineTrigger,
@@ -72,13 +73,19 @@ import {
   doorTextures,
   floorTextures,
   sectorEffects,
+  swappableKinds,
   switchTextures,
   thingCatalog,
   thingKinds,
   wallTextures,
 } from "@/lib/map/catalog";
 import { atLeast } from "@/lib/map/complevel";
-import { defaultDoor, gridSize } from "@/lib/map/edit";
+import {
+  defaultDoor,
+  freeTag,
+  gridSize,
+  type RoomNumber,
+} from "@/lib/map/edit";
 import { containerOf } from "@/lib/map/geometry";
 import {
   describeLine,
@@ -97,6 +104,7 @@ import {
   triggersFor,
   usedFromFront,
 } from "@/lib/map/lines";
+import { describeWalls, type LineFlag } from "@/lib/map/many-lines";
 import { describeSurface, surfaceKey, type WallPart } from "@/lib/map/surfaces";
 import { flatUse, type TextureUse, wallUse } from "@/lib/map/textures";
 
@@ -112,7 +120,6 @@ const skillLabels: Record<ThingSkill, string> = {
 };
 
 const offsetLimit = 32767;
-const tagLimit = 32767;
 const keyLabels: Record<KeyColor, string> = {
   blue: "Blue key",
   yellow: "Yellow key",
@@ -244,6 +251,7 @@ export function SectorInspector({
             special={special}
             level={level}
             tag={sector.tag ?? 0}
+            free={freeTag(map)}
             onChange={(next) => onChange(sectorSpecialPatch(next))}
             onTagChange={(tag) => onChange({ tag: tag || undefined })}
           />
@@ -279,12 +287,9 @@ export function SectorInspector({
                 }
               />
             )}
-            <NumberSetting
-              label="Tag"
+            <TagSetting
               value={sector.tag ?? 0}
-              step={1}
-              min={0}
-              max={tagLimit}
+              free={freeTag(map)}
               onChange={(tag) => onChange({ tag: tag || undefined })}
             />
           </div>
@@ -313,14 +318,15 @@ export function SectorInspector({
 
 const mixed = "Mixed";
 
-type RoomNumber = "floor" | "ceiling" | "light";
-
 interface RoomsInspectorProps {
   map: GameMap;
   rooms: Sector[];
   assets: SceneAssets;
   onChange: (patch: Partial<Sector>) => void;
   onShift: (key: RoomNumber, delta: number) => void;
+  // True makes every room a door, false makes none one, and settings change
+  // every door's.
+  onDoor: (change: boolean | Partial<DoorSettings>) => void;
 }
 
 export function RoomsInspector({
@@ -329,6 +335,7 @@ export function RoomsInspector({
   assets,
   onChange,
   onShift,
+  onDoor,
 }: RoomsInspectorProps) {
   const [first] = rooms;
   // What every room agrees on, or null where they differ. A door has no
@@ -346,6 +353,17 @@ export function RoomsInspector({
   const context = `${rooms.length} rooms`;
   const flats = { kind: "flat" as const, use: flatUse(map), context };
   const light = shared("light");
+  const effect = agreed(
+    rooms.map(
+      (room) =>
+        room.effect ?? (room.rawEffect ? `raw:${room.rawEffect}` : "none"),
+    ),
+  );
+  const tag = agreed(rooms.map((room) => room.tag ?? 0));
+  const doors = rooms.every((room) => room.door);
+  // What every door agrees on, or null where they differ.
+  const door = <K extends keyof DoorSettings>(key: K) =>
+    agreed(rooms.map((room) => room.door?.[key]));
   // The field lists Mixed as a value, which choosing again changes nothing.
   const paint =
     (patch: (name: string) => Partial<Sector>) => (name: string) => {
@@ -419,6 +437,80 @@ export function RoomsInspector({
           onChange={(next) => onChange({ light: next })}
           onShift={(delta) => onShift("light", delta)}
         />
+        <div className="flex items-center items-end gap-2 [&>*]:min-w-0 [&>*]:flex-1">
+          <ChoiceField
+            label="Effect"
+            value={effect ?? mixed}
+            items={[
+              ...(effect === null ? [{ value: mixed, label: mixed }] : []),
+              ...(effect?.startsWith("raw:")
+                ? [{ value: effect, label: `Special ${effect.slice(4)}` }]
+                : []),
+              { value: "none", label: "None" },
+              ...Object.entries(sectorEffects).map(([value, { label }]) => ({
+                value,
+                label,
+              })),
+            ]}
+            onChange={(next) => {
+              if (next === mixed || next.startsWith("raw:")) return;
+              onChange({
+                effect: next === "none" ? undefined : (next as SectorEffect),
+                rawEffect: undefined,
+              });
+            }}
+          />
+          <TagSetting
+            value={tag}
+            free={freeTag(map)}
+            onChange={(next) => onChange({ tag: next || undefined })}
+          />
+        </div>
+      </InspectorSection>
+      <InspectorSection title="Door">
+        <ToggleField label="Open as doors" checked={doors} onChange={onDoor} />
+        {doors && first.door ? (
+          <>
+            <ChoiceField
+              label="Opens with"
+              value={door("opensBy") ?? mixed}
+              items={[
+                ...(door("opensBy") === null
+                  ? [{ value: mixed, label: mixed }]
+                  : []),
+                { value: "use", label: "Use key" },
+                { value: "switch", label: "Switch" },
+              ]}
+              onChange={(opensBy) => {
+                if (opensBy !== mixed) {
+                  onDoor({ opensBy: opensBy as DoorSettings["opensBy"] });
+                }
+              }}
+            />
+            <ToggleField
+              label="Close again"
+              checked={door("closes") === true}
+              onChange={(closes) => onDoor({ closes })}
+            />
+            <ToggleField
+              label="Open fast"
+              checked={door("fast") === true}
+              onChange={(fast) => onDoor({ fast: fast || undefined })}
+            />
+            <TextureField
+              label="Door texture"
+              value={door("texture") ?? mixed}
+              options={doorTextures}
+              picture={assets.texture}
+              assets={assets}
+              light={light ?? first.light}
+              whole
+              onChange={(texture) => {
+                if (texture !== mixed) onDoor({ texture });
+              }}
+            />
+          </>
+        ) : null}
       </InspectorSection>
     </>
   );
@@ -849,12 +941,9 @@ export function LineInspector({
               }
             />
             {raw ? (
-              <NumberSetting
-                label="Tag"
+              <TagSetting
                 value={raw.tag}
-                step={1}
-                min={0}
-                max={tagLimit}
+                free={freeTag(map)}
                 onChange={(tag) =>
                   onLineChange({
                     raw: { special: raw.special, tag },
@@ -906,6 +995,111 @@ export function LineInspector({
             />
           ),
         )}
+      </InspectorSection>
+    </>
+  );
+}
+
+interface LinesInspectorProps {
+  map: GameMap;
+  walls: string[];
+  assets: SceneAssets;
+  onPaint: (texture: string) => void;
+  onOffset: (key: "offsetX" | "offsetY", value: number, shift: boolean) => void;
+  onFlag: (flag: LineFlag, on: boolean) => void;
+  onAction: (kind: LineActionKind | null) => void;
+  onTag: (tag: number) => void;
+}
+
+export function LinesInspector({
+  map,
+  walls,
+  assets,
+  onPaint,
+  onOffset,
+  onFlag,
+  onAction,
+  onTag,
+}: LinesInspectorProps) {
+  const look = describeWalls(map, walls);
+  const context = `${walls.length} lines`;
+  return (
+    <>
+      <InspectorSection title="Wall textures" detail={context}>
+        {look.showing ? (
+          <TextureField
+            picture={assets.texture}
+            assets={assets}
+            label="Wall"
+            value={look.texture ?? mixed}
+            options={wallTextures}
+            browse={{ kind: "wall", use: wallUse(map), context }}
+            light={255}
+            onChange={(texture) => {
+              if (texture !== mixed) onPaint(texture);
+            }}
+          />
+        ) : (
+          <p className="text-muted-foreground">
+            The rooms on either side are level, so these lines show no wall.
+          </p>
+        )}
+        <div className="flex items-center gap-2 [&>*]:min-w-0 [&>*]:flex-1">
+          <NumberSetting
+            label="Offset X"
+            value={look.offsetX}
+            step={1}
+            min={-offsetLimit}
+            max={offsetLimit}
+            onChange={(value) => onOffset("offsetX", value, false)}
+            onShift={(delta) => onOffset("offsetX", delta, true)}
+          />
+          <NumberSetting
+            label="Offset Y"
+            value={look.offsetY}
+            step={1}
+            min={-offsetLimit}
+            max={offsetLimit}
+            onChange={(value) => onOffset("offsetY", value, false)}
+            onShift={(delta) => onOffset("offsetY", delta, true)}
+          />
+        </div>
+      </InspectorSection>
+      <InspectorSection title="Action">
+        <ChoiceField
+          label="When triggered"
+          value={look.action ?? mixed}
+          items={[
+            ...(look.action === null ? [{ value: mixed, label: mixed }] : []),
+            ...(look.action === "raw"
+              ? [{ value: "raw", label: "Special by number" }]
+              : []),
+            { value: "none", label: "Nothing" },
+          ]}
+          groups={lineActionGroups([...lineActionKinds])}
+          onChange={(kind) => {
+            if (kind === mixed || kind === "raw") return;
+            onAction(getIsLineActionKind(kind) ? kind : null);
+          }}
+        />
+        {look.tagged ? (
+          <TagSetting value={look.tag} free={freeTag(map)} onChange={onTag} />
+        ) : null}
+      </InspectorSection>
+      <InspectorSection title="Flags">
+        {[
+          ...(look.twoSided
+            ? [{ flag: "blocksAll", label: "Blocks players and enemies" }]
+            : []),
+          ...lineFlags,
+        ].map(({ flag, label }) => (
+          <ToggleField
+            key={flag}
+            label={label}
+            checked={look.flags[flag as LineFlag]}
+            onChange={(checked) => onFlag(flag as LineFlag, checked)}
+          />
+        ))}
       </InspectorSection>
     </>
   );
@@ -986,6 +1180,10 @@ export function SwitchInspector({
       />
     </div>
   );
+}
+
+function agreed<T>(values: T[]) {
+  return values.every((value) => value === values[0]) ? values[0] : null;
 }
 
 interface ChoiceFieldProps {
@@ -1222,6 +1420,50 @@ function stepWay(details: { reason: string; event?: Event }) {
   return key === "ArrowDown" || key === "PageDown" ? -1 : 0;
 }
 
+const tagLimit = 32767;
+
+interface TagSettingProps {
+  // Null leaves the field empty, where the items don't agree.
+  value: number | null;
+  free: number;
+  onChange: (tag: number) => void;
+}
+
+function TagSetting({ value, free, onChange }: TagSettingProps) {
+  return (
+    <FieldItem>
+      <div className="flex items-baseline justify-between gap-2">
+        <Label>Tag</Label>
+        <Button
+          variant="text"
+          className="text-xs"
+          title={`Use tag ${free}, which nothing uses yet`}
+          onClick={() => onChange(free)}
+        >
+          Free tag
+        </Button>
+      </div>
+      <NumberField
+        label="Tag"
+        value={value}
+        placeholder={value === null ? mixed : undefined}
+        step={1}
+        min={0}
+        max={tagLimit}
+        onValueChange={(next, details) => {
+          if (next === null) return;
+          // Items with different tags have nothing to step from, so only a
+          // typed tag sets them all.
+          const typed =
+            details.reason === "input-change" ||
+            details.reason === "input-commit";
+          if (value !== null || typed) onChange(Math.round(next));
+        }}
+      />
+    </FieldItem>
+  );
+}
+
 interface InspectorSectionProps {
   title: string;
   detail?: string;
@@ -1246,6 +1488,7 @@ interface BoomSectorFieldsProps {
   special: number;
   level: Complevel;
   tag: number;
+  free: number;
   onChange: (special: number) => void;
   onTagChange: (tag: number) => void;
 }
@@ -1256,6 +1499,7 @@ function BoomSectorFields({
   special,
   level,
   tag,
+  free,
   onChange,
   onTagChange,
 }: BoomSectorFieldsProps) {
@@ -1294,14 +1538,7 @@ function BoomSectorFields({
               : set({ base: Number(base) })
           }
         />
-        <NumberSetting
-          label="Tag"
-          value={tag}
-          step={1}
-          min={0}
-          max={tagLimit}
-          onChange={onTagChange}
-        />
+        <TagSetting value={tag} free={free} onChange={onTagChange} />
       </div>
       <div className="flex items-center items-end gap-2 [&>*]:min-w-0 [&>*]:flex-1">
         {exit ? null : (
@@ -1520,6 +1757,10 @@ function ThingFields({ things, grid, onChange }: ThingFieldsProps) {
   const pressed = allSkills.filter((skill) =>
     placed.every((thing) => appearsOn(thing.skills, skill)),
   );
+  const kinds = swappableKinds(first.kind).filter((kind) =>
+    things.every((thing) => swappableKinds(thing.kind).includes(kind)),
+  );
+  const sameKind = things.every((thing) => thing.kind === first.kind);
   const toggleSkill = (skill: ThingSkill, on: boolean) =>
     onChange((thing) => {
       if (thingCatalog[thing.kind].category === "start") return {};
@@ -1534,6 +1775,22 @@ function ThingFields({ things, grid, onChange }: ThingFieldsProps) {
   return (
     <>
       <InspectorSection title="Placement">
+        {kinds.length > 0 ? (
+          <ChoiceField
+            label="Type"
+            value={sameKind ? first.kind : mixed}
+            items={[
+              ...(sameKind ? [] : [{ value: mixed, label: mixed }]),
+              ...kinds.map((kind) => ({
+                value: kind,
+                label: thingCatalog[kind].label,
+              })),
+            ]}
+            onChange={(kind) => {
+              if (kind !== mixed) onChange(() => ({ kind: kind as ThingKind }));
+            }}
+          />
+        ) : null}
         <div className="flex gap-2.5">
           {single ? (
             <>

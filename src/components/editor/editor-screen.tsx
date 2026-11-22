@@ -26,6 +26,7 @@ import {
 import * as React from "react";
 
 import type { LivePeer } from "@/lib/episodes/live";
+import type { FindKind } from "@/lib/map/similar";
 import type { GameMap, Point, ThingCategory, ThingKind } from "@/lib/map/types";
 
 import { GameView, type PlayerSpot } from "@/components/play/play-panel";
@@ -95,6 +96,7 @@ import {
   addNote,
   addPlayerStarts,
   addSwitch,
+  defaultDoor,
   duplicateThings,
   freeWallAt,
   gridSize,
@@ -106,6 +108,7 @@ import {
   setLineTarget,
   setRoomDoor,
   setRoomWalls,
+  shiftRooms,
   switchKeyPrefix,
   thingKeyPrefix,
   updateLine,
@@ -137,6 +140,13 @@ import {
 import { describeLine } from "@/lib/map/lines";
 import { lineLinks, type MapLink, sectorLinks } from "@/lib/map/links";
 import { gradient, gradientEnds, type SurfaceLook } from "@/lib/map/look";
+import {
+  paintWalls,
+  setWallsAction,
+  setWallsTag,
+  updateWalls,
+  updateWallSides,
+} from "@/lib/map/many-lines";
 import {
   formatTics,
   keepRun,
@@ -179,9 +189,11 @@ import type {
 import { AgentCard } from "./agent-card";
 import { BuildDialog } from "./build-dialog";
 import { MapContextMenu } from "./context-menu";
+import { FindDialog } from "./find-dialog";
 import { GradientPanel } from "./gradient-panel";
 import {
   LineInspector,
+  LinesInspector,
   RoomsInspector,
   SectorInspector,
   SwitchInspector,
@@ -227,12 +239,6 @@ const shapeHints: Record<Exclude<DrawShape, "outline">, string> = {
 const noLinks: MapLink[] = [];
 
 // The same ranges the inspector's fields keep a single room within.
-const roomLimits = {
-  floor: { min: -1024, max: 1024 },
-  ceiling: { min: -1024, max: 2048 },
-  light: { min: 0, max: 255 },
-};
-
 const roomSides: RoomSide[] = ["north", "east", "south", "west"];
 
 type ViewLayout = "map" | "split" | "scene";
@@ -418,6 +424,7 @@ export function EditorScreen({
   // A dialog opened from a room's menu keeps what the menu worked on, which
   // the selection alone may not say once the menu has closed.
   const [transforming, setTransforming] = React.useState<string[] | null>(null);
+  const [finding, setFinding] = React.useState(false);
   const [replacing, setReplacing] = React.useState<{
     kind: TextureKind;
     from: string;
@@ -581,6 +588,10 @@ export function EditorScreen({
   const selectedThingIds = selection
     .filter((key) => key.startsWith(thingKeyPrefix))
     .map((key) => key.slice(thingKeyPrefix.length));
+  const selectedWalls = selection
+    .filter((key) => key.startsWith(wallKeyPrefix))
+    .map((key) => key.slice(wallKeyPrefix.length))
+    .filter((wall) => wall.split("|").every((id) => map.vertices[id]));
 
   // The rooms and things the selection stands for, which copy, cut, paste
   // and the transforms work on.
@@ -821,6 +832,48 @@ export function EditorScreen({
     editorShortcuts.flipOver.keys,
     () => transformSelection([{ kind: "mirror", axis: "vertical" }]),
     shortcut("flipOver", canTransform),
+  );
+
+  // What a search found, selected in the mode that works on it.
+  const selectFound = (kind: FindKind, keys: string[]) => {
+    setNotice(
+      `Selected ${keys.length} ${keys.length === 1 ? "match" : "matches"}.`,
+    );
+    if (kind === "wall" || kind === "action") {
+      setEditMode("lines");
+      const [first] = keys;
+      const wall = first?.slice(wallKeyPrefix.length);
+      const owner = wall ? wallOwners(map).get(wall)?.[0] : undefined;
+      setSurface(
+        wall && owner
+          ? surfaceKey({ kind: "wall", sector: owner.id, wall, part: "middle" })
+          : null,
+      );
+      setActiveSector(owner?.id ?? null);
+      setSelection(keys);
+      return;
+    }
+    setSurface(null);
+    if (kind === "thing") {
+      setEditMode("things");
+      setActiveSector(null);
+      setSelection(keys);
+      return;
+    }
+    setEditMode("sectors");
+    // One room on its own is the active room, which the inspector edits.
+    if (keys.length === 1) {
+      setSelection([]);
+      setActiveSector(keys[0].slice(roomKeyPrefix.length));
+      return;
+    }
+    setActiveSector(null);
+    setSelection(keys);
+  };
+  useShortcut(
+    editorShortcuts.find.keys,
+    () => setFinding(true),
+    shortcut("find", notTyping),
   );
 
   const joinSelection = () => {
@@ -1582,7 +1635,15 @@ export function EditorScreen({
                 ) : null}
               </MenuContent>
             </Menu>
-            <Menu onAction={(action) => (action === "undo" ? undo() : redo())}>
+            <Menu
+              onAction={(action) =>
+                action === "find"
+                  ? setFinding(true)
+                  : action === "undo"
+                    ? undo()
+                    : redo()
+              }
+            >
               <MenuTrigger
                 className={buttonVariants({
                   variant: "text",
@@ -1605,6 +1666,10 @@ export function EditorScreen({
                   disabled={!undoable.redo}
                 >
                   Redo
+                </MenuItem>
+                <MenuSeparator />
+                <MenuItem value="find" shortcut={editorShortcuts.find.keys}>
+                  Find and select…
                 </MenuItem>
               </MenuContent>
             </Menu>
@@ -1859,7 +1924,11 @@ export function EditorScreen({
                         }
                         commit(
                           next,
-                          details.reason === "move-key" ? "nudge" : undefined,
+                          details.reason === "move-key"
+                            ? "nudge"
+                            : details.reason === "height-key"
+                              ? "heights"
+                              : undefined,
                         );
                       }}
                       onAgentAction={logAgentAction}
@@ -2147,7 +2216,41 @@ export function EditorScreen({
               </section>
             ) : null}
 
-            {line && selectedWall ? (
+            {selectedWalls.length > 1 ? (
+              <LinesInspector
+                map={map}
+                walls={selectedWalls}
+                assets={assets}
+                onPaint={(texture) =>
+                  commit(paintWalls(map, selectedWalls, texture))
+                }
+                onOffset={(key, value, shift) =>
+                  commit(
+                    updateWallSides(map, selectedWalls, (side) => ({
+                      [key]:
+                        (shift ? (side[key] ?? 0) + value : value) || undefined,
+                    })),
+                    `lines:${selectedWalls.join()}`,
+                  )
+                }
+                onFlag={(flag, on) =>
+                  commit(
+                    updateWalls(map, selectedWalls, {
+                      [flag]: on || undefined,
+                    }),
+                  )
+                }
+                onAction={(kind) =>
+                  commit(setWallsAction(map, selectedWalls, kind))
+                }
+                onTag={(tag) =>
+                  commit(
+                    setWallsTag(map, selectedWalls, tag),
+                    `lines:${selectedWalls.join()}`,
+                  )
+                }
+              />
+            ) : line && selectedWall ? (
               <LineInspector
                 key={`${line.wall}:${line.sector.id}`}
                 map={map}
@@ -2231,44 +2334,56 @@ export function EditorScreen({
                 assets={assets}
                 onChange={(patch) =>
                   commit(
-                    selectedRooms.reduce(
-                      (next, room) =>
-                        patch.wallTexture
-                          ? setRoomWalls(next, room.id, patch.wallTexture)
-                          : // A door has no ceiling height of its own.
-                            updateSector(
-                              next,
-                              room.id,
-                              room.door && "ceiling" in patch ? {} : patch,
-                            ),
-                      map,
-                    ),
+                    selectedRooms.reduce((next, room) => {
+                      if (patch.wallTexture) {
+                        return setRoomWalls(next, room.id, patch.wallTexture);
+                      }
+                      // A door has no ceiling height of its own.
+                      return updateSector(
+                        next,
+                        room.id,
+                        room.door && "ceiling" in patch ? {} : patch,
+                      );
+                    }, map),
+                    `rooms:${selectedRooms.map((room) => room.id).join()}`,
+                  )
+                }
+                onDoor={(change) =>
+                  commit(
+                    selectedRooms.reduce((next, room) => {
+                      if (change === true) {
+                        return room.door
+                          ? next
+                          : setRoomDoor(next, room.id, defaultDoor);
+                      }
+                      if (change === false) {
+                        return setRoomDoor(next, room.id, undefined);
+                      }
+                      if (!room.door) return next;
+                      const opened = setRoomDoor(next, room.id, {
+                        ...room.door,
+                        ...change,
+                      });
+                      return change.texture
+                        ? setDoorTexture(opened, room.id, change.texture)
+                        : opened;
+                    }, map),
                     `rooms:${selectedRooms.map((room) => room.id).join()}`,
                   )
                 }
                 onShift={(key, delta) => {
-                  const moved = selectedRooms.flatMap((room) => {
-                    // A room already past a limit stays, and never moves
-                    // against the step.
-                    const { min, max } = roomLimits[key];
-                    const value =
-                      delta > 0
-                        ? Math.max(room[key], Math.min(max, room[key] + delta))
-                        : Math.min(room[key], Math.max(min, room[key] + delta));
-                    return (room.door && key === "ceiling") ||
-                      value === room[key]
-                      ? []
-                      : [{ id: room.id, value }];
-                  });
-                  if (moved.length === 0) return;
-                  commit(
-                    moved.reduce(
-                      (next, { id, value }) =>
-                        updateSector(next, id, { [key]: value }),
-                      map,
-                    ),
-                    `rooms:${selectedRooms.map((room) => room.id).join()}`,
+                  const next = shiftRooms(
+                    map,
+                    selectedRooms.map((room) => room.id),
+                    key,
+                    delta,
                   );
+                  if (next !== map) {
+                    commit(
+                      next,
+                      `rooms:${selectedRooms.map((room) => room.id).join()}`,
+                    );
+                  }
                 }}
               />
             ) : sector && !selectedSwitch && !thing ? (
@@ -2609,6 +2724,13 @@ export function EditorScreen({
             );
           }}
           onClose={() => setReplacing(null)}
+        />
+      ) : null}
+      {finding ? (
+        <FindDialog
+          map={map}
+          onSelect={selectFound}
+          onClose={() => setFinding(false)}
         />
       ) : null}
       {transforming ? (

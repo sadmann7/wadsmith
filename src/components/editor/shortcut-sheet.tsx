@@ -123,6 +123,18 @@ function groups(): { title: string; items: Shortcut[] }[] {
           does: "Pan the map",
         },
         { keys: [key("Esc")], does: "Clear the selection" },
+        {
+          keys: [key("Page Up"), key("Page Down")],
+          does: "Raise or lower the floor of the selected rooms, or the room under the pointer, with Shift for 3 steps",
+        },
+        {
+          keys: [key("Home"), key("End")],
+          does: "Raise or lower their ceiling",
+        },
+        {
+          keys: [key("Alt+Page Up"), key("Alt+Page Down")],
+          does: "Brighten or darken them",
+        },
         { keys: [chord("mod+c")], does: "Copy the selected rooms and things" },
         { keys: [chord("mod+x")], does: "Cut them" },
         { keys: [chord("mod+v")], does: "Paste at the pointer" },
