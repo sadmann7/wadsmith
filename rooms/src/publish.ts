@@ -121,7 +121,8 @@ export async function routePublished(
     const gallery = env.GALLERY.get(env.GALLERY.idFromName("gallery"));
     if (isGallery) {
       if (request.method !== "GET") return reply({ error: "Not found." }, 404);
-      const before = Number(searchParams.get("before") ?? Date.now() + 1);
+      const cursor = searchParams.get("before");
+      const before = cursor ? Number(cursor) : Date.now() + 1;
       return reply({
         maps: await gallery.list(Number.isFinite(before) ? before : Date.now()),
       });
@@ -187,9 +188,11 @@ async function publish(
   if (length > 3 * maxPublishedBytes) {
     return reply({ error: "That's too big to publish." }, 413);
   }
+  const text = await readCapped(request, 3 * maxPublishedBytes);
+  if (text === null) return reply({ error: "That's too big to publish." }, 413);
   let body: Record<string, unknown>;
   try {
-    body = (await request.json()) as Record<string, unknown>;
+    body = JSON.parse(text) as Record<string, unknown>;
   } catch {
     return reply({ error: "A publish is a JSON object." }, 400);
   }
@@ -305,13 +308,43 @@ function parseDetails(body: Record<string, unknown>) {
   } satisfies Omit<Manifest, "id" | "wad" | "source" | "publishedAt">;
 }
 
+// The body as text, or null once it passes the limit, which a missing or
+// wrong Content-Length can't get round.
+async function readCapped(request: Request, limit: number) {
+  if (!request.body) return "";
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.length;
+    if (size > limit) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(size);
+  let at = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, at);
+    at += chunk.length;
+  }
+  return new TextDecoder().decode(bytes);
+}
+
 function decode(value: unknown) {
   if (typeof value !== "string") return null;
+  let text: string;
   try {
-    return Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
+    text = atob(value);
   } catch {
     return null;
   }
+  const bytes = new Uint8Array(text.length);
+  for (let at = 0; at < text.length; at += 1) bytes[at] = text.charCodeAt(at);
+  return bytes;
 }
 
 async function hash(bytes: Uint8Array) {

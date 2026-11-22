@@ -47,6 +47,14 @@ export function playTarget(pathname: string) {
   return playPath.exec(pathname)?.[1] ?? null;
 }
 
+// A level's number as the engine counts it: MAP05 is 5, and E2M3 is 12.
+export function levelNumber(slot: string) {
+  const map = /^MAP(\d\d)$/.exec(slot);
+  if (map) return Number(map[1]);
+  const episode = /^E(\d)M(\d)$/.exec(slot);
+  return episode ? (Number(episode[1]) - 1) * 9 + Number(episode[2]) : 0;
+}
+
 export async function publish(
   request: PublishRequest,
   base = publishBase,

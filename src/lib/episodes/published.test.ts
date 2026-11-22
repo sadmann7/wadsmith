@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { playLink, playTarget, publish } from "./published";
+import { levelNumber, playLink, playTarget, publish } from "./published";
 
 const id = "0123456789abcdef0123";
 
@@ -11,6 +11,13 @@ describe("published maps", () => {
     expect(playTarget(new URL(link).pathname)).toBe(id);
     expect(playTarget("/play/short")).toBeNull();
     expect(playTarget("/maps")).toBeNull();
+  });
+
+  it("numbers levels as the engine does", () => {
+    expect(levelNumber("MAP05")).toBe(5);
+    expect(levelNumber("E1M1")).toBe(1);
+    expect(levelNumber("E2M3")).toBe(12);
+    expect(levelNumber("LEVEL")).toBe(0);
   });
 
   it("sends the WAD as base64 and returns the link's id", async () => {
