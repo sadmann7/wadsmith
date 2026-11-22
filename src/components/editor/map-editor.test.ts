@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import type { GameMap } from "@/lib/map/types";
 
 import { defined } from "@/lib/defined";
+import { pickedRooms } from "@/lib/map/fragment";
+import { drawRoom } from "@/lib/map/reshape";
 import { testMap } from "@/lib/map/test-map";
 
 import { mapEditor } from "./map-editor";
@@ -245,6 +247,139 @@ describe("map editor parts", () => {
     expect(defined(result).sectors).toHaveLength(testMap.sectors.length + 1);
   });
 
+  it("select every wall in line mode, and swap rooms in sector mode", () => {
+    let picked: string[] = [];
+    const lines = mapEditor({
+      id,
+      map: testMap,
+      editMode: "lines",
+      onSelectionChange: (next) => {
+        picked = next;
+      },
+    });
+    lines.api.keydown(press("a", { ctrlKey: true }));
+    expect(picked).toContain("wall:v1|v15");
+    expect(picked.every((key) => key.startsWith("wall:"))).toBe(true);
+
+    const rooms = mapEditor({
+      id,
+      map: testMap,
+      editMode: "sectors",
+      activeSector: "sector-1",
+      onSelectionChange: (next) => {
+        picked = next;
+      },
+    });
+    rooms.api.keydown(press("i", { ctrlKey: true }));
+    expect(picked.filter((key) => key.startsWith("room:"))).toEqual([
+      "room:sector-2",
+      "room:sector-3",
+      "room:sector-4",
+    ]);
+  });
+
+  it("swap rooms in a row without taking in the one between", () => {
+    let map = {
+      vertices: {},
+      sectors: [],
+      things: [],
+      switches: [],
+    } as GameMap;
+    for (const left of [0, 128, 256]) {
+      map = drawRoom(map, box(left, 0, left + 128, 128), {}, 1).map;
+    }
+    const [first, middle, last] = map.sectors.map((sector) => sector.id);
+    let picked: string[] = [];
+    const instance = mapEditor({
+      id,
+      map,
+      editMode: "sectors",
+      activeSector: middle,
+      onSelectionChange: (next) => {
+        picked = next;
+      },
+    });
+    instance.api.keydown(press("i", { ctrlKey: true }));
+    expect(picked).toEqual([`room:${first}`, `room:${last}`]);
+    expect(pickedRooms(map, picked, null)).toEqual([first, last]);
+  });
+
+  it("nudge a room picked whole, with what stands in it", () => {
+    let result = null as GameMap | null;
+    const instance = mapEditor({
+      id,
+      map: testMap,
+      editMode: "sectors",
+      selection: ["room:sector-2"],
+      onMapChange: (next) => {
+        result = next;
+      },
+    });
+    instance.api.keydown(press("ArrowDown"));
+    expect(defined(result).vertices.v13).toEqual({ x: 496, y: 104 });
+    const shotgun = defined(result).things.find(
+      (thing) => thing.id === "shotgun-1",
+    );
+    expect(shotgun).toMatchObject({ x: 448, y: 168 });
+  });
+
+  it("nudge the active room in sector mode", () => {
+    let result = null as GameMap | null;
+    const instance = mapEditor({
+      id,
+      map: testMap,
+      editMode: "sectors",
+      activeSector: "sector-2",
+      onMapChange: (next) => {
+        result = next;
+      },
+    });
+    instance.api.keydown(press("ArrowDown"));
+    expect(defined(result).vertices.v13).toEqual({ x: 496, y: 104 });
+  });
+
+  it("clear the selection with Escape", () => {
+    let picked: string[] | null = null;
+    const instance = mapEditor({
+      id,
+      map: testMap,
+      selection: ["v1", "thing:imp-1"],
+      onSelectionChange: (next) => {
+        picked = next;
+      },
+    });
+    instance.api.keydown(press("Escape"));
+    expect(picked).toEqual([]);
+  });
+
+  it("show a wall picked as one of several", () => {
+    const instance = mapEditor({ id, map: testMap, editMode: "lines" });
+    const parts = listen(instance);
+    instance.setOptions({
+      id,
+      map: testMap,
+      editMode: "lines",
+      selection: ["wall:v1|v15", "wall:v9|v10"],
+    });
+    expect(parts.heard()).toEqual(["wall v1|v15", "wall v9|v10"]);
+  });
+
+  it("move every selected wall's corners with the arrow keys", () => {
+    let result = null as GameMap | null;
+    const instance = mapEditor({
+      id,
+      map: testMap,
+      editMode: "lines",
+      selection: ["wall:v9|v10"],
+      onMapChange: (next) => {
+        result = next;
+      },
+    });
+    instance.api.keydown(press("ArrowDown"));
+    expect(defined(result).vertices.v9).toEqual({ x: 512, y: -56 });
+    expect(defined(result).vertices.v10).toEqual({ x: 960, y: -56 });
+  });
+
   it("wake the measure as a wall is drawn and when a wall is selected", () => {
     const instance = mapEditor({ id, map: testMap, tool: "draw" });
     let heard = 0;
@@ -304,11 +439,16 @@ function listen(instance: Instance) {
   return { heard: () => heard.splice(0).toSorted() };
 }
 
-function press(key: string) {
+function press(key: string, keys: Partial<KeyboardEvent> = {}) {
   return {
     key,
+    ctrlKey: false,
+    metaKey: false,
+    shiftKey: false,
+    altKey: false,
     defaultPrevented: false,
     preventDefault: () => {},
+    ...keys,
   } as KeyboardEvent;
 }
 
@@ -318,4 +458,13 @@ function moved(map: GameMap, corner: string, dx: number): GameMap {
     ...map,
     vertices: { ...map.vertices, [corner]: { x: point.x + dx, y: point.y } },
   };
+}
+
+function box(left: number, top: number, right: number, bottom: number) {
+  return [
+    { x: left, y: top },
+    { x: right, y: top },
+    { x: right, y: bottom },
+    { x: left, y: bottom },
+  ];
 }

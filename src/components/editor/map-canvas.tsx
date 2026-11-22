@@ -40,6 +40,7 @@ import {
 } from "./map-editor";
 
 const worldSize = 65536;
+const gridGap = 6;
 const crowdedRooms = 60;
 const farZoom = 0.5;
 const labelWidth = 80;
@@ -68,6 +69,8 @@ interface MapCanvasProps extends React.ComponentProps<typeof MapEditor> {
   peers?: LivePeer[];
   // Where a browser's agent is working, while it works.
   agentAt?: Point | null;
+  // The grid's spacing, drawn whether or not snapping is on.
+  gridSize?: number;
 }
 
 export function MapCanvas({
@@ -77,6 +80,7 @@ export function MapCanvas({
   trail,
   peers = [],
   agentAt = null,
+  gridSize = 64,
   onViewChange,
   ...props
 }: MapCanvasProps) {
@@ -93,6 +97,11 @@ export function MapCanvas({
   const labelStep = crowded ? step : Infinity;
   const area = crowded ? (seen ?? nowhere) : null;
   const selection = props.selection ?? noSelection;
+  // Lines closer than a few pixels would turn the grid into a wash, so a fine
+  // grid draws every second, fourth or further line when zoomed out.
+  let fine = gridSize;
+  while (fine * step < gridGap) fine *= 2;
+  const major = Math.max(64, fine * 8);
 
   const shapes = (
     <>
@@ -265,11 +274,22 @@ export function MapCanvas({
           <defs>
             <pattern
               id="map-grid"
-              width="64"
-              height="64"
+              width={fine}
+              height={fine}
               patternUnits="userSpaceOnUse"
             >
-              <path d="M64 0H0V64" className="map-grid-line" />
+              <path d={`M${fine} 0H0V${fine}`} className="map-grid-line" />
+            </pattern>
+            <pattern
+              id="map-grid-major"
+              width={major}
+              height={major}
+              patternUnits="userSpaceOnUse"
+            >
+              <path
+                d={`M${major} 0H0V${major}`}
+                className="map-grid-line map-grid-major"
+              />
             </pattern>
           </defs>
           <rect
@@ -278,6 +298,13 @@ export function MapCanvas({
             width={worldSize}
             height={worldSize}
             fill="url(#map-grid)"
+          />
+          <rect
+            x={-worldSize / 2}
+            y={-worldSize / 2}
+            width={worldSize}
+            height={worldSize}
+            fill="url(#map-grid-major)"
           />
           {shapes}
           {links.map(({ from, to }) => (

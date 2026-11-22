@@ -776,6 +776,26 @@
     fill-rule: evenodd;
   }
 
+  .map-grid-major {
+    stroke: color-mix(
+      in oklab,
+      var(--color-map-grid),
+      var(--color-map-wall) 10%
+    );
+  }
+
+  .map-sector[data-hover] {
+    fill: color-mix(in oklab, var(--color-primary) 9%, var(--color-map-sector));
+  }
+
+  .map[data-mode="lines"] .map-sector[data-hover] {
+    fill: color-mix(
+      in oklab,
+      var(--color-map-portal) 22%,
+      var(--color-map-sector)
+    );
+  }
+
   .map-sector[data-selected] {
     fill: color-mix(in oklab, var(--color-primary) 14%, transparent);
   }
@@ -796,6 +816,15 @@
   .map-wall[data-portal] {
     stroke: var(--color-map-portal);
     stroke-dasharray: 5 4;
+  }
+
+  .map-wall[data-hover] {
+    stroke: color-mix(
+      in oklab,
+      var(--color-primary) 65%,
+      var(--color-map-wall)
+    );
+    stroke-width: 2.5;
   }
 
   .map-wall[data-selected] {

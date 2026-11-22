@@ -360,6 +360,21 @@ describe("removing a corner", () => {
 });
 
 describe("dropping a corner on a wall", () => {
+  it("joins a wall laid along another", () => {
+    const side = addRoom(hall.map, box(128, 320, 384, 448), {}, 1);
+    const [first, second] = side.map.sectors[1].vertices;
+    const moved = {
+      ...side.map,
+      vertices: {
+        ...side.map.vertices,
+        [first]: { x: -64, y: 256 },
+        [second]: { x: 576, y: 256 },
+      },
+    };
+    const joined = joinCornersToWalls(moved, [first, second]);
+    expect(sharedWalls(joined)).toHaveLength(1);
+  });
+
   it("makes it a corner of that wall", () => {
     const below = addRoom(hall.map, box(128, 300, 256, 384), {}, 1);
     const corner = below.map.sectors[1].vertices[0];

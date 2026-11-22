@@ -34,6 +34,8 @@ export const gridSizes = [1, 2, 4, 8, 16, 32, 64] as const;
 export const thingKeyPrefix = "thing:";
 export const switchKeyPrefix = "switch:";
 export const doorKeyPrefix = "door:";
+export const wallKeyPrefix = "wall:";
+export const roomKeyPrefix = "room:";
 const switchWidth = 64;
 
 export const defaultDoor: DoorSettings = {

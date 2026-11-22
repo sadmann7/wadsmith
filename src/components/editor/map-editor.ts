@@ -10,6 +10,7 @@ import {
   definePrimitive,
   dragThreshold,
   live,
+  matchesShortcut,
   type MoveDraft,
   selects,
   type Viewport,
@@ -37,6 +38,7 @@ import {
   targetForKeys,
   wallTarget,
 } from "@/lib/editor/map-target";
+import { editorShortcuts } from "@/lib/editor/shortcuts";
 import { getIsPlayerStart } from "@/lib/map/catalog";
 import {
   addSwitch,
@@ -49,14 +51,21 @@ import {
   positionsOf,
   removeSwitch,
   roomCenter,
+  roomKeyPrefix,
   snapPoint,
   splitWall,
   switchKeyPrefix,
   thingKeyPrefix,
   updateSwitch,
+  wallKeyPrefix,
   wallNear,
 } from "@/lib/map/edit";
-import { partKeys, removeParts, selectedParts } from "@/lib/map/fragment";
+import {
+  partKeys,
+  pickedRooms,
+  removeParts,
+  selectedParts,
+} from "@/lib/map/fragment";
 import {
   type Box,
   boxOf,
@@ -65,6 +74,7 @@ import {
   sectorAt,
   sectorVertices,
   wallKey,
+  wallOwners,
 } from "@/lib/map/geometry";
 import {
   drawLines,
@@ -98,7 +108,9 @@ interface MapEditorOptions {
   map?: GameMap;
   tool?: MapTool;
   editMode?: EditMode;
-  onWallSelect?: (sector: string, wall: string) => void;
+  // A wall picked as the one the inspector shows, with every wall now
+  // selected alongside it.
+  onWallSelect?: (sector: string, wall: string, selection: string[]) => void;
   onViewChange?: (status: MapViewStatus) => void;
   thingKind?: ThingKind;
   activeSector?: string | null;
@@ -133,6 +145,8 @@ interface MapEditorOptions {
   grid?: number;
   drawShape?: DrawShape;
   drawSides?: number;
+  // Whether a corner or wall dropped on a wall joins it.
+  autoMerge?: boolean;
 }
 
 interface MapEditorState {
@@ -154,6 +168,8 @@ interface MapEditorState {
   drawShape: DrawShape;
   drawSides: number;
   grid: number;
+  hoverWall: string | null;
+  hoverRooms: string[];
 }
 
 const emptyMap: GameMap = {
@@ -227,7 +243,11 @@ const readsNothing = {
   drawShape: none,
   drawSides: none,
   grid: none,
+  hoverWall: none,
+  hoverRooms: none,
 } satisfies Record<keyof MapEditorState, readonly never[]>;
+
+type BoxMode = "replace" | "add" | "remove";
 
 export const mapEditor = definePrimitive({
   name: "map-editor",
@@ -261,6 +281,7 @@ export const mapEditor = definePrimitive({
     grid: "number",
     drawShape: "string",
     drawSides: "number",
+    autoMerge: "boolean",
   },
   controlled: ["map", "tool", "activeSector", "selection"],
   state: (options: MapEditorOptions): MapEditorState => {
@@ -284,6 +305,8 @@ export const mapEditor = definePrimitive({
       drawShape: options.drawShape ?? "outline",
       drawSides: options.drawSides ?? defaultSides,
       grid: options.grid ?? gridSize,
+      hoverWall: null,
+      hoverRooms: [],
     };
   },
   sync: (options) => ({
@@ -369,9 +392,13 @@ export const mapEditor = definePrimitive({
         const corners = (keys ?? []).filter(
           (key) => !key.startsWith(thingKeyPrefix),
         );
+        const merging = context.options().autoMerge !== false;
         const joined =
           details.reason === "drag" && corners.length > 0
-            ? mergeCorners(joinCornersToWalls(moved, corners), corners)
+            ? mergeCorners(
+                merging ? joinCornersToWalls(moved, corners) : moved,
+                corners,
+              )
             : moved;
         const done = change("map", joined, details);
         if (done && joined !== moved) select([]);
@@ -613,10 +640,19 @@ export const mapEditor = definePrimitive({
       if (!direction || event.altKey || event.ctrlKey || event.metaKey) {
         return false;
       }
-      const { selection, positions } = store.get();
-      const keys = selection.filter(
-        (key) => key in positions && !key.startsWith(switchKeyPrefix),
-      );
+      const { map, selection, positions, editMode } = store.get();
+      // A room picked whole, or the active room in sector mode, moves with
+      // its corners and what stands in it.
+      const rooms = selection.filter((key) => key.startsWith(roomKeyPrefix));
+      const active = editMode === "sectors" ? pickedRoom() : null;
+      const keys = [
+        ...new Set([
+          ...movableKeys(selection, positions),
+          ...(rooms.length > 0 || active
+            ? partKeys(map, selectedParts(map, rooms, active))
+            : []),
+        ]),
+      ];
       if (keys.length === 0) return false;
       const by = event.shiftKey ? grid() * 8 : grid();
       move.moveBy(keys, direction.x * by, direction.y * by, {
@@ -640,13 +676,20 @@ export const mapEditor = definePrimitive({
       return selectedParts(map, selection, pickedRoom());
     };
 
-    // Adding to a selection keeps the active room in it, as its corners.
+    // Adding to a selection keeps the active room in it: as a whole room in
+    // sector mode, and as its corners in corner mode.
     const withPickedRoom = () => {
-      const { map, selection } = store.get();
+      const { map, selection, editMode } = store.get();
       const room = map.sectors.find((sector) => sector.id === pickedRoom());
-      return room
-        ? [...new Set([...selection, ...sectorVertices(room)])]
-        : selection;
+      if (!room) return selection;
+      return [
+        ...new Set([
+          ...selection,
+          ...(editMode === "sectors"
+            ? [`${roomKeyPrefix}${room.id}`]
+            : sectorVertices(room)),
+        ]),
+      ];
     };
 
     const deleteSelection = () => {
@@ -711,12 +754,130 @@ export const mapEditor = definePrimitive({
       return true;
     };
     let pointer: Point | null = null;
+    let spaceHeld = false;
 
-    // Shift and a drag over the map adds what the box holds to the selection:
-    // corners and things in vertex mode, whole rooms and things in sector
-    // mode, where corners don't show, and things alone in thing mode.
+    // What a click would pick, drawn highlighted: the wall in line mode, with
+    // the rooms its action works on, and the room in sector mode.
+    const hover = (at: Point | null) => {
+      const {
+        map,
+        editMode,
+        tool,
+        moving,
+        marquee,
+        viewport: view,
+      } = store.get();
+      let wall: string | null = null;
+      let rooms: string[] = [];
+      if (at && tool === "select" && !moving && !marquee) {
+        if (editMode === "lines") {
+          wall = wallNear(map, at, wallReach / view.zoom)?.wall ?? null;
+          const tag = wall ? taggedBy(map, wall) : 0;
+          rooms = tag
+            ? map.sectors
+                .filter((sector) => sector.tag === tag)
+                .map((sector) => sector.id)
+            : [];
+        } else if (editMode === "sectors") {
+          const room = sectorAt(map, at);
+          rooms = room ? [room.id] : [];
+        }
+      }
+      const { hoverWall, hoverRooms } = store.get();
+      if (
+        hoverWall !== wall ||
+        hoverRooms.length !== rooms.length ||
+        hoverRooms.some((id, index) => id !== rooms[index])
+      ) {
+        store.set({ hoverWall: wall, hoverRooms: rooms });
+      }
+    };
+
+    const selectedWalls = () =>
+      store
+        .get()
+        .selection.filter((key) => key.startsWith(wallKeyPrefix))
+        .map((key) => key.slice(wallKeyPrefix.length));
+
+    // The walls in the selection, with one of them shown in the inspector:
+    // the one pressed, from the side of it that was pressed, or else the one
+    // shown before.
+    const pickWalls = (
+      walls: string[],
+      primary: { wall: string; sector: string } | null,
+    ) => {
+      const { map, highlightedWall, activeSector } = store.get();
+      const keys = walls.map((wall) => `${wallKeyPrefix}${wall}`);
+      select(keys);
+      const before =
+        highlightedWall && walls.includes(highlightedWall) && activeSector
+          ? { wall: highlightedWall, sector: activeSector }
+          : null;
+      const last = walls.at(-1);
+      const owner = last && wallOwners(map).get(last)?.[0];
+      const shown =
+        primary && walls.includes(primary.wall)
+          ? primary
+          : (before ??
+            (last && owner ? { wall: last, sector: owner.id } : null));
+      if (shown) {
+        context.options().onWallSelect?.(shown.sector, shown.wall, keys);
+      }
+    };
+
+    // Select all picks everything the mode works on, and inverting swaps
+    // what is picked for what isn't.
+    const everything = () => {
+      const { map, positions, editMode } = store.get();
+      return boxedKeys(map, positions, editMode, null);
+    };
+    const selectEverything = (invert: boolean) => {
+      const { map, editMode, selection } = store.get();
+      const all = everything();
+      let current = new Set(withPickedRoom());
+      // A room is in or out as a whole, however it came to be picked.
+      if (editMode === "sectors") {
+        current = new Set([
+          ...selection.filter((key) => key.startsWith(thingKeyPrefix)),
+          ...pickedRooms(map, selection, pickedRoom()).map(
+            (id) => `${roomKeyPrefix}${id}`,
+          ),
+        ]);
+      }
+      applyPicked(invert ? all.filter((key) => !current.has(key)) : all);
+    };
+
+    // Selects these keys, through the inspector's wall when they are walls.
+    const applyPicked = (keys: string[]) => {
+      const { editMode } = store.get();
+      if (editMode === "lines") {
+        const walls = keys.filter((key) => key.startsWith(wallKeyPrefix));
+        if (walls.length > 0) {
+          pickWalls(
+            walls.map((key) => key.slice(wallKeyPrefix.length)),
+            null,
+          );
+        } else select([]);
+        return;
+      }
+      // One room on its own is the active room, which the inspector edits.
+      if (
+        editMode === "sectors" &&
+        keys.length === 1 &&
+        keys[0].startsWith(roomKeyPrefix)
+      ) {
+        select([], keys[0].slice(roomKeyPrefix.length));
+        return;
+      }
+      select(keys);
+    };
+
+    // A drag over the map boxes in what the mode works on: corners and
+    // things, whole rooms and things, walls with both ends inside, or things.
+    // A plain box replaces the selection, Shift adds and Ctrl or Cmd takes
+    // away.
     let stopMarquee: (() => void) | undefined;
-    const startMarquee = (event: PointerEvent) => {
+    const startMarquee = (event: PointerEvent, how: BoxMode) => {
       const surface = root();
       if (!surface) return;
       const from = viewport.toCanvas(event.clientX, event.clientY);
@@ -731,37 +892,64 @@ export const mapEditor = definePrimitive({
           const { marquee, map, positions, editMode } = store.get();
           store.set({ marquee: null });
           if (canceled || !marquee) return;
-          const holds = (key: string) => {
-            const point = positions[key];
-            return (
-              point !== undefined &&
-              point.x >= marquee.left &&
-              point.x <= marquee.right &&
-              point.y >= marquee.top &&
-              point.y <= marquee.bottom
-            );
-          };
-          const things = Object.keys(positions).filter(
-            (key) => key.startsWith(thingKeyPrefix) && holds(key),
+          const picked = boxedKeys(map, positions, editMode, marquee);
+          if (how === "replace") {
+            applyPicked(picked);
+            return;
+          }
+          const current = withPickedRoom();
+          const { highlightedWall } = store.get();
+          // The wall the inspector shows counts as selected.
+          const held =
+            editMode === "lines" && highlightedWall
+              ? [...new Set([...current, `${wallKeyPrefix}${highlightedWall}`])]
+              : current;
+          const removed = new Set(
+            editMode === "sectors"
+              ? picked.flatMap((key) =>
+                  key.startsWith(roomKeyPrefix)
+                    ? [key, ...roomCornerKeys(map, key)]
+                    : [key],
+                )
+              : picked,
           );
-          const corners =
-            editMode === "vertices"
-              ? Object.keys(map.vertices).filter(holds)
-              : editMode === "sectors"
-                ? map.sectors
-                    .filter((sector) => sector.vertices.every(holds))
-                    .flatMap(sectorVertices)
-                : [];
-          select([...new Set([...withPickedRoom(), ...corners, ...things])]);
+          applyPicked(
+            how === "add"
+              ? [...new Set([...held, ...picked])]
+              : held.filter((key) => !removed.has(key)),
+          );
         },
       });
     };
     context.onDestroy(() => stopMarquee?.());
 
-    // Shift and a click on a room adds its corners to the selection, or takes
-    // them out when they are all in it.
+    // Shift and a click on a room adds it to the selection, or takes it out
+    // when it is in: as a whole room in sector mode, as its corners in corner
+    // mode.
     const toggleRoom = (room: Sector) => {
+      const { map, editMode } = store.get();
       const selection = withPickedRoom();
+      if (editMode === "sectors") {
+        const key = `${roomKeyPrefix}${room.id}`;
+        const rooms = pickedRooms(map, selection, null);
+        if (!rooms.includes(room.id)) {
+          applyPicked([...selection, key]);
+          return;
+        }
+        // Corners the other picked rooms still need stay.
+        const kept = new Set(
+          map.sectors
+            .filter((sector) => sector !== room && rooms.includes(sector.id))
+            .flatMap(sectorVertices),
+        );
+        const own = new Set(sectorVertices(room));
+        applyPicked(
+          selection.filter(
+            (item) => item !== key && !(own.has(item) && !kept.has(item)),
+          ),
+        );
+        return;
+      }
       const corners = [...new Set(sectorVertices(room))];
       const picked = room.vertices.every((id) => selection.includes(id));
       select(
@@ -787,6 +975,19 @@ export const mapEditor = definePrimitive({
 
     const selectedTarget = (): MapTarget => {
       const { selection, activeSector, highlightedWall, map } = store.get();
+      const rooms = pickedRooms(
+        map,
+        selection.filter((key) => key.startsWith(roomKeyPrefix)),
+        null,
+      );
+      if (rooms[0]) {
+        return {
+          kind: "room",
+          sector: rooms[0],
+          point: null,
+          keepSelection: true,
+        };
+      }
       const picked = targetForKeys(selection, null);
       if (picked) return picked;
       if (highlightedWall) {
@@ -837,9 +1038,15 @@ export const mapEditor = definePrimitive({
         const item = state.map.switches.find(
           (entry) => wallKey(entry.from, entry.to) === wall.wall,
         );
-        return item
-          ? targetForKeys([`${switchKeyPrefix}${item.id}`], point)
-          : wallTarget(wall.sector, wall.wall, point);
+        if (item) {
+          return targetForKeys([`${switchKeyPrefix}${item.id}`], point);
+        }
+        const target = wallTarget(wall.sector, wall.wall, point);
+        // A wall that is one of several selected keeps the rest selected.
+        return selectedWalls().length > 1 &&
+          state.selection.includes(`${wallKeyPrefix}${wall.wall}`)
+          ? { ...target, keepSelection: true }
+          : target;
       }
       const room = sectorAt(state.map, at);
       if (room) {
@@ -1014,44 +1221,47 @@ export const mapEditor = definePrimitive({
         const { tool, editMode, map, viewport: view } = store.get();
         if (tool !== "select") return;
         // A touch has no Shift, and two of them zoom the map, so a box and a
-        // drag of a room take a mouse or a pen.
+        // drag of a room take a mouse or a pen. The middle button, or Space
+        // held down, pans instead.
         const fine = event.pointerType !== "touch" && event.button === 0;
-        if (fine && event.shiftKey && editMode !== "lines") {
-          // The browser would stretch the page's text selection to here.
-          event.preventDefault();
-          startMarquee(event);
+        if (event.button !== 0 || spaceHeld) {
+          viewport.pointerdown(event);
           return;
         }
-        // In line mode a wall drags by its two corners together.
-        if (editMode === "lines" && event.button === 0) {
-          const at = viewport.toCanvas(event.clientX, event.clientY);
+        const at = viewport.toCanvas(event.clientX, event.clientY);
+        const surface = root();
+        if (!surface) return;
+        const adding = event.shiftKey || event.ctrlKey || event.metaKey;
+        // In line mode a wall drags by its corners, with every selected wall
+        // when it is one of them.
+        if (editMode === "lines") {
           const wall = wallNear(map, at, wallReach / view.zoom);
-          const surface = root();
-          if (wall && surface) {
-            const [from, to] = wall.wall.split("|");
-            select([from, to]);
-            move.pointerdown(event, from, surface);
+          if (wall && !adding) {
+            const walls = selectedWalls();
+            const group = walls.includes(wall.wall) ? walls : [wall.wall];
+            if (group.length === 1) pickWalls(group, wall);
+            carried = [...new Set(group.flatMap((item) => item.split("|")))];
+            move.pointerdown(event, carried[0], surface);
+            event.preventDefault();
             return;
           }
         }
-        // In sector mode a selected room drags with everything picked.
+        // In sector mode a room drags with everything picked, and a room not
+        // yet picked is picked first.
         if (editMode === "sectors" && fine) {
-          const { selection, positions } = store.get();
-          const room = sectorAt(
-            map,
-            viewport.toCanvas(event.clientX, event.clientY),
-          );
-          const parts = pickedParts();
-          const surface = root();
-          if (room && surface && parts.sectors.includes(room.id)) {
-            carried = [
-              ...new Set([
-                ...partKeys(map, parts),
-                ...selection.filter(
-                  (key) => key in positions && !key.startsWith(switchKeyPrefix),
-                ),
-              ]),
-            ];
+          const room = sectorAt(map, at);
+          if (room && !adding) {
+            const { selection, positions } = store.get();
+            const held = pickedParts().sectors.includes(room.id);
+            if (!held) select([], room.id);
+            carried = held
+              ? [
+                  ...new Set([
+                    ...partKeys(map, pickedParts()),
+                    ...movableKeys(selection, positions),
+                  ]),
+                ]
+              : partKeys(map, selectedParts(map, [], room.id));
             move.pointerdown(event, carried[0], surface);
             // The move turns away a press that is already cancelled, so the
             // page's text selection is held off only after it has begun.
@@ -1059,10 +1269,25 @@ export const mapEditor = definePrimitive({
             return;
           }
         }
-        viewport.pointerdown(event);
+        // A finger or a pen has no Shift or middle button, so it pans.
+        if (event.pointerType !== "mouse") {
+          viewport.pointerdown(event);
+          return;
+        }
+        // The browser would stretch the page's text selection to here.
+        event.preventDefault();
+        startMarquee(
+          event,
+          event.shiftKey
+            ? "add"
+            : event.ctrlKey || event.metaKey
+              ? "remove"
+              : "replace",
+        );
       },
       pointerleave() {
         pointer = null;
+        hover(null);
         reportPointer?.(null);
       },
       pointermove(event: PointerEvent) {
@@ -1078,6 +1303,7 @@ export const mapEditor = definePrimitive({
           context.options().onContextTarget?.(null);
         }
         pointer = viewport.toCanvas(event.clientX, event.clientY);
+        hover(event.buttons === 0 ? pointer : null);
         reportPointer?.(pointFromEvent(event));
         const { tool } = store.get();
         if (tool === "draw" || tool === "line") {
@@ -1130,10 +1356,25 @@ export const mapEditor = definePrimitive({
           } else if (editMode === "lines") {
             const at = viewport.toCanvas(event.clientX, event.clientY);
             const wall = wallNear(map, at, wallReach / view.zoom);
-            select([]);
-            if (wall) {
-              context.options().onWallSelect?.(wall.sector, wall.wall);
+            if (!wall) {
+              if (!event.shiftKey) select([]);
+              return;
             }
+            const walls = selectedWalls();
+            const { highlightedWall } = store.get();
+            const current =
+              highlightedWall && !walls.includes(highlightedWall)
+                ? [...walls, highlightedWall]
+                : walls;
+            if (!event.shiftKey) {
+              pickWalls([wall.wall], wall);
+              return;
+            }
+            const next = current.includes(wall.wall)
+              ? current.filter((item) => item !== wall.wall)
+              : [...current, wall.wall];
+            if (next.length === 0) select([]);
+            else pickWalls(next, next.includes(wall.wall) ? wall : null);
           } else {
             select(
               [],
@@ -1165,6 +1406,30 @@ export const mapEditor = definePrimitive({
           event.preventDefault();
           return;
         }
+        // Space held over the map pans with the pointer, though a focused
+        // button inside it still presses.
+        if (event.key === " " && event.target === root()) {
+          spaceHeld = true;
+          event.preventDefault();
+          return;
+        }
+        if (tool === "select") {
+          const all = matchesShortcut(event, editorShortcuts.selectAll.keys);
+          const invert = matchesShortcut(
+            event,
+            editorShortcuts.invertSelection.keys,
+          );
+          if (all || invert) {
+            selectEverything(invert);
+            event.preventDefault();
+            return;
+          }
+          if (event.key === "Escape" && store.get().selection.length > 0) {
+            select([]);
+            event.preventDefault();
+            return;
+          }
+        }
         if (
           ((event.key === "Delete" || event.key === "Backspace") &&
             deleteSelection()) ||
@@ -1178,6 +1443,9 @@ export const mapEditor = definePrimitive({
           return;
         }
         viewport.keydown(event);
+      },
+      keyup(event: KeyboardEvent) {
+        if (event.key === " ") spaceHeld = false;
       },
       pressPort(event: PointerEvent, key: string, el: HTMLElement) {
         if (event.button !== 0 || getIsSecondaryPress(event)) return;
@@ -1244,6 +1512,8 @@ export const mapEditor = definePrimitive({
         contextmenu: (event, { api }) => api.contextmenu(event),
         dblclick: (event, { api }) => api.doubleClick(event),
         keydown: (event, { api }) => api.keydown(event),
+        keyup: (event, { api }) => api.keyup(event),
+        blur: (_event, { api }) => api.keyup({ key: " " } as KeyboardEvent),
       },
     }),
     world: slot({
@@ -1266,16 +1536,21 @@ export const mapEditor = definePrimitive({
         positions: ({ props }) => sectorCorners(props),
         moving: whole,
         activeSector: ({ key }) => [key],
-        selection: ({ props }) => props.corners,
+        selection: ({ key, props }) => [
+          ...props.corners,
+          `${roomKeyPrefix}${key}`,
+        ],
+        hoverRooms: ({ key }) => [key],
       }),
       attrs: (state, { key, props }) => ({
         d: sectorPath(state, props.corners, props.holes),
         "data-active": state.activeSector === key ? "" : undefined,
-        "data-selected": props.corners.every((corner) =>
-          state.selection.includes(corner),
-        )
-          ? ""
-          : undefined,
+        "data-hover": state.hoverRooms.includes(key) ? "" : undefined,
+        "data-selected":
+          state.selection.includes(`${roomKeyPrefix}${key}`) ||
+          props.corners.every((corner) => state.selection.includes(corner))
+            ? ""
+            : undefined,
         "data-door": props.door ? "" : undefined,
       }),
       live: live<MapEditorState, unknown, SectorProps>((state, { props }) => ({
@@ -1292,10 +1567,17 @@ export const mapEditor = definePrimitive({
           moved: movedDraft,
         },
         highlightedWall: ({ key }) => [key],
+        selection: ({ key }) => [`${wallKeyPrefix}${key}`],
+        hoverWall: ({ key }) => [key],
       }),
       attrs: (state, { key, props }) => ({
         ...wallAttrs(state, props.from, props.to),
-        "data-selected": state.highlightedWall === key ? "" : undefined,
+        "data-selected":
+          state.highlightedWall === key ||
+          state.selection.includes(`${wallKeyPrefix}${key}`)
+            ? ""
+            : undefined,
+        "data-hover": state.hoverWall === key ? "" : undefined,
       }),
       live: live<MapEditorState, unknown, WallProps>((state, { props }) =>
         wallAttrs(state, props.from, props.to),
@@ -1490,6 +1772,73 @@ export const mapEditor = definePrimitive({
     items: (api) => api.rooms(),
   },
 });
+
+// The keys a mode works on, within a box or, without one, on the whole map.
+function boxedKeys(
+  map: GameMap,
+  positions: Record<string, Point>,
+  editMode: EditMode,
+  box: Box | null,
+) {
+  const holds = (point: Point | undefined) =>
+    point !== undefined &&
+    (!box ||
+      (point.x >= box.left &&
+        point.x <= box.right &&
+        point.y >= box.top &&
+        point.y <= box.bottom));
+  const things = Object.keys(positions).filter(
+    (key) => key.startsWith(thingKeyPrefix) && holds(positions[key]),
+  );
+  if (editMode === "things") return things;
+  if (editMode === "lines") {
+    return [...wallOwners(map).keys()]
+      .filter((wall) =>
+        wall.split("|").every((corner) => holds(map.vertices[corner])),
+      )
+      .map((wall) => `${wallKeyPrefix}${wall}`);
+  }
+  if (editMode === "sectors") {
+    return [
+      ...map.sectors
+        .filter((sector) =>
+          sector.vertices.every((corner) => holds(map.vertices[corner])),
+        )
+        .map((sector) => `${roomKeyPrefix}${sector.id}`),
+      ...things,
+    ];
+  }
+  return [
+    ...Object.keys(map.vertices).filter((key) => holds(map.vertices[key])),
+    ...things,
+  ];
+}
+
+// The selection's keys that move, with a selected wall moving by its corners.
+function movableKeys(selection: string[], positions: Record<string, Point>) {
+  return [
+    ...new Set(
+      selection.flatMap((key) =>
+        key.startsWith(wallKeyPrefix)
+          ? key.slice(wallKeyPrefix.length).split("|")
+          : key in positions && !key.startsWith(switchKeyPrefix)
+            ? [key]
+            : [],
+      ),
+    ),
+  ];
+}
+
+function roomCornerKeys(map: GameMap, key: string) {
+  const id = key.slice(roomKeyPrefix.length);
+  const room = map.sectors.find((sector) => sector.id === id);
+  return room ? sectorVertices(room) : [];
+}
+
+function taggedBy(map: GameMap, wall: string) {
+  const line = map.lines?.[wall];
+  return line?.action?.tag ?? line?.raw?.tag ?? 0;
+}
 
 function getHasName(value: unknown, index: number) {
   return (
