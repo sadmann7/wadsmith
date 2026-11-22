@@ -5,7 +5,6 @@ import { wadFileName } from "@/components/editor/build-dialog";
 import { engineSlot, type GameInfo } from "@/lib/engine/game";
 import type { CheckContext } from "@/lib/map/validate";
 import { useBuildChecks } from "@/hooks/use-build-checks";
-import { knownBuildProblem } from "@/lib/episodes/build-checks";
 import {
   mapName,
   mapSlots,
@@ -59,10 +58,10 @@ export function EpisodeBuildDialog({
     wadFileName(name.toLowerCase()),
   );
   const [buildError, setBuildError] = React.useState<string | null>(null);
-  useBuildChecks(maps);
+  const checks = useBuildChecks(maps);
   const rows = maps.map((entry) => ({
     entry,
-    status: mapStatus(entry, knownBuildProblem(entry), context),
+    status: mapStatus(entry, checks.problem(entry), context),
   }));
   const blocked = rows.filter((row) => row.status.kind === "error");
   const checking = rows.some((row) => row.status.kind === "checking");

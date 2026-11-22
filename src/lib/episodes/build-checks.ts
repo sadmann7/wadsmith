@@ -11,6 +11,11 @@ interface Check {
   build?: Build;
 }
 
+interface Result {
+  revision: number;
+  build: Build;
+}
+
 interface Job {
   id: number;
   map: GameMap;
@@ -29,6 +34,8 @@ const queue: Job[] = [];
 const builders: Builder[] = [];
 const listeners = new Set<() => void>();
 let nextId = 0;
+let results: ReadonlyMap<string, Result> = new Map();
+let snapshot = readChecks(results);
 
 function builderLimit() {
   return Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 2) - 1));
@@ -91,6 +98,11 @@ export function checkBuild(entry: EpisodeMap) {
       runQueue();
     }).then((build) => {
       check.build = build;
+      results = new Map(results).set(entry.id, {
+        revision: check.revision,
+        build,
+      });
+      snapshot = readChecks(results);
       for (const listener of listeners) listener();
       return build.problem;
     }),
@@ -110,6 +122,32 @@ export function knownBuildProblem(entry: EpisodeMap) {
 
 export function knownLumps(entry: EpisodeMap): Lump[] | null {
   return knownBuild(entry)?.lumps ?? null;
+}
+
+export interface BuildChecks {
+  problem: (entry: EpisodeMap) => string | null | undefined;
+  lumps: (entry: EpisodeMap) => Lump[] | null;
+}
+
+function readChecks(from: ReadonlyMap<string, Result>): BuildChecks {
+  const build = (entry: EpisodeMap) => {
+    const result = from.get(entry.id);
+    return result?.revision === entry.mapRevision ? result.build : undefined;
+  };
+  return {
+    problem: (entry) => build(entry)?.problem,
+    lumps: (entry) => build(entry)?.lumps ?? null,
+  };
+}
+
+export const noBuildChecks = readChecks(new Map());
+
+export function buildChecksSnapshot() {
+  return snapshot;
+}
+
+export function buildCheckResult(id: string) {
+  return results.get(id);
 }
 
 export function subscribeBuildChecks(listener: () => void) {

@@ -260,7 +260,7 @@ export function EpisodeScreen() {
   const [maps, setMaps] = React.useState<EpisodeMap[]>([]);
   const [session, setSession] = React.useState<Session | null>(null);
   // Only the editor's map switcher shows them; the home page's rows check their own.
-  useBuildChecks(session ? maps : []);
+  const checks = useBuildChecks(session ? maps : []);
   const [details, setDetails] = React.useState<SessionDetails | null>(null);
   const [saveStatus, setSaveStatus] = React.useState<SaveStatus>("saved");
   const [message, setMessage] = React.useState<string | null>(null);
@@ -276,11 +276,7 @@ export function EpisodeScreen() {
     () => ({ game: iwad?.game, names }),
     [iwad, names],
   );
-  // The route effect runs once, so it reads the context of the moment.
-  const contextRef = React.useRef(context);
-  React.useEffect(() => {
-    contextRef.current = context;
-  }, [context]);
+  const currentContext = React.useEffectEvent(() => context);
   const [mapDialog, setMapDialog] = React.useState<"new" | "settings" | null>(
     null,
   );
@@ -473,7 +469,7 @@ export function EpisodeScreen() {
         } else if (route.kind === "episode" && play) {
           const started = await episodeGame(
             await opened.listMaps(route.id),
-            contextRef.current,
+            currentContext(),
           );
           if (stale() || !started) return;
           if (started.problem) setMessage(started.problem);
@@ -1215,7 +1211,7 @@ export function EpisodeScreen() {
               id: entry.id,
               slot: entry.slot,
               name: mapName(entry),
-              health: mapStatus(entry, knownBuildProblem(entry), context).kind,
+              health: mapStatus(entry, checks.problem(entry), context).kind,
             })),
             currentId: session.id,
             canAddMap: freeSlots(maps, undefined, game).length > 0,

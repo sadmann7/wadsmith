@@ -381,10 +381,9 @@ export function CoopJoin({ code }: CoopJoinProps) {
   const [session, setSession] = React.useState<CoopSession | null>(null);
   const [hostGame, setHostGame] = React.useState<GameId | null>(null);
   const iwad = useIwad();
-  const iwadRef = React.useRef(iwad);
-  React.useEffect(() => {
-    iwadRef.current = iwad;
-  }, [iwad]);
+  const currentGame = React.useEffectEvent(
+    () => iwad?.game.id ?? defaultGame.id,
+  );
 
   React.useEffect(() => {
     let peer = 0;
@@ -435,7 +434,7 @@ export function CoopJoin({ code }: CoopJoinProps) {
         ),
       // A map plays on the host's IWAD, so another one here would desync.
       onGame: (received) => {
-        const mine = iwadRef.current?.game.id ?? defaultGame.id;
+        const mine = currentGame();
         if (received.game && received.game !== mine) {
           setHostGame(received.game);
           setState({ step: "ended", reason: "game" });

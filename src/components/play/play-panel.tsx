@@ -478,10 +478,10 @@ function GameSession({
     if (heldKeys.current.press(source, key)) gameRef.current?.key(true, key);
   };
 
-  const releaseKey = React.useEffectEvent((source: string) => {
+  const releaseKey = (source: string) => {
     const key = heldKeys.current.release(source);
     if (key !== null) gameRef.current?.key(false, key);
-  });
+  };
 
   const releaseAllKeys = () => {
     for (const key of heldKeys.current.releaseAll()) {
@@ -509,39 +509,41 @@ function GameSession({
     pressKey(mouseFireSource, keysByCode.Space);
   };
 
-  const releaseMouse = React.useEffectEvent(() => {
+  const releaseMouse = () => {
     if (document.pointerLockElement !== canvasRef.current) return;
     expectingRelease.current = true;
     document.exitPointerLock();
-  });
+  };
 
-  const cancelCapture = React.useEffectEvent(() => {
+  const cancelCapture = () => {
     clearTimeout(lockTimer.current);
     lockPending.current = false;
     wantsLock.current = false;
     updateCapture("cancelled");
+  };
+
+  const onPointerLockChange = React.useEffectEvent(() => {
+    const canvas = canvasRef.current;
+    if (canvas && document.pointerLockElement === canvas) {
+      updateCapture("locked");
+      // A request already on its way can land after the game stopped wanting it.
+      if (!wantsLock.current) releaseMouse();
+      return;
+    }
+    const { mode } = captureRef.current;
+    if (mode !== "locked" && mode !== "capturing") return;
+    releaseKey(mouseFireSource);
+    if (expectingRelease.current) {
+      expectingRelease.current = false;
+      updateCapture("suspended");
+    } else {
+      notePointerReleased(performance.now());
+      updateCapture("lost");
+    }
   });
 
   React.useEffect(() => {
-    const onChange = () => {
-      const canvas = canvasRef.current;
-      if (canvas && document.pointerLockElement === canvas) {
-        updateCapture("locked");
-        // A request already on its way can land after the game stopped wanting it.
-        if (!wantsLock.current) releaseMouse();
-        return;
-      }
-      const { mode } = captureRef.current;
-      if (mode !== "locked" && mode !== "capturing") return;
-      releaseKey(mouseFireSource);
-      if (expectingRelease.current) {
-        expectingRelease.current = false;
-        updateCapture("suspended");
-      } else {
-        notePointerReleased(performance.now());
-        updateCapture("lost");
-      }
-    };
+    const onChange = () => onPointerLockChange();
     const onError = () => updateCapture("failed");
     document.addEventListener("pointerlockchange", onChange);
     document.addEventListener("pointerlockerror", onError);
@@ -573,10 +575,14 @@ function GameSession({
     else lock();
   };
 
-  React.useEffect(() => {
-    if (!finished && !error && !between) return;
+  const stopCapture = React.useEffectEvent(() => {
     cancelCapture();
     releaseMouse();
+  });
+
+  React.useEffect(() => {
+    if (!finished && !error && !between) return;
+    stopCapture();
   }, [finished, error, between]);
 
   const openNote = () => {
