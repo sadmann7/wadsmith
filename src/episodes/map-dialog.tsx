@@ -39,7 +39,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-type MapDetails = {
+interface MapDetails {
   name: string;
   slot: string;
   description: string;
@@ -47,7 +47,7 @@ type MapDetails = {
   complevel: Complevel;
   template: MapTemplate;
   featured: FeaturedMap | null;
-};
+}
 
 function MapDialog({
   maps,

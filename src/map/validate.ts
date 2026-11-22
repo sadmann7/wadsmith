@@ -31,12 +31,12 @@ import {
 import { describeLine, lineUsesTag, movesSector, opensDoor } from "./lines";
 import type { Complevel, GameMap, Point, Sector, ThingSkill } from "./types";
 
-type MapIssue = {
+interface MapIssue {
   id: string;
   message: string;
   detail?: string;
   target?: string;
-};
+}
 
 const skills: ThingSkill[] = ["easy", "medium", "hard"];
 const coordinateLimit = 32000;
@@ -104,7 +104,10 @@ function edgeKey(a: string, b: string) {
   return a < b ? `${a}|${b}` : `${b}|${a}`;
 }
 
-type Wall = { from: string; to: string };
+interface Wall {
+  from: string;
+  to: string;
+}
 
 function sharesCorner(a: Wall, b: Wall) {
   return (

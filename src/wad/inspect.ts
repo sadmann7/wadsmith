@@ -7,17 +7,23 @@ import {
 } from "@/map/complevel";
 import type { Complevel } from "@/map/types";
 
-type GameFile = { name: string; data: Uint8Array };
+interface GameFile {
+  name: string;
+  data: Uint8Array;
+}
 
-type Lump = { name: string; data: Uint8Array };
+interface Lump {
+  name: string;
+  data: Uint8Array;
+}
 
-type WadSummary = {
+interface WadSummary {
   wads: Uint8Array[];
   dehacked: Uint8Array[];
   maps: number[];
   complevel: Complevel;
   declared: boolean;
-};
+}
 
 class WadFileError extends Error {}
 

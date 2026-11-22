@@ -1,15 +1,27 @@
 import type { GameMap, Point, Sector } from "./types";
 
-type Edge = { from: string; to: string };
+interface Edge {
+  from: string;
+  to: string;
+}
 
-type Box = { left: number; top: number; right: number; bottom: number };
+interface Box {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
 
-type Outline = { polygon: Point[]; box: Box; area: number };
+interface Outline {
+  polygon: Point[];
+  box: Box;
+  area: number;
+}
 
-type SectorIndex = {
+interface SectorIndex {
   outlines: Map<Sector, Outline>;
   cells: Map<number, Sector[]>;
-};
+}
 
 const cellSize = 512;
 const cellOffset = 1024;

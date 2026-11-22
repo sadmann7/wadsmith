@@ -1,7 +1,7 @@
 import { FramePacer } from "./frame-pacer";
 import type { NetInbox } from "./net-inbox";
 
-type DoomModule = {
+interface DoomModule {
   FS: {
     writeFile(path: string, data: Uint8Array | string): void;
   };
@@ -62,9 +62,9 @@ type DoomModule = {
   _wadsmith_net_player_items(player: number): number;
   _wadsmith_net_player_secrets(player: number): number;
   _wadsmith_net_lagging_players(): number;
-};
+}
 
-type DoomModuleOptions = {
+interface DoomModuleOptions {
   print?: (message: string) => void;
   printErr?: (message: string) => void;
   locateFile?: (path: string) => string;
@@ -73,7 +73,7 @@ type DoomModuleOptions = {
     receive(pointer: number, capacity: number, peerPointer: number): number;
     wait(ms: number): void;
   };
-};
+}
 
 type NetworkMode = "coop" | "deathmatch";
 
@@ -81,12 +81,12 @@ type Skill = "easy" | "medium" | "hard";
 
 import type { Complevel } from "@/map/types";
 
-type GameFiles = {
+interface GameFiles {
   wads: Uint8Array[];
   dehacked: Uint8Array[];
   complevel: Complevel;
   warp: number;
-};
+}
 
 // Doom's numbers for "Hey, not too rough", "Hurt me plenty" and "Ultra-Violence".
 const skillLevels: Record<Skill, number> = { easy: 2, medium: 3, hard: 4 };
@@ -94,24 +94,24 @@ const skillLevels: Record<Skill, number> = { easy: 2, medium: 3, hard: 4 };
 const fragLimit = 10;
 
 /** How a network game reaches the other players, each numbered by the room. */
-type NetworkOptions = {
+interface NetworkOptions {
   role: "host" | "guest";
   mode: NetworkMode;
   host: number;
   peer: number;
   inbox: NetInbox;
   send: (peer: number, data: Uint8Array) => void;
-};
+}
 
 type CreateDoom = (options: DoomModuleOptions) => Promise<DoomModule>;
 
-type GameEvents = {
+interface GameEvents {
   onFrame?: () => void;
   onExit?: () => void;
   onFailure?: (error: unknown) => void;
-};
+}
 
-type GameStatus = {
+interface GameStatus {
   inLevel: boolean;
   map: number;
   health: number;
@@ -130,11 +130,14 @@ type GameStatus = {
   secrets: number;
   totalSecrets: number;
   tics: number;
-};
+}
 
 type Resolution = "classic" | "high";
 
-type Screen = { resolution: Resolution; widescreen: boolean };
+interface Screen {
+  resolution: Resolution;
+  widescreen: boolean;
+}
 
 const screenHeights: Record<Resolution, number> = { classic: 200, high: 400 };
 

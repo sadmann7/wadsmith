@@ -76,14 +76,18 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Alert } from "@/components/ui/alert";
 
-type Session = {
+interface Session {
   id: string;
   episodeId: string;
   initialMap: GameMap;
   saver: ReturnType<typeof createMapSaver>;
-};
+}
 
-type SessionDetails = { name: string; slot: string; par: number | null };
+interface SessionDetails {
+  name: string;
+  slot: string;
+  par: number | null;
+}
 type SaveStatus = "saving" | "saved" | "failed";
 type HomeView = "episodes" | "featured";
 

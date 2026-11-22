@@ -445,7 +445,11 @@ function removeSwitch(map: GameMap, id: string): GameMap {
   };
 }
 
-type FreeWall = { sector: string; from: string; to: string };
+interface FreeWall {
+  sector: string;
+  from: string;
+  to: string;
+}
 
 function freeWalls(map: GameMap): FreeWall[] {
   const owners = wallOwners(map);

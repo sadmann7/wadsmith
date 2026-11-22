@@ -8,11 +8,11 @@ type Instance = ReturnType<typeof mapEditor>;
 
 const id = "map";
 
-type Slot = {
+interface Slot {
   selects: {
     subscribe: (part: object, listener: () => void, props: object) => void;
   };
-};
+}
 
 const { slots } = mapEditor as unknown as { slots: Record<string, Slot> };
 

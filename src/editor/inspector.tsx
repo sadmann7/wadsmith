@@ -293,7 +293,11 @@ function TextureField({
   );
 }
 
-type Choice = { value: string; label: string; short?: string };
+interface Choice {
+  value: string;
+  label: string;
+  short?: string;
+}
 
 function ChoiceField({
   label,
@@ -1266,11 +1270,7 @@ function ThingFields({
                           : {},
                       )
                     }
-                  >
-                    <CheckboxIndicator>
-                      <Check size={12} aria-hidden="true" />
-                    </CheckboxIndicator>
-                  </Checkbox>
+                  />
                   {label}
                 </label>
               );

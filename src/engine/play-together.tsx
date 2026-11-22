@@ -51,14 +51,17 @@ import {
 } from "@/components/ui/dialog";
 import { Alert } from "@/components/ui/alert";
 
-type HostedGame = { session: CoopSession; close: () => void };
+interface HostedGame {
+  session: CoopSession;
+  close: () => void;
+}
 
-type Settings = {
+interface Settings {
   mode: NetworkMode;
   players: number;
   skill: Skill;
   name: string;
-};
+}
 
 function listPlayers(players: number[]) {
   return players.length > 1

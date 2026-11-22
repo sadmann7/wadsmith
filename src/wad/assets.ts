@@ -1,23 +1,26 @@
 import { thingCatalog, thingKinds } from "@/map/catalog";
 import type { ThingKind } from "@/map/types";
 
-type Picture = {
+interface Picture {
   width: number;
   height: number;
   leftOffset: number;
   topOffset: number;
   pixels: Uint8Array;
   opaque: Uint8Array;
-};
+}
 
-type SceneAssets = {
+interface SceneAssets {
   shades: Uint32Array;
   texture: (name: string) => Picture;
   flat: (name: string) => Picture;
   sprite: (kind: ThingKind) => Picture | null;
-};
+}
 
-type Lump = { offset: number; size: number };
+interface Lump {
+  offset: number;
+  size: number;
+}
 
 const shadeLevels = 32;
 const flatSize = 64;

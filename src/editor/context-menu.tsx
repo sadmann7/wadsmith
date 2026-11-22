@@ -96,9 +96,12 @@ import {
 } from "./map-target";
 import { thingIcons } from "./thing-icons";
 
-type Selection = { keys?: string[]; sector?: string | null };
+interface Selection {
+  keys?: string[];
+  sector?: string | null;
+}
 
-type MapContextMenuProps = {
+interface MapContextMenuProps {
   controller: MenuController;
   map: GameMap;
   target: MapTarget | null;
@@ -112,7 +115,7 @@ type MapContextMenuProps = {
   onFitMap: () => void;
   onDrawRoom: (point: Point) => void;
   grid: number;
-};
+}
 
 type BodyProps = Omit<MapContextMenuProps, "controller" | "onOpenChange">;
 

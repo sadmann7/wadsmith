@@ -15,7 +15,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-type ImportedMap = { slot: string; map: GameMap; report: ImportReport };
+interface ImportedMap {
+  slot: string;
+  map: GameMap;
+  report: ImportReport;
+}
 
 const plural = (count: number, one: string, many = `${one}s`) =>
   `${count} ${count === 1 ? one : many}`;

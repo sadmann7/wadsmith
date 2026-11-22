@@ -58,7 +58,10 @@ const thingNotCoop = 0x0040;
 const thingFriendly = 0x0080;
 const noSidedef = 0xffff;
 
-type Lump = { name: string; data: Uint8Array };
+interface Lump {
+  name: string;
+  data: Uint8Array;
+}
 
 class LumpWriter {
   private bytes: number[] = [];
@@ -91,13 +94,13 @@ function writeBox(writer: LumpWriter, box: Box) {
 
 type LevelLine = NodeLine & { wall: string };
 
-type WallSide = {
+interface WallSide {
   sector: number;
   from: string;
   to: string;
   pillar: boolean;
   detail: boolean;
-};
+}
 
 function buildLevel(map: GameMap) {
   const used = new Set(map.sectors.flatMap(sectorVertices));

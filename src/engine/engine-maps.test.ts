@@ -43,12 +43,12 @@ function facingWall(map: GameMap, from: string, to: string, roomId: string) {
   return playerAt(map, x, y, angle);
 }
 
-type Press = {
+interface Press {
   label: string;
   map: GameMap;
   height: (game: DoomGame) => number;
   done: (game: DoomGame, before: number) => boolean;
-};
+}
 
 function pressesOf(map: GameMap): Press[] {
   const presses: Press[] = [];

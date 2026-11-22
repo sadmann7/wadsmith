@@ -11,12 +11,12 @@ import {
 
 type MapHealth = "ready" | "warning" | "error" | "checking";
 
-type EpisodeEntry = {
+interface EpisodeEntry {
   id: string;
   slot: string;
   name: string;
   health: MapHealth;
-};
+}
 
 const healthDots: Record<MapHealth, string> = {
   ready: "bg-success",

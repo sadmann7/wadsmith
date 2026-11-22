@@ -22,7 +22,7 @@ type Surface =
   | { kind: "wall"; sector: string; wall: string; part: WallPart }
   | { kind: "thing"; thing: string };
 
-type SurfaceInfo = {
+interface SurfaceInfo {
   surface: Surface;
   label: string;
   sector: Sector | null;
@@ -32,7 +32,7 @@ type SurfaceInfo = {
   textures: readonly string[];
   paints: "floor" | "ceiling" | "wall" | "door" | "switch" | null;
   mapSwitch: MapSwitch | null;
-};
+}
 
 const minimumOpening = 8;
 const heightLimit = 2048;

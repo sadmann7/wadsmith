@@ -50,7 +50,7 @@ import type {
 } from "@/map/types";
 import type { DoomMap } from "./read-map";
 
-type ImportReport = {
+interface ImportReport {
   rooms: number;
   splitSectors: number;
   skippedSectors: number;
@@ -64,18 +64,21 @@ type ImportReport = {
   innerLines: number;
   plainDoors: number;
   solidSectors: number;
-};
+}
 
-type Edge = { from: number; to: number };
+interface Edge {
+  from: number;
+  to: number;
+}
 
 // Openings are holes that other rooms fill, which still bound this one, and
 // details are lines with this sector on both sides.
-type Region = {
+interface Region {
   outer: number[];
   holes: number[][];
   openings: number[][];
   details: number[][];
-};
+}
 
 type TracedLine = DoomMap["lines"][number] & {
   frontSector: number;

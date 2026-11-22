@@ -21,7 +21,11 @@ import {
 
 type TextureKind = "flat" | "wall";
 
-type Category = { id: string; label: string; names: readonly string[] };
+interface Category {
+  id: string;
+  label: string;
+  names: readonly string[];
+}
 
 const pageSize = 48;
 

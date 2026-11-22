@@ -1,6 +1,9 @@
 type MouseMode = "idle" | "capturing" | "locked" | "released" | "denied";
 
-type MouseCapture = { mode: MouseMode; hasLocked: boolean };
+interface MouseCapture {
+  mode: MouseMode;
+  hasLocked: boolean;
+}
 
 type MouseEvent =
   | "request"
