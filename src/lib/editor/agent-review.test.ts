@@ -8,6 +8,7 @@ import {
   agentStepSummary,
   getIsAgentAskFirst,
   getIsAgentRead,
+  runAgentAction,
 } from "./agent-actions";
 
 describe("reviewing an agent's steps", () => {
@@ -61,5 +62,60 @@ describe("reviewing an agent's steps", () => {
     expect(getIsAgentRead("addRoom")).toBe(false);
     expect(getIsAgentAskFirst("removeRoom")).toBe(true);
     expect(getIsAgentAskFirst("addRoom")).toBe(false);
+  });
+});
+
+describe("placing things for an agent", () => {
+  it("keeps things placed in one room apart", () => {
+    let map = testMap;
+    const placed: string[] = [];
+    for (let index = 0; index < 4; index += 1) {
+      const outcome = runAgentAction(map, "placeThing", ["imp", "Arena"]);
+      map = outcome.map;
+      placed.push(String(outcome.result));
+    }
+    const spots = placed.map((id) => {
+      const thing = map.things.find((item) => item.id === id);
+      return `${thing?.x},${thing?.y}`;
+    });
+    expect(new Set(spots).size).toBe(4);
+    for (const id of placed) {
+      const thing = map.things.find((item) => item.id === id);
+      expect(thing && sectorAt(map, thing)?.id).toBe("sector-3");
+    }
+  });
+
+  it("keeps big monsters clear of each other and the walls", () => {
+    let map = testMap;
+    const placed: string[] = [];
+    for (let index = 0; index < 2; index += 1) {
+      const outcome = runAgentAction(map, "placeThing", ["demon", "Arena"]);
+      map = outcome.map;
+      placed.push(String(outcome.result));
+    }
+    const [first, second] = placed.map((id) =>
+      map.things.find((thing) => thing.id === id),
+    );
+    expect(first && second).toBeTruthy();
+    if (!first || !second) return;
+    expect(
+      Math.max(Math.abs(first.x - second.x), Math.abs(first.y - second.y)),
+    ).toBeGreaterThanOrEqual(60);
+    for (const thing of [first, second]) {
+      for (const [dx, dy] of [
+        [-30, -30],
+        [30, 30],
+      ]) {
+        expect(sectorAt(map, { x: thing.x + dx, y: thing.y + dy })?.id).toBe(
+          "sector-3",
+        );
+      }
+    }
+  });
+
+  it("says so when a room has no space left", () => {
+    expect(() =>
+      runAgentAction(testMap, "placeThing", ["mancubus", "Arena door"]),
+    ).toThrow(/No room left in Arena door/);
   });
 });

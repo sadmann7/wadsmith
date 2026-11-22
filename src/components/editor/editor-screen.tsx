@@ -57,7 +57,7 @@ import {
 import { useIwad } from "@/hooks/use-iwad";
 import { agent, agentSession } from "@/lib/editor/agent";
 import { agentStepSummary } from "@/lib/editor/agent-actions";
-import { idleAgentSession } from "@/lib/editor/agent-session";
+import { getHasAgentCard, idleAgentSession } from "@/lib/editor/agent-session";
 import {
   dropFragment,
   heldFragment,
@@ -1479,7 +1479,7 @@ export function EditorScreen({
   const undoAgentRequest = () => {
     const request = agentState.request;
     if (!request) return;
-    const working = agentState.status !== "idle";
+    const working = agentSession.getIsCalling();
     agentSession.stop();
     const next = history.undoGroup(`agent-${request.id}`, mapRef.current);
     restore(next);
@@ -1516,7 +1516,9 @@ export function EditorScreen({
   return (
     <>
       <div className="app" inert={Boolean(game)}>
-        <header className="topbar">
+        {/* Only the map takes an agent's steps, so the controls around it stay
+            out of what a browser agent sees. */}
+        <header className="topbar" data-agent-hidden>
           {navigation}
           <MapSwitcher
             episodeName={episode.name}
@@ -1645,6 +1647,15 @@ export function EditorScreen({
                     ? "waiting for you"
                     : "working…"}
                 </span>
+                {agentState.status === "working" ? (
+                  <Button
+                    variant="text"
+                    className="ml-1 text-foreground"
+                    onClick={() => agentSession.stop()}
+                  >
+                    Stop
+                  </Button>
+                ) : null}
               </span>
             )}
           </span>
@@ -1728,6 +1739,7 @@ export function EditorScreen({
         <main className="workspace">
           <SegmentedControlPrimitive.SegmentedControl
             aria-label="Mode"
+            data-agent-hidden
             className="tool-rail"
             value={railMode}
             onValueChange={(next) => chooseMode(next as RailMode)}
@@ -1751,6 +1763,7 @@ export function EditorScreen({
           <div className="views" data-layout={visibleLayout}>
             <SegmentedControl
               aria-label="Main view"
+              data-agent-hidden
               className="absolute top-3 right-3 z-5"
               value={visibleLayout}
               onValueChange={(next) => changeLayout(next as ViewLayout)}
@@ -1871,11 +1884,10 @@ export function EditorScreen({
                     onUndoAll={undoAgentRequest}
                     onDismiss={() => agentSession.dismiss()}
                   />
-                  {welcomed ||
-                  agentState.request ||
-                  agentState.question ? null : (
+                  {welcomed || getHasAgentCard(agentState) ? null : (
                     <section
                       aria-labelledby="welcome-title"
+                      data-agent-hidden
                       className="absolute bottom-3 left-3 z-4 grid max-w-[min(380px,calc(100%-24px))] gap-3 rounded-[3px] border border-border bg-card p-4 shadow-lg"
                     >
                       <h2
@@ -1913,6 +1925,7 @@ export function EditorScreen({
               <ResizableHandle
                 className="view-handle"
                 aria-label="Resize map and 3D view"
+                data-agent-hidden
               />
               <ResizablePanel
                 className="view-panel scene-panel"
@@ -1920,6 +1933,7 @@ export function EditorScreen({
               >
                 <section
                   className="pane scene-pane"
+                  data-agent-hidden
                   aria-label="3D view"
                   data-pane="scene"
                   onPointerEnter={() => {
@@ -1951,7 +1965,7 @@ export function EditorScreen({
             </Resizable>
           </div>
 
-          <aside className="side">
+          <aside className="side" data-agent-hidden>
             {checks.length === 0 ? null : (
               <section
                 ref={mapCheck}
@@ -2358,7 +2372,7 @@ export function EditorScreen({
             ) : null}
           </aside>
         </main>
-        <footer className="status-bar">
+        <footer className="status-bar" data-agent-hidden>
           <p className="status-hint">
             <strong>{modeNames[railMode]}</strong>
             {tool === "select"

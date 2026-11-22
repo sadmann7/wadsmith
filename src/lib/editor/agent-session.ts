@@ -44,6 +44,14 @@ interface Pending {
   at: number;
 }
 
+// Whether the card has something to show: a question, a step to undo, or a
+// stopped request to close.
+export function getHasAgentCard({ question, request }: AgentSessionState) {
+  return Boolean(
+    question || (request && (request.steps.length > 0 || request.stopped)),
+  );
+}
+
 export const idleAgentSession: AgentSessionState = {
   status: "idle",
   request: null,
@@ -54,7 +62,7 @@ export const idleAgentSession: AgentSessionState = {
 // time, so calls count as one request, with one trail, one Stop and one Undo
 // all, until a long pause, the person's own edit or closing the card.
 export function createAgentSession({
-  busyMs = 3000,
+  busyMs = 15_000,
   requestGapMs = 60_000,
   now = Date.now,
 }: AgentSessionOptions = {}) {
@@ -96,6 +104,8 @@ export function createAgentSession({
     }
     lastAt = at;
   };
+
+  const callGapMs = 3000;
 
   const getHasPending = () => pending !== null && now() - pending.at <= busyMs;
 
@@ -200,6 +210,8 @@ export function createAgentSession({
       return true;
     },
     stop,
+    // Whether a call came in just now, so more of the same request may follow.
+    getIsCalling: () => now() - lastAt < callGapMs,
     // Empties the trail after Undo all took it back, keeping the request.
     clearTrail() {
       setRequest({ steps: [], todo: [], at: null });
