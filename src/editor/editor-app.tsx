@@ -11,7 +11,7 @@ import {
   Resizable,
   ResizableHandle,
   ResizablePanel,
-} from "@ui-sdk/react/resizable";
+} from "@/components/ui/resizable";
 import {
   CircleCheck,
   CircleX,

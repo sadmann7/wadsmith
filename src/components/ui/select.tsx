@@ -5,9 +5,10 @@ import * as React from "react";
 import { cn } from "@/lib/cn";
 
 const popupClass =
-  "z-20 max-h-(--available-height) overflow-y-auto rounded-[7px] border border-input bg-muted p-1 shadow-popover";
+  "z-20 max-h-(--available-height) origin-(--transform-origin) overflow-y-auto rounded-md border border-border bg-popover p-1 text-foreground shadow-popover transition-[opacity,scale] duration-100 data-[ending-style]:scale-95 data-[ending-style]:opacity-0 data-[starting-style]:scale-95 data-[starting-style]:opacity-0";
 
-const itemClass = "flex items-center gap-2 rounded-[4px] px-2 py-[5px]";
+const itemClass =
+  "flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 outline-none select-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0";
 
 function SelectTrigger({
   className,
@@ -16,7 +17,7 @@ function SelectTrigger({
   return (
     <SelectPrimitive.SelectTrigger
       className={cn(
-        "inline-flex min-h-[30px] cursor-default items-center justify-between gap-2 rounded-[3px] border border-input bg-transparent px-2.5 py-1 whitespace-nowrap hover:border-muted-foreground",
+        "inline-flex min-h-[30px] cursor-default items-center justify-between gap-2 rounded-[3px] border border-input bg-input/30 px-2.5 py-1 whitespace-nowrap shadow-xs transition-[color,background-color,box-shadow] hover:not-disabled:bg-input/50 disabled:opacity-50 data-[placeholder]:text-muted-foreground",
         className,
       )}
       {...props}

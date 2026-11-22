@@ -1,10 +1,9 @@
-import { Checkbox, CheckboxIndicator } from "@ui-sdk/react/checkbox";
-import { Check } from "lucide-react";
 import * as React from "react";
 
 import type { GameMap } from "@/map/types";
 import type { ImportReport } from "@/wad/decompile";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogBackdrop,
@@ -173,7 +172,6 @@ function WadImportDialog({
                   <li key={entry.slot}>
                     <label className="grid cursor-pointer grid-cols-[16px_48px_minmax(0,1fr)_auto] items-center gap-2.5 text-sm has-[[data-disabled]]:cursor-default has-[[data-disabled]]:opacity-50">
                       <Checkbox
-                        className="flex size-4 items-center justify-center rounded-[2px] border border-input bg-transparent p-0 text-primary-foreground aria-checked:border-primary aria-checked:bg-primary"
                         checked={on}
                         disabled={full}
                         onCheckedChange={(checked) =>
@@ -189,11 +187,7 @@ function WadImportDialog({
                               : current.filter((slot) => slot !== entry.slot),
                           )
                         }
-                      >
-                        <CheckboxIndicator>
-                          <Check size={12} aria-hidden="true" />
-                        </CheckboxIndicator>
-                      </Checkbox>
+                      />
                       <span className="font-mono text-xs text-muted-foreground">
                         {entry.slot}
                       </span>

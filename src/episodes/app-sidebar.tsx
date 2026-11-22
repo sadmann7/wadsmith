@@ -5,7 +5,7 @@ import {
   DrawerContent,
   DrawerTitle,
   DrawerTrigger,
-} from "@ui-sdk/react/drawer";
+} from "@/components/ui/drawer";
 import { PanelLeft, Plus, Star } from "lucide-react";
 import * as React from "react";
 
@@ -347,8 +347,8 @@ function SidebarDrawer({
       >
         <PanelLeft size={16} aria-hidden="true" />
       </DrawerTrigger>
-      <DrawerBackdrop className="fixed inset-0 size-full bg-scrim" />
-      <DrawerContent className="h-full w-[248px] border-r border-input text-foreground">
+      <DrawerBackdrop />
+      <DrawerContent className="w-[248px]">
         <DrawerTitle className="sr-only">Wadsmith</DrawerTitle>
         <AppSidebar {...props} onNavigate={navigate} />
       </DrawerContent>

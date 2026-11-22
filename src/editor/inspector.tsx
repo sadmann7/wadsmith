@@ -1,11 +1,9 @@
-import { Checkbox, CheckboxIndicator } from "@ui-sdk/react/checkbox";
 import {
   NumberInput,
   NumberInputControl,
   NumberInputGroup,
 } from "@ui-sdk/react/number-input";
-import { Toggle, ToggleGroup } from "@ui-sdk/react/toggle";
-import { Check, Search, TriangleAlert } from "lucide-react";
+import { Search, TriangleAlert } from "lucide-react";
 import * as React from "react";
 
 import {
@@ -58,6 +56,7 @@ import type { SceneAssets } from "@/wad/assets";
 import { TexturePicker, type TextureKind } from "./texture-picker";
 import { thingIcons } from "./thing-icons";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { InputGroup, InputGroupInput } from "@/components/ui/input";
 import {
   Select,
@@ -78,6 +77,7 @@ import {
 } from "@/components/ui/segmented-control";
 import { Slider, SliderValue } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
+import { Toggle, ToggleGroup } from "@/components/ui/toggle";
 
 type ThingTab = "enemy" | "item" | "key" | "decor";
 
@@ -977,7 +977,7 @@ function CompactNumber({
           if (next !== null) onChange(Math.round(next));
         }}
       >
-        <NumberInputGroup className="flex h-8 items-center rounded-[3px] border border-input px-2 has-focus-visible:outline-2 has-focus-visible:outline-offset-1 has-focus-visible:outline-ring">
+        <NumberInputGroup className="flex h-8 items-center rounded-[3px] border border-input bg-input/30 px-2 shadow-xs has-focus-visible:outline-2 has-focus-visible:outline-offset-1 has-focus-visible:outline-ring">
           <NumberInputControl
             aria-label={label}
             className="w-full min-w-0 border-0 bg-transparent font-mono text-xs tabular-nums outline-none"
@@ -1219,7 +1219,8 @@ function ThingFields({
           <ToggleGroup
             aria-label="Difficulties"
             multiple
-            className="grid grid-cols-3 gap-0.5 rounded-[3px] bg-muted p-[3px]"
+            variant="segmented"
+            className="grid-cols-3"
             value={pressed}
             onValueChange={(next) => {
               const changed = allSkills.find(
@@ -1229,11 +1230,7 @@ function ThingFields({
             }}
           >
             {allSkills.map((skill) => (
-              <Toggle
-                key={skill}
-                value={skill}
-                className="h-[26px] rounded-[2px] border-0 bg-transparent text-muted-foreground hover:text-foreground aria-pressed:bg-input/30 aria-pressed:text-foreground aria-pressed:shadow-sm aria-pressed:ring-1 aria-pressed:ring-input aria-pressed:ring-inset"
-              >
+              <Toggle key={skill} value={skill} variant="segmented">
                 {skillLabels[skill]}
               </Toggle>
             ))}
@@ -1241,7 +1238,6 @@ function ThingFields({
           {enemies.length > 0 ? (
             <label className="flex items-center gap-2">
               <Checkbox
-                className="flex size-4 items-center justify-center rounded-[2px] border border-input bg-transparent p-0 text-primary-foreground aria-checked:border-primary aria-checked:bg-primary"
                 checked={enemies.every((thing) => thing.ambush)}
                 onCheckedChange={(checked) =>
                   onChange((thing) =>
@@ -1250,11 +1246,7 @@ function ThingFields({
                       : {},
                   )
                 }
-              >
-                <CheckboxIndicator>
-                  <Check size={12} aria-hidden="true" />
-                </CheckboxIndicator>
-              </Checkbox>
+              />
               Wait until player is seen
             </label>
           ) : null}
