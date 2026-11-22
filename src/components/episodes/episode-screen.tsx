@@ -23,7 +23,7 @@ import { Button } from "@/components/ui/button";
 import { useBuildChecks } from "@/hooks/use-build-checks";
 import { useIwad } from "@/hooks/use-iwad";
 import { clearPlaytest } from "@/lib/editor/playtests";
-import { loadName } from "@/lib/engine/coop";
+import { loadName, saveName } from "@/lib/engine/coop";
 import {
   defaultGame,
   engineSlot,
@@ -32,6 +32,7 @@ import {
   indexSlot,
   lumpSlotIndex,
   slotCount,
+  slotIndex,
   slotName,
 } from "@/lib/engine/game";
 import {
@@ -94,6 +95,7 @@ import {
   liveUrl,
   openLiveMap,
 } from "@/lib/episodes/live";
+import { publish, publishBase } from "@/lib/episodes/published";
 import {
   findEpisode,
   parseRoute,
@@ -127,6 +129,7 @@ import { EpisodeBuildDialog } from "./episode-build-dialog";
 import { EpisodeHome } from "./episode-home";
 import { FeaturedMaps } from "./featured-maps";
 import { type MapDetails, MapDialog } from "./map-dialog";
+import { PublishDialog } from "./publish-dialog";
 import { ResourcesDialog } from "./resources-dialog";
 import { ShareDialog } from "./share-dialog";
 import { type ImportedMap, WadImportDialog } from "./wad-import-dialog";
@@ -219,6 +222,10 @@ export function EpisodeScreen() {
   } | null>(null);
   const [texturesOpen, setTexturesOpen] = React.useState(false);
   const [sharing, setSharing] = React.useState(false);
+  // What the publish dialog is for: the open map, or an episode by its id.
+  const [publishing, setPublishing] = React.useState<
+    { kind: "map" } | { kind: "episode"; id: string } | null
+  >(null);
   const [cloudProblem, setCloudProblem] = React.useState<string | null>(null);
   const [clash, setClash] = React.useState<{
     revision: number;
@@ -1416,6 +1423,51 @@ export function EpisodeScreen() {
     });
   };
 
+  // Why these maps can't be published yet, or null when they can.
+  const publishProblem = (ordered: EpisodeMap[]) => {
+    if (ordered.length === 0) return "This episode has no maps.";
+    const problems = ordered.map((entry) => knownBuildProblem(entry));
+    const blocked = blockedOf(ordered, problems, context);
+    return blocked.length > 0
+      ? `Fix ${blocked.join(", ")} before publishing.`
+      : null;
+  };
+
+  // Builds the maps into one WAD, as Build WAD does, and publishes it with
+  // the file it came from.
+  const publishLevels = async (
+    ordered: EpisodeMap[],
+    kind: "map" | "episode",
+    form: { title: string; author: string; listed: boolean },
+    source: () => string,
+  ) => {
+    const wad = compileEpisode(
+      ordered.map((entry) => ({
+        ...entry,
+        slot: engineSlot(entry.slot, game),
+        lumps: knownLumps(entry),
+      })),
+      game,
+      iwad ? texturesOf(iwad) : undefined,
+    );
+    if (form.author.trim()) saveName(form.author.trim());
+    return publish({
+      kind,
+      title: form.title,
+      author: form.author,
+      listed: form.listed,
+      game: game.id,
+      complevel: inspectWads([{ name: "map.wad", data: wad }], game).complevel,
+      warp: slotIndex(ordered[0].slot),
+      maps: ordered.map((entry) => ({
+        slot: engineSlot(entry.slot, game),
+        name: mapName(entry),
+      })),
+      wad,
+      source: source(),
+    });
+  };
+
   const buildEpisode = (fileName: string) => {
     const ordered = bySlot(maps);
     const problems = ordered.map((entry) => knownBuildProblem(entry));
@@ -1491,6 +1543,9 @@ export function EpisodeScreen() {
           onNewMap={() => openDialog("new")}
           onMapSettings={() => openDialog("settings")}
           onShare={cloudApi ? () => setSharing(true) : undefined}
+          onPublish={
+            publishBase ? () => setPublishing({ kind: "map" }) : undefined
+          }
           onParChange={(par) => void setPar(session.id, par)}
           playing={mapPlaying}
           onPlayingChange={(next, hosted) => {
@@ -1519,6 +1574,23 @@ export function EpisodeScreen() {
             game={game}
             onClose={() => setMapDialog(null)}
             onSubmit={createMap}
+          />
+        ) : null}
+        {publishing?.kind === "map" && current ? (
+          <PublishDialog
+            kind="map"
+            title={details.name}
+            author={loadName()}
+            customTextures={iwad?.resources.length ?? 0}
+            blocked={publishProblem([current])}
+            onPublish={async (form) => {
+              await session.saver.flush();
+              const latest = (await store.getMap(session.id)) ?? current;
+              return publishLevels([latest], "map", form, () =>
+                serializeMap({ ...latest.map, name: form.title }),
+              );
+            }}
+            onClose={() => setPublishing(null)}
           />
         ) : null}
         {sharing && current ? (
@@ -1811,6 +1883,21 @@ export function EpisodeScreen() {
           onClose={() => setWadImport(null)}
         />
       ) : null}
+      {publishing?.kind === "episode" && publishing.id === episode.id ? (
+        <PublishDialog
+          kind="episode"
+          title={episode.name}
+          author={loadName()}
+          customTextures={iwad?.resources.length ?? 0}
+          blocked={publishProblem(bySlot(maps))}
+          onPublish={(form) =>
+            publishLevels(bySlot(maps), "episode", form, () =>
+              serializeEpisode({ ...episode, name: form.title }, maps),
+            )
+          }
+          onClose={() => setPublishing(null)}
+        />
+      ) : null}
       {buildingEpisode === episode.id ? (
         <EpisodeBuildDialog
           name={episode.name}
@@ -1852,6 +1939,11 @@ export function EpisodeScreen() {
         onImportEpisode={(file) => void importEpisode(file)}
         onImportFiles={(files) => void importFiles(files)}
         onBuildEpisode={() => setBuildingEpisode(episode.id)}
+        onPublishEpisode={
+          publishBase
+            ? () => setPublishing({ kind: "episode", id: episode.id })
+            : undefined
+        }
         onPlayEpisode={() => void playEpisode(maps)}
         onOpenMap={(entry) => void openMap(entry)}
         onCreateMap={createMap}

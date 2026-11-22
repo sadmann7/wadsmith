@@ -6,6 +6,7 @@ import {
 import {
   Download,
   Ellipsis,
+  Globe,
   GripVertical,
   Package,
   Pencil,
@@ -256,6 +257,7 @@ interface EpisodeHomeProps {
   onImportEpisode: (file: File) => void;
   onImportFiles: (files: File[]) => void;
   onBuildEpisode: () => void;
+  onPublishEpisode?: () => void;
   onPlayEpisode: () => void;
   onOpenMap: (entry: EpisodeMap) => void;
   onCreateMap: (details: MapDetails) => Promise<string | null>;
@@ -281,6 +283,7 @@ export function EpisodeHome({
   onImportEpisode,
   onImportFiles,
   onBuildEpisode,
+  onPublishEpisode,
   onPlayEpisode,
   onOpenMap,
   onCreateMap,
@@ -363,6 +366,12 @@ export function EpisodeHome({
             <Package size={14} aria-hidden="true" />
             <span className="max-[1000px]:sr-only">Build WAD</span>
           </Button>
+          {onPublishEpisode ? (
+            <Button disabled={maps.length === 0} onClick={onPublishEpisode}>
+              <Globe size={14} aria-hidden="true" />
+              <span className="max-[1000px]:sr-only">Publish</span>
+            </Button>
+          ) : null}
           <Menu>
             <MenuTrigger
               className={buttonVariants({ className: "px-2" })}
