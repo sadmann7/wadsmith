@@ -10,16 +10,19 @@ import {
 } from "@ui-sdk/core";
 import { createParts } from "@ui-sdk/react/primitive";
 
-type MapOrderOptions = {
+interface MapOrderOptions {
   value?: string[];
   onValueChange?: (
     value: string[],
     details: ChangeDetails<ReorderReason>,
   ) => void;
   label?: (id: string) => string | undefined;
-};
+}
 
-type MapOrderState = { value: string[]; moving: ReorderDraft | null };
+interface MapOrderState {
+  value: string[];
+  moving: ReorderDraft | null;
+}
 
 const mapOrder = definePrimitive({
   name: "map-order",
