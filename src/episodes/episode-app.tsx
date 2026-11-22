@@ -1308,7 +1308,7 @@ function EpisodeApp() {
           })
         }
         onReorderMaps={(order) =>
-          void attempt(async () => {
+          attempt(async () => {
             await store.moveMaps(slotMoves(maps, order));
             await refresh(store, episodeIdRef.current);
           })
