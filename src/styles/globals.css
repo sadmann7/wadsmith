@@ -301,6 +301,19 @@
     stroke-dasharray: none;
   }
 
+  .map-link {
+    stroke: var(--color-info);
+    stroke-width: 1.5;
+    stroke-dasharray: 6 4;
+    vector-effect: non-scaling-stroke;
+    pointer-events: none;
+  }
+
+  .map-link-end {
+    fill: var(--color-info);
+    pointer-events: none;
+  }
+
   .map-connecting[data-active] {
     display: inline;
   }

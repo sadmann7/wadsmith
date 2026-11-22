@@ -73,6 +73,8 @@ import {
   sectorVertices,
   wallKey,
 } from "@/lib/map/geometry";
+import { joinWalls } from "@/lib/map/join";
+import { type DrawShape, shapeCorners } from "@/lib/map/shapes";
 
 export type MapTool = "select" | "draw" | "line" | "thing" | "switch";
 export type EditMode = "vertices" | "lines" | "sectors" | "things";
@@ -124,6 +126,8 @@ interface MapEditorOptions {
   onDrawingChange?: (corners: number) => void;
   contextMenuOpen?: boolean;
   grid?: number;
+  drawShape?: DrawShape;
+  drawSides?: number;
 }
 
 interface MapEditorState {
@@ -142,6 +146,9 @@ interface MapEditorState {
   cameraPosition: Camera | null;
   highlightedWall: string | null;
   marquee: Box | null;
+  drawShape: DrawShape;
+  drawSides: number;
+  grid: number;
 }
 
 const emptyMap: GameMap = {
@@ -161,6 +168,7 @@ const arrowSteps: Record<string, Point> = {
   ArrowRight: { x: 1, y: 0 },
 };
 const wallReach = 14;
+const defaultSides = 8;
 
 const agentDepthLimit = 4096;
 
@@ -213,6 +221,9 @@ const readsNothing = {
   cameraPosition: none,
   highlightedWall: none,
   marquee: none,
+  drawShape: none,
+  drawSides: none,
+  grid: none,
 } satisfies Record<keyof MapEditorState, readonly never[]>;
 
 export const mapEditor = definePrimitive({
@@ -243,6 +254,8 @@ export const mapEditor = definePrimitive({
     onDrawingChange: "callback",
     contextMenuOpen: "boolean",
     grid: "number",
+    drawShape: "string",
+    drawSides: "number",
   },
   controlled: ["map", "tool", "activeSector", "selection"],
   state: (options: MapEditorOptions): MapEditorState => {
@@ -263,6 +276,9 @@ export const mapEditor = definePrimitive({
       cameraPosition: options.camera?.position ?? null,
       highlightedWall: options.highlightedWall ?? null,
       marquee: null,
+      drawShape: options.drawShape ?? "outline",
+      drawSides: options.drawSides ?? defaultSides,
+      grid: options.grid ?? gridSize,
     };
   },
   sync: (options) => ({
@@ -277,6 +293,9 @@ export const mapEditor = definePrimitive({
       : {}),
     ...(options.selection ? { selection: options.selection } : {}),
     highlightedWall: options.highlightedWall ?? null,
+    drawShape: options.drawShape ?? "outline",
+    drawSides: options.drawSides ?? defaultSides,
+    grid: options.grid ?? gridSize,
   }),
   live: [
     "viewport",
@@ -520,14 +539,19 @@ export const mapEditor = definePrimitive({
       return snapPoint({ x, y }, grid());
     };
 
-    const finishRoom = () => {
-      const { drawing, map } = store.get();
-      if (drawing.length < 3) return;
-      const room = addRoom(map, drawing, {}, 1);
+    // A room drawn against or across walls already there shares corners with
+    // them from the start.
+    const addDrawnRoom = (corners: Point[]) => {
+      const room = addRoom(store.get().map, corners, {}, 1);
       store.set({ drawing: [], cursor: null });
-      change("map", room.map, { reason: "draw" });
+      change("map", joinWalls(room.map, [room.id]), { reason: "draw" });
       select([], room.id);
       change("tool", "select", { reason: "draw" });
+    };
+
+    const finishRoom = () => {
+      const { drawing, drawShape } = store.get();
+      if (drawShape === "outline" && drawing.length >= 3) addDrawnRoom(drawing);
     };
 
     // A line that no room can hold stays as a draft to adjust or throw away.
@@ -555,8 +579,17 @@ export const mapEditor = definePrimitive({
     };
 
     const clickDraw = (point: Point) => {
-      const { drawing } = store.get();
+      const { drawing, drawShape, drawSides } = store.get();
       const first = drawing[0];
+      // A rectangle and a polygon take two clicks: where they start, and how
+      // far they reach.
+      if (drawShape !== "outline") {
+        const corners =
+          first && shapeCorners(drawShape, drawSides, first, point, grid());
+        if (corners) addDrawnRoom(corners);
+        else if (!first) store.set({ drawing: [point] });
+        return;
+      }
       if (
         first &&
         drawing.length >= 3 &&
@@ -1298,6 +1331,21 @@ export const mapEditor = definePrimitive({
         style: marqueeStyle(state),
       })),
     }),
+    measure: slot({
+      selects: selects<MapEditorState, unknown, {}>({
+        ...readsNothing,
+        map: whole,
+        positions: whole,
+        moving: whole,
+        tool: whole,
+        highlightedWall: whole,
+        drawShape: whole,
+        drawSides: whole,
+        grid: whole,
+      }),
+      attrs: (state) => measureAttrs(state),
+      live: live<MapEditorState, unknown, {}>((state) => measureAttrs(state)),
+    }),
     handle: slot<KeyedProps>({
       props: { value: "string" },
       selects: selects<MapEditorState, unknown, KeyedProps>({
@@ -1548,10 +1596,78 @@ function marqueeStyle({ marquee }: MapEditorState) {
 }
 
 function draftPoints(state: MapEditorState) {
-  const points = state.cursor
-    ? [...state.drawing, state.cursor]
-    : state.drawing;
-  return points.map((point) => `${point.x},${point.y}`).join(" ");
+  const shape = shapeDraft(state);
+  const outline =
+    state.tool === "draw" && state.drawShape !== "outline"
+      ? shape
+        ? [...shape, shape[0]]
+        : []
+      : state.cursor
+        ? [...state.drawing, state.cursor]
+        : state.drawing;
+  return outline.map((point) => `${point.x},${point.y}`).join(" ");
+}
+
+// The corners a rectangle or a polygon would have with the pointer where it
+// is, once its first point is down.
+function shapeDraft(state: MapEditorState) {
+  const { drawShape, drawSides, drawing, cursor, grid, tool } = state;
+  if (tool !== "draw" || drawShape === "outline" || !drawing[0] || !cursor) {
+    return null;
+  }
+  return shapeCorners(drawShape, drawSides, drawing[0], cursor, grid);
+}
+
+function measureAttrs(state: MapEditorState) {
+  const measure = measureOf(state);
+  return {
+    "data-measure": measure?.text ?? "",
+    style: css({
+      position: "absolute",
+      left: `${measure?.at.x ?? 0}px`,
+      top: `${measure?.at.y ?? 0}px`,
+      visibility: measure ? undefined : "hidden",
+      "pointer-events": "none",
+    }),
+  };
+}
+
+// What the measure shows: the stretch being drawn, a shape's size, or the
+// selected wall, which it follows through a drag.
+function measureOf(state: MapEditorState) {
+  const { tool, drawing, cursor, drawShape, highlightedWall } = state;
+  const last = drawing.at(-1);
+  if ((tool === "draw" || tool === "line") && last && cursor) {
+    if (tool === "line" || drawShape === "outline") {
+      return { at: cursor, text: measureText(last, cursor) };
+    }
+    const wide = Math.abs(cursor.x - last.x);
+    const tall = Math.abs(cursor.y - last.y);
+    return {
+      at: cursor,
+      text:
+        drawShape === "rectangle"
+          ? `${wide} × ${tall}`
+          : `${Math.round(Math.hypot(wide, tall))} across the middle`,
+    };
+  }
+  if (tool !== "select" || !highlightedWall) return null;
+  const [from, to] = highlightedWall.split("|");
+  if (!state.positions[from] || !state.positions[to]) return null;
+  const a = pointOf(state, from);
+  const b = pointOf(state, to);
+  return {
+    at: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
+    text: measureText(a, b),
+  };
+}
+
+// A wall's length and the way it runs, counted like a thing's facing: from
+// east, turning left.
+function measureText(from: Point, to: Point) {
+  const length = Math.round(Math.hypot(to.x - from.x, to.y - from.y));
+  const turn = (Math.atan2(from.y - to.y, to.x - from.x) * 180) / Math.PI;
+  return `${length} · ${Math.round((turn + 360) % 360)}°`;
 }
 
 const hiddenLine = { x1: "0", y1: "0", x2: "0", y2: "0" };
@@ -1679,6 +1795,7 @@ const parts = createParts(mapEditor, {
   wall: "line",
   draft: "polyline",
   marquee: "div",
+  measure: "div",
   handle: "button",
   port: "button",
   wire: "line",
@@ -1699,6 +1816,7 @@ export const MapSector = React.memo(parts.Sector);
 export const MapWall = React.memo(parts.Wall);
 export const MapDraft = parts.Draft;
 export const MapMarquee = parts.Marquee;
+export const MapMeasure = parts.Measure;
 export const MapHandle = React.memo(parts.Handle);
 export const MapPort = React.memo(parts.Port);
 export const MapWire = React.memo(parts.Wire);
