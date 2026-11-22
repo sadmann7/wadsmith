@@ -355,15 +355,17 @@ export function RoomsInspector({
     <>
       <InspectorSection title="Height" detail={context}>
         <div className="flex items-center gap-2 [&>*]:min-w-0 [&>*]:flex-1">
-          <NumberSetting
-            label="Ceiling"
-            value={shared("ceiling")}
-            step={8}
-            min={-1024}
-            max={2048}
-            onChange={(ceiling) => onChange({ ceiling })}
-            onShift={(delta) => onShift("ceiling", delta)}
-          />
+          {rooms.every((room) => room.door) ? null : (
+            <NumberSetting
+              label="Ceiling"
+              value={shared("ceiling")}
+              step={8}
+              min={-1024}
+              max={2048}
+              onChange={(ceiling) => onChange({ ceiling })}
+              onShift={(delta) => onShift("ceiling", delta)}
+            />
+          )}
           <NumberSetting
             label="Floor"
             value={shared("floor")}
@@ -1197,13 +1199,27 @@ function NumberSetting({
           const typed =
             details.reason === "input-change" ||
             details.reason === "input-commit";
-          // An empty field steps from zero, so the step is how far to move.
-          if (value === null && !typed) onShift?.(Math.round(next));
-          else onChange(Math.round(next));
+          // An empty field has nothing to step from, so a step moves each
+          // room from where it stands, and only a typed number sets them all.
+          if (value !== null || typed) onChange(Math.round(next));
+          else onShift?.(stepWay(details) * step);
         }}
       />
     </FieldItem>
   );
+}
+
+// Which way a step went, read from what caused it: the field counts from zero
+// when it is empty, and its limits hide the direction.
+function stepWay(details: { reason: string; event?: Event }) {
+  if (details.reason === "increment-press") return 1;
+  if (details.reason === "decrement-press") return -1;
+  const key =
+    details.reason === "step-key" && details.event instanceof KeyboardEvent
+      ? details.event.key
+      : "";
+  if (key === "ArrowUp" || key === "PageUp") return 1;
+  return key === "ArrowDown" || key === "PageDown" ? -1 : 0;
 }
 
 interface InspectorSectionProps {

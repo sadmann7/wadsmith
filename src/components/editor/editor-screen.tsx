@@ -1931,26 +1931,27 @@ export function EditorScreen({
                     `rooms:${selectedRooms.map((room) => room.id).join()}`,
                   )
                 }
-                onShift={(key, delta) =>
+                onShift={(key, delta) => {
+                  const moved = selectedRooms.flatMap((room) => {
+                    const value = Math.max(
+                      roomLimits[key].min,
+                      Math.min(roomLimits[key].max, room[key] + delta),
+                    );
+                    return (room.door && key === "ceiling") ||
+                      value === room[key]
+                      ? []
+                      : [{ id: room.id, value }];
+                  });
+                  if (moved.length === 0) return;
                   commit(
-                    selectedRooms.reduce(
-                      (next, room) =>
-                        room.door && key === "ceiling"
-                          ? next
-                          : updateSector(next, room.id, {
-                              [key]: Math.max(
-                                roomLimits[key].min,
-                                Math.min(
-                                  roomLimits[key].max,
-                                  room[key] + delta,
-                                ),
-                              ),
-                            }),
+                    moved.reduce(
+                      (next, { id, value }) =>
+                        updateSector(next, id, { [key]: value }),
                       map,
                     ),
                     `rooms:${selectedRooms.map((room) => room.id).join()}`,
-                  )
-                }
+                  );
+                }}
               />
             ) : sector && !selectedSwitch && !thing ? (
               <SectorInspector

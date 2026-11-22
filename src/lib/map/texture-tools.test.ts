@@ -91,6 +91,29 @@ describe("aligning textures along walls", () => {
     ).toBe(testMap);
   });
 
+  it("goes by the parts the rooms' heights leave showing", () => {
+    // From the start room only the wall above the corridor's opening shows,
+    // and here it wears another texture than the room's.
+    const open = wallKey("v3", "v4");
+    const painted = updateLineSide(testMap, open, "sector-1", {
+      upper: "BRICK1",
+    });
+    const aligned = alignWalls(
+      painted,
+      "sector-1",
+      wallKey("v1", "v15"),
+      () => 128,
+    );
+    expect(aligned.lines?.[open]?.sides?.["sector-1"]).toEqual({
+      upper: "BRICK1",
+    });
+    // The run stops there going one way, and comes round to the wall past
+    // it going the other: 320, 384 and 96 units back from where it started.
+    expect(aligned.lines?.[wallKey("v4", "v5")]?.sides?.["sector-1"]).toEqual({
+      offsetX: 96,
+    });
+  });
+
   it("aligns the walls a room shows around a room drawn inside it", () => {
     const riser = wallKey("e", "f");
     const shifted = updateLineSide(islandMap, riser, "yard", { offsetX: 16 });

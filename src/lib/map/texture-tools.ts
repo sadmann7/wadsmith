@@ -36,18 +36,21 @@ export function alignWalls(
   );
   // What this room's side of a wall shows, as the compiler writes it: null
   // for a wall that isn't this room's to paint, and no textures for one that
-  // wears a switch's or a door's.
+  // wears a switch's or a door's, or that the rooms' heights leave bare.
   const shown = (key: string) => {
     const sides = owners.get(key) ?? [];
     if (!sides.includes(sector)) return null;
     const other = sides.find((item) => item !== sector);
     if (switches.has(key) || other?.door) return [];
-    return other
-      ? [
-          wallPartTexture(map, sector, key, "upper"),
-          wallPartTexture(map, sector, key, "lower"),
-        ]
-      : [wallPartTexture(map, sector, key, "middle")];
+    if (!other) return [wallPartTexture(map, sector, key, "middle")];
+    return [
+      ...(other.ceiling < sector.ceiling
+        ? [wallPartTexture(map, sector, key, "upper")]
+        : []),
+      ...(other.floor > sector.floor
+        ? [wallPartTexture(map, sector, key, "lower")]
+        : []),
+    ];
   };
   const textures = shown(wall);
   if (!textures || textures.length === 0) return map;

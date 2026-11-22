@@ -991,7 +991,12 @@ function WallMenu({ sector, wall, ...props }: WallMenuProps) {
           </MenuItem>
           <MenuItem
             className={itemClass}
-            disabled={!picked || !texture || picked === texture}
+            disabled={
+              !picked ||
+              surfaces.every(
+                (key) => describeSurface(map, key)?.texture === picked,
+              )
+            }
             onSelect={() =>
               picked &&
               onCommit(
