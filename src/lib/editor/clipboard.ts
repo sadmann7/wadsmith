@@ -6,14 +6,17 @@ import {
   serializeFragment,
 } from "@/lib/map/fragment";
 
-// A map's id is only its own within one browser, and a first map has the same
-// id in every browser, so a piece is marked with this page as well.
-const page = crypto.randomUUID();
-
 let held: CopiedPiece | null = null;
+let page: string | null = null;
 
-// The mark a piece copied from this map on this page carries.
+// The mark a piece copied from this map on this page carries. A map's id is
+// only its own within one browser, and a first map has the same id in every
+// browser, so the page is part of it. The page's id is made on first use with
+// getRandomValues, which works on a plain http address as randomUUID doesn't.
 export function originOf(mapId: string) {
+  page ??= Array.from(crypto.getRandomValues(new Uint8Array(8)), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
   return `${page}:${mapId}`;
 }
 

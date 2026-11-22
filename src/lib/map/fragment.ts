@@ -13,7 +13,6 @@ import {
   thingKeyPrefix,
 } from "./edit";
 import {
-  type Box,
   boxOf,
   sectorAt,
   sectorContainers,
@@ -377,7 +376,12 @@ export function transformParts(
       ? (((transform.degrees / 90) % 4) + 4) % 4
       : null;
   const pivot =
-    quarters === null ? middle : turnPivot(box, positions[moved[0]], grid);
+    quarters === null
+      ? middle
+      : turnPivot(
+          moved.map((key) => positions[key]),
+          grid,
+        );
   // Adding zero turns a negative zero into a plain one.
   const land = (value: number) => snap(value, grid) + 0;
   const radians =
@@ -500,13 +504,21 @@ export function parseFragment(text: string): CopiedPiece | null {
 // whole one sends every grid point to a grid point. The pivot is the nearest
 // such point to the middle, and of several as near, the one nearest the first
 // thing moved, which turns with the rest and so picks the same pivot again.
-function turnPivot(box: Box, anchor: Point, grid: number): Point {
+function turnPivot(points: Point[], grid: number): Point {
+  const box = boxOf(points);
   const middle = {
     x: (box.left + box.right) / 2,
     y: (box.top + box.bottom) / 2,
   };
   // A square turns onto itself about its own middle, on the grid or off it.
-  if (box.right - box.left === box.bottom - box.top) return middle;
+  // That is the pivot as long as it takes nothing off the grid.
+  if (box.right - box.left === box.bottom - box.top) {
+    const turned = points.map(({ x, y }) => ({
+      x: middle.x + middle.y - y,
+      y: middle.y - middle.x + x,
+    }));
+    if (gridCount(turned, grid) >= gridCount(points, grid)) return middle;
+  }
   const half = grid / 2;
   const across = Math.floor(middle.x / half);
   const down = Math.floor(middle.y / half);
@@ -515,11 +527,15 @@ function turnPivot(box: Box, anchor: Point, grid: number): Point {
     for (let b = down - 1; b <= down + 2; b += 1) {
       if ((a + b) % 2 !== 0) continue;
       const spot = { x: a * half, y: b * half };
-      spots.push({ spot, near: far(spot, middle), held: far(spot, anchor) });
+      spots.push({ spot, near: far(spot, middle), held: far(spot, points[0]) });
     }
   }
   spots.sort((one, other) => one.near - other.near || one.held - other.held);
   return spots[0].spot;
+}
+
+function gridCount(points: Point[], grid: number) {
+  return points.filter(({ x, y }) => x % grid === 0 && y % grid === 0).length;
 }
 
 function far(from: Point, to: Point) {

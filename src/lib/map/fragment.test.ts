@@ -478,6 +478,35 @@ describe("turning, flipping and resizing", () => {
     expect(back.vertices).toEqual(square48.map.vertices);
   });
 
+  it("keeps a room on the grid when a thing beside it squares the selection", () => {
+    const room = addRoom(
+      empty,
+      [
+        { x: 0, y: 0 },
+        { x: 64, y: 0 },
+        { x: 64, y: 64 },
+        { x: 0, y: 64 },
+      ],
+      {},
+      64,
+    );
+    const map: GameMap = {
+      ...room.map,
+      things: [{ id: "imp-1", kind: "imp", x: 96, y: 96, angle: 0 }],
+    };
+    const turned = defined(
+      transformParts(
+        map,
+        [...room.map.sectors[0].vertices, "thing:imp-1"],
+        { kind: "rotate", degrees: 90 },
+        64,
+      ),
+    );
+    for (const point of Object.values(turned.vertices)) {
+      expect([Math.abs(point.x % 64), Math.abs(point.y % 64)]).toEqual([0, 0]);
+    }
+  });
+
   it("flips a room where it stands and turns a lone thing on the spot", () => {
     const odd = addRoom(
       empty,

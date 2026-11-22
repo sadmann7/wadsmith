@@ -315,9 +315,12 @@ export function EditorScreen({
   const playButton = React.useRef<HTMLButtonElement>(null);
   const fileInput = React.useRef<HTMLInputElement>(null);
   const [notice, setNotice] = React.useState("");
-  const [transforming, setTransforming] = React.useState(false);
+  // A dialog opened from a room's menu keeps what the menu worked on, which
+  // the selection alone may not say once the menu has closed.
+  const [transforming, setTransforming] = React.useState<string[] | null>(null);
   const [prefabsAt, setPrefabsAt] = React.useState<{
     point: Point | null;
+    selected: GameMap | null;
   } | null>(null);
   const viewStatus = React.useRef<MapViewStatus | null>(null);
   const [initialLayout] = React.useState(loadLayout);
@@ -579,11 +582,11 @@ export function EditorScreen({
     selectPasted(copies.ids.map((id) => `${thingKeyPrefix}${id}`));
   };
 
-  const transformSelection = (steps: Transform[]) => {
-    if (transformKeys.length === 0 || steps.length === 0) return;
+  const transformSelection = (steps: Transform[], keys = transformKeys) => {
+    if (keys.length === 0 || steps.length === 0) return;
     let next = map;
     for (const step of steps) {
-      const turned = transformParts(next, transformKeys, step, grid);
+      const turned = transformParts(next, keys, step, grid);
       if (!turned) {
         setNotice(
           "That would press two corners of a room together, or change nothing.",
@@ -2020,8 +2023,9 @@ export function EditorScreen({
           onPaste: (point) => pasteFragment(heldFragment(), point),
           onDuplicate: duplicateSelection,
           onTransform: (transform) => transformSelection([transform]),
-          onTransformBy: () => setTransforming(true),
-          onPrefabs: (point) => setPrefabsAt({ point }),
+          onTransformBy: () => setTransforming(transformKeys),
+          onPrefabs: (point) =>
+            setPrefabsAt({ point, selected: copyParts(map, parts) }),
         }}
         onOpenChange={(open, details) => {
           const target = menuTargetRef.current;
@@ -2054,17 +2058,14 @@ export function EditorScreen({
       ) : null}
       {transforming ? (
         <TransformDialog
-          onApply={transformSelection}
-          onClose={() => setTransforming(false)}
+          onApply={(steps) => transformSelection(steps, transforming)}
+          onClose={() => setTransforming(null)}
         />
       ) : null}
       {prefabsAt ? (
         <PrefabsDialog
-          selected={copyParts(map, parts)}
-          suggestedName={
-            map.sectors.find((item) => item.id === parts.sectors[0])?.name ??
-            "Prefab"
-          }
+          selected={prefabsAt.selected}
+          suggestedName={prefabsAt.selected?.sectors[0]?.name ?? "Prefab"}
           onPlace={(fragment) =>
             pasteFragment(
               { fragment, origin: null },
