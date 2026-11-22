@@ -30,14 +30,19 @@ export function createEditHistory({ limit, groupDelay }: EditHistoryOptions) {
   const undone: Step[] = [];
   return {
     // Edits of one group close together join one step, like a drag's moves.
-    record(before: GameMap, after: GameMap, group?: string) {
+    record(
+      before: GameMap,
+      after: GameMap,
+      group?: string,
+      delay = groupDelay,
+    ) {
       const redo = diffMaps(before, after);
       if (getIsEmptyPatch(redo)) return;
       const undo = diffMaps(after, before);
       const now = Date.now();
       const last = done.at(-1);
       undone.length = 0;
-      if (group && last?.group === group && now - last.at < groupDelay) {
+      if (group && last?.group === group && now - last.at < delay) {
         last.redo = combinePatches(last.redo, redo);
         last.undo = combinePatches(undo, last.undo);
         last.at = now;
@@ -62,6 +67,20 @@ export function createEditHistory({ limit, groupDelay }: EditHistoryOptions) {
       const next = keepCorners(current, applyPatch(current, step.redo));
       if (getHasLostCorners(current, next)) return undefined;
       done.push({ ...step, group: undefined });
+      return next;
+    },
+    // Takes back every step of one group, wherever it sits in the history.
+    // Nothing changes if that would bring a room back on lost corners.
+    undoGroup(group: string, current: GameMap) {
+      const steps = done.filter((step) => step.group === group).toReversed();
+      if (steps.length === 0) return undefined;
+      const next = steps.reduce(
+        (map, step) => keepCorners(map, applyPatch(map, step.undo)),
+        current,
+      );
+      if (getHasLostCorners(current, next)) return undefined;
+      for (const step of steps) done.splice(done.indexOf(step), 1);
+      undone.length = 0;
       return next;
     },
     canUndo: () => done.length > 0,

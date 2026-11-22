@@ -333,6 +333,10 @@
     color: var(--color-destructive);
   }
 
+  .map-agent {
+    color: var(--color-foreground);
+  }
+
   .map-peer-name {
     margin-top: 12px;
     padding: 1px 4px;

@@ -1130,6 +1130,208 @@ export function runAgentAction(
   return { ...settled, result: result ?? null };
 }
 
+const askFirstNames = new Set([
+  "removeRoom",
+  "removeDoor",
+  "removeHole",
+  "removeDetailLine",
+  "removeThing",
+  "removeSwitch",
+  "removeNote",
+  "replaceTexture",
+  "clearLineAction",
+]);
+
+export function getIsAgentRead(name: string) {
+  return byName.get(name)?.reads === true;
+}
+
+// Removals, and a line special of 0, which clears a wall's action like
+// clearLineAction does.
+export function getIsAgentAskFirst(name: string, input: unknown[] | Args = []) {
+  if (askFirstNames.has(name)) return true;
+  if (name !== "setLineSpecial") return false;
+  const action = byName.get(name);
+  try {
+    return action
+      ? number(named(action, input), "special", 0, 65535) === 0
+      : false;
+  } catch {
+    return false;
+  }
+}
+
+export interface AgentRisk {
+  title: string;
+  detail: string;
+  confirm: string;
+}
+
+// What an action would take away, put to the person before it runs.
+export function agentRisk(
+  map: GameMap,
+  name: string,
+  input: unknown[] | Args = [],
+): AgentRisk {
+  const fallback = {
+    title: `Let the agent run ${humanize(name).toLowerCase()}?`,
+    detail: "Undo brings back what it changes.",
+    confirm: "Allow",
+  };
+  const action = byName.get(name);
+  if (!action) return fallback;
+  try {
+    const args = named(action, input);
+    if (name === "removeRoom") {
+      const sector = findRoom(map, args.room);
+      const switches = map.switches.filter(
+        (item) => item.sector === sector.id,
+      ).length;
+      const things = map.things.filter(
+        (thing) => sectorAt(map, thing)?.id === sector.id,
+      ).length;
+      const parts = [
+        switches > 1 ? `${switches} switches` : switches === 1 ? "switch" : "",
+        things > 0 ? `${count(things, "thing", "things")} inside` : "",
+      ].filter(Boolean);
+      return {
+        title: `Remove ${sector.name}?`,
+        detail:
+          parts.length > 0
+            ? `Its ${parts.join(" and the ")} ${switches + things > 1 ? "go" : "goes"} with it. Undo brings ${switches + things > 1 ? "them all" : "it"} back.`
+            : "Undo brings it back.",
+        confirm: `Remove ${sector.name}`,
+      };
+    }
+    if (name === "removeDoor") {
+      const sector = findDoor(map, args.room);
+      return {
+        title: `Turn ${sector.name} back into a plain room?`,
+        detail: "It stops opening. Undo brings the door back.",
+        confirm: "Remove door",
+      };
+    }
+    if (name === "removeHole") {
+      const sector = findRoom(map, args.room);
+      return {
+        title: `Remove a pillar from ${sector.name}?`,
+        detail: "It leaves open floor. Undo brings it back.",
+        confirm: "Remove pillar",
+      };
+    }
+    if (name === "removeDetailLine") {
+      const sector = findRoom(map, args.room);
+      return {
+        title: `Remove a line inside ${sector.name}?`,
+        detail: "Undo brings it back.",
+        confirm: "Remove line",
+      };
+    }
+    if (name === "removeThing") {
+      const thing = findThing(map, args.thing);
+      const room = sectorAt(map, thing);
+      return {
+        title: `Remove the ${thingCatalog[thing.kind].label.toLowerCase()}?`,
+        detail: `${room ? `It stands in ${room.name}. ` : ""}Undo brings it back.`,
+        confirm: "Remove thing",
+      };
+    }
+    if (name === "removeSwitch") {
+      const id = findSwitch(map, args.switch);
+      const room = map.sectors.find(
+        (sector) =>
+          sector.id === map.switches.find((item) => item.id === id)?.sector,
+      );
+      return {
+        title: "Remove a switch?",
+        detail: `${room ? `It's on a wall of ${room.name}. ` : ""}Undo brings it back.`,
+        confirm: "Remove switch",
+      };
+    }
+    if (name === "removeNote") {
+      const note = map.notes?.find((item) => item.id === args.note);
+      return {
+        title: "Remove a note?",
+        detail: note
+          ? `“${note.text}” goes. Undo brings it back.`
+          : fallback.detail,
+        confirm: "Remove note",
+      };
+    }
+    if (name === "replaceTexture") {
+      const { result } = runAgentAction(map, name, args);
+      const from = text(args, "from");
+      return {
+        title: `Replace ${from} with ${text(args, "to")}?`,
+        detail: `${typeof result === "number" ? `${count(result, "surface", "surfaces")} change.` : "Every surface that wears it changes."} Undo puts ${from} back.`,
+        confirm: "Replace",
+      };
+    }
+    if (
+      name === "clearLineAction" ||
+      (name === "setLineSpecial" && number(args, "special", 0, 65535) === 0)
+    ) {
+      return {
+        title: "Take this wall's action away?",
+        detail:
+          "Whatever it opened or triggered stops working. Undo brings it back.",
+        confirm: "Take it away",
+      };
+    }
+  } catch {
+    return fallback;
+  }
+  return fallback;
+}
+
+export interface AgentStepSummary {
+  label: string;
+  at: Point | null;
+}
+
+// A line for the trail of what an agent did, and where on the map it did it.
+export function agentStepSummary(
+  map: GameMap,
+  name: string,
+  input: unknown[] | Args,
+  result: unknown,
+): AgentStepSummary {
+  const made = map.sectors.find((sector) => sector.id === result);
+  const placed = map.things.find((thing) => thing.id === result);
+  let room: Sector | undefined = made;
+  let thing: Thing | undefined = placed;
+  const action = byName.get(name);
+  if (action && !room && !thing) {
+    try {
+      const args = named(action, input);
+      if (args.room !== undefined) room = findRoom(map, args.room);
+      else if (args.thing !== undefined) thing = findThing(map, args.thing);
+    } catch {
+      // The step named something that is gone now, so it has no place.
+    }
+  }
+  const label = humanize(name);
+  if (room) {
+    return { label: `${label} · ${room.name}`, at: roomCenter(map, room) };
+  }
+  if (thing) {
+    return {
+      label: `${label} · ${thingCatalog[thing.kind].label}`,
+      at: { x: thing.x, y: thing.y },
+    };
+  }
+  return { label, at: null };
+}
+
+function humanize(name: string) {
+  const words = name.replace(/([A-Z])/g, " $1").toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+function count(value: number, one: string, many: string) {
+  return `${value} ${value === 1 ? one : many}`;
+}
+
 // Positional arguments take the parameters' names in order. A lone object
 // whose keys are all parameter names is taken as named already.
 function named(action: AgentAction, input: unknown[] | Args): Args {

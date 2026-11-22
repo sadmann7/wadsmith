@@ -1,4 +1,5 @@
 import {
+  Bot,
   Focus,
   LocateFixed,
   Maximize,
@@ -10,7 +11,7 @@ import * as React from "react";
 import type { LivePeer } from "@/lib/episodes/live";
 import type { MapLink } from "@/lib/map/links";
 import type { PlaytestRun, RunMark } from "@/lib/map/playtest";
-import type { GameMap, Sector, ThingKind } from "@/lib/map/types";
+import type { GameMap, Point, Sector, ThingKind } from "@/lib/map/types";
 
 import { buttonVariants } from "@/components/ui/button";
 import { thingIcons } from "@/lib/editor/thing-icons";
@@ -65,6 +66,8 @@ interface MapCanvasProps extends React.ComponentProps<typeof MapEditor> {
   trail: PlaytestRun | null;
   // Other people editing the map, at their pointers.
   peers?: LivePeer[];
+  // Where a browser's agent is working, while it works.
+  agentAt?: Point | null;
 }
 
 export function MapCanvas({
@@ -73,6 +76,7 @@ export function MapCanvas({
   links,
   trail,
   peers = [],
+  agentAt = null,
   onViewChange,
   ...props
 }: MapCanvasProps) {
@@ -340,6 +344,22 @@ export function MapCanvas({
             </MapMarker>
           ) : null,
         )}
+        {agentAt ? (
+          <MapMarker
+            value="agent"
+            x={agentAt.x}
+            y={agentAt.y}
+            className="map-peer map-agent pointer-events-none origin-top-left [transform:scale(calc(1/var(--canvas-zoom,1)))]"
+          >
+            <MousePointer2 size={16} aria-hidden="true" />
+            <span className="map-peer-name">
+              <span className="flex items-center gap-1">
+                <Bot size={11} aria-hidden="true" />
+                Agent
+              </span>
+            </span>
+          </MapMarker>
+        ) : null}
         {callouts.map((callout) => (
           <MapMarker
             key={callout.id}
