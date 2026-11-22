@@ -120,9 +120,9 @@ interface MapContextMenuProps {
 type BodyProps = Omit<MapContextMenuProps, "controller" | "onOpenChange">;
 
 const contentClass =
-  "z-30 w-54 rounded-[7px] border border-input bg-muted p-1 shadow-popover outline-none";
+  "z-30 w-54 rounded-md border border-border bg-popover p-1 shadow-popover outline-none";
 const itemClass =
-  "flex h-7 cursor-default items-center gap-2 rounded-[4px] px-2 outline-none select-none data-[disabled]:text-muted-foreground/60 data-[highlighted]:bg-accent data-[popup-open]:bg-accent";
+  "flex h-7 cursor-default items-center gap-2 rounded-sm px-2 outline-none select-none data-[disabled]:text-muted-foreground/60 data-[highlighted]:bg-accent data-[popup-open]:bg-accent";
 const iconClass = "flex w-3.5 shrink-0 justify-center text-muted-foreground";
 const destructiveIconClass =
   "flex w-3.5 shrink-0 justify-center text-destructive";
@@ -306,7 +306,7 @@ function Heading({ children }: { children: React.ReactNode }) {
 }
 
 function Rule() {
-  return <MenuSeparator className="mx-0 my-1 h-px bg-border" />;
+  return <MenuSeparator className="-mx-1 my-1 h-px bg-border" />;
 }
 
 function ShowItem({ map, target, onShow }: BodyProps & { target: MapTarget }) {

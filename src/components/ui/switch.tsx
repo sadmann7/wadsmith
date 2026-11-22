@@ -10,12 +10,12 @@ function Switch({
   return (
     <SwitchPrimitive.Switch
       className={cn(
-        "group inline-flex h-[18px] w-8 shrink-0 rounded-full border-0 bg-input p-0.5 data-[checked]:bg-primary",
+        "group inline-flex h-[18px] w-8 shrink-0 items-center rounded-full border border-transparent bg-input/80 shadow-xs transition-colors disabled:opacity-50 data-[checked]:bg-primary",
         className,
       )}
       {...props}
     >
-      <SwitchPrimitive.SwitchThumb className="size-3.5 rounded-full bg-foreground group-data-[checked]:translate-x-3.5" />
+      <SwitchPrimitive.SwitchThumb className="size-4 rounded-full bg-foreground transition-transform group-data-[checked]:translate-x-3.5 group-data-[checked]:bg-primary-foreground" />
     </SwitchPrimitive.Switch>
   );
 }

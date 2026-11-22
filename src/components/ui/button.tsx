@@ -5,15 +5,14 @@ import { cn } from "@/lib/cn";
 
 const variants = {
   default:
-    "border border-input bg-transparent hover:not-disabled:border-muted-foreground",
+    "border border-input bg-input/30 shadow-xs hover:not-disabled:bg-input/50",
   primary:
-    "border border-transparent bg-primary font-semibold text-primary-foreground",
+    "border border-transparent bg-primary font-semibold text-primary-foreground shadow-xs hover:not-disabled:bg-primary/90",
   destructive:
-    "border border-destructive bg-transparent text-destructive hover:not-disabled:bg-destructive/15",
-  outline:
-    "border border-input bg-card hover:not-disabled:border-muted-foreground",
+    "border border-transparent bg-destructive/10 text-destructive hover:not-disabled:bg-destructive/15",
+  outline: "border border-input bg-card shadow-xs hover:not-disabled:bg-accent",
   ghost:
-    "border border-transparent bg-transparent hover:not-disabled:bg-accent",
+    "border border-transparent bg-transparent hover:not-disabled:bg-accent/50",
   text: "border-0 bg-transparent px-0 py-0.5 text-muted-foreground hover:text-foreground aria-expanded:text-foreground",
 };
 
@@ -31,7 +30,7 @@ function buttonVariants({
   className,
 }: { variant?: ButtonVariant; size?: ButtonSize; className?: string } = {}) {
   return cn(
-    "inline-flex cursor-default items-center justify-center rounded-[3px] whitespace-nowrap disabled:opacity-45",
+    "inline-flex shrink-0 cursor-default items-center justify-center rounded-[3px] whitespace-nowrap transition-colors disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
     variant !== "text" && sizes[size],
     variants[variant],
     className,

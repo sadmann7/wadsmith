@@ -19,11 +19,11 @@ function Slider({
     >
       {children}
       <SliderPrimitive.SliderControl className="flex h-[18px] items-center">
-        <SliderPrimitive.SliderTrack className="relative h-1 w-full rounded-sm bg-muted">
-          <SliderPrimitive.SliderIndicator className="h-full rounded-sm bg-primary" />
+        <SliderPrimitive.SliderTrack className="relative h-1.5 w-full rounded-full bg-muted">
+          <SliderPrimitive.SliderIndicator className="h-full rounded-full bg-primary" />
           <SliderPrimitive.SliderThumb
             aria-label={label}
-            className="size-3.5 rounded-full bg-foreground"
+            className="size-4 rounded-full border border-primary bg-foreground shadow-sm transition-[box-shadow] hover:ring-4 hover:ring-ring/50 data-[dragging]:ring-4 data-[dragging]:ring-ring/50 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ring"
           />
         </SliderPrimitive.SliderTrack>
       </SliderPrimitive.SliderControl>
