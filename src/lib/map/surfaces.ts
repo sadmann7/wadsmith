@@ -145,6 +145,16 @@ export function describeSurface(
   if (sector.door) {
     return { ...empty, sector, label: `${sector.name} frame` };
   }
+  // The middle of an open line is its see-through texture, which the line's
+  // own settings choose, and not a part of the room's wall.
+  if (owners.length > 1 && surface.part === "middle") {
+    return {
+      ...empty,
+      sector,
+      label: `Line in ${sector.name}`,
+      texture: map.lines?.[surface.wall]?.sides?.[sector.id]?.middle ?? null,
+    };
+  }
   // Doom flips a switch texture on any part of the line when it is pressed.
   const pressed =
     surface.part !== "middle" &&

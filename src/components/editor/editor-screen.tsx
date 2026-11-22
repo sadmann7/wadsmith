@@ -69,7 +69,7 @@ import {
   viewOfTarget,
 } from "@/lib/editor/map-target";
 import { type EditorShortcut, editorShortcuts } from "@/lib/editor/shortcuts";
-import { defaultGame, engineSlot } from "@/lib/engine/game";
+import { defaultGame, defaultSky, engineSlot } from "@/lib/engine/game";
 import { texturesOf } from "@/lib/engine/iwad";
 import {
   floorTextures,
@@ -1039,7 +1039,7 @@ export function EditorScreen({
       onContextMenuCapture={normalizeControlClick}
     >
       <SceneCanvas
-        aria-label="3D view. Click a surface to select it. W, A, S and D walk, N and P step through surfaces."
+        aria-label="3D view. Click a surface to select it. W, A, S and D walk, N and P step through surfaces, and O opens the door or lift under the pointer."
         className="screen scene"
         map={map}
         assets={assets}
@@ -1048,6 +1048,7 @@ export function EditorScreen({
         selected={surfaceInfo ? surface : null}
         linked={sceneInfo ? sceneSelection : null}
         placing={tool === "thing" ? thingKind : null}
+        sky={sky ?? defaultSky(slot, iwadGame)}
         grid={grid}
         renderWidth={640}
         renderHeight={400}

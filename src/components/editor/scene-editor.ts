@@ -32,6 +32,7 @@ import {
   moveSurfaceHeight,
   parseSurface,
 } from "@/lib/map/surfaces";
+import { getIsMover, moverAt, withMovers } from "@/lib/preview/movers";
 import {
   cameraBasis,
   createRenderTarget,
@@ -67,6 +68,7 @@ interface SceneOptions {
   ) => void;
   contextMenuOpen?: boolean;
   placing?: ThingKind | null;
+  sky?: string | null;
   renderWidth?: number;
   renderHeight?: number;
   grid?: number;
@@ -90,6 +92,9 @@ interface SceneState {
   frozenEye: number | null;
   placing: ThingKind | null;
   ghost: Point | null;
+  sky: string | null;
+  // The doors and lifts shown open, to check what they leave room for.
+  opened: string[];
   width: number;
   height: number;
 }
@@ -112,6 +117,7 @@ const sceneEditor = definePrimitive({
     onContextSurface: "callback",
     contextMenuOpen: "boolean",
     placing: "value",
+    sky: "value",
     renderWidth: "number",
     renderHeight: "number",
     grid: "number",
@@ -129,6 +135,8 @@ const sceneEditor = definePrimitive({
     frozenEye: null,
     placing: options.placing ?? null,
     ghost: null,
+    sky: options.sky ?? null,
+    opened: [],
     width: options.renderWidth ?? 320,
     height: options.renderHeight ?? 200,
   }),
@@ -138,6 +146,7 @@ const sceneEditor = definePrimitive({
     ...(options.selected !== undefined ? { selected: options.selected } : {}),
     linked: options.linked ?? null,
     placing: options.placing ?? null,
+    sky: options.sky ?? null,
     ...(options.placing ? {} : { ghost: null }),
   }),
   live: ["hovered"],
@@ -159,6 +168,22 @@ const sceneEditor = definePrimitive({
       return draftMap ?? map;
     };
 
+    // The map as the frame shows it, with the opened doors and lifts where
+    // they stand. What a press means is read from this one, and edits go to
+    // the map itself.
+    const viewMap = () => {
+      const map = shownMap();
+      return map ? withMovers(map, store.get().opened) : null;
+    };
+
+    // A door or lift that is gone, or no longer one, stops being shown open.
+    context.onOptions(({ map }) => {
+      const { opened } = store.get();
+      if (!map || opened.length === 0) return;
+      const still = opened.filter((id) => getIsMover(map, id));
+      if (still.length < opened.length) store.set({ opened: still });
+    });
+
     const cameraState = () => context.options().camera;
     const grid = () => context.options().grid ?? gridSize;
 
@@ -174,6 +199,8 @@ const sceneEditor = definePrimitive({
         frozenEye,
         placing,
         ghost,
+        sky,
+        opened,
       } = store.get();
       const view = cameraState();
       const output = canvas?.getContext("2d");
@@ -191,6 +218,8 @@ const sceneEditor = definePrimitive({
           hovered: placing ? null : hovered,
           selected: selected ?? linked,
           ghost: placing && ghost ? { ...ghost, kind: placing } : null,
+          sky,
+          opened,
         },
       );
       output.putImageData(image, 0, 0);
@@ -229,7 +258,7 @@ const sceneEditor = definePrimitive({
     };
 
     const floorPointAt = (event: MouseEvent) => {
-      const { map } = store.get();
+      const map = viewMap();
       const view = cameraState();
       const key = surfaceAt(event)?.key;
       const surface = key ? parseSurface(key) : null;
@@ -326,12 +355,15 @@ const sceneEditor = definePrimitive({
 
     const dragThing = (event: PointerEvent, thingId: string) => {
       const { map } = store.get();
+      const shown = viewMap();
       const view = cameraState();
       const thing = map?.things.find((item) => item.id === thingId);
       const pressed = targetPoint(event);
-      if (!canvas || !target || !map || !view || !thing || !pressed) return;
-      const plane = sectorAt(map, thing)?.floor ?? 0;
-      const feet = projectPoint(target, map, view.position, thing, plane);
+      if (!canvas || !target || !map || !shown || !view || !thing || !pressed) {
+        return;
+      }
+      const plane = sectorAt(shown, thing)?.floor ?? 0;
+      const feet = projectPoint(target, shown, view.position, thing, plane);
       if (!feet) return;
       const element = canvas;
       const output = target;
@@ -348,7 +380,7 @@ const sceneEditor = definePrimitive({
           const box = element.getBoundingClientRect();
           const point = pointOnPlane(
             output,
-            map,
+            shown,
             view.position,
             ((x - box.left) / box.width) * output.width - offset.x,
             ((y - box.top) / box.height) * output.height - offset.y,
@@ -399,9 +431,15 @@ const sceneEditor = definePrimitive({
       change("selected", key, { reason });
     };
 
+    // A door or lift shown open isn't at the height the map holds for it, so
+    // its height waits until it is shut again.
     const getCanMoveHeight = (key: string | null) => {
-      const { map } = store.get();
-      return !!map && describeSurface(map, key)?.height != null;
+      const { map, opened } = store.get();
+      const info = map ? describeSurface(map, key) : null;
+      return (
+        info?.height != null &&
+        !(info.sector && opened.includes(info.sector.id))
+      );
     };
 
     const nudge = (event: KeyboardEvent, direction: number) => {
@@ -548,7 +586,8 @@ const sceneEditor = definePrimitive({
         if (!hit || !key || !map || !getCanMoveHeight(key)) return;
 
         const view = cameraState();
-        const owner = view ? sectorAt(map, view.position) : null;
+        const shown = viewMap();
+        const owner = view && shown ? sectorAt(shown, view.position) : null;
         const startY = event.clientY;
         const { focal, height } = target;
         const rowsPerPixel = height / canvas.getBoundingClientRect().height;
@@ -603,6 +642,18 @@ const sceneEditor = definePrimitive({
           event.preventDefault();
           held.add(event.code);
           if (!walkFrame) walk(performance.now());
+        } else if (event.code === "KeyO" && map && !event.repeat) {
+          // The door or lift under the pointer, or else the selected one,
+          // stands open until the key is pressed on it again.
+          const { hovered, selected, opened } = store.get();
+          const mover = moverAt(map, hovered) ?? moverAt(map, selected);
+          if (!mover) return;
+          event.preventDefault();
+          store.set({
+            opened: opened.includes(mover)
+              ? opened.filter((id) => id !== mover)
+              : [...opened, mover],
+          });
         } else if (event.code === "KeyN" || event.code === "KeyP") {
           event.preventDefault();
           cycle(event.code === "KeyN" ? 1 : -1);
@@ -635,7 +686,10 @@ const sceneEditor = definePrimitive({
         if (state.ghost) hover = "place";
         else if (surface?.kind === "thing") hover = "thing";
         else if (state.placing) hover = undefined;
-        else if (surface?.kind === "floor" || surface?.kind === "ceiling") {
+        else if (
+          (surface?.kind === "floor" || surface?.kind === "ceiling") &&
+          !state.opened.includes(surface.sector)
+        ) {
           hover = "height";
         } else if (surface) hover = "surface";
         return { "data-hover": hover };

@@ -89,6 +89,15 @@ export function engineSlot(slot: string, game: GameInfo) {
   return `E${episode}M${map}`;
 }
 
+// The sky the game gives a slot when its map names none: one an episode in
+// Doom, and one for each third of Doom II.
+export function defaultSky(slot: string, game: GameInfo) {
+  const episode = episodeSlot.exec(engineSlot(slot, game));
+  if (episode) return `SKY${episode[1]}`;
+  const index = slotIndex(slot);
+  return index >= 21 ? "SKY3" : index >= 12 ? "SKY2" : "SKY1";
+}
+
 // What an engine lump named like a map plays as, in MAP01 to MAP32 numbering.
 export function lumpSlotIndex(name: string) {
   const map = mapSlot.exec(name);
