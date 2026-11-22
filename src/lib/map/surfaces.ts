@@ -229,14 +229,18 @@ export function moveSurfaceHeight(
   if (surface.kind === "floor") {
     const top = sector.door ? heightLimit : sector.ceiling - minimumOpening;
     const floor = Math.max(-heightLimit, Math.min(top, sector.floor + delta));
-    return updateSector(map, sector.id, { floor });
+    return floor === sector.floor
+      ? map
+      : updateSector(map, sector.id, { floor });
   }
   if (surface.kind === "ceiling") {
     const ceiling = Math.min(
       heightLimit,
       Math.max(sector.floor + minimumOpening, sector.ceiling + delta),
     );
-    return updateSector(map, sector.id, { ceiling });
+    return ceiling === sector.ceiling
+      ? map
+      : updateSector(map, sector.id, { ceiling });
   }
   return map;
 }

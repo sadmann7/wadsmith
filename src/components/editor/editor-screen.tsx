@@ -57,7 +57,12 @@ import {
 } from "@/components/ui/segmented-control";
 import { useIwad } from "@/hooks/use-iwad";
 import { agent } from "@/lib/editor/agent";
-import { heldFragment, holdFragment, originOf } from "@/lib/editor/clipboard";
+import {
+  dropFragment,
+  heldFragment,
+  holdFragment,
+  originOf,
+} from "@/lib/editor/clipboard";
 import {
   type MapTarget,
   normalizeControlClick,
@@ -121,6 +126,7 @@ import {
 } from "@/lib/map/geometry";
 import { describeLine } from "@/lib/map/lines";
 import { lineLinks, type MapLink, sectorLinks } from "@/lib/map/links";
+import { gradient, gradientEnds, type SurfaceLook } from "@/lib/map/look";
 import { type DrawShape, polygonSides } from "@/lib/map/shapes";
 import {
   MapFileError,
@@ -149,6 +155,7 @@ import type { EditMode, MapTool, MapViewStatus } from "./map-editor";
 
 import { BuildDialog } from "./build-dialog";
 import { MapContextMenu } from "./context-menu";
+import { GradientPanel } from "./gradient-panel";
 import {
   LineInspector,
   RoomsInspector,
@@ -215,6 +222,9 @@ const thingCategoryLabels: Record<ThingCategory, string> = {
 };
 
 const savedLayout = createLocalStorage("wadsmith:layout");
+// How long after the 3D view copies a look the page's copy event still
+// belongs to it.
+const lookCopyMs = 250;
 const savedWelcome = createLocalStorage("wadsmith:welcomed");
 // Below this width, two panes can't hold the map controls and a usable 3D view.
 const narrowQuery = "(max-width: 1100px)";
@@ -352,11 +362,18 @@ export function EditorScreen({
   // A dialog opened from a room's menu keeps what the menu worked on, which
   // the selection alone may not say once the menu has closed.
   const [transforming, setTransforming] = React.useState<string[] | null>(null);
-  const [pickedTexture, setPickedTexture] = React.useState<string | null>(null);
   const [replacing, setReplacing] = React.useState<{
     kind: TextureKind;
     from: string;
   } | null>(null);
+  // The look last picked up, from a wall's menu on the map or by copying a
+  // surface in the 3D view.
+  const [look, setLook] = React.useState<SurfaceLook | null>(null);
+  const lookCopy = React.useRef({ texture: "", at: -Infinity });
+  // Whether a piece was copied after the look, so the 3D view's paste key
+  // pastes the piece and not the look.
+  const [pieceNewer, setPieceNewer] = React.useState(false);
+  const [scenePicked, setScenePicked] = React.useState<string[]>([]);
   const [drawShape, setDrawShape] = React.useState<DrawShape>("outline");
   const [drawSides, setDrawSides] = React.useState(8);
   const [prefabsAt, setPrefabsAt] = React.useState<{
@@ -614,6 +631,7 @@ export function EditorScreen({
     if (!fragment) return;
     const text = holdFragment(fragment, episode.currentId);
     void navigator.clipboard?.writeText(text).catch(() => undefined);
+    setPieceNewer(true);
     if (cut) cutFragment(fragment);
   };
 
@@ -667,6 +685,18 @@ export function EditorScreen({
     ) {
       return;
     }
+    // A look copied in the 3D view a moment ago takes the clipboard, so a
+    // piece copied before it can no longer be pasted over it.
+    if (
+      event.type === "copy" &&
+      performance.now() - lookCopy.current.at < lookCopyMs &&
+      document.activeElement?.closest(".scene")
+    ) {
+      event.preventDefault();
+      event.clipboardData?.setData("text/plain", lookCopy.current.texture);
+      dropFragment();
+      return;
+    }
     if (event.type === "paste") {
       const fragment = heldFragment(event.clipboardData?.getData("text/plain"));
       if (!fragment) return;
@@ -689,6 +719,7 @@ export function EditorScreen({
       "text/plain",
       holdFragment(fragment, episode.currentId),
     );
+    setPieceNewer(true);
     if (event.type === "cut") cutFragment(fragment);
   });
 
@@ -1039,7 +1070,7 @@ export function EditorScreen({
       onContextMenuCapture={normalizeControlClick}
     >
       <SceneCanvas
-        aria-label="3D view. Click a surface to select it. W, A, S and D walk, N and P step through surfaces, and O opens the door or lift under the pointer."
+        aria-label="3D view. Click a surface to select it, and drag a wall to move its texture. W, A, S and D walk, N and P step through surfaces, and O opens the door or lift under the pointer."
         className="screen scene"
         map={map}
         assets={assets}
@@ -1052,7 +1083,21 @@ export function EditorScreen({
         grid={grid}
         renderWidth={640}
         renderHeight={400}
-        onMapChange={(next) => commit(next)}
+        look={look}
+        pasteLook={!pieceNewer}
+        onLookChange={(next) => {
+          setLook(next);
+          setPieceNewer(false);
+          lookCopy.current = { texture: next.texture, at: performance.now() };
+          setNotice(
+            `Copied ${next.texture}. Paste it with the paste key, paint it with Alt and a click${next.kind === "wall" ? ", or flood it along joined walls with F" : ""}.`,
+          );
+        }}
+        picked={scenePicked}
+        onPickedChange={setScenePicked}
+        onMapChange={(next, details) =>
+          commit(next, details.reason === "wheel" ? "scene-wheel" : undefined)
+        }
         onSelectedChange={selectSurface}
         onContextSurface={reportSceneTarget}
         contextMenuOpen={contextMenuOpen}
@@ -1060,11 +1105,21 @@ export function EditorScreen({
     </MenuContextTrigger>
   );
 
+  // The surfaces picked together that are still on the map, with what each
+  // one is.
+  const pickedSurfaces = scenePicked.flatMap((key) => {
+    const info = describeSurface(map, key);
+    return info?.sector ? [{ key, info }] : [];
+  });
+  const pickedKeys = pickedSurfaces.map((item) => item.key);
+
   const sceneStatus = (
     <p className="scene-status" role="status">
-      {sceneInfo
-        ? `${sceneInfo.label}${sceneInfo.texture ? ` · ${sceneInfo.texture}` : ""}${sceneInfo.height !== null ? ` · height ${sceneInfo.height}` : ""}`
-        : "Click a floor, ceiling, wall or thing."}
+      {pickedSurfaces.length > 1
+        ? `${pickedSurfaces.length} surfaces picked. Shift-click adds or removes one.`
+        : sceneInfo
+          ? `${sceneInfo.label}${sceneInfo.texture ? ` · ${sceneInfo.texture}` : ""}${sceneInfo.height !== null ? ` · height ${sceneInfo.height}` : ""}`
+          : "Click a floor, ceiling, wall or thing. Drag a wall to move its texture."}
     </p>
   );
 
@@ -1253,6 +1308,7 @@ export function EditorScreen({
   const replaceMap = (next: GameMap) => {
     commit(next);
     setSelection([]);
+    setScenePicked([]);
     setActiveSector(null);
     setSurface(null);
     setFileError(null);
@@ -1596,7 +1652,10 @@ export function EditorScreen({
                       }
                       onToolChange={setTool}
                       onActiveSectorChange={setActiveSector}
-                      onSelectionChange={setSelection}
+                      onSelectionChange={(next) => {
+                        setSelection(next);
+                        setScenePicked([]);
+                      }}
                       onMapSelect={() => setSurface(null)}
                       onDraftMapChange={(draft) => drafts.publish(draft)}
                       camera={camera}
@@ -1814,6 +1873,19 @@ export function EditorScreen({
                 <h2>Map problem</h2>
                 <p>{fileError}</p>
               </section>
+            ) : null}
+
+            {pickedSurfaces.length > 1 ? (
+              <GradientPanel
+                key={pickedKeys.join()}
+                count={pickedSurfaces.length}
+                heights={gradientEnds(map, pickedKeys, "height")}
+                lights={gradientEnds(map, pickedKeys, "light")}
+                onApply={(what, from, to) => {
+                  const next = gradient(map, pickedKeys, what, from, to);
+                  if (next !== map) commit(next);
+                }}
+              />
             ) : null}
 
             {surface && surfaceInfo && !surfaceInfo.thing && !selectedWall ? (
@@ -2192,10 +2264,11 @@ export function EditorScreen({
             setPrefabsAt({ point, selected: copyParts(map, parts) }),
         }}
         textures={{
-          picked: pickedTexture,
+          picked: look?.kind === "wall" ? look.texture : null,
           widthOf: (name) => assets.texture(name).width,
           onPick: (name) => {
-            setPickedTexture(name);
+            setLook({ kind: "wall", texture: name });
+            setPieceNewer(false);
             setNotice(`Picked up ${name}. Right-click a wall to apply it.`);
           },
           onReplace: (kind, from) => setReplacing({ kind, from }),

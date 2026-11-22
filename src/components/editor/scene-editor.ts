@@ -24,14 +24,23 @@ import {
   gridSize,
   removeThing,
   snapPoint,
+  updateLineSide,
+  updateSector,
   updateThing,
 } from "@/lib/map/edit";
 import { sectorAt } from "@/lib/map/geometry";
+import {
+  applyLook,
+  floodWalls,
+  lookOf,
+  type SurfaceLook,
+} from "@/lib/map/look";
 import {
   describeSurface,
   moveSurfaceHeight,
   parseSurface,
 } from "@/lib/map/surfaces";
+import { alignWalls } from "@/lib/map/texture-tools";
 import { getIsMover, moverAt, withMovers } from "@/lib/preview/movers";
 import {
   cameraBasis,
@@ -41,6 +50,7 @@ import {
   renderScene,
   type RenderTarget,
 } from "@/lib/preview/render";
+import { countNotches } from "@/lib/preview/wheel";
 
 export type DraftSource = (
   listener: (map: GameMap | null) => void,
@@ -49,6 +59,9 @@ export type DraftSource = (
 type SceneChangeReason =
   | "height-drag"
   | "height-key"
+  | "offset-drag"
+  | "paint"
+  | "wheel"
   | "place"
   | "thing-drag"
   | "thing-key"
@@ -69,6 +82,15 @@ interface SceneOptions {
   contextMenuOpen?: boolean;
   placing?: ThingKind | null;
   sky?: string | null;
+  // The look last copied from a surface, to paste, paint and flood with.
+  look?: SurfaceLook | null;
+  // False once something else was copied after the look, which the paste key
+  // then leaves to the page.
+  pasteLook?: boolean;
+  onLookChange?: (look: SurfaceLook) => void;
+  // The surfaces picked together with Shift, in the order they were picked.
+  picked?: string[];
+  onPickedChange?: (picked: string[]) => void;
   renderWidth?: number;
   renderHeight?: number;
   grid?: number;
@@ -93,6 +115,7 @@ interface SceneState {
   placing: ThingKind | null;
   ghost: Point | null;
   sky: string | null;
+  picked: string[];
   // The doors and lifts shown open, to check what they leave room for.
   opened: string[];
   width: number;
@@ -100,6 +123,10 @@ interface SceneState {
 }
 
 const touchSlop = 4;
+const noSurfaces: string[] = [];
+const lightLimit = 255;
+const lightStep = 16;
+
 const moveSpeed = 260;
 const turnSpeed = 120;
 const placeDistances = [128, 96, 64, 32];
@@ -118,6 +145,11 @@ const sceneEditor = definePrimitive({
     contextMenuOpen: "boolean",
     placing: "value",
     sky: "value",
+    look: "value",
+    pasteLook: "boolean",
+    onLookChange: "callback",
+    picked: "value",
+    onPickedChange: "callback",
     renderWidth: "number",
     renderHeight: "number",
     grid: "number",
@@ -136,6 +168,7 @@ const sceneEditor = definePrimitive({
     placing: options.placing ?? null,
     ghost: null,
     sky: options.sky ?? null,
+    picked: options.picked ?? noSurfaces,
     opened: [],
     width: options.renderWidth ?? 320,
     height: options.renderHeight ?? 200,
@@ -147,6 +180,7 @@ const sceneEditor = definePrimitive({
     linked: options.linked ?? null,
     placing: options.placing ?? null,
     sky: options.sky ?? null,
+    picked: options.picked ?? noSurfaces,
     ...(options.placing ? {} : { ghost: null }),
   }),
   live: ["hovered"],
@@ -162,6 +196,8 @@ const sceneEditor = definePrimitive({
     let dragging = false;
     let touchPress: Point | null = null;
     const held = new Set<string>();
+    let shiftHeld = false;
+    let wheeled = { surface: "", sum: 0, at: 0 };
 
     const shownMap = () => {
       const { draftMap, map } = store.get();
@@ -200,6 +236,7 @@ const sceneEditor = definePrimitive({
         placing,
         ghost,
         sky,
+        picked,
         opened,
       } = store.get();
       const view = cameraState();
@@ -219,6 +256,7 @@ const sceneEditor = definePrimitive({
           selected: selected ?? linked,
           ghost: placing && ghost ? { ...ghost, kind: placing } : null,
           sky,
+          picked,
           opened,
         },
       );
@@ -429,6 +467,107 @@ const sceneEditor = definePrimitive({
 
     const select = (key: string | null, reason: "press" | "key") => {
       change("selected", key, { reason });
+      if (store.get().picked.length > 0) context.options().onPickedChange?.([]);
+    };
+
+    // Shift adds a surface to the ones picked, or takes it out again. The
+    // selected surface starts the list, so the first two picked are a pair.
+    const pick = (key: string) => {
+      const { picked, selected } = store.get();
+      const list =
+        picked.length === 0 && selected && selected !== key
+          ? [selected]
+          : picked;
+      context
+        .options()
+        .onPickedChange?.(
+          list.includes(key)
+            ? list.filter((item) => item !== key)
+            : [...list, key],
+        );
+    };
+
+    const aimed = () => {
+      const { hovered, selected } = store.get();
+      return hovered ?? selected;
+    };
+
+    const paste = (key: string | null, event: Event) => {
+      const { map } = store.get();
+      const { look } = context.options();
+      if (!map || !look) return;
+      const painted = applyLook(map, key, look);
+      if (painted !== map) change("map", painted, { reason: "paint", event });
+    };
+
+    // A wall's texture follows the pointer: a drag to the right or down moves
+    // the picture that way, which takes its offsets down.
+    const dragOffsets = (
+      event: PointerEvent,
+      key: string,
+      distance: number,
+      onTap?: () => void,
+    ) => {
+      const { map } = store.get();
+      const info = map ? describeSurface(map, key) : null;
+      if (!canvas || !target || !map || !info?.sector) return false;
+      if (info.paints !== "wall" || info.surface.kind !== "wall") return false;
+      const { wall } = info.surface;
+      const sector = info.sector.id;
+      const side = map.lines?.[wall]?.sides?.[sector];
+      const unitsPerPixel =
+        ((distance / target.focal) * target.width) /
+        canvas.getBoundingClientRect().width;
+      const start = { x: event.clientX, y: event.clientY };
+      let moved = false;
+      let started = false;
+      stopDrag = bindDrag(canvas, event, {
+        threshold: dragThreshold,
+        cancelOnEscape: true,
+        onStart: () => {
+          dragging = true;
+          started = true;
+        },
+        onMove: ({ x, y, event: move }) => {
+          shiftHeld = move.shiftKey;
+          const offsetX = clampOffset(
+            (side?.offsetX ?? 0) - (x - start.x) * unitsPerPixel,
+          );
+          const offsetY = clampOffset(
+            (side?.offsetY ?? 0) - (y - start.y) * unitsPerPixel,
+          );
+          moved =
+            offsetX !== (side?.offsetX ?? 0) ||
+            offsetY !== (side?.offsetY ?? 0);
+          const shifted = updateLineSide(map, wall, sector, {
+            offsetX: offsetX || undefined,
+            offsetY: offsetY || undefined,
+          });
+          // With Shift held the walls beside this one follow, so the texture
+          // stays unbroken along the room as it moves.
+          store.set({
+            draftMap: shiftHeld
+              ? alignWalls(
+                  shifted,
+                  sector,
+                  wall,
+                  (name) => store.get().assets?.texture(name).width ?? 1,
+                )
+              : shifted,
+          });
+        },
+        onEnd: (end, canceled) => {
+          const { draftMap } = store.get();
+          stopDrag = undefined;
+          dragging = false;
+          store.set({ draftMap: null });
+          if (!canceled && moved && draftMap) {
+            change("map", draftMap, { reason: "offset-drag", event: end });
+          }
+          if (!canceled && !started) onTap?.();
+        },
+      });
+      return true;
     };
 
     // A door or lift shown open isn't at the height the map holds for it, so
@@ -446,10 +585,8 @@ const sceneEditor = definePrimitive({
       const { map, selected } = store.get();
       if (!map || !selected || !getCanMoveHeight(selected)) return;
       const step = gridSize * (event.shiftKey ? 3 : 1);
-      change("map", moveSurfaceHeight(map, selected, direction * step), {
-        reason: "height-key",
-        event,
-      });
+      const next = moveSurfaceHeight(map, selected, direction * step);
+      if (next !== map) change("map", next, { reason: "height-key", event });
     };
 
     const cycle = (direction: number) => {
@@ -577,10 +714,28 @@ const sceneEditor = definePrimitive({
           if (point) place(point, "press", event);
           return;
         }
+        if (key && surface?.kind !== "thing") {
+          // Alt paints the copied look on. Shift picks several surfaces with
+          // a click, and aligns the walls beside one with a drag.
+          if (event.altKey) {
+            paste(key, event);
+            return;
+          }
+          if (event.shiftKey) {
+            shiftHeld = true;
+            const onTap = () => pick(key);
+            if (!hit || !dragOffsets(event, key, hit.distance, onTap)) onTap();
+            return;
+          }
+        }
         select(key, "press");
         const { map } = store.get();
         if (surface?.kind === "thing") {
           if (!store.get().placing) dragThing(event, surface.thing);
+          return;
+        }
+        if (hit && key && surface?.kind === "wall") {
+          dragOffsets(event, key, hit.distance);
           return;
         }
         if (!hit || !key || !map || !getCanMoveHeight(key)) return;
@@ -605,8 +760,9 @@ const sceneEditor = definePrimitive({
           onMove: ({ y }) => {
             const units = (startY - y) * rowsPerPixel * unitsPerRow;
             const delta = Math.round(units / gridSize) * gridSize;
-            moved = delta !== 0;
-            store.set({ draftMap: moveSurfaceHeight(map, key, delta) });
+            const draftMap = moveSurfaceHeight(map, key, delta);
+            moved = draftMap !== map;
+            store.set({ draftMap });
           },
           onEnd: (end, canceled) => {
             const { draftMap } = store.get();
@@ -619,11 +775,79 @@ const sceneEditor = definePrimitive({
           },
         });
       },
+      wheel(event: WheelEvent) {
+        const { map, hovered } = store.get();
+        // Only a view that was clicked into takes the wheel, so scrolling the
+        // page over it changes nothing.
+        if (!map || !hovered || stopDrag || document.activeElement !== canvas) {
+          return;
+        }
+        const info = describeSurface(map, hovered);
+        if (!info?.sector) return;
+        event.preventDefault();
+        // With Shift held, most browsers report a mouse wheel's turn sideways.
+        const delta = event.shiftKey
+          ? event.deltaY || event.deltaX
+          : event.deltaY;
+        const { notches, ...turns } = countNotches(
+          wheeled.surface === hovered ? wheeled : { sum: 0, at: 0 },
+          delta,
+          event.deltaMode,
+          event.timeStamp,
+        );
+        wheeled = { ...turns, surface: hovered };
+        if (notches === 0) return;
+        // The wheel moves a floor or ceiling a step a notch, and with Shift
+        // it makes the surface's room a step brighter or darker.
+        const light = Math.max(
+          0,
+          Math.min(lightLimit, info.sector.light - notches * lightStep),
+        );
+        let next = map;
+        if (!event.shiftKey) {
+          if (getCanMoveHeight(hovered)) {
+            next = moveSurfaceHeight(map, hovered, -notches * gridSize);
+          }
+        } else if (light !== info.sector.light) {
+          next = updateSector(map, info.sector.id, { light });
+        }
+        if (next !== map) change("map", next, { reason: "wheel", event });
+      },
       keydown(event: KeyboardEvent) {
+        if (event.key === "Shift") shiftHeld = true;
         if (stopDrag || openMenuFromKey(event)) return;
         const { map, placing } = store.get();
         const thing = selectedThing();
         if (event.altKey && nudgeThing(event)) return;
+        const command = event.metaKey || event.ctrlKey;
+        const { look, pasteLook = true } = context.options();
+        const letter = letterOf(event);
+        // A surface's look is copied and pasted here. Anything else, like a
+        // selected thing, is left to the page's own copy and paste.
+        if (command && map && letter === "c" && !thing) {
+          const copied = lookOf(map, aimed());
+          if (copied) {
+            // The page's copy runs next and puts the look on the clipboard,
+            // once and not for every repeat of the key.
+            if (event.repeat) event.preventDefault();
+            else context.options().onLookChange?.(copied);
+            return;
+          }
+        }
+        // While the look is the last thing copied, the page's paste of an
+        // older piece is kept out even where the look doesn't fit.
+        if (command && look && pasteLook && letter === "v") {
+          event.preventDefault();
+          if (!event.repeat) paste(aimed(), event);
+          return;
+        }
+        if (!command && event.code === "KeyF" && map && look?.kind === "wall") {
+          const flooded = floodWalls(map, aimed(), look.texture);
+          if (flooded === map) return;
+          event.preventDefault();
+          change("map", flooded, { reason: "paint", event });
+          return;
+        }
         if (event.key === "Enter" && placing) {
           event.preventDefault();
           placeAhead(event);
@@ -642,7 +866,7 @@ const sceneEditor = definePrimitive({
           event.preventDefault();
           held.add(event.code);
           if (!walkFrame) walk(performance.now());
-        } else if (event.code === "KeyO" && map && !event.repeat) {
+        } else if (event.code === "KeyO" && map && !command && !event.repeat) {
           // The door or lift under the pointer, or else the selected one,
           // stands open until the key is pressed on it again.
           const { hovered, selected, opened } = store.get();
@@ -665,9 +889,11 @@ const sceneEditor = definePrimitive({
         }
       },
       keyup(event: KeyboardEvent) {
+        if (event.key === "Shift") shiftHeld = false;
         held.delete(event.code);
       },
       blur() {
+        shiftHeld = false;
         held.clear();
       },
     };
@@ -699,6 +925,7 @@ const sceneEditor = definePrimitive({
         pointermove: (event, { api }) => api.pointermove(event),
         pointerleave: (_event, { api }) => api.pointerleave(),
         pointerdown: (event, { api }) => api.pointerdown(event),
+        wheel: (event, { api }) => api.wheel(event),
         contextmenu: (event, { api }) => api.contextmenu(event),
         keydown: (event, { api }) => api.keydown(event),
         keyup: (event, { api }) => api.keyup(event),
@@ -708,6 +935,22 @@ const sceneEditor = definePrimitive({
   }),
   agent: { shown: () => false },
 });
+
+// The letter a key types, or the one printed on it where the layout types no
+// Latin letter, which is how the browser's own copy and paste keys go.
+function letterOf(event: KeyboardEvent) {
+  return /^[a-z]$/i.test(event.key)
+    ? event.key.toLowerCase()
+    : event.code.slice(3).toLowerCase();
+}
+
+// A side's offsets serve its upper, lower and middle parts at once, each with
+// a picture of its own size, so an offset is kept as dragged and not wrapped.
+const offsetLimit = 32767;
+
+function clampOffset(value: number) {
+  return Math.max(-offsetLimit, Math.min(offsetLimit, Math.round(value)));
+}
 
 function standable(map: GameMap, point: Point) {
   const sector = sectorAt(map, point);
