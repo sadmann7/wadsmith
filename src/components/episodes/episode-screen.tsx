@@ -1388,7 +1388,7 @@ export function EpisodeScreen() {
         {clash ? (
           <AlertDialog open>
             <AlertDialogBackdrop />
-            <AlertDialogContent className="w-[460px]">
+            <AlertDialogContent className="w-115">
               <AlertDialogTitle>
                 This map changed on another device
               </AlertDialogTitle>
