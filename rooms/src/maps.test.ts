@@ -11,6 +11,7 @@ beforeAll(async () => {
     config: resolve(import.meta.dirname, "../wrangler.jsonc"),
     ip: "127.0.0.1",
     persist: false,
+    vars: { MAP_HELLO_SECONDS: "1" },
     logLevel: "none",
     experimental: { disableExperimentalWarning: true },
   });
@@ -105,17 +106,200 @@ describe("online map copies", () => {
   });
 });
 
-async function create(body: unknown = map) {
-  const response = await send("/maps", {
-    method: "POST",
-    body: JSON.stringify(body),
+interface Live {
+  socket: WebSocket;
+  next: () => Promise<Record<string, unknown>>;
+  closed: Promise<number>;
+}
+
+describe("live editing", () => {
+  it("hands every editor each edit in order, and keeps it", async () => {
+    const { id, secret } = await create({
+      ...map,
+      things: [{ id: "imp-1", kind: "imp", x: 0, y: 0, angle: 0 }],
+    });
+    const a = await live(id);
+    a.socket.send(
+      JSON.stringify({
+        type: "hello",
+        secret,
+        name: "Ana",
+        client: "a".repeat(24),
+      }),
+    );
+    expect(await a.next()).toEqual({
+      type: "welcome",
+      peer: 1,
+      revision: 1,
+      map: {
+        ...map,
+        things: [{ id: "imp-1", kind: "imp", x: 0, y: 0, angle: 0 }],
+      },
+      peers: [],
+    });
+    const b = await live(id);
+    b.socket.send(JSON.stringify({ type: "hello", secret, name: "Bo" }));
+    expect(await b.next()).toMatchObject({
+      peer: 2,
+      peers: [{ peer: 1, name: "Ana" }],
+    });
+    expect(await a.next()).toEqual({ type: "join", peer: 2, name: "Bo" });
+
+    const moved = { id: "imp-1", kind: "imp", x: 64, y: 0, angle: 0 };
+    a.socket.send(
+      JSON.stringify({
+        type: "patch",
+        id: 7,
+        patch: { set: { things: { "imp-1": moved } } },
+      }),
+    );
+    const echo = {
+      type: "patch",
+      revision: 2,
+      peer: 1,
+      id: 7,
+      client: "a".repeat(24),
+    };
+    expect(await a.next()).toMatchObject(echo);
+    expect(await b.next()).toMatchObject(echo);
+
+    // The same edit sent again after a drop is taken once.
+    a.socket.send(
+      JSON.stringify({
+        type: "patch",
+        id: 7,
+        patch: { set: { things: { "imp-1": moved } } },
+      }),
+    );
+    expect(await a.next()).toEqual({ type: "ack", id: 7, revision: 2 });
+    expect(await (await send(`/maps/${id}`)).json()).toMatchObject({
+      revision: 2,
+      map: { things: [moved] },
+    });
+
+    b.socket.send(JSON.stringify({ type: "cursor", x: 10.4, y: -3 }));
+    expect(await a.next()).toEqual({
+      type: "cursor",
+      peer: 2,
+      at: { x: 10, y: -3 },
+    });
+
+    // A whole map saved over the web tells everyone to read it again.
+    expect((await put(id, secret, 2, map)).status).toBe(200);
+    expect(await a.next()).toEqual({ type: "map", revision: 3, map });
+
+    b.socket.close();
+    expect(await a.next()).toEqual({ type: "leave", peer: 2 });
+    a.socket.close();
   });
-  expect(response.status).toBe(201);
-  return (await response.json()) as {
-    id: string;
-    secret: string;
-    revision: number;
-  };
+
+  it("turns away a connection without the secret and a bad patch", async () => {
+    const { id, secret } = await create();
+    const stranger = await live(id);
+    stranger.socket.send(JSON.stringify({ type: "hello", secret: "nope" }));
+    expect(await stranger.closed).toBe(4003);
+
+    const editor = await live(id);
+    editor.socket.send(JSON.stringify({ type: "hello", secret }));
+    await editor.next();
+    editor.socket.send(
+      JSON.stringify({ type: "patch", patch: { set: { secrets: {} } } }),
+    );
+    editor.socket.send(JSON.stringify({ type: "cursor", x: 1, y: 2 }));
+    // A room on a corner the map doesn't have is turned away.
+    editor.socket.send(
+      JSON.stringify({
+        type: "patch",
+        id: 1,
+        patch: {
+          set: {
+            sectors: { s: { id: "s", vertices: ["a", "b", "c"] } },
+          },
+        },
+      }),
+    );
+    expect(await editor.next()).toEqual({
+      type: "refused",
+      id: 1,
+      error: "missing-corners",
+    });
+    // The bad patch is dropped, and nothing came back for either message.
+    expect(await (await send(`/maps/${id}`)).json()).toMatchObject({
+      revision: 1,
+    });
+    editor.socket.close();
+    await expect(live("0000000000000000")).rejects.toThrow();
+  });
+
+  it("keeps edits made in quick succession, and lets a silent link go", async () => {
+    const { id, secret } = await create({ ...map, things: [] });
+    const editor = await live(id);
+    editor.socket.send(JSON.stringify({ type: "hello", secret }));
+    await editor.next();
+    for (let x = 1; x <= 5; x += 1) {
+      editor.socket.send(
+        JSON.stringify({
+          type: "patch",
+          id: x,
+          patch: {
+            set: { things: { t: { id: "t", kind: "imp", x, y: 0, angle: 0 } } },
+          },
+        }),
+      );
+    }
+    for (let x = 1; x <= 5; x += 1) {
+      expect(await editor.next()).toMatchObject({ type: "patch", id: x });
+    }
+    // A read straight after sees every edit, saved or still in memory.
+    expect(await (await send(`/maps/${id}`)).json()).toMatchObject({
+      revision: 6,
+      map: { things: [{ x: 5 }] },
+    });
+    editor.socket.close();
+
+    // A connection that never shows the secret is let go once a new one
+    // comes after its time is up.
+    const silent = await live(id);
+    await new Promise((done) => setTimeout(done, 1200));
+    const next = await live(id);
+    expect(await silent.closed).toBe(4003);
+    next.socket.close();
+  }, 20_000);
+});
+
+function live(id: string) {
+  return new Promise<Live>((done, fail) => {
+    const socket = new WebSocket(
+      `${base.replace("http", "ws")}/maps/${id}/live`,
+      {
+        headers: { Origin: origin },
+      } as unknown as string[],
+    );
+    const received: Record<string, unknown>[] = [];
+    const waiting: ((message: Record<string, unknown>) => void)[] = [];
+    socket.addEventListener("message", (event) => {
+      const message = JSON.parse(String(event.data)) as Record<string, unknown>;
+      const take = waiting.shift();
+      if (take) take(message);
+      else received.push(message);
+    });
+    const closed = new Promise<number>((close) =>
+      socket.addEventListener("close", (event) => close(event.code)),
+    );
+    socket.addEventListener("open", () =>
+      done({
+        socket,
+        closed,
+        next: () =>
+          new Promise((take) => {
+            const message = received.shift();
+            if (message) take(message);
+            else waiting.push(take);
+          }),
+      }),
+    );
+    socket.addEventListener("error", () => fail(new Error("Refused.")));
+  });
 }
 
 function send(
@@ -128,4 +312,17 @@ function send(
     ...init,
     headers: { Origin: origin, ...init.headers },
   });
+}
+
+async function create(body: unknown = map) {
+  const response = await send("/maps", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  expect(response.status).toBe(201);
+  return (await response.json()) as {
+    id: string;
+    secret: string;
+    revision: number;
+  };
 }

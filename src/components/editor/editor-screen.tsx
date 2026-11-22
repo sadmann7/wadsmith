@@ -1,10 +1,7 @@
 "use client";
 
-import {
-  createLocalStorage,
-  createUndoStack,
-  matchesShortcut,
-} from "@ui-sdk/core";
+import { applyPatch, type MapPatch } from "@rooms/map-patch";
+import { createLocalStorage, matchesShortcut } from "@ui-sdk/core";
 import * as SegmentedControlPrimitive from "@ui-sdk/react/segmented-control";
 import { useShortcut } from "@ui-sdk/react/shortcuts";
 import {
@@ -27,6 +24,7 @@ import {
 } from "lucide-react";
 import * as React from "react";
 
+import type { LivePeer } from "@/lib/episodes/live";
 import type { GameMap, Point, ThingCategory, ThingKind } from "@/lib/map/types";
 
 import { GameView, type PlayerSpot } from "@/components/play/play-panel";
@@ -63,6 +61,7 @@ import {
   holdFragment,
   originOf,
 } from "@/lib/editor/clipboard";
+import { createEditHistory } from "@/lib/editor/edit-history";
 import {
   type MapTarget,
   normalizeControlClick,
@@ -291,6 +290,11 @@ interface AppProps {
   saveStatus: "saving" | "saved" | "failed" | "session";
   onSave: (map: GameMap) => void;
   watchExternal: (listener: (map: GameMap) => void) => () => void;
+  // Edits other people make to the map at the same time, as patches.
+  watchRemote?: (listener: (patch: MapPatch) => void) => () => void;
+  // Everyone else editing the map, with where their pointers are.
+  peers?: LivePeer[];
+  onPointer?: (at: Point | null) => void;
   onOpenEpisodes: () => void;
   navigation: React.ReactNode;
   onNewMap: () => void;
@@ -333,6 +337,9 @@ export function EditorScreen({
   saveStatus,
   onSave,
   watchExternal,
+  watchRemote,
+  peers,
+  onPointer,
   onOpenEpisodes,
   navigation,
   onNewMap,
@@ -344,6 +351,9 @@ export function EditorScreen({
   episode,
 }: AppProps) {
   const [map, setMap] = React.useState(initialMap);
+  // The map as last shown, which a remote edit lands on before the next
+  // render.
+  const mapRef = React.useRef(initialMap);
   const [tool, setTool] = React.useState<MapTool>("select");
   const [gridSetting, setGridSetting] = React.useState(loadGrid);
   // Snapping off still lands on whole units, which is all the engine stores.
@@ -457,7 +467,7 @@ export function EditorScreen({
   const [drafts] = React.useState(createDraftChannel);
   const [camera] = React.useState(() => new SceneCamera(initialMap));
   const [history] = React.useState(() =>
-    createUndoStack(initialMap, { limit: 200, groupDelay: 500 }),
+    createEditHistory({ limit: 200, groupDelay: 500 }),
   );
   const [undoable, setUndoable] = React.useState({ undo: false, redo: false });
   const syncUndoable = React.useCallback(
@@ -535,23 +545,25 @@ export function EditorScreen({
   const doors = map.sectors.filter((item) => item.door);
 
   const showMap = (next: GameMap) => {
+    mapRef.current = next;
     setMap(next);
     onSave(next);
     syncUndoable();
   };
 
   const commit = (next: GameMap, group?: string) => {
-    history.record(next, group ? { group } : undefined);
+    history.record(mapRef.current, next, group);
     showMap(next);
   };
 
   const restore = (next: GameMap | undefined) => {
+    syncUndoable();
     if (!next) return;
     showMap(next);
     setSelection([]);
   };
-  const undo = () => restore(history.undo());
-  const redo = () => restore(history.redo());
+  const undo = () => restore(history.undo(mapRef.current));
+  const redo = () => restore(history.redo(mapRef.current));
 
   const selectedThingIds = selection
     .filter((key) => key.startsWith(thingKeyPrefix))
@@ -661,7 +673,7 @@ export function EditorScreen({
     }
     const copies = duplicateThings(map, selectedThingIds);
     if (copies.ids.length === 0) return;
-    history.record(copies.map);
+    history.record(map, copies.map);
     showMap(copies.map);
     selectPasted(copies.ids.map((id) => `${thingKeyPrefix}${id}`));
   };
@@ -1130,13 +1142,28 @@ export function EditorScreen({
   React.useEffect(
     () =>
       watchExternal((next) => {
-        history.record(next);
+        // The steps were taken on a map that is gone now.
+        history.clear();
+        mapRef.current = next;
         setMap(next);
         setSelection([]);
         setSurface(null);
         syncUndoable();
       }),
     [history, syncUndoable, watchExternal],
+  );
+
+  // Someone else's edit lands on the map as it stands, without an undo step,
+  // and is saved like any edit, which sends nothing back.
+  const takeRemote = React.useEffectEvent((patch: MapPatch) => {
+    const next = applyPatch(mapRef.current, patch);
+    mapRef.current = next;
+    setMap(next);
+    onSave(next);
+  });
+  React.useEffect(
+    () => watchRemote?.((patch) => takeRemote(patch)),
+    [watchRemote],
   );
 
   React.useEffect(() => {
@@ -1166,6 +1193,7 @@ export function EditorScreen({
   const updateViewStatus = (status: MapViewStatus) => {
     const { pointer, zoom } = status;
     viewStatus.current = status;
+    onPointer?.(pointer);
     if (pointerStatus.current) {
       pointerStatus.current.textContent = pointer
         ? `X ${pointer.x}  Y ${-pointer.y}`
@@ -1719,6 +1747,7 @@ export function EditorScreen({
                       callouts={callouts}
                       links={links}
                       trail={showTrail ? (playtest?.run ?? null) : null}
+                      peers={peers}
                       drawShape={drawShape}
                       drawSides={drawSides}
                       drawRequest={drawRequest}

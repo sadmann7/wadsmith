@@ -1,5 +1,6 @@
 "use client";
 
+import { diffMaps, getIsEmptyPatch, type MapPatch } from "@rooms/map-patch";
 import * as React from "react";
 
 import type { GameFiles, Skill } from "@/lib/engine/runtime";
@@ -22,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { useBuildChecks } from "@/hooks/use-build-checks";
 import { useIwad } from "@/hooks/use-iwad";
 import { clearPlaytest } from "@/lib/editor/playtests";
+import { loadName } from "@/lib/engine/coop";
 import {
   defaultGame,
   engineSlot,
@@ -86,6 +88,12 @@ import {
   createMemoryStore,
   openEpisodeStore,
 } from "@/lib/episodes/episode-store";
+import {
+  type LiveMap,
+  type LivePeer,
+  liveUrl,
+  openLiveMap,
+} from "@/lib/episodes/live";
 import {
   findEpisode,
   parseRoute,
@@ -217,6 +225,9 @@ export function EpisodeScreen() {
     map: GameMap;
   } | null>(null);
   // A wait before each map's next sync, so a burst of edits goes as one.
+  const live = React.useRef<{ mapId: string; link: LiveMap } | null>(null);
+  const remoteListeners = React.useRef(new Set<(patch: MapPatch) => void>());
+  const [peers, setPeers] = React.useState<LivePeer[]>([]);
   const cloudTimers = React.useRef(
     new Map<string, ReturnType<typeof setTimeout>>(),
   );
@@ -282,6 +293,9 @@ export function EpisodeScreen() {
     async (active: EpisodeStore, note: string | null = null) => {
       const id = sessionRef.current?.episodeId ?? episodeIdRef.current;
       sessionRef.current = null;
+      live.current?.link.close();
+      live.current = null;
+      setPeers([]);
       setMapDialog(null);
       setBlockedLeave(null);
       setMessage(note);
@@ -294,13 +308,25 @@ export function EpisodeScreen() {
     [refresh],
   );
 
+  const stopLive = React.useCallback(() => {
+    live.current?.link.close();
+    live.current = null;
+    setPeers([]);
+  }, []);
+  // The live link's steps, which need the sync loop declared after them.
+  const cloudSteps = React.useRef({
+    goLive: (_active: EpisodeStore, _mapId: string) => {},
+    settle: (_active: EpisodeStore, _mapId: string) => {},
+  });
+
   // Brings a map and its online copy together: sends edits made here, takes a
   // newer copy when nothing here clashes with it, and otherwise asks. It runs
   // for the map it was asked about even once another map is open, so a push
   // that lands after leaving still records its revision.
   const runCloudSync = React.useCallback(
     async (active: EpisodeStore, mapId: string) => {
-      if (!cloudApi) return;
+      // The live link keeps an open map in step by itself.
+      if (!cloudApi || live.current?.mapId === mapId) return;
       const opened = () =>
         sessionRef.current?.id === mapId ? sessionRef.current : null;
       await opened()?.saver.flush();
@@ -314,7 +340,10 @@ export function EpisodeScreen() {
         return;
       }
       if (opened()) setCloudProblem(null);
-      if (outcome.kind === "same") return;
+      if (outcome.kind === "same") {
+        cloudSteps.current.goLive(active, mapId);
+        return;
+      }
       if (outcome.kind === "conflict") {
         // A map that isn't open asks when it next opens.
         if (opened())
@@ -324,7 +353,7 @@ export function EpisodeScreen() {
       if (outcome.kind === "pushed") {
         // Edits made while the copy was on its way scheduled a sync of their
         // own, which runs next and sends them.
-        await active.updateMap(mapId, (latest) =>
+        const settled = await active.updateMap(mapId, (latest) =>
           // A map no longer kept online stays that way.
           latest.cloud?.id === entry.cloud?.id
             ? {
@@ -336,6 +365,9 @@ export function EpisodeScreen() {
               }
             : latest,
         );
+        if (settled?.cloud && !settled.cloud.pending) {
+          cloudSteps.current.goLive(active, mapId);
+        }
         return;
       }
       const pulled = await active.updateMap(mapId, (latest) =>
@@ -362,6 +394,7 @@ export function EpisodeScreen() {
       current.saver.adopt(pulled);
       setDetails(detailsOf(pulled));
       for (const listener of externalListeners.current) listener(pulled.map);
+      cloudSteps.current.goLive(active, mapId);
     },
     [announce],
   );
@@ -376,6 +409,109 @@ export function EpisodeScreen() {
     [runCloudSync],
   );
 
+  React.useEffect(() => {
+    // Records that the online copy holds everything this browser has, once
+    // the live link has nothing on its way.
+    const settle = (active: EpisodeStore, mapId: string) => {
+      const link = live.current?.mapId === mapId ? live.current.link : null;
+      const confirmed = link?.idle ? link.confirmed : null;
+      if (!link || !confirmed) return;
+      const { revision } = link;
+      void active
+        .updateMap(mapId, (latest) =>
+          latest.cloud &&
+          latest.map.name === confirmed.name &&
+          getIsEmptyPatch(diffMaps(confirmed, latest.map))
+            ? {
+                ...latest,
+                cloud: { ...latest.cloud, revision, pending: undefined },
+              }
+            : latest,
+        )
+        .catch(() => {});
+    };
+    // Someone else's edits reach the editor, and a new name the map's entry.
+    const takeRemote = (
+      active: EpisodeStore,
+      mapId: string,
+      patch: MapPatch,
+    ) => {
+      const name = patch.fields?.name;
+      if (typeof name === "string") {
+        void active
+          .updateMap(mapId, (entry) => ({
+            ...entry,
+            map: { ...entry.map, name },
+          }))
+          .then((saved) => {
+            if (saved && sessionRef.current?.id === mapId) {
+              setDetails(detailsOf(saved));
+              announce(mapId);
+            }
+          })
+          .catch(() => {});
+      }
+      for (const listener of remoteListeners.current) listener(patch);
+    };
+    // Opens the live link for the open map once it agrees with its online
+    // copy. From then on the link keeps it in step, reconnecting by itself.
+    const goLive = (active: EpisodeStore, mapId: string) => {
+      const current = sessionRef.current;
+      if (!cloudUrl || current?.id !== mapId || live.current?.mapId === mapId) {
+        return;
+      }
+      void active.getMap(mapId).then((entry) => {
+        const secret = entry?.cloud?.secret;
+        if (
+          !entry?.cloud ||
+          !secret ||
+          entry.cloud.pending ||
+          sessionRef.current !== current ||
+          live.current?.mapId === mapId
+        ) {
+          return;
+        }
+        stopLive();
+        const link = openLiveMap({
+          url: liveUrl(cloudUrl, entry.cloud.id),
+          secret,
+          name: loadName(),
+          map: entry.map,
+          onChange: (patch) => takeRemote(active, mapId, patch),
+          onDropped: (reason) =>
+            setCloudProblem(
+              reason === "too-big"
+                ? "That edit would make the map too big to keep online, so it was taken back."
+                : reason === "missing-corners"
+                  ? "That edit was taken back: someone removed corners it uses at the same moment."
+                  : "The online copy turned an edit away, so it was taken back.",
+            ),
+          onPeers: setPeers,
+          onIdle: () => {
+            setCloudProblem(null);
+            settle(active, mapId);
+          },
+          onConnected: (connected) =>
+            setCloudProblem(
+              connected
+                ? null
+                : "Reconnecting to the online copy. Edits wait here until then.",
+            ),
+          onRefused: () => {
+            if (live.current?.link !== link) return;
+            live.current = null;
+            setPeers([]);
+            setCloudProblem("This link can no longer edit the map.");
+          },
+        });
+        live.current = { mapId, link };
+        // Edits made while the stored map was read go out on the link.
+        link.send(current.saver.map);
+      });
+    };
+    cloudSteps.current = { goLive, settle };
+  });
+
   const startSession = React.useCallback(
     (active: EpisodeStore, entry: EpisodeMap) => {
       const saver = createMapSaver(active, entry, {
@@ -383,6 +519,10 @@ export function EpisodeScreen() {
         onSaved: (saved) => {
           announce(saved.id);
           if (!saved.cloud) return;
+          if (live.current?.mapId === saved.id) {
+            cloudSteps.current.settle(active, saved.id);
+            return;
+          }
           const timers = cloudTimers.current;
           clearTimeout(timers.get(saved.id));
           timers.set(
@@ -410,6 +550,9 @@ export function EpisodeScreen() {
       setBuildingEpisode(null);
       setClash(null);
       setCloudProblem(null);
+      live.current?.link.close();
+      live.current = null;
+      setPeers([]);
       selectEpisode(entry.episodeId);
       if (entry.cloud) void syncCloud(active, entry.id);
     },
@@ -559,10 +702,13 @@ export function EpisodeScreen() {
       }
       if (entry.broken) return;
       setDetails(detailsOf(entry));
+      // Each tab's live link brings it the same edits, so it doesn't take
+      // another tab's copy of them as well.
       if (
         entry.mapRevision > active.saver.revision &&
         !active.saver.busy &&
-        !active.saver.failed
+        !active.saver.failed &&
+        live.current?.mapId !== active.id
       ) {
         active.saver.adopt(entry);
         for (const listener of externalListeners.current) listener(entry.map);
@@ -795,9 +941,24 @@ export function EpisodeScreen() {
     return () => window.removeEventListener("beforeunload", warn);
   }, []);
 
+  // An edit goes out on the live link the moment it is made, so a remote edit
+  // arriving while it saves can't come between.
   const onSave = React.useCallback((map: GameMap) => {
-    sessionRef.current?.saver.saveMap(map);
+    const current = sessionRef.current;
+    if (!current) return;
+    if (live.current?.mapId === current.id) live.current.link.send(map);
+    current.saver.saveMap(map);
   }, []);
+
+  const watchRemote = React.useCallback(
+    (listener: (patch: MapPatch) => void) => {
+      remoteListeners.current.add(listener);
+      return () => {
+        remoteListeners.current.delete(listener);
+      };
+    },
+    [],
+  );
 
   const watchExternal = React.useCallback(
     (listener: (map: GameMap) => void) => {
@@ -962,7 +1123,21 @@ export function EpisodeScreen() {
       });
       if (!saved) return "This map no longer exists.";
       announce(id);
-      if (saved.cloud) void syncCloud(store, id);
+      if (sessionRef.current?.id === id) {
+        // The open editor takes the new settings like any other change, so
+        // its next edit doesn't put the old ones back.
+        const settings: MapPatch = {
+          fields: {
+            name: saved.map.name ?? null,
+            complevel: saved.map.complevel ?? null,
+          },
+        };
+        for (const listener of remoteListeners.current) listener(settings);
+        if (live.current?.mapId === id) {
+          live.current.link.rename(saved.map.name ?? "");
+        }
+      }
+      if (saved.cloud && live.current?.mapId !== id) void syncCloud(store, id);
       if (sessionRef.current?.id === id) setDetails(detailsOf(saved));
       else await refresh(store, saved.episodeId);
       return null;
@@ -1303,6 +1478,9 @@ export function EpisodeScreen() {
           saveStatus={store.durable ? saveStatus : "session"}
           onSave={onSave}
           watchExternal={watchExternal}
+          watchRemote={watchRemote}
+          peers={peers}
+          onPointer={(at) => live.current?.link.cursor(at)}
           onOpenEpisodes={() =>
             void whenSaved(() => {
               setView("episodes");
@@ -1366,10 +1544,12 @@ export function EpisodeScreen() {
               }));
               announce(session.id);
               await refresh(store, session.episodeId);
+              stopLive();
               void syncCloud(store, session.id);
             }}
             onStop={() =>
               void attempt(async () => {
+                stopLive();
                 await store.updateMap(session.id, (entry) => ({
                   ...entry,
                   cloud: undefined,

@@ -38,15 +38,21 @@ class ConnectionLimits {
   private readonly bytes: Budget;
   private dropped = 0;
 
-  constructor(now: number, messagesPerSecond = 300) {
+  constructor(
+    now: number,
+    messagesPerSecond = 300,
+    private readonly textLimit = maxTextBytes,
+  ) {
     this.messages = new Budget(messagesPerSecond, 600, now);
-    this.bytes = new Budget(256 * 1024, 2 * maxTextBytes, now);
+    this.bytes = new Budget(256 * 1024, 2 * textLimit, now);
   }
 
   check(message: string | ArrayBuffer, now: number): Verdict {
     const size =
       typeof message === "string" ? message.length : message.byteLength;
-    if (size > (typeof message === "string" ? maxTextBytes : maxBinaryBytes)) {
+    if (
+      size > (typeof message === "string" ? this.textLimit : maxBinaryBytes)
+    ) {
       return "close";
     }
     if (this.messages.take(1, now) && this.bytes.take(size, now)) {
