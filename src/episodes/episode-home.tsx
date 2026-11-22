@@ -19,6 +19,7 @@ import * as React from "react";
 import { MapPlan } from "@/components/map-plan";
 import { knownBuildProblem, useBuildChecks } from "./build-checks";
 import { MapDialog } from "./map-dialog";
+import { MapOrder, MapOrderHandle, MapOrderRow } from "./map-order";
 import type { MapDetails } from "./map-dialog";
 import {
   bySlot,
@@ -172,60 +173,36 @@ function ConfirmDialog({
 
 function MapRow({
   entry,
+  slot,
   canDuplicate,
   canMoveUp,
   canMoveDown,
-  dragging,
-  dropBefore,
+  hint,
   onOpen,
   onSettings,
   onDuplicate,
   onDelete,
   onMove,
-  onDragStart,
-  onDragOver,
-  onDrop,
-  onDragEnd,
 }: {
   entry: EpisodeMap;
+  slot: string;
   canDuplicate: boolean;
   canMoveUp: boolean;
   canMoveDown: boolean;
-  dragging: boolean;
-  dropBefore: boolean;
+  hint: string;
   onOpen: () => void;
   onSettings: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
   onMove: (step: -1 | 1) => void;
-  onDragStart: () => void;
-  onDragOver: (after: boolean) => void;
-  onDrop: () => void;
-  onDragEnd: () => void;
 }) {
   useBuildChecks([entry]);
   const status = mapStatus(entry, knownBuildProblem(entry));
   const name = mapName(entry);
   return (
-    <tr
-      draggable
-      data-map={entry.id}
-      className={`group h-24 border-b border-border hover:bg-muted ${dragging ? "opacity-40" : ""} ${dropBefore ? "shadow-[inset_0_2px_0_var(--color-primary)]" : ""}`}
-      onDragStart={(event) => {
-        event.dataTransfer.effectAllowed = "move";
-        event.dataTransfer.setData("text/plain", entry.id);
-        onDragStart();
-      }}
-      onDragOver={(event) => {
-        event.preventDefault();
-        const box = event.currentTarget.getBoundingClientRect();
-        onDragOver(event.clientY > box.top + box.height / 2);
-      }}
-      onDrop={(event) => {
-        event.preventDefault();
-        onDrop();
-      }}
-      onDragEnd={onDragEnd}
+    <MapOrderRow
+      value={entry.id}
+      className="group h-24 border-b border-border select-none hover:bg-muted data-dragging:bg-muted/60 data-dragging:outline-2 data-dragging:-outline-offset-2 data-dragging:outline-border data-dragging:outline-dashed data-dragging:*:invisible data-moving:bg-muted data-moving:shadow-[inset_2px_0_0_var(--color-primary)] data-drag-preview:flex data-drag-preview:items-center data-drag-preview:rounded-[4px] data-drag-preview:border! data-drag-preview:border-border! data-drag-preview:bg-card! data-drag-preview:shadow-xl data-drag-preview:*:shrink-0"
       onClick={(event) => {
         if (
           !entry.broken &&
@@ -235,17 +212,24 @@ function MapRow({
         }
       }}
     >
-      <td className="w-6 text-muted-foreground/60 group-hover:text-muted-foreground">
-        <GripVertical size={14} aria-hidden="true" className="cursor-grab" />
+      <td className="w-6">
+        <MapOrderHandle
+          value={entry.id}
+          aria-label={`Move ${name}`}
+          aria-describedby={hint}
+          className="flex h-8 w-full cursor-grab touch-none focus-visible:-outline-offset-2 items-center justify-center rounded-[3px] border-0 bg-transparent p-0 text-muted-foreground/60 group-hover:text-muted-foreground group-data-moving:text-primary group-data-drag-preview:cursor-grabbing"
+        >
+          <GripVertical size={14} aria-hidden="true" />
+        </MapOrderHandle>
       </td>
-      <td className="font-mono text-xs">{entry.slot}</td>
-      <td className="max-[900px]:hidden">
+      <td className="w-16 font-mono text-xs">{slot}</td>
+      <td className="w-36 max-[900px]:hidden">
         <MapPlan
           map={entry.map}
-          className="h-[76px] w-[128px] rounded-[2px] border border-input bg-background"
+          className="h-[76px] w-[128px] rounded-[2px] border border-input bg-card"
         />
       </td>
-      <td className="max-w-0 pr-4 pl-6 max-[900px]:pl-0">
+      <td className="max-w-0 pr-4 pl-6 group-data-drag-preview:max-w-none group-data-drag-preview:min-w-0 group-data-drag-preview:flex-1 group-data-drag-preview:shrink! max-[900px]:pl-0">
         <button
           type="button"
           disabled={entry.broken}
@@ -258,18 +242,18 @@ function MapRow({
           {entry.description}
         </div>
       </td>
-      <td className="text-right font-mono text-sm max-[700px]:hidden">
+      <td className="w-20 text-right font-mono text-sm max-[700px]:hidden">
         {entry.map.sectors.length}
       </td>
-      <td className="text-right font-mono text-sm max-[700px]:hidden">
+      <td className="w-20 text-right font-mono text-sm max-[700px]:hidden">
         {entry.map.things.length}
       </td>
-      <td className="text-right font-mono text-sm max-[480px]:hidden">
+      <td className="w-16 text-right font-mono text-sm max-[480px]:hidden">
         {formatPar(entry.par) || (
           <span className="text-muted-foreground">—</span>
         )}
       </td>
-      <td className="pl-4">
+      <td className="w-32 pl-4">
         <span
           className="flex items-center gap-2 text-sm whitespace-nowrap"
           title={"detail" in status ? status.detail : undefined}
@@ -281,10 +265,10 @@ function MapRow({
           {status.label}
         </span>
       </td>
-      <td className="text-sm whitespace-nowrap text-muted-foreground max-[900px]:hidden">
+      <td className="w-24 text-sm whitespace-nowrap text-muted-foreground max-[900px]:hidden">
         {formatEdited(entry.editedAt)}
       </td>
-      <td>
+      <td className="w-10">
         <Menu>
           <MenuTrigger
             className={buttonVariants({ variant: "ghost", size: "icon" })}
@@ -319,7 +303,7 @@ function MapRow({
           </MenuContent>
         </Menu>
       </td>
-    </tr>
+    </MapOrderRow>
   );
 }
 
@@ -364,7 +348,7 @@ function EpisodeHome({
   ) => Promise<string | null>;
   onDuplicateMap: (entry: EpisodeMap) => void;
   onDeleteMap: (entry: EpisodeMap) => void;
-  onReorderMaps: (order: string[]) => void;
+  onReorderMaps: (order: string[]) => Promise<void>;
 }) {
   const [creatingMap, setCreatingMap] = React.useState(false);
   const [editing, setEditing] = React.useState<EpisodeMap | null>(null);
@@ -372,8 +356,8 @@ function EpisodeHome({
   const [confirmation, setConfirmation] = React.useState<Confirmation | null>(
     null,
   );
-  const [dragged, setDragged] = React.useState<string | null>(null);
-  const [dropIndex, setDropIndex] = React.useState<number | null>(null);
+  const hint = React.useId();
+  const [saving, setSaving] = React.useState<string[] | null>(null);
   const accepted = React.useRef(false);
   const episodeFile = React.useRef<HTMLInputElement>(null);
   const { durable } = sidebar;
@@ -385,16 +369,17 @@ function EpisodeHome({
       ? `${sorted[0].slot} to ${sorted.at(-1)!.slot}`
       : sorted[0]?.slot;
 
+  // Holds the dropped order until the save lands, so rows don't snap back meanwhile.
+  const saveOrder = (order: string[]) => {
+    setSaving(order);
+    void onReorderMaps(order).finally(() => setSaving(null));
+  };
+
   const reorder = (id: string, index: number) => {
     const order = sorted.map((entry) => entry.id).filter((item) => item !== id);
     const from = sorted.findIndex((entry) => entry.id === id);
     order.splice(index > from ? index - 1 : index, 0, id);
-    onReorderMaps(order);
-  };
-
-  const endDrag = () => {
-    setDragged(null);
-    setDropIndex(null);
+    saveOrder(order);
   };
 
   return (
@@ -543,64 +528,56 @@ function EpisodeHome({
                     </th>
                   </tr>
                 </thead>
-                <tbody
-                  onDragLeave={(event) => {
-                    if (
-                      !event.currentTarget.contains(event.relatedTarget as Node)
-                    ) {
-                      setDropIndex(null);
-                    }
+                <MapOrder
+                  value={saving ?? sorted.map((entry) => entry.id)}
+                  onValueChange={saveOrder}
+                  label={(id) => {
+                    const entry = sorted.find((item) => item.id === id);
+                    return entry ? mapName(entry) : undefined;
                   }}
                 >
-                  {sorted.map((entry, index) => (
-                    <MapRow
-                      key={entry.id}
-                      entry={entry}
-                      canDuplicate={Boolean(nextSlot)}
-                      canMoveUp={index > 0}
-                      canMoveDown={index < sorted.length - 1}
-                      dragging={dragged === entry.id}
-                      dropBefore={
-                        dragged !== null &&
-                        dropIndex === index &&
-                        dragged !== entry.id
-                      }
-                      onOpen={() => onOpenMap(entry)}
-                      onSettings={() => setEditing(entry)}
-                      onDuplicate={() => onDuplicateMap(entry)}
-                      onDelete={() =>
-                        setConfirmation({
-                          title: `Delete ${mapName(entry)}?`,
-                          body: `${entry.slot} is removed from this browser. Back up the episode first if you might need it.`,
-                          run: () => onDeleteMap(entry),
-                        })
-                      }
-                      onMove={(step) =>
-                        reorder(entry.id, step < 0 ? index - 1 : index + 2)
-                      }
-                      onDragStart={() => setDragged(entry.id)}
-                      onDragOver={(after) =>
-                        setDropIndex(after ? index + 1 : index)
-                      }
-                      onDrop={() => {
-                        if (dragged && dropIndex !== null) {
-                          reorder(dragged, dropIndex);
-                        }
-                        endDrag();
-                      }}
-                      onDragEnd={endDrag}
-                    />
-                  ))}
-                </tbody>
+                  {({ order }) =>
+                    order.map((id, index) => {
+                      const entry = sorted.find((item) => item.id === id);
+                      if (!entry) return null;
+                      return (
+                        <MapRow
+                          key={entry.id}
+                          entry={entry}
+                          slot={sorted[index]?.slot ?? entry.slot}
+                          canDuplicate={Boolean(nextSlot)}
+                          canMoveUp={index > 0}
+                          canMoveDown={index < sorted.length - 1}
+                          hint={hint}
+                          onOpen={() => onOpenMap(entry)}
+                          onSettings={() => setEditing(entry)}
+                          onDuplicate={() => onDuplicateMap(entry)}
+                          onDelete={() =>
+                            setConfirmation({
+                              title: `Delete ${mapName(entry)}?`,
+                              body: `${entry.slot} is removed from this browser. Back up the episode first if you might need it.`,
+                              run: () => onDeleteMap(entry),
+                            })
+                          }
+                          onMove={(step) =>
+                            reorder(entry.id, step < 0 ? index - 1 : index + 2)
+                          }
+                        />
+                      );
+                    })
+                  }
+                </MapOrder>
               </table>
             ) : (
               <p className="m-0 text-muted-foreground">
                 This episode has no maps yet.
               </p>
             )}
-            <div
-              className={`flex flex-wrap items-center gap-x-2 gap-y-1 px-6 ${dragged !== null && dropIndex === sorted.length ? "shadow-[inset_0_2px_0_var(--color-primary)]" : ""}`}
-            >
+            <p id={hint} hidden>
+              Press Space to pick up a map, the arrow keys to move it, and Space
+              again to drop it. Escape puts it back.
+            </p>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-6">
               {nextSlot ? (
                 <>
                   <button
