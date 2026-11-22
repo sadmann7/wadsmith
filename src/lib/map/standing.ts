@@ -2,7 +2,9 @@ import type { GameMap, Point, Sector } from "./types";
 
 import { sectorAt, wallOwners } from "./geometry";
 
-const passes = 8;
+// In a sharp corner each wall pushes the spot back toward the other, so the
+// two close in on a clear spot over many passes.
+const passes = 96;
 
 // The nearest spot to a point where a player has room to stand and walk off,
 // or null when there is none close by. A player that starts with a wall

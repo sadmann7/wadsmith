@@ -70,6 +70,23 @@ describe("a spot to stand on", () => {
     expect(standingSpot(testMap, { x: 513, y: 95 })).not.toBeNull();
   });
 
+  it("backs out of a sharp corner to the nearest clear spot", () => {
+    const wedge: GameMap = {
+      vertices: {
+        a: { x: 0, y: 0 },
+        b: { x: 512, y: 0 },
+        c: { x: 512, y: 512 },
+      },
+      sectors: [{ ...testMap.sectors[0], vertices: ["a", "b", "c"] }],
+      things: [],
+      switches: [],
+    };
+    const spot = standingSpot(wedge, { x: 32.9, y: 18.1 });
+    expect(spot).not.toBeNull();
+    expect(spot && standingSpot(wedge, spot)).toEqual(spot);
+    expect(spot?.y).toBe(17);
+  });
+
   it("steps back from a line that blocks everything", () => {
     const fenced = updateLine(testMap, "v3|v4", { blocksAll: true });
     expect(standingSpot(fenced, { x: 380, y: 160 })).toEqual({
