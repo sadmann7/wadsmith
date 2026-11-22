@@ -169,9 +169,6 @@ importers:
       '@fontsource/ibm-plex-mono':
         specifier: ^5.3.0
         version: 5.3.0
-      '@fontsource/ibm-plex-sans-condensed':
-        specifier: ^5.3.0
-        version: 5.3.0
       '@ui-sdk/core':
         specifier: 0.1.0-beta.14
         version: 0.1.0-beta.14
@@ -463,9 +460,6 @@ packages:
 
   '@fontsource/ibm-plex-mono@5.3.0':
     resolution: {integrity: sha512-eTgnZjZEGk1QtD3ZstF+Vclo2HLAni8YMy34/DxllwZvyz1lR/1RF/xTiAquOBO7MvqBx8D2Ig2WCPMVfdZu7Q==}
-
-  '@fontsource/ibm-plex-sans-condensed@5.3.0':
-    resolution: {integrity: sha512-fQyBpwbkguP4azjq7Cw8h/J3C/d8MFAzXOiSoFxyKCUK4x0XKrWEh3tGdTxhDM0HctVRQilQo1zGoyxDHLm5jQ==}
 
   '@img/colour@1.1.0':
     resolution: {integrity: sha512-Td76q7j57o/tLVdgS746cYARfSyxk8iEfRxewL9h4OMzYhbW4TAcppl0mT4eyqXddh6L/jwoM75mo7ixa/pCeQ==}
@@ -2053,8 +2047,6 @@ snapshots:
     optional: true
 
   '@fontsource/ibm-plex-mono@5.3.0': {}
-
-  '@fontsource/ibm-plex-sans-condensed@5.3.0': {}
 
   '@img/colour@1.1.0': {}
 
