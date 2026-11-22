@@ -955,10 +955,10 @@ function openChain(chain: string[]) {
 // ran between the two goes away.
 function replaceCorner(map: GameMap, from: string, to: string): GameMap {
   const rename = (id: string) => (id === from ? to : id);
+  const holds = (key: string) => key.split("|").includes(from);
   const rekey = <T>(record: Record<string, T> | undefined) => {
     if (!record) return undefined;
     const out: Record<string, T> = {};
-    const holds = (key: string) => key.split("|").includes(from);
     const entries = Object.entries(record).toSorted(
       ([a], [b]) => Number(holds(a)) - Number(holds(b)),
     );
@@ -1142,6 +1142,10 @@ function withDetails(sector: Sector, details: string[][]): Sector {
   return next;
 }
 
+function middle(a: Point, b: Point) {
+  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+}
+
 // A line drawn inside a room, with the room on both of its sides, for a
 // middle texture or a walk-over action. Every stretch of it must cross that
 // room's floor.
@@ -1159,10 +1163,6 @@ function addDetail(
         point.y !== list[index - 1].y,
     );
   if (chain.length < 2) return null;
-  const middle = (a: Point, b: Point) => ({
-    x: (a.x + b.x) / 2,
-    y: (a.y + b.y) / 2,
-  });
   const owner = sectorAt(map, middle(chain[0], chain[1]));
   if (!owner || owner.door) return null;
   const strays = chain

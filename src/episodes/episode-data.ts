@@ -442,6 +442,14 @@ function serializeEpisode(episode: Episode, maps: EpisodeMap[]) {
   });
 }
 
+function lumpField(field: unknown) {
+  if (field === undefined) return undefined;
+  if (typeof field !== "string" || !lumpName.test(field)) {
+    throw new MapFileError("The episode names a lump that can't exist.");
+  }
+  return field;
+}
+
 function parseEpisodeBackup(text: string) {
   if (text.length > maxBackupBytes) {
     throw new MapFileError("The file is too large.");
@@ -481,21 +489,14 @@ function parseEpisodeBackup(text: string) {
       (value.par as number) <= maxPar
         ? (value.par as number)
         : null;
-    const name = (field: unknown) => {
-      if (field === undefined) return undefined;
-      if (typeof field !== "string" || !lumpName.test(field)) {
-        throw new MapFileError("The episode names a lump that can't exist.");
-      }
-      return field;
-    };
     return createMapEntry(episode.id, slot, parseMap(value.map), {
       par,
       description:
         typeof value.description === "string"
           ? value.description.slice(0, maxDescriptionLength)
           : "",
-      music: name(value.music),
-      sky: name(value.sky),
+      music: lumpField(value.music),
+      sky: lumpField(value.sky),
       intertext:
         typeof value.intertext === "string"
           ? value.intertext.trim().slice(0, maxIntertextLength) || undefined

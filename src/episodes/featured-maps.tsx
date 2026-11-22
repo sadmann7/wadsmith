@@ -219,7 +219,7 @@ function FeaturedMaps({
         ) : null}
         <ul
           aria-label="Maps"
-          className="m-0 grid list-none grid-cols-6 max-[1200px]:grid-cols-3 max-[600px]:grid-cols-2 gap-4 p-0"
+          className="m-0 grid list-none grid-cols-6 gap-4 p-0 max-[1200px]:grid-cols-3 max-[600px]:grid-cols-2"
         >
           {shown.map((entry) => (
             <li key={entry.id}>

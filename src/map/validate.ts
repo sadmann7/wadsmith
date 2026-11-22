@@ -56,30 +56,44 @@ const playerHeight = 56;
 const gridSize = 256;
 const maxCells = 4096;
 
-// Imported maps have thousands of walls, so each wall or room is only
-// compared with the ones whose bounds meet its own.
-function nearby(boxes: Box[]) {
-  const span = (box: Box) => ({
+function span(box: Box) {
+  return {
     left: Math.floor(box.left / gridSize),
     right: Math.floor(box.right / gridSize),
     top: Math.floor(box.top / gridSize),
     bottom: Math.floor(box.bottom / gridSize),
-  });
-  // A box over too many cells, like a far-off corner's wall, meets every box.
-  const wide = (box: Box) => {
-    const cells = span(box);
-    return (
-      (cells.right - cells.left + 1) * (cells.bottom - cells.top + 1) > maxCells
-    );
   };
-  const cellsOf = (box: Box) => {
-    const cells = span(box);
-    const keys: string[] = [];
-    for (let x = cells.left; x <= cells.right; x += 1) {
-      for (let y = cells.top; y <= cells.bottom; y += 1) keys.push(`${x},${y}`);
-    }
-    return keys;
-  };
+}
+
+function meets(a: Box, b: Box) {
+  return (
+    a.left <= b.right &&
+    a.right >= b.left &&
+    a.top <= b.bottom &&
+    a.bottom >= b.top
+  );
+}
+
+// A box over too many cells, like a far-off corner's wall, meets every box.
+function wide(box: Box) {
+  const cells = span(box);
+  return (
+    (cells.right - cells.left + 1) * (cells.bottom - cells.top + 1) > maxCells
+  );
+}
+
+function cellsOf(box: Box) {
+  const cells = span(box);
+  const keys: string[] = [];
+  for (let x = cells.left; x <= cells.right; x += 1) {
+    for (let y = cells.top; y <= cells.bottom; y += 1) keys.push(`${x},${y}`);
+  }
+  return keys;
+}
+
+// Imported maps have thousands of walls, so each wall or room is only
+// compared with the ones whose bounds meet its own.
+function nearby(boxes: Box[]) {
   const cells = new Map<string, number[]>();
   const wideBoxes: number[] = [];
   boxes.forEach((box, index) => {
@@ -91,11 +105,6 @@ function nearby(boxes: Box[]) {
       cells.set(key, [...(cells.get(key) ?? []), index]);
     }
   });
-  const meets = (a: Box, b: Box) =>
-    a.left <= b.right &&
-    a.right >= b.left &&
-    a.top <= b.bottom &&
-    a.bottom >= b.top;
   return (index: number) => {
     const box = boxes[index];
     const candidates = wide(box)

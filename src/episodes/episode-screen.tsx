@@ -15,10 +15,10 @@ import {
   slotName,
 } from "@/engine/game";
 import {
+  adoptOwnIwad,
   identifyIwad,
   loadIwad,
-  useBundledIwad,
-  useOwnIwad,
+  restoreBundledIwad,
   type Iwad,
 } from "@/engine/iwad";
 import type { GameFiles, Skill } from "@/engine/runtime";
@@ -231,6 +231,17 @@ async function readGameFiles(picked: File[]) {
     }),
   );
   return files.flat();
+}
+
+// A game IWAD becomes the game rather than something to play or import.
+async function isIwad(file: File) {
+  if (!/\.wad$/i.test(file.name)) return false;
+  try {
+    identifyIwad(file.name, new Uint8Array(await file.arrayBuffer()));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function EpisodeScreen() {
@@ -908,20 +919,9 @@ function EpisodeScreen() {
     }
   };
 
-  // A game IWAD becomes the game rather than something to play or import.
-  const isIwad = async (file: File) => {
-    if (!/\.wad$/i.test(file.name)) return false;
-    try {
-      identifyIwad(file.name, new Uint8Array(await file.arrayBuffer()));
-      return true;
-    } catch {
-      return false;
-    }
-  };
-
   const adoptIwad = async (file: File) => {
     try {
-      const next = await useOwnIwad(
+      const next = await adoptOwnIwad(
         file.name,
         new Uint8Array(await file.arrayBuffer()),
       );
@@ -939,7 +939,7 @@ function EpisodeScreen() {
 
   const dropIwad = async () => {
     try {
-      await useBundledIwad();
+      await restoreBundledIwad();
       setMessage("Freedoom is the game again.");
     } catch {
       setMessage("Couldn't put your IWAD away.");

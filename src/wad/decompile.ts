@@ -294,6 +294,14 @@ function mostCommon(names: string[]) {
   return [...counts].toSorted((a, b) => b[1] - a[1])[0]?.[0];
 }
 
+function vertexId(index: number) {
+  return `v${index}`;
+}
+
+function keyOf(a: number, b: number) {
+  return wallKey(vertexId(a), vertexId(b));
+}
+
 function decompileMap(
   doom: DoomMap,
   names: TextureNames = freedoomNames,
@@ -578,8 +586,6 @@ function decompileMap(
       region.details.forEach(([a, b]) => own(a, b));
     }),
   );
-  const vertexId = (index: number) => `v${index}`;
-  const keyOf = (a: number, b: number) => wallKey(vertexId(a), vertexId(b));
   const pieceAt = (sector: number, a: number, b: number) =>
     edgeOwner.get(`${sector}:${wallKey(String(a), String(b))}`)?.id ?? null;
 

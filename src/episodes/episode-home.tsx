@@ -203,7 +203,7 @@ const MapRow = React.memo(function MapRow({
   return (
     <MapOrderRow
       value={entry.id}
-      className="group h-24 select-none *:border-b *:border-border data-drag-preview:*:border-b-0 hover:*:bg-muted data-dragging:text-transparent data-dragging:*:border-y-2 data-dragging:*:border-dashed data-dragging:*:bg-muted/60 data-dragging:*:first:border-l-2 data-dragging:*:last:border-r-2 data-dragging:*:*:invisible data-moving:*:bg-muted data-moving:*:first:shadow-[inset_2px_0_0_var(--color-primary)] data-drag-preview:flex data-drag-preview:items-center data-drag-preview:rounded-[4px] data-drag-preview:border! data-drag-preview:border-border! data-drag-preview:bg-card! data-drag-preview:shadow-xl data-drag-preview:*:shrink-0"
+      className="group h-24 select-none *:border-b *:border-border hover:*:bg-muted data-drag-preview:flex data-drag-preview:items-center data-drag-preview:rounded-[4px] data-drag-preview:border! data-drag-preview:border-border! data-drag-preview:bg-card! data-drag-preview:shadow-xl data-drag-preview:*:shrink-0 data-drag-preview:*:border-b-0 data-dragging:text-transparent data-dragging:*:*:invisible data-dragging:*:border-y-2 data-dragging:*:border-dashed data-dragging:*:bg-muted/60 data-dragging:*:first:border-l-2 data-dragging:*:last:border-r-2 data-moving:*:bg-muted data-moving:*:first:shadow-[inset_2px_0_0_var(--color-primary)]"
       onClick={(event) => {
         if (
           !entry.broken &&
@@ -218,7 +218,7 @@ const MapRow = React.memo(function MapRow({
           value={entry.id}
           aria-label={`Move ${name}`}
           aria-describedby={hint}
-          className="flex h-8 w-full cursor-grab touch-none focus-visible:-outline-offset-2 items-center justify-center rounded-[3px] border-0 bg-transparent p-0 text-muted-foreground/60 group-hover:text-muted-foreground group-data-moving:text-primary group-data-drag-preview:cursor-grabbing"
+          className="flex h-8 w-full cursor-grab touch-none items-center justify-center rounded-[3px] border-0 bg-transparent p-0 text-muted-foreground/60 group-hover:text-muted-foreground group-data-drag-preview:cursor-grabbing group-data-moving:text-primary focus-visible:-outline-offset-2"
         >
           <GripVertical size={14} aria-hidden="true" />
         </MapOrderHandle>

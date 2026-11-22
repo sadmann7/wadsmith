@@ -55,7 +55,7 @@ function socketTransport(url: string): RoomTransport {
   const socket = new WebSocket(url);
   socket.binaryType = "arraybuffer";
   const waiting: (string | Uint8Array<ArrayBuffer>)[] = [];
-  let handler: (message: RoomMessage) => void = () => {};
+  let handler: ((message: RoomMessage) => void) | null = null;
   let closing = false;
 
   const send = (data: string | Uint8Array<ArrayBuffer>) => {
@@ -68,10 +68,10 @@ function socketTransport(url: string): RoomTransport {
   });
   socket.addEventListener("message", (event: MessageEvent) => {
     const message = decodeMessage(event.data as string | ArrayBuffer);
-    if (message) handler(message);
+    if (message) handler?.(message);
   });
   socket.addEventListener("close", () => {
-    if (!closing) handler({ type: "dropped" });
+    if (!closing) handler?.({ type: "dropped" });
   });
 
   return {

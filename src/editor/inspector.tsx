@@ -460,7 +460,7 @@ function BoomSectorFields({
   const mbf21 = atLeast(level, "mbf21") || bits.altDamage || bits.killGrounded;
   return (
     <>
-      <div className="flex items-center gap-2 [&>*]:min-w-0 [&>*]:flex-1 items-end">
+      <div className="flex items-center items-end gap-2 [&>*]:min-w-0 [&>*]:flex-1">
         <ChoiceField
           label="Effect"
           value={String(bits.base)}
@@ -494,7 +494,7 @@ function BoomSectorFields({
           onChange={onTagChange}
         />
       </div>
-      <div className="flex items-center gap-2 [&>*]:min-w-0 [&>*]:flex-1 items-end">
+      <div className="flex items-center items-end gap-2 [&>*]:min-w-0 [&>*]:flex-1">
         {exit ? null : (
           <ChoiceField
             label="Damage"
@@ -731,7 +731,7 @@ function SectorInspector({
             onTagChange={(tag) => onChange({ tag: tag || undefined })}
           />
         ) : (
-          <div className="flex items-center gap-2 [&>*]:min-w-0 [&>*]:flex-1 items-end">
+          <div className="flex items-center items-end gap-2 [&>*]:min-w-0 [&>*]:flex-1">
             <ChoiceField
               label="Effect"
               value={sector.effect ?? "none"}
@@ -1071,7 +1071,7 @@ function LineInspector({
               />
             ) : action ? (
               <>
-                <div className="flex items-center gap-2 [&>*]:min-w-0 [&>*]:flex-1 items-end">
+                <div className="flex items-center items-end gap-2 [&>*]:min-w-0 [&>*]:flex-1">
                   <ChoiceField
                     label="Trigger"
                     value={action.trigger}

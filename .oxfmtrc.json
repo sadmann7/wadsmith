@@ -8,6 +8,10 @@
   "trailingComma": "all",
   "endOfLine": "lf",
   "sortPackageJson": false,
+  "sortTailwindcss": {
+    "stylesheet": "./src/app/globals.css",
+    "functions": ["cn"]
+  },
   "ignorePatterns": [
     ".next/**",
     "next-env.d.ts",
