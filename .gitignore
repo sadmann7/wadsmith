@@ -13,7 +13,7 @@ next-env.d.ts
 /public/engine/
 
 # cloudflare and vercel
-/.wrangler/
+.wrangler/
 .dev.vars*
 .vercel
 

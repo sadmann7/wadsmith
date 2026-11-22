@@ -1204,7 +1204,7 @@ export function EpisodeScreen() {
             }}
           >
             <AlertDialogBackdrop />
-            <AlertDialogContent className="w-[460px]">
+            <AlertDialogContent className="w-115">
               <AlertDialogTitle>
                 Your latest changes aren't saved
               </AlertDialogTitle>
@@ -1225,7 +1225,6 @@ export function EpisodeScreen() {
                 </Button>
                 <Button
                   variant="primary"
-
                   onClick={() =>
                     download(
                       "wadsmith-map.json",
