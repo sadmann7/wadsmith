@@ -6,8 +6,13 @@ import type { Complevel } from "@/lib/map/types";
 import { GameView } from "@/components/play/play-panel";
 import { Alert } from "@/components/ui/alert";
 import { buttonVariants } from "@/components/ui/button";
-import { useIwad } from "@/hooks/use-iwad";
-import { defaultGame, type GameId, games } from "@/lib/engine/game";
+import {
+  defaultGame,
+  type GameId,
+  type GameInfo,
+  games,
+} from "@/lib/engine/game";
+import { loadIwad } from "@/lib/engine/iwad";
 import {
   levelNumber,
   type PublishedMap,
@@ -18,7 +23,7 @@ import { complevels } from "@/lib/map/complevel";
 type Loaded =
   | { kind: "loading" }
   | { kind: "failed"; message: string }
-  | { kind: "ready"; details: PublishedMap; wad: Uint8Array };
+  | { kind: "ready"; details: PublishedMap; wad: Uint8Array; game: GameInfo };
 
 interface PublishedPlayerProps {
   id: string;
@@ -26,15 +31,14 @@ interface PublishedPlayerProps {
 
 export function PublishedPlayer({ id }: PublishedPlayerProps) {
   const [loaded, setLoaded] = React.useState<Loaded>({ kind: "loading" });
-  const iwad = useIwad();
   React.useEffect(() => {
     let stale = false;
-    readPublished(id)
-      .then((found) => {
+    Promise.all([readPublished(id), loadIwad()])
+      .then(([found, iwad]) => {
         if (stale) return;
         setLoaded(
           found
-            ? { kind: "ready", ...found }
+            ? { kind: "ready", ...found, game: iwad.game }
             : { kind: "failed", message: "That map isn't published here." },
         );
       })
@@ -65,24 +69,22 @@ export function PublishedPlayer({ id }: PublishedPlayerProps) {
       </main>
     );
   }
-  const { details, wad } = loaded;
-  if (!iwad) {
-    return (
-      <div className="editor-loading" role="status">
-        Loading the game…
-      </div>
-    );
-  }
-  // A map made for Doom's episodes plays only on Doom's IWADs, and one made
-  // for Doom II's numbered maps only on Doom II's.
+  const { details, wad, game } = loaded;
+  const last = levelNumber(details.maps.at(-1)?.slot ?? "MAP01");
+  // A map made for Doom's episodes plays only on a Doom IWAD with as many
+  // episodes, and one made for Doom II's numbered maps only on Doom II's.
   const made = games[details.game as GameId] ?? defaultGame;
-  if (made.episodes > 0 !== iwad.game.episodes > 0) {
+  const fits =
+    made.episodes > 0
+      ? game.episodes >= Math.ceil(last / 9)
+      : game.episodes === 0;
+  if (!fits) {
     return (
       <main className="grid min-h-dvh place-content-center gap-4 p-6">
         <Alert role="alert">
           {details.title} was made for {made.label}, and this browser plays{" "}
-          {iwad.game.label}. Pick an IWAD like it on the maps page, then open
-          the link again.
+          {game.label}. Pick an IWAD like it on the maps page, then open the
+          link again.
         </Alert>
         <Link className={buttonVariants({ variant: "primary" })} href="/maps">
           See the maps
@@ -102,7 +104,7 @@ export function PublishedPlayer({ id }: PublishedPlayerProps) {
       }
       slot={details.maps[0]?.slot ?? "MAP01"}
       par={null}
-      lastLevel={levelNumber(details.maps.at(-1)?.slot ?? "MAP01")}
+      lastLevel={last}
       exit="maps"
       onExit={() => location.assign("/maps")}
     />
