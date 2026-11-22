@@ -1,0 +1,1634 @@
+import type {
+  Complevel,
+  DoorSettings,
+  GameMap,
+  LineTrigger,
+  Point,
+  Sector,
+  SectorEffect,
+  Thing,
+  ThingKind,
+  ThingSkill,
+} from "@/lib/map/types";
+
+import { mapBalance } from "@/lib/map/balance";
+import { sectorSpecialPatch } from "@/lib/map/boom";
+import {
+  ceilingTextures,
+  doorTextures,
+  floorTextures,
+  getIsPlayerStart,
+  sectorEffects,
+  switchTextures,
+  thingCatalog,
+  thingKinds,
+  wallTextures,
+} from "@/lib/map/catalog";
+import { checkMap, fixIssue } from "@/lib/map/checks";
+import {
+  addDetail,
+  addNote,
+  addRoom,
+  addRoomOnSide,
+  addSwitch,
+  addSwitchInRoom,
+  addThing,
+  applyPositions,
+  defaultDoor,
+  fillHole,
+  freeWallAt,
+  gridSize,
+  makePillar,
+  mergeCorners,
+  removeDetailLine,
+  removeHole,
+  removeNote,
+  removeSector,
+  removeSwitch,
+  removeThing,
+  roomCenter,
+  type RoomSide,
+  setLineTarget,
+  setRoomDoor,
+  setRoomWalls,
+  splitWall,
+  updateLine,
+  updateLineSide,
+  updateSector,
+  updateSwitch,
+  updateThing,
+} from "@/lib/map/edit";
+import {
+  boxOf,
+  sectorAt,
+  sectorLoops,
+  sectorPolygon,
+  wallKey,
+  wallOwners,
+} from "@/lib/map/geometry";
+import { joinWalls } from "@/lib/map/join";
+import {
+  describeLine,
+  fitLineAction,
+  keyColors,
+  lineActionKinds,
+  lineActions,
+  lineTriggers,
+  lineUsesTag,
+  newLineAction,
+} from "@/lib/map/lines";
+import { describeSurface, paintSurface } from "@/lib/map/surfaces";
+import { replaceTexture } from "@/lib/map/texture-tools";
+import {
+  type CheckContext,
+  inspectMap,
+  type MapIssue,
+} from "@/lib/map/validate";
+
+type ParamType = "string" | "number" | "boolean" | "points" | "strings";
+
+export interface AgentParam {
+  name: string;
+  type: ParamType;
+  description: string;
+  optional?: boolean;
+  choices?: readonly string[];
+}
+
+type Args = Record<string, unknown>;
+
+// One thing an agent can ask of a map. A read reports on the map and leaves
+// it alone, and an edit returns the map it makes.
+export interface AgentAction {
+  name: string;
+  description: string;
+  reads?: boolean;
+  params: AgentParam[];
+  run: (
+    map: GameMap,
+    args: Args,
+    context: CheckContext,
+  ) => { map?: GameMap; result?: unknown };
+}
+
+// What an action did: the map as it now stands, what the action reported,
+// the problems that were fixed on the way and what the map still needs.
+export interface AgentOutcome {
+  map: GameMap;
+  result: unknown;
+  fixed: string[];
+  todo: string[];
+}
+
+const sides: RoomSide[] = ["north", "east", "south", "west"];
+const skills: ThingSkill[] = ["easy", "medium", "hard"];
+const complevels: Complevel[] = ["vanilla", "boom", "mbf", "mbf21"];
+const wallParts = ["middle", "upper", "lower"] as const;
+const catalogs = [
+  "things",
+  "walls",
+  "flats",
+  "line-actions",
+  "sector-effects",
+] as const;
+
+const depthLimit = 4096;
+
+const maxNameLength = 80;
+const maxNoteLength = 200;
+
+// Problems an agent finishes with a later edit, like a door that waits for
+// its switch. They are reported back and never refuse the edit.
+const unfinished =
+  /^(empty|no-player|door-unwired|switch-unwired|line-key)(:|$)/;
+
+const room = (description = "A room's id or name."): AgentParam => ({
+  name: "room",
+  type: "string",
+  description,
+});
+const wall: AgentParam = {
+  name: "wall",
+  type: "string",
+  description: 'A wall, as its two corner ids joined by "|", like "v1|v2".',
+};
+const optional = (param: AgentParam): AgentParam => ({
+  ...param,
+  optional: true,
+});
+const roomLooks: AgentParam[] = [
+  { name: "name", type: "string", description: "What to call the room." },
+  { name: "floor", type: "number", description: "The floor's height." },
+  { name: "ceiling", type: "number", description: "The ceiling's height." },
+  { name: "light", type: "number", description: "Brightness, 0 to 255." },
+  { name: "floorTexture", type: "string", description: "The floor's flat." },
+  {
+    name: "ceilingTexture",
+    type: "string",
+    description: 'The ceiling\'s flat. "F_SKY1" opens it to the sky.',
+  },
+  {
+    name: "wallTexture",
+    type: "string",
+    description: "The texture on every wall of the room.",
+  },
+].map((param) => optional(param as AgentParam));
+const thingToggles = [
+  ["ambush", "A monster that waits until it sees the player."],
+  ["multiplayer", "Appears only in a multiplayer game."],
+  ["notDeathmatch", "Stays out of a deathmatch. Boom and later."],
+  ["notCoop", "Stays out of a co-op game. Boom and later."],
+  ["friendly", "A monster that fights beside the player. MBF and later."],
+] as const;
+// A wall's flags, each with what setting it does.
+const lineFlags = [
+  ["blocksAll", "Blocks players and monsters, like a window."],
+  ["blocksEnemies", "Blocks monsters only."],
+  ["upperFixed", "The upper texture hangs from the ceiling."],
+  ["lowerFixed", "The lower texture starts at the floor."],
+  ["secret", "The automap draws it as a solid wall."],
+  ["hidden", "The automap never draws it."],
+  ["mapped", "The automap shows it from the start."],
+  ["soundBlock", "Stops sound from carrying past two of these."],
+  ["passUse", "A press passes on to the lines behind it. Boom and later."],
+  ["solid", "An inner room's wall stays solid."],
+  ["shut", "A door's own line that doesn't open it from this side."],
+  ["scrolls", "The wall's texture scrolls sideways. Not with an action."],
+] as const;
+const thingFlags: AgentParam[] = [
+  {
+    name: "angle",
+    type: "number",
+    description: "Where it faces, in degrees: 0 east, 90 north.",
+  },
+  {
+    name: "skills",
+    type: "strings",
+    description: "The difficulties it appears on. Leave out for all three.",
+    choices: skills,
+  },
+  ...thingToggles.map(([name, description]) => ({
+    name,
+    type: "boolean",
+    description,
+  })),
+].map((param) => optional(param as AgentParam));
+
+export const agentActions: AgentAction[] = [
+  {
+    name: "help",
+    description: "Lists every action with what it takes.",
+    reads: true,
+    params: [],
+    run: () => ({
+      result: agentActions.map(({ name, description, reads, params }) => ({
+        name,
+        description,
+        reads: Boolean(reads),
+        params: params.map((param) => ({
+          ...param,
+          optional: Boolean(param.optional),
+        })),
+      })),
+    }),
+  },
+  {
+    name: "describeMap",
+    description:
+      "An overview of the map: its rooms, how many things of each kind, and what it still needs.",
+    reads: true,
+    params: [],
+    run: (map, _args, context) => ({
+      result: {
+        name: map.name ?? null,
+        complevel: map.complevel ?? "vanilla",
+        // Coordinates are in map units with y running down, so north is up
+        // on the map and a smaller y.
+        axes: "x runs east, y runs south",
+        rooms: map.sectors.map((sector) => roomSummary(map, sector)),
+        things: countBy(map.things.map((thing) => thing.kind)),
+        switches: map.switches.length,
+        notes: map.notes?.length ?? 0,
+        todo: problems(inspectMap(map, context).errors),
+      },
+    }),
+  },
+  {
+    name: "listRooms",
+    description:
+      "Every room with its corners, heights, textures, and the room or solid wall on each of its walls.",
+    reads: true,
+    params: [],
+    run: (map) => ({
+      result: map.sectors.map((sector) => roomDetail(map, sector)),
+    }),
+  },
+  {
+    name: "describeRoom",
+    description: "One room in full, with every wall's textures and action.",
+    reads: true,
+    params: [room()],
+    run: (map, args) => ({
+      result: roomDetail(map, findRoom(map, args.room)),
+    }),
+  },
+  {
+    name: "listThings",
+    description: "Every thing with its place, its room and its flags.",
+    reads: true,
+    params: [optional(room("Only the things in this room."))],
+    run: (map, args) => {
+      const only = args.room === undefined ? null : findRoom(map, args.room).id;
+      return {
+        result: map.things
+          .map((thing) => ({
+            ...thing,
+            label: thingCatalog[thing.kind].label,
+            room: sectorAt(map, thing)?.id ?? null,
+          }))
+          .filter((thing) => only === null || thing.room === only),
+      };
+    },
+  },
+  {
+    name: "listLines",
+    description:
+      "Every wall that has an action, a switch, flags or its own textures.",
+    reads: true,
+    params: [],
+    run: (map) => ({
+      result: [...wallOwners(map)].flatMap(([key, owners]) => {
+        const settings = map.lines?.[key];
+        const mapSwitch = map.switches.find(
+          (item) => wallKey(item.from, item.to) === key,
+        );
+        if (!settings && !mapSwitch) return [];
+        return [
+          {
+            wall: key,
+            rooms: [...new Set(owners.map((owner) => owner.id))],
+            ...settings,
+            ...(mapSwitch && { switch: mapSwitch.id }),
+          },
+        ];
+      }),
+    }),
+  },
+  {
+    name: "checkMap",
+    description:
+      "The map's errors and warnings, and how its health, ammo and keys balance against its monsters on a difficulty.",
+    reads: true,
+    params: [
+      optional({
+        name: "skill",
+        type: "string",
+        description: "The difficulty to balance for. Medium when left out.",
+        choices: skills,
+      }),
+    ],
+    run: (map, args, context) => {
+      const issues = checkMap(map, context);
+      const of = (severity: "error" | "warning") =>
+        issues
+          .filter((issue) => issue.severity === severity)
+          .map(({ id, message, target }) => ({ id, message, target }));
+      return {
+        result: {
+          errors: of("error"),
+          warnings: of("warning"),
+          balance: mapBalance(map, choice(args, "skill", skills, "medium")),
+        },
+      };
+    },
+  },
+  {
+    name: "listCatalog",
+    description:
+      "The names an action takes: thing kinds, wall textures, flats, line actions or sector effects.",
+    reads: true,
+    params: [
+      {
+        name: "of",
+        type: "string",
+        description: "Which list to read.",
+        choices: catalogs,
+      },
+    ],
+    run: (_map, args) => ({ result: catalog(choice(args, "of", catalogs)) }),
+  },
+  {
+    name: "addRoom",
+    description:
+      "Draws a room from its corners, in order. Corners that land on another room's wall join it, so the two rooms open onto each other. A room drawn inside another sits in it like a platform or a pit.",
+    params: [
+      {
+        name: "corners",
+        type: "points",
+        description: "At least three corners as {x, y}.",
+      },
+      ...roomLooks,
+    ],
+    run: (map, args) => {
+      const corners = points(args, "corners");
+      if (corners.length < 3) throw new Error("A room needs three corners.");
+      const added = addRoom(map, corners, looks(args), 1);
+      return { map: joinWalls(added.map, [added.id]), result: added.id };
+    },
+  },
+  {
+    name: "addConnectedRoom",
+    description:
+      "Adds a room on a free wall of another, as wide as that wall, and opens the two onto each other.",
+    params: [
+      room("The room to build from."),
+      {
+        name: "side",
+        type: "string",
+        description: "Which way the new room lies.",
+        choices: sides,
+      },
+      optional({
+        name: "depth",
+        type: "number",
+        description: "How far the new room reaches. 192 when left out.",
+      }),
+      optional(roomLooks[1]),
+      optional(roomLooks[2]),
+    ],
+    run: (map, args) => {
+      const source = findRoom(map, args.room);
+      const side = choice(args, "side", sides);
+      const depth = number(args, "depth", gridSize, depthLimit, 192);
+      const heights =
+        args.floor === undefined && args.ceiling === undefined
+          ? { floor: source.floor, ceiling: source.ceiling }
+          : heightsOf(args, source);
+      const added = addRoomOnSide(map, source.id, side, depth, {
+        ...heights,
+        light: source.light,
+        floorTexture: source.floorTexture,
+        ceilingTexture: source.ceilingTexture,
+        wallTexture: source.wallTexture,
+      });
+      if (!added) {
+        throw new Error(`${source.name} has no free wall facing ${side}.`);
+      }
+      return { map: added.map, result: added.id };
+    },
+  },
+  {
+    name: "updateRoom",
+    description:
+      "Changes a room's name, heights, brightness, textures, effect or tag.",
+    params: [
+      room(),
+      ...roomLooks,
+      optional({
+        name: "effect",
+        type: "string",
+        description: 'A sector effect, or "none" to clear it.',
+        choices: ["none", ...Object.keys(sectorEffects)],
+      }),
+      optional({
+        name: "tag",
+        type: "number",
+        description: "The tag line actions find the room by. 0 clears it.",
+      }),
+      optional({
+        name: "special",
+        type: "number",
+        description:
+          "A sector special by its number, for an effect the list doesn't name. 0 clears it.",
+      }),
+    ],
+    run: (map, args) => {
+      const sector = findRoom(map, args.room);
+      const { wallTexture, ...patch } = looks(args, sector);
+      if (args.effect !== undefined && args.special !== undefined) {
+        throw new Error("Give a room an effect or a special, not both.");
+      }
+      // An effect and a special are one number in the game, so either one
+      // takes the other's place.
+      const effect =
+        args.effect === undefined
+          ? {}
+          : {
+              effect: (choice(args, "effect", [
+                "none",
+                ...Object.keys(sectorEffects),
+              ]) === "none"
+                ? undefined
+                : args.effect) as SectorEffect | undefined,
+              rawEffect: undefined,
+            };
+      const tag =
+        args.tag === undefined
+          ? {}
+          : { tag: number(args, "tag", 0, 32767) || undefined };
+      const special =
+        args.special === undefined
+          ? {}
+          : sectorSpecialPatch(number(args, "special", 0, 65535));
+      const updated = updateSector(map, sector.id, {
+        ...patch,
+        ...effect,
+        ...tag,
+        ...special,
+      });
+      return {
+        map: wallTexture
+          ? setRoomWalls(updated, sector.id, wallTexture)
+          : updated,
+      };
+    },
+  },
+  {
+    name: "setRoomHeights",
+    description: "Sets a room's floor and ceiling heights.",
+    params: [
+      room(),
+      { ...roomLooks[1], optional: false },
+      { ...roomLooks[2], optional: false },
+    ],
+    run: (map, args) => {
+      const sector = findRoom(map, args.room);
+      return { map: updateSector(map, sector.id, heightsOf(args, sector)) };
+    },
+  },
+  {
+    name: "removeRoom",
+    description: "Removes a room, and with it the switches on its walls.",
+    params: [room()],
+    run: (map, args) => ({
+      map: removeSector(map, findRoom(map, args.room).id),
+    }),
+  },
+  {
+    name: "makeDoor",
+    description:
+      "Turns a thin room between two rooms into a door. It opens when pressed, or from a switch added with addDoorSwitch.",
+    params: [
+      room("The room to turn into a door."),
+      optional({
+        name: "opensBy",
+        type: "string",
+        description: "How it opens. Pressed when left out.",
+        choices: ["use", "switch"],
+      }),
+      optional({
+        name: "closes",
+        type: "boolean",
+        description: "Whether it shuts again. It does when left out.",
+      }),
+      optional({
+        name: "fast",
+        type: "boolean",
+        description: "Opens at the fast doors' speed.",
+      }),
+      optional({
+        name: "texture",
+        type: "string",
+        description: "The texture on the door's face.",
+        choices: doorTextures,
+      }),
+    ],
+    run: (map, args) => {
+      const door: DoorSettings = {
+        ...defaultDoor,
+        opensBy: choice(args, "opensBy", ["use", "switch"], "use"),
+        closes: flag(args, "closes") ?? true,
+        ...(flag(args, "fast") && { fast: true }),
+        ...(args.texture !== undefined && {
+          texture: choice(args, "texture", doorTextures),
+        }),
+      };
+      return { map: setRoomDoor(map, findRoom(map, args.room).id, door) };
+    },
+  },
+  {
+    name: "removeDoor",
+    description: "Turns a door back into a plain room.",
+    params: [room("The door.")],
+    run: (map, args) => ({
+      map: setRoomDoor(map, findRoom(map, args.room).id, undefined),
+    }),
+  },
+  {
+    name: "moveCorner",
+    description:
+      "Moves a corner, and with it every wall that ends there. A corner moved onto another joins it. Corner ids come from listRooms.",
+    params: [
+      { name: "corner", type: "string", description: "The corner's id." },
+      { name: "x", type: "number", description: "Where it goes, across." },
+      { name: "y", type: "number", description: "Where it goes, down." },
+    ],
+    run: (map, args) => {
+      const id = text(args, "corner");
+      if (!map.vertices[id]) throw new Error(`No corner "${id}".`);
+      const moved = applyPositions(map, { [id]: pointOf(args) });
+      return { map: mergeCorners(moved, [id]) };
+    },
+  },
+  {
+    name: "splitWall",
+    description: "Adds a corner on a wall, at the point nearest the one given.",
+    params: [
+      wall,
+      { name: "x", type: "number", description: "Near where, across." },
+      { name: "y", type: "number", description: "Near where, down." },
+    ],
+    run: (map, args) => {
+      const split = splitWall(map, findWall(map, args.wall), pointOf(args), 1);
+      if (!split) throw new Error("That point isn't on the wall.");
+      return { map: split.map, result: split.id };
+    },
+  },
+  {
+    name: "makePillar",
+    description:
+      "Turns a room drawn inside another into a solid pillar the outer room goes round.",
+    params: [room("The inner room.")],
+    run: (map, args) => {
+      const sector = findRoom(map, args.room);
+      const made = makePillar(map, sector.id);
+      if (!made) throw new Error(`${sector.name} isn't inside another room.`);
+      return { map: made };
+    },
+  },
+  {
+    name: "fillHole",
+    description: "Turns one of a room's pillars back into a room of its own.",
+    params: [
+      room("The room with the pillar."),
+      {
+        name: "index",
+        type: "number",
+        description: "Which pillar, counting from 0 as listRooms lists them.",
+      },
+    ],
+    run: (map, args) => {
+      const sector = findRoom(map, args.room);
+      const filled = fillHole(map, sector.id, holeIndex(args, sector));
+      if (!filled) throw new Error("That pillar can't be filled.");
+      return { map: filled.map, result: filled.id };
+    },
+  },
+  {
+    name: "removeHole",
+    description: "Removes one of a room's pillars, leaving open floor.",
+    params: [
+      room("The room with the pillar."),
+      { name: "index", type: "number", description: "Which pillar, from 0." },
+    ],
+    run: (map, args) => {
+      const sector = findRoom(map, args.room);
+      return { map: removeHole(map, sector.id, holeIndex(args, sector)) };
+    },
+  },
+  {
+    name: "addDetailLine",
+    description:
+      "Draws a line inside one room, with that room on both sides, for a trigger to walk over or a texture hung in the open.",
+    params: [
+      {
+        name: "points",
+        type: "points",
+        description: "The line's points in order, at least two.",
+      },
+    ],
+    run: (map, args) => {
+      const added = addDetail(map, points(args, "points"), 1);
+      if (!added) throw new Error("A line needs two points inside one room.");
+      return { map: added.map, result: added.id };
+    },
+  },
+  {
+    name: "removeDetailLine",
+    description: "Removes a line drawn inside a room.",
+    params: [room(), wall],
+    run: (map, args) => ({
+      map: removeDetailLine(
+        map,
+        findRoom(map, args.room).id,
+        findWall(map, args.wall),
+      ),
+    }),
+  },
+  {
+    name: "setLineAction",
+    description:
+      "Gives a wall an action, like a lift, a remote door, a teleporter or the level's exit. Actions that move a room need the room as their target. For a locked door, give the wall in front of a door the kind door-raise with the trigger door and a key.",
+    params: [
+      wall,
+      {
+        name: "kind",
+        type: "string",
+        description: "The action. listCatalog of line-actions names them.",
+      },
+      optional({
+        name: "trigger",
+        type: "string",
+        description:
+          "What sets it off: pressing the wall as a switch, walking over it, shooting it, or pressing a door's own face.",
+        choices: lineTriggers,
+      }),
+      optional(room("The room the action moves or lands in.")),
+      optional({
+        name: "key",
+        type: "string",
+        description: "A key a locked door asks for.",
+        choices: keyColors,
+      }),
+      optional({
+        name: "repeat",
+        type: "boolean",
+        description: "Whether it works more than once.",
+      }),
+    ],
+    run: (map, args) => {
+      const key = findWall(map, args.wall);
+      const kind = choice(args, "kind", lineActionKinds);
+      const line = describeLine(map, key, "");
+      const fresh = newLineAction(line, kind);
+      const wanted = {
+        ...fresh,
+        ...(args.trigger !== undefined && {
+          trigger: choice(args, "trigger", lineTriggers),
+        }),
+        ...(args.key !== undefined && {
+          key: choice(args, "key", keyColors),
+        }),
+        ...(args.repeat !== undefined && { repeat: Boolean(args.repeat) }),
+      };
+      const action = fitLineAction(wanted, line);
+      if (args.trigger !== undefined && action.trigger !== args.trigger) {
+        throw new Error(
+          `${lineActions[kind].label} can't be set off by "${text(args, "trigger")}" on this wall. It takes: ${Object.keys(lineActions[kind].triggers).join(", ")}.`,
+        );
+      }
+      const acted = updateLine(map, key, { ...soleSpecial, action });
+      if (!lineUsesTag(action)) {
+        if (args.room !== undefined) {
+          throw new Error(`${lineActions[kind].label} takes no target room.`);
+        }
+        return { map: acted };
+      }
+      if (args.room === undefined) {
+        throw new Error(`${lineActions[kind].label} needs a target room.`);
+      }
+      return { map: setLineTarget(acted, key, findRoom(map, args.room).id) };
+    },
+  },
+  {
+    name: "clearLineAction",
+    description: "Takes a wall's action or special away.",
+    params: [wall],
+    run: (map, args) => ({
+      map: updateLine(map, findWall(map, args.wall), {
+        action: undefined,
+        raw: undefined,
+      }),
+    }),
+  },
+  {
+    name: "setLineSpecial",
+    description:
+      "Gives a wall a line special by its number, for what setLineAction doesn't name, like a Boom generalized line. The map's complevel has to allow it. 0 clears it.",
+    params: [
+      wall,
+      { name: "special", type: "number", description: "The special." },
+      optional(room("The room the special acts on, found by its tag.")),
+    ],
+    run: (map, args) => {
+      const key = findWall(map, args.wall);
+      const special = number(args, "special", 0, 65535);
+      const acted = updateLine(map, key, {
+        ...soleSpecial,
+        ...(special > 0 && { raw: { special, tag: 0 } }),
+      });
+      return {
+        map:
+          special > 0 && args.room !== undefined
+            ? setLineTarget(acted, key, findRoom(map, args.room).id)
+            : acted,
+      };
+    },
+  },
+  {
+    name: "setLineFlags",
+    description:
+      "Sets a wall's flags: what it blocks, how its textures are pegged, and how the automap shows it.",
+    params: [
+      wall,
+      ...lineFlags.map(([name, description]) =>
+        optional({ name, type: "boolean", description }),
+      ),
+      optional(
+        room(
+          "The room on the line's front, where a switch or a teleporter is used from.",
+        ),
+      ),
+    ],
+    run: (map, args) => {
+      const key = findWall(map, args.wall);
+      const patch = Object.fromEntries(
+        lineFlags.flatMap(([name]) => {
+          const value = flag(args, name);
+          return value === undefined ? [] : [[name, value || undefined]];
+        }),
+      );
+      const line = map.lines?.[key];
+      if (patch.scrolls && (line?.action || line?.raw)) {
+        throw new Error("A wall with an action can't scroll its texture.");
+      }
+      if (args.room === undefined) return { map: updateLine(map, key, patch) };
+      const front = findRoom(map, args.room);
+      if (!wallOwners(map).get(key)?.includes(front)) {
+        throw new Error(`${front.name} doesn't have the wall ${key}.`);
+      }
+      return { map: updateLine(map, key, { ...patch, front: front.id }) };
+    },
+  },
+  {
+    name: "setLineSide",
+    description:
+      "Sets a wall's texture offsets and its own upper, lower and middle textures, as seen from one room.",
+    params: [
+      wall,
+      room("The room that side of the wall faces."),
+      ...(
+        [
+          ["offsetX", "number", "Shifts the textures across."],
+          ["offsetY", "number", "Shifts the textures down."],
+          ["upper", "string", 'The upper texture, or "-" for none.'],
+          ["lower", "string", 'The lower texture, or "-" for none.'],
+          ["middle", "string", 'A see-through middle texture, or "-".'],
+        ] as const
+      ).map(([name, type, description]) =>
+        optional({ name, type, description }),
+      ),
+    ],
+    run: (map, args) => {
+      const key = findWall(map, args.wall);
+      const sector = findRoom(map, args.room);
+      if (!wallOwners(map).get(key)?.includes(sector)) {
+        throw new Error(`${sector.name} doesn't have the wall ${key}.`);
+      }
+      const offsets = (["offsetX", "offsetY"] as const).flatMap((name) =>
+        args[name] === undefined
+          ? []
+          : [[name, number(args, name, -32767, 32767) || undefined]],
+      );
+      const textures = (["upper", "lower", "middle"] as const).flatMap(
+        (name) => {
+          if (args[name] === undefined) return [];
+          const texture = text(args, name);
+          return [[name, texture === "-" ? undefined : texture]];
+        },
+      );
+      return {
+        map: updateLineSide(
+          map,
+          key,
+          sector.id,
+          Object.fromEntries([...offsets, ...textures]),
+        ),
+      };
+    },
+  },
+  {
+    name: "paintSurface",
+    description:
+      "Paints one surface: a room's floor or ceiling, or one part of one wall.",
+    params: [
+      room(),
+      {
+        name: "surface",
+        type: "string",
+        description: "Which surface of the room.",
+        choices: ["floor", "ceiling", "wall"],
+      },
+      { name: "texture", type: "string", description: "The texture or flat." },
+      optional({ ...wall, description: `${wall.description} For a wall.` }),
+      optional({
+        name: "part",
+        type: "string",
+        description: "Which part of the wall. The middle when left out.",
+        choices: wallParts,
+      }),
+    ],
+    run: (map, args) => {
+      const sector = findRoom(map, args.room);
+      const kind = choice(args, "surface", ["floor", "ceiling", "wall"]);
+      const key =
+        kind === "wall"
+          ? `wall:${sector.id}:${findWall(map, args.wall)}:${choice(args, "part", wallParts, "middle")}`
+          : `${kind}:${sector.id}`;
+      const info = describeSurface(map, key);
+      if (!info?.sector || !info.paints) {
+        throw new Error(`${sector.name} has no such surface to paint.`);
+      }
+      return { map: paintSurface(map, key, text(args, "texture")) };
+    },
+  },
+  {
+    name: "replaceTexture",
+    description:
+      "Swaps one texture for another everywhere on the map, and says how many surfaces wore it.",
+    params: [
+      { name: "from", type: "string", description: "The texture to find." },
+      { name: "to", type: "string", description: "What takes its place." },
+      {
+        name: "kind",
+        type: "string",
+        description: "Wall textures or the flats of floors and ceilings.",
+        choices: ["wall", "flat"],
+      },
+    ],
+    run: (map, args) => {
+      const swapped = replaceTexture(
+        map,
+        text(args, "from"),
+        text(args, "to"),
+        choice(args, "kind", ["wall", "flat"]),
+      );
+      return { map: swapped.map, result: swapped.count };
+    },
+  },
+  {
+    name: "placeThing",
+    description: "Puts a thing in the middle of a room.",
+    params: [
+      {
+        name: "kind",
+        type: "string",
+        description: "The thing. listCatalog of things names them.",
+      },
+      room(),
+      ...thingFlags,
+    ],
+    run: (map, args) => {
+      const sector = findRoom(map, args.room);
+      return placed(map, args, roomCenter(map, sector));
+    },
+  },
+  {
+    name: "addThing",
+    description: "Puts a thing at a point, which has to be inside a room.",
+    params: [
+      {
+        name: "kind",
+        type: "string",
+        description: "The thing. listCatalog of things names them.",
+      },
+      { name: "x", type: "number", description: "Where, across." },
+      { name: "y", type: "number", description: "Where, down." },
+      ...thingFlags,
+    ],
+    run: (map, args) => placed(map, args, pointOf(args)),
+  },
+  {
+    name: "updateThing",
+    description: "Moves a thing, turns it, or changes its kind or flags.",
+    params: [
+      { name: "thing", type: "string", description: "The thing's id." },
+      optional({ name: "x", type: "number", description: "Where, across." }),
+      optional({ name: "y", type: "number", description: "Where, down." }),
+      optional({
+        name: "kind",
+        type: "string",
+        description: "What it becomes.",
+      }),
+      ...thingFlags,
+    ],
+    run: (map, args) => {
+      const thing = findThing(map, args.thing);
+      const moved = {
+        x: args.x === undefined ? thing.x : coordinate(args, "x"),
+        y: args.y === undefined ? thing.y : coordinate(args, "y"),
+      };
+      const kind =
+        args.kind === undefined ? thing.kind : thingKind(args, "kind");
+      standsIn(map, kind, moved);
+      return {
+        map: updateThing(map, thing.id, { ...moved, kind, ...flagsOf(args) }),
+      };
+    },
+  },
+  {
+    name: "removeThing",
+    description: "Removes a thing.",
+    params: [{ name: "thing", type: "string", description: "The thing's id." }],
+    run: (map, args) => ({
+      map: removeThing(map, findThing(map, args.thing).id),
+    }),
+  },
+  {
+    name: "addDoorSwitch",
+    description:
+      "Puts a switch on a room's longest free wall and wires it to a door.",
+    params: [room("The room the switch goes in."), doorParam()],
+    run: (map, args) => {
+      const source = findRoom(map, args.room);
+      const target = findDoor(map, args.door);
+      const added = addSwitchInRoom(map, source.id, target.id);
+      if (!added) throw new Error(`${source.name} has no free wall.`);
+      return { map: added.map, result: added.id };
+    },
+  },
+  {
+    name: "addSwitch",
+    description:
+      "Puts a switch on a solid wall, wired to a door or left for a line action on that wall.",
+    params: [
+      wall,
+      optional(doorParam()),
+      optional({
+        name: "texture",
+        type: "string",
+        description: "The switch's texture.",
+        choices: switchTextures,
+      }),
+    ],
+    run: (map, args) => {
+      const key = findWall(map, args.wall);
+      const free = freeWallAt(map, key);
+      if (!free) {
+        throw new Error("A switch needs a solid wall with no switch on it.");
+      }
+      const from = map.vertices[free.from];
+      const to = map.vertices[free.to];
+      const door = args.door === undefined ? null : findDoor(map, args.door);
+      const added = addSwitch(
+        map,
+        free,
+        { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 },
+        door?.id ?? null,
+      );
+      return {
+        map:
+          args.texture === undefined
+            ? added.map
+            : updateSwitch(added.map, added.id, {
+                texture: choice(args, "texture", switchTextures),
+              }),
+        result: added.id,
+      };
+    },
+  },
+  {
+    name: "connectSwitch",
+    description: "Wires a switch to a door, or to none.",
+    params: [
+      { name: "switch", type: "string", description: "The switch's id." },
+      optional(doorParam()),
+    ],
+    run: (map, args) => ({
+      map: updateSwitch(map, findSwitch(map, args.switch), {
+        door: args.door === undefined ? null : findDoor(map, args.door).id,
+      }),
+    }),
+  },
+  {
+    name: "removeSwitch",
+    description: "Removes a switch.",
+    params: [{ name: "switch", type: "string", description: "Its id." }],
+    run: (map, args) => ({
+      map: removeSwitch(map, findSwitch(map, args.switch)),
+    }),
+  },
+  {
+    name: "addNote",
+    description: "Leaves a note on the map for whoever edits it next.",
+    params: [
+      { name: "x", type: "number", description: "Where, across." },
+      { name: "y", type: "number", description: "Where, down." },
+      { name: "text", type: "string", description: "What it says." },
+    ],
+    run: (map, args) => {
+      const note = text(args, "text").trim().slice(0, maxNoteLength);
+      if (!note) throw new Error("A note needs some text.");
+      const added = addNote(map, pointOf(args), note);
+      return { map: added, result: added.notes?.at(-1)?.id };
+    },
+  },
+  {
+    name: "removeNote",
+    description: "Removes a note.",
+    params: [{ name: "note", type: "string", description: "The note's id." }],
+    run: (map, args) => {
+      const id = text(args, "note");
+      if (!map.notes?.some((note) => note.id === id)) {
+        throw new Error(`No note "${id}".`);
+      }
+      return { map: removeNote(map, id) };
+    },
+  },
+  {
+    name: "setMapDetails",
+    description: "Names the map, or sets the engine features it may use.",
+    params: [
+      optional({ name: "name", type: "string", description: "The name." }),
+      optional({
+        name: "complevel",
+        type: "string",
+        description:
+          "Vanilla plays everywhere. Boom and the MBF levels allow more line actions.",
+        choices: complevels,
+      }),
+    ],
+    run: (map, args) => ({
+      map: {
+        ...map,
+        ...(args.name !== undefined && {
+          name: text(args, "name").trim().slice(0, maxNameLength),
+        }),
+        ...(args.complevel !== undefined && {
+          complevel: choice(args, "complevel", complevels),
+        }),
+      },
+    }),
+  },
+];
+
+// A wall holds one special, so a new one takes the place of whatever the
+// wall did before.
+const soleSpecial = {
+  action: undefined,
+  raw: undefined,
+  scrolls: undefined,
+  shut: undefined,
+};
+
+const byName = new Map(agentActions.map((action) => [action.name, action]));
+
+export const agentActionNames = agentActions.map((action) => action.name);
+
+// Runs an action on a map. The arguments come in the action's own order, as
+// an agent bridge step sends them, or by name, as an MCP tool call does. An
+// edit that would break the map throws, and the map stays as it was. With
+// the game's texture names in the context, a name it lacks breaks the map.
+export function runAgentAction(
+  map: GameMap,
+  name: string,
+  input: unknown[] | Args = [],
+  context: CheckContext = {},
+): AgentOutcome {
+  const action = byName.get(name);
+  if (!action) {
+    throw new Error(
+      `No action "${name}". Actions: ${agentActionNames.join(", ")}.`,
+    );
+  }
+  const args = named(action, input);
+  const { map: next, result } = action.run(map, args, context);
+  if (!next || next === map) {
+    return { map, result: result ?? null, fixed: [], todo: [] };
+  }
+  const settled = settle(map, next, context);
+  return { ...settled, result: result ?? null };
+}
+
+// Positional arguments take the parameters' names in order. A lone object
+// whose keys are all parameter names is taken as named already.
+function named(action: AgentAction, input: unknown[] | Args): Args {
+  const names = action.params.map((param) => param.name);
+  let args: Args;
+  if (!Array.isArray(input)) {
+    args = input;
+  } else if (
+    input.length === 1 &&
+    getIsRecord(input[0]) &&
+    Object.keys(input[0]).every((key) => names.includes(key))
+  ) {
+    [args] = input as [Args];
+  } else {
+    if (input.length > names.length) {
+      throw new Error(
+        `${action.name} takes ${names.length === 0 ? "nothing" : names.join(", ")}.`,
+      );
+    }
+    args = Object.fromEntries(
+      input.map((value, index) => [names[index], value]),
+    );
+  }
+  const unknown = Object.keys(args).filter((key) => !names.includes(key));
+  if (unknown.length > 0) {
+    throw new Error(
+      `${action.name} takes no "${unknown[0]}". It takes: ${names.join(", ") || "nothing"}.`,
+    );
+  }
+  const cleaned = Object.fromEntries(
+    Object.entries(args).filter(
+      ([, value]) => value !== undefined && value !== null,
+    ),
+  );
+  const missing = action.params.find(
+    (param) => !param.optional && cleaned[param.name] === undefined,
+  );
+  if (missing) {
+    throw new Error(
+      `${action.name} needs "${missing.name}": ${missing.description}`,
+    );
+  }
+  return cleaned;
+}
+
+const fixPasses = 8;
+
+// Fixes what the edit broke where a fix is known, and refuses it where one
+// isn't. Problems the map already had stay for the agent to see in checkMap.
+function settle(before: GameMap, after: GameMap, context: CheckContext) {
+  let map = after;
+  const fixed: string[] = [];
+  for (let pass = 0; pass < fixPasses; pass += 1) {
+    const fresh = freshErrors(before, map, context);
+    if (fresh.length === 0) break;
+    const repaired = fresh.reduce<{ map: GameMap; issue: MapIssue } | null>(
+      (found, issue) => {
+        if (found) return found;
+        const next = fixIssue(map, issue);
+        return next && next !== map ? { map: next, issue } : null;
+      },
+      null,
+    );
+    if (!repaired) break;
+    fixed.push(repaired.issue.message);
+    map = repaired.map;
+  }
+  const left = freshErrors(before, map, context);
+  if (left.length > 0) {
+    throw new Error(
+      `That would break the map, so nothing changed. ${problems(left).join(" ")}`,
+    );
+  }
+  return {
+    map,
+    fixed,
+    todo: problems(
+      inspectMap(map, context).errors.filter((issue) =>
+        unfinished.test(issue.id),
+      ),
+    ),
+  };
+}
+
+// The errors a map has that the one before it didn't. Checks the earlier map
+// was too broken to run say nothing about this edit, so they don't count.
+function freshErrors(before: GameMap, after: GameMap, context: CheckContext) {
+  const was = inspectMap(before, context);
+  const now = inspectMap(after, context);
+  const old = new Set(was.errors.map((issue) => issue.id));
+  const unknown = new Set([
+    ...(was.layers.rooms ? [] : (now.layers.rooms ?? [])),
+    ...(was.layers.things ? [] : (now.layers.things ?? [])),
+  ]);
+  const fresh = now.errors.filter(
+    (issue) =>
+      !old.has(issue.id) &&
+      !unknown.has(issue.id) &&
+      !unfinished.test(issue.id),
+  );
+  // The map check leaves where things stand until nothing else is wrong,
+  // which an unfinished map never is, so the gate looks for itself.
+  const placed = new Set(misplaced(before).map((issue) => issue.id));
+  const seen = new Set(fresh.map((issue) => issue.id));
+  return [
+    ...fresh,
+    ...misplaced(after).filter(
+      (issue) => !placed.has(issue.id) && !seen.has(issue.id),
+    ),
+  ];
+}
+
+// Things outside every room, which never spawn, and player starts inside a
+// shut door, which can't move.
+function misplaced(map: GameMap): MapIssue[] {
+  return map.things.flatMap((thing) => {
+    const room = sectorAt(map, thing);
+    if (!room) {
+      return [
+        {
+          id: `outside:${thing.id}`,
+          message: `${thing.id} is outside every room.`,
+          target: thing.id,
+        },
+      ];
+    }
+    return room.door && getIsPlayerStart(thing.kind)
+      ? [
+          {
+            id: `in-door:${thing.id}`,
+            message: `${thing.id} is inside a closed door.`,
+            target: thing.id,
+          },
+        ]
+      : [];
+  });
+}
+
+// Each problem once, as several walls can raise the same one.
+function problems(issues: MapIssue[]) {
+  return [
+    ...new Set(
+      issues.map(({ message, detail }) =>
+        detail ? `${message} ${detail}` : message,
+      ),
+    ),
+  ];
+}
+
+function roomSummary(map: GameMap, sector: Sector) {
+  const box = boxOf(sectorPolygon(map, sector));
+  return {
+    id: sector.id,
+    name: sector.name,
+    floor: sector.floor,
+    ceiling: sector.ceiling,
+    light: sector.light,
+    ...(sector.door && { door: sector.door.opensBy }),
+    ...(sector.tag && { tag: sector.tag }),
+    ...(sector.effect && { effect: sector.effect }),
+    box,
+    center: roomCenter(map, sector),
+  };
+}
+
+function roomDetail(map: GameMap, sector: Sector) {
+  const owners = wallOwners(map);
+  const [outline, ...holes] = sectorLoops(sector);
+  const corner = (id: string) => ({ id, ...map.vertices[id] });
+  const walls = sectorLoops(sector).flatMap((loop) =>
+    loop.map((from, index) => {
+      const key = wallKey(from, loop[(index + 1) % loop.length]);
+      const beyond = (owners.get(key) ?? []).find((owner) => owner !== sector);
+      const settings = map.lines?.[key];
+      return {
+        wall: key,
+        // The room past the wall, or null for a solid wall.
+        opensOnto: beyond?.id ?? null,
+        ...(sector.wallOverrides?.[key] && {
+          texture: sector.wallOverrides[key],
+        }),
+        ...(settings?.action && { action: settings.action }),
+        ...(settings?.sides?.[sector.id] && {
+          side: settings.sides[sector.id],
+        }),
+      };
+    }),
+  );
+  return {
+    ...roomSummary(map, sector),
+    floorTexture: sector.floorTexture,
+    ceilingTexture: sector.ceilingTexture,
+    wallTexture: sector.wallTexture,
+    ...(sector.door && { door: sector.door }),
+    corners: outline.map(corner),
+    pillars: holes.map((loop) => loop.map(corner)),
+    walls,
+    things: map.things
+      .filter((thing) => sectorAt(map, thing) === sector)
+      .map((thing) => thing.id),
+  };
+}
+
+function catalog(of: string) {
+  if (of === "things") {
+    return thingKinds.map((kind) => ({
+      kind,
+      label: thingCatalog[kind].label,
+      category: thingCatalog[kind].category,
+    }));
+  }
+  if (of === "walls") {
+    return {
+      walls: wallTextures,
+      doors: doorTextures,
+      switches: switchTextures,
+    };
+  }
+  if (of === "flats") {
+    return { floors: floorTextures, ceilings: ceilingTextures, sky: "F_SKY1" };
+  }
+  if (of === "sector-effects") {
+    return Object.entries(sectorEffects).map(([effect, { label }]) => ({
+      effect,
+      label,
+    }));
+  }
+  return lineActionKinds.map((kind) => ({
+    kind,
+    label: lineActions[kind].label,
+    group: lineActions[kind].group,
+    triggers: Object.keys(lineActions[kind].triggers),
+    // Pressing a door's own face moves the door behind it. Any other
+    // trigger finds the room to move by its tag.
+    needsRoom: Object.keys(lineActions[kind].triggers).some((trigger) =>
+      lineUsesTag({
+        kind,
+        trigger: trigger as LineTrigger,
+        repeat: true,
+        tag: 0,
+      }),
+    ),
+  }));
+}
+
+function countBy(values: string[]) {
+  const counts: Record<string, number> = {};
+  for (const value of values) counts[value] = (counts[value] ?? 0) + 1;
+  return counts;
+}
+
+function doorParam(): AgentParam {
+  return {
+    name: "door",
+    type: "string",
+    description: "The door's id or name.",
+  };
+}
+
+// A room by its id, or by its name where only one room has it.
+function findRoom(map: GameMap, value: unknown) {
+  const name = label(value).trim();
+  const known = map.sectors.find((sector) => sector.id === name);
+  if (known) return known;
+  const named = map.sectors.filter(
+    (sector) => sector.name.toLowerCase() === name.toLowerCase(),
+  );
+  if (named.length === 1) return named[0];
+  const list = map.sectors
+    .map((sector) => `${sector.id} (${sector.name})`)
+    .join(", ");
+  throw new Error(
+    named.length > 1
+      ? `${named.length} rooms are named "${name}". Use an id: ${named.map((sector) => sector.id).join(", ")}.`
+      : `No room "${name}". Rooms: ${list || "none yet"}.`,
+  );
+}
+
+function findDoor(map: GameMap, value: unknown) {
+  const sector = findRoom(map, value);
+  if (!sector.door) throw new Error(`${sector.name} is not a door.`);
+  return sector;
+}
+
+function findThing(map: GameMap, value: unknown) {
+  const thing = map.things.find((item) => item.id === value);
+  if (!thing) throw new Error(`No thing "${label(value)}".`);
+  return thing;
+}
+
+function findSwitch(map: GameMap, value: unknown) {
+  const found = map.switches.find((item) => item.id === value);
+  if (!found) throw new Error(`No switch "${label(value)}".`);
+  return found.id;
+}
+
+// A wall named by its corners in either order.
+function findWall(map: GameMap, value: unknown) {
+  const [from, to, ...rest] = label(value).split("|");
+  const key = from && to && rest.length === 0 ? wallKey(from, to) : "";
+  if (!wallOwners(map).has(key)) {
+    throw new Error(
+      `No wall "${label(value)}". A wall is two corner ids joined by "|", as listRooms shows them.`,
+    );
+  }
+  return key;
+}
+
+function holeIndex(args: Args, sector: Sector) {
+  const count = sector.holes?.length ?? 0;
+  if (count === 0) throw new Error(`${sector.name} has no pillars.`);
+  return number(args, "index", 0, count - 1);
+}
+
+function thingKind(args: Args, name: string) {
+  const kind = text(args, name) as ThingKind;
+  if (!thingKinds.includes(kind)) {
+    throw new Error(
+      `No thing "${kind}". listCatalog of things names them, like: ${thingKinds.slice(0, 8).join(", ")}.`,
+    );
+  }
+  return kind;
+}
+
+// A thing outside every room never spawns, and a player can't start inside a
+// shut door.
+function standsIn(map: GameMap, kind: ThingKind, point: Point) {
+  const sector = sectorAt(map, point);
+  if (!sector) {
+    throw new Error(`${point.x}, ${point.y} is outside every room.`);
+  }
+  if (sector.door && getIsPlayerStart(kind)) {
+    throw new Error(`A player can't start inside ${sector.name}, a door.`);
+  }
+}
+
+function flagsOf(args: Args): Partial<Thing> {
+  const picked =
+    args.skills === undefined
+      ? undefined
+      : strings(args, "skills").map((skill) => {
+          if (!skills.includes(skill as ThingSkill)) {
+            throw new Error(
+              `No difficulty "${skill}". Use: ${skills.join(", ")}.`,
+            );
+          }
+          return skill as ThingSkill;
+        });
+  return {
+    ...(args.angle !== undefined && {
+      angle: ((number(args, "angle", -3600, 3600) % 360) + 360) % 360,
+    }),
+    ...(picked && {
+      skills:
+        picked.length === 0 || picked.length === skills.length
+          ? undefined
+          : skills.filter((skill) => picked.includes(skill)),
+    }),
+    ...Object.fromEntries(
+      thingToggles.flatMap(([name]) => {
+        const value = flag(args, name);
+        return value === undefined ? [] : [[name, value || undefined]];
+      }),
+    ),
+  };
+}
+
+function placed(map: GameMap, args: Args, point: Point) {
+  const kind = thingKind(args, "kind");
+  standsIn(map, kind, point);
+  const added = addThing(map, kind, point, 0, 1);
+  return {
+    map: updateThing(added.map, added.id, flagsOf(args)),
+    result: added.id,
+  };
+}
+
+const lightLimit = 255;
+
+function looks(args: Args, sector?: Sector) {
+  const texture = (name: string) =>
+    args[name] === undefined ? {} : { [name]: text(args, name) };
+  return {
+    ...(args.name !== undefined && {
+      name: text(args, "name").trim().slice(0, maxNameLength) || "Room",
+    }),
+    ...(args.floor !== undefined || args.ceiling !== undefined
+      ? heightsOf(args, sector)
+      : {}),
+    ...(args.light !== undefined && {
+      light: number(args, "light", 0, lightLimit),
+    }),
+    ...texture("floorTexture"),
+    ...texture("ceilingTexture"),
+    ...texture("wallTexture"),
+  } as Partial<Omit<Sector, "id" | "vertices">>;
+}
+
+const heightLimit = 2048;
+
+// A room's heights, with what isn't given taken from the room as it is.
+function heightsOf(args: Args, sector?: Sector) {
+  const floor =
+    args.floor === undefined
+      ? (sector?.floor ?? 0)
+      : number(args, "floor", -heightLimit, heightLimit);
+  const ceiling =
+    args.ceiling === undefined
+      ? (sector?.ceiling ?? floor + 128)
+      : number(args, "ceiling", -heightLimit, heightLimit);
+  if (ceiling <= floor && !sector?.door) {
+    throw new Error("The ceiling must be above the floor.");
+  }
+  return { floor, ceiling };
+}
+
+function pointOf(args: Args): Point {
+  return { x: coordinate(args, "x"), y: coordinate(args, "y") };
+}
+
+const coordinateLimit = 32000;
+
+function coordinate(args: Args, name: string) {
+  return number(args, name, -coordinateLimit, coordinateLimit);
+}
+
+function points(args: Args, name: string): Point[] {
+  const list = args[name];
+  if (!Array.isArray(list)) {
+    throw new Error(`"${name}" must be a list of points like {x, y}.`);
+  }
+  return list.map((item, index) => {
+    const pair = Array.isArray(item) ? { x: item[0], y: item[1] } : item;
+    if (!getIsRecord(pair)) {
+      throw new Error(`Point ${index + 1} of "${name}" must be {x, y}.`);
+    }
+    return pointOf(pair);
+  });
+}
+
+function strings(args: Args, name: string) {
+  const list = args[name];
+  if (!Array.isArray(list) || !list.every((item) => typeof item === "string")) {
+    throw new Error(`"${name}" must be a list of words.`);
+  }
+  return list;
+}
+
+function text(args: Args, name: string) {
+  const value = args[name];
+  if (typeof value !== "string") throw new Error(`"${name}" must be text.`);
+  return value;
+}
+
+function flag(args: Args, name: string) {
+  const value = args[name];
+  if (value === undefined) return undefined;
+  if (typeof value !== "boolean") {
+    throw new Error(`"${name}" must be true or false.`);
+  }
+  return value;
+}
+
+// A whole number, kept within its limits. Text that is a number counts, as
+// agents often send one.
+function number(
+  args: Args,
+  name: string,
+  min: number,
+  max: number,
+  fallback?: number,
+) {
+  const given = args[name] ?? fallback;
+  const value =
+    typeof given === "string" && given.trim() ? Number(given) : given;
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(`"${name}" must be a number.`);
+  }
+  return Math.max(min, Math.min(max, Math.round(value)));
+}
+
+function choice<T extends string>(
+  args: Args,
+  name: string,
+  choices: readonly T[],
+  fallback?: T,
+) {
+  const value = args[name] ?? fallback;
+  if (typeof value !== "string" || !choices.includes(value as T)) {
+    throw new Error(`"${name}" must be one of: ${choices.join(", ")}.`);
+  }
+  return value as T;
+}
+
+// What an agent sent, as text to look a name up by or to quote back.
+function label(value: unknown) {
+  return typeof value === "string" ? value : JSON.stringify(value ?? "");
+}
+
+function getIsRecord(value: unknown): value is Args {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}

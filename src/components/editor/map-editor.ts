@@ -17,17 +17,17 @@ import {
 import { createParts } from "@ui-sdk/react/primitive";
 import * as React from "react";
 
-import type {
-  DoorSettings,
-  GameMap,
-  Point,
-  Sector,
-  ThingKind,
-} from "@/lib/map/types";
+import type { GameMap, Point, Sector, ThingKind } from "@/lib/map/types";
+import type { CheckContext } from "@/lib/map/validate";
 import type { Camera } from "@/lib/preview/render";
 import type { SceneCamera } from "@/lib/preview/scene-camera";
 
 import { defined } from "@/lib/defined";
+import {
+  agentActionNames,
+  type AgentOutcome,
+  runAgentAction,
+} from "@/lib/editor/agent-actions";
 import {
   getIsDragging,
   getIsKeyboardMenu,
@@ -37,16 +37,13 @@ import {
   targetForKeys,
   wallTarget,
 } from "@/lib/editor/map-target";
-import { getIsPlayerStart, thingKinds } from "@/lib/map/catalog";
+import { getIsPlayerStart } from "@/lib/map/catalog";
 import {
   addDetail,
   addRoom,
-  addRoomOnSide,
   addSwitch,
-  addSwitchInRoom,
   addThing,
   applyPositions,
-  defaultDoor,
   doorKeyPrefix,
   freeWallNear,
   gridSize,
@@ -54,12 +51,9 @@ import {
   positionsOf,
   removeSwitch,
   roomCenter,
-  type RoomSide,
-  setRoomDoor,
   snapPoint,
   switchKeyPrefix,
   thingKeyPrefix,
-  updateSector,
   updateSwitch,
   wallNear,
 } from "@/lib/map/edit";
@@ -94,6 +88,8 @@ type MapChangeReason =
   | "connect-key"
   | "agent";
 
+export type AgentReport = Omit<AgentOutcome, "map">;
+
 interface MapEditorOptions {
   map?: GameMap;
   tool?: MapTool;
@@ -123,6 +119,11 @@ interface MapEditorOptions {
   focusRequest?: { id: number; point: Point } | null;
   lookAtRequest?: { id: number; clientX: number; clientY: number } | null;
   onContextTarget?: (target: MapTarget | null) => void;
+  // An agent's edit landed: which action, what was fixed on the way and what
+  // the map still needs.
+  onAgentAction?: (action: string, outcome: AgentReport) => void;
+  // The game's texture names, so an agent's edit can't use one it lacks.
+  checkContext?: CheckContext;
   onDrawingChange?: (corners: number) => void;
   contextMenuOpen?: boolean;
   grid?: number;
@@ -169,8 +170,6 @@ const arrowSteps: Record<string, Point> = {
 };
 const wallReach = 14;
 const defaultSides = 8;
-
-const agentDepthLimit = 4096;
 
 interface LiveApi {
   viewport: ReturnType<typeof createViewport<MapEditorState>>;
@@ -251,6 +250,8 @@ export const mapEditor = definePrimitive({
     focusRequest: "value",
     lookAtRequest: "value",
     onContextTarget: "callback",
+    onAgentAction: "callback",
+    checkContext: "value",
     onDrawingChange: "callback",
     contextMenuOpen: "boolean",
     grid: "number",
@@ -822,18 +823,38 @@ export const mapEditor = definePrimitive({
         : { kind: "empty", point };
     };
 
-    const findRoom = (name: string): Sector => {
-      const { map } = store.get();
-      const wanted = name.toLowerCase();
-      const room = map.sectors.find(
-        (sector) => sector.id === name || sector.name.toLowerCase() === wanted,
-      );
-      if (!room) {
-        const rooms = map.sectors.map((sector) => sector.name).join(", ");
-        throw new Error(`No room named "${name}". Rooms: ${rooms}.`);
-      }
-      return room;
-    };
+    // Every agent action is a method here, so a bridge step reaches it by
+    // name. A read returns what it found, and an edit lands as one change
+    // that already passed the map's checks.
+    const agentMethods = Object.fromEntries(
+      agentActionNames.map((name) => [
+        name,
+        (...args: unknown[]) => {
+          const { map } = store.get();
+          // The editor names the map from its settings, which would undo a
+          // name set here.
+          if (name === "setMapDetails" && args.some(getHasName)) {
+            throw new Error("Rename the map from Map settings in the editor.");
+          }
+          const { map: next, ...outcome } = runAgentAction(
+            map,
+            name,
+            args,
+            context.options().checkContext,
+          );
+          if (next === map) return outcome.result;
+          change("map", next, { reason: "agent" });
+          const made = next.sectors.find(
+            (sector) =>
+              sector.id === outcome.result &&
+              !map.sectors.some((item) => item.id === sector.id),
+          );
+          if (made) select([], made.id);
+          context.options().onAgentAction?.(name, outcome);
+          return outcome;
+        },
+      ]),
+    );
 
     return {
       viewport,
@@ -943,84 +964,7 @@ export const mapEditor = definePrimitive({
         }
         context.options().onContextTarget?.(targetAt(event));
       },
-      addConnectedRoom(
-        room: string,
-        side: RoomSide,
-        depth = 192,
-        floor?: number,
-        ceiling?: number,
-      ) {
-        const source = findRoom(room);
-        const roomDepth = agentNumber(
-          depth,
-          gridSize,
-          agentDepthLimit,
-          "Depth",
-        );
-        const added = addRoomOnSide(
-          store.get().map,
-          source.id,
-          side,
-          roomDepth,
-          {
-            ...(floor === undefined && ceiling === undefined
-              ? { floor: source.floor, ceiling: source.ceiling }
-              : agentHeights(floor ?? source.floor, ceiling ?? source.ceiling)),
-            light: source.light,
-            floorTexture: source.floorTexture,
-            ceilingTexture: source.ceilingTexture,
-            wallTexture: source.wallTexture,
-          },
-        );
-        if (!added) {
-          throw new Error(`${source.name} has no free wall facing ${side}.`);
-        }
-        change("map", added.map, { reason: "agent" });
-        select([], added.id);
-        return added.id;
-      },
-      setRoomHeights(room: string, floor: number, ceiling: number) {
-        const { id } = findRoom(room);
-        change(
-          "map",
-          updateSector(store.get().map, id, agentHeights(floor, ceiling)),
-          { reason: "agent" },
-        );
-      },
-      makeDoor(
-        room: string,
-        opensBy: DoorSettings["opensBy"] = "use",
-        closes = true,
-      ) {
-        const { id } = findRoom(room);
-        change(
-          "map",
-          setRoomDoor(store.get().map, id, {
-            ...defaultDoor,
-            opensBy,
-            closes,
-          }),
-          { reason: "agent" },
-        );
-      },
-      addDoorSwitch(room: string, door: string) {
-        const source = findRoom(room);
-        const target = findRoom(door);
-        if (!target.door) throw new Error(`${target.name} is not a door.`);
-        const added = addSwitchInRoom(store.get().map, source.id, target.id);
-        if (!added) throw new Error(`${source.name} has no free wall.`);
-        change("map", added.map, { reason: "agent" });
-        return added.id;
-      },
-      placeThing(kind: ThingKind, room: string) {
-        if (!thingKinds.includes(kind)) {
-          throw new Error(`Unknown thing. Use: ${thingKinds.join(", ")}.`);
-        }
-        const { map } = store.get();
-        const placed = addThing(map, kind, roomCenter(map, findRoom(room)));
-        change("map", placed.map, { reason: "agent" });
-        return placed.id;
-      },
+      ...agentMethods,
       pointerdown(event: PointerEvent) {
         press = { x: event.clientX, y: event.clientY };
         // A second finger joins the press it follows and doesn't start one.
@@ -1504,16 +1448,17 @@ export const mapEditor = definePrimitive({
     }),
   }),
   agent: {
-    actions: [
-      "addConnectedRoom",
-      "setRoomHeights",
-      "placeThing",
-      "makeDoor",
-      "addDoorSwitch",
-    ],
+    actions: agentActionNames,
     items: (api) => api.rooms(),
   },
 });
+
+function getHasName(value: unknown, index: number) {
+  return (
+    (index === 0 && typeof value === "string") ||
+    (typeof value === "object" && value !== null && "name" in value)
+  );
+}
 
 function lookTarget(state: MapEditorState): Point | null {
   const { map, activeSector, selection } = state;
@@ -1526,29 +1471,6 @@ function lookTarget(state: MapEditorState): Point | null {
   }
   const sector = map.sectors.find((item) => item.id === activeSector);
   return sector && !sector.door ? roomCenter(map, sector) : null;
-}
-
-const agentHeightLimit = 2048;
-
-function agentHeights(floor: number, ceiling: number) {
-  const heights = {
-    floor: agentNumber(floor, -agentHeightLimit, agentHeightLimit, "Floor"),
-    ceiling: agentNumber(
-      ceiling,
-      -agentHeightLimit,
-      agentHeightLimit,
-      "Ceiling",
-    ),
-  };
-  if (heights.ceiling <= heights.floor) {
-    throw new Error("The ceiling must be above the floor.");
-  }
-  return heights;
-}
-
-function agentNumber(value: number, min: number, max: number, label: string) {
-  if (!Number.isFinite(value)) throw new Error(`${label} must be a number.`);
-  return Math.max(min, Math.min(max, Math.round(value)));
 }
 
 function sectorCorners({ corners, holes = [] }: SectorProps) {

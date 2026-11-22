@@ -107,10 +107,18 @@ export function inspectMap(map: GameMap, context: CheckContext = {}) {
   for (const sector of map.sectors) {
     validateSector(map, sector, issues, openedTags);
   }
+  // The checks between rooms wait until every room is sound, and the checks
+  // of where things stand until nothing else is wrong. Each layer lists the
+  // errors it found, or is null when it never ran.
+  const layers: { rooms: string[] | null; things: string[] | null } = {
+    rooms: null,
+    things: null,
+  };
   if (issues.length === 0) {
     validateNeighbors(map, issues);
     validateDoors(map, issues, warnings, lineActions(), openedTags());
     validateLines(map, issues, warnings, lineActions());
+    layers.rooms = issues.map((issue) => issue.id);
   }
   validateLevels(map, issues, warnings, issues.length === 0);
   validateGame(map, issues, context);
@@ -158,8 +166,9 @@ export function inspectMap(map: GameMap, context: CheckContext = {}) {
         });
       }
     }
+    layers.things = issues.map((issue) => issue.id);
   }
-  return { errors: issues, warnings };
+  return { errors: issues, warnings, layers };
 }
 
 export function validateMap(map: GameMap, context?: CheckContext): MapIssue[] {
