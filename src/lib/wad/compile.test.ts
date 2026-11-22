@@ -5,7 +5,7 @@ import type { GameMap, LineAction } from "@/lib/map/types";
 import { wadFileName } from "@/components/editor/build-dialog";
 import { defined } from "@/lib/defined";
 import {
-  canStand,
+  getCanStand,
   targetExists,
   targetForIssue,
   targetForKeys,
@@ -1775,7 +1775,7 @@ describe("context menu targets", () => {
       wallTarget("sector-1", wallKey("v1", "v15"), null),
     );
     expect(view?.at).toEqual({ x: 80, y: 0 });
-    expect(view && canStand(testMap, view.from)).toBe(true);
+    expect(view && getCanStand(testMap, view.from)).toBe(true);
     expect(
       viewOfTarget(testMap, {
         kind: "room",

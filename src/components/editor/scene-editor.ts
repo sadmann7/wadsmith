@@ -13,9 +13,9 @@ import type { SceneCamera } from "@/lib/preview/scene-camera";
 import type { SceneAssets } from "@/lib/wad/assets";
 
 import {
-  isDragging,
-  isKeyboardMenu,
-  isSecondaryPress,
+  getIsDragging,
+  getIsKeyboardMenu,
+  getIsSecondaryPress,
   openMenuFromKey,
 } from "@/lib/editor/map-target";
 import { thingCatalog } from "@/lib/map/catalog";
@@ -374,9 +374,9 @@ const sceneEditor = definePrimitive({
 
     const reportContext = (event: MouseEvent) => {
       const { onContextSurface } = context.options();
-      if (dragging || isDragging(event)) {
+      if (dragging || getIsDragging(event)) {
         onContextSurface?.(null, null, false);
-      } else if (isKeyboardMenu(event)) {
+      } else if (getIsKeyboardMenu(event)) {
         const { selected, linked } = store.get();
         onContextSurface?.(selected ?? linked, null, true);
       } else {
@@ -399,14 +399,14 @@ const sceneEditor = definePrimitive({
       change("selected", key, { reason });
     };
 
-    const canMoveHeight = (key: string | null) => {
+    const getCanMoveHeight = (key: string | null) => {
       const { map } = store.get();
       return !!map && describeSurface(map, key)?.height != null;
     };
 
     const nudge = (event: KeyboardEvent, direction: number) => {
       const { map, selected } = store.get();
-      if (!map || !selected || !canMoveHeight(selected)) return;
+      if (!map || !selected || !getCanMoveHeight(selected)) return;
       const step = gridSize * (event.shiftKey ? 3 : 1);
       change("map", moveSurfaceHeight(map, selected, direction * step), {
         reason: "height-key",
@@ -528,7 +528,7 @@ const sceneEditor = definePrimitive({
           touchPress = { x: event.clientX, y: event.clientY };
           reportContext(event);
         }
-        if (event.button !== 0 || isSecondaryPress(event)) return;
+        if (event.button !== 0 || getIsSecondaryPress(event)) return;
         if (!canvas || !target) return;
         canvas.focus({ preventScroll: true });
         const hit = surfaceAt(event);
@@ -545,7 +545,7 @@ const sceneEditor = definePrimitive({
           if (!store.get().placing) dragThing(event, surface.thing);
           return;
         }
-        if (!hit || !key || !map || !canMoveHeight(key)) return;
+        if (!hit || !key || !map || !getCanMoveHeight(key)) return;
 
         const view = cameraState();
         const owner = view ? sectorAt(map, view.position) : null;

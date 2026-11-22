@@ -16,7 +16,7 @@ import type {
 } from "@/lib/map/types";
 
 import { defined } from "@/lib/defined";
-import { generalizedTrigger, isGeneralized } from "@/lib/map/boom";
+import { generalizedTrigger, getIsGeneralized } from "@/lib/map/boom";
 import {
   doorTextures,
   sectorEffects,
@@ -45,7 +45,7 @@ import {
 import {
   closesDoor,
   doorSpecial,
-  isFast,
+  getIsFast,
   lineActionKinds,
   lineActions,
   movesSector,
@@ -364,7 +364,7 @@ export function decompileMap(
         return;
       doorCandidates.set(index, "switch");
       doorCloses.set(index, closesDoor(action.kind));
-      if (isFast(action.kind)) doorFast.add(index);
+      if (getIsFast(action.kind)) doorFast.add(index);
     });
   }
 
@@ -632,7 +632,7 @@ export function decompileMap(
         line.tag === 0;
       const trigger = action
         ? action.trigger
-        : isGeneralized(line.special)
+        : getIsGeneralized(line.special)
           ? generalizedTrigger(line.special).trigger
           : null;
       const unreachable =
@@ -674,7 +674,7 @@ export function decompileMap(
         // A switch on an open line keeps its texture so the press still shows,
         // and a door's face can be any door texture.
         const part = (name: string) =>
-          entry.action?.trigger === "switch" && isSwitch(name)
+          entry.action?.trigger === "switch" && getIsSwitch(name)
             ? switchTexture(name)
             : opening && (doorTextures as readonly string[]).includes(name)
               ? name
@@ -710,7 +710,7 @@ export function decompileMap(
         (name) => name !== noTexture,
       );
       const madeSwitch =
-        entry.action?.trigger === "switch" && isSwitch(visible ?? "");
+        entry.action?.trigger === "switch" && getIsSwitch(visible ?? "");
       // The compiler pegs door tracks and switch art to the floor unless the
       // line says otherwise.
       if (
@@ -991,6 +991,6 @@ function vertexId(index: number) {
   return `v${index}`;
 }
 
-function isSwitch(name: string) {
+function getIsSwitch(name: string) {
   return /^SW[12]/.test(name);
 }

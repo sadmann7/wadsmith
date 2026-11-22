@@ -1,6 +1,6 @@
 import type { Point } from "@/lib/map/types";
 
-import { isMapLump } from "@/lib/engine/game";
+import { getIsMapLump } from "@/lib/engine/game";
 
 import { type GameFile, readLumps, WadFileError } from "./inspect";
 
@@ -47,6 +47,7 @@ export interface DoomMap {
 
 const text = new TextDecoder("latin1");
 
+// A map in a later WAD replaces one in the same slot, as when the engine loads them.
 export function readMaps(files: GameFile[]): DoomMap[] {
   const maps = new Map<string, DoomMap>();
   const titles = new Map<string, string>();
@@ -58,7 +59,7 @@ export function readMaps(files: GameFile[]): DoomMap[] {
           titles.set(slot, title);
         }
       }
-      if (!isMapLump(lump.name)) continue;
+      if (!getIsMapLump(lump.name)) continue;
       const parts = new Map<string, Uint8Array>();
       for (const part of lumps.slice(index + 1, index + 12)) {
         if (part.name === "TEXTMAP") {
@@ -66,7 +67,7 @@ export function readMaps(files: GameFile[]): DoomMap[] {
             `${lump.name} in ${file.name} is a UDMF map, which the editor can't open.`,
           );
         }
-        if (parts.has(part.name) || isMapLump(part.name)) break;
+        if (parts.has(part.name) || getIsMapLump(part.name)) break;
         parts.set(part.name, part.data);
       }
       if (parts.has("BEHAVIOR")) {
@@ -98,7 +99,7 @@ function readTitles(lumpName: string, data: Uint8Array) {
     for (const [, number, value] of source.matchAll(levelString)) {
       const slot = `MAP${number.padStart(2, "0")}`;
       const title = titleOf(slot, value);
-      if (isMapLump(slot) && title) titles.push([slot, title]);
+      if (getIsMapLump(slot) && title) titles.push([slot, title]);
     }
   } else {
     for (const [, slot, body] of source.matchAll(levelInfo)) {
@@ -112,7 +113,6 @@ function readTitles(lumpName: string, data: Uint8Array) {
   return titles;
 }
 
-// A map in a later WAD replaces one in the same slot, as when the engine loads them.
 // Titles often repeat the slot, as in "MAP01: Entryway".
 function titleOf(slot: string, value: string) {
   const title = value.replace(/^(MAP\d\d|level \d+)\s*:\s*/i, "").trim();

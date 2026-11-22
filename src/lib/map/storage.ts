@@ -26,7 +26,7 @@ import {
 } from "./catalog";
 import { complevels } from "./complevel";
 import {
-  isLineActionKind,
+  getIsLineActionKind,
   keyColors,
   lineSpecial,
   lineTriggers,
@@ -466,7 +466,7 @@ function parseLine(value: unknown, rooms: Set<string>): LineSettings {
 function parseLineAction(value: unknown, label: string): LineAction {
   const action = record(value, label);
   if (
-    !isLineActionKind(action.kind) ||
+    !getIsLineActionKind(action.kind) ||
     !lineTriggers.includes(action.trigger as LineTrigger) ||
     typeof action.repeat !== "boolean" ||
     (action.key !== undefined && !keyColors.includes(action.key as KeyColor))

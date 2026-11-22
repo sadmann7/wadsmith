@@ -12,7 +12,7 @@ import type {
   ThingKind,
 } from "./types";
 
-import { isPlayerStart } from "./catalog";
+import { getIsPlayerStart } from "./catalog";
 import {
   containerOf,
   loopEdges,
@@ -165,7 +165,7 @@ export function addThing(
   grid = gridSize,
 ): { map: GameMap; id: string } {
   const at = snapPoint(point, grid);
-  const things = isPlayerStart(kind)
+  const things = getIsPlayerStart(kind)
     ? map.things.filter((thing) => thing.kind !== kind)
     : map.things;
   const id = nextId(
@@ -318,7 +318,7 @@ export function duplicateThings(map: GameMap, ids: string[]) {
   const copies: string[] = [];
   for (const id of ids) {
     const thing = map.things.find((item) => item.id === id);
-    if (!thing || isPlayerStart(thing.kind)) continue;
+    if (!thing || getIsPlayerStart(thing.kind)) continue;
     const added = addThing(
       next,
       thing.kind,
@@ -937,7 +937,7 @@ export function mergeCorners(map: GameMap, ids: string[]): GameMap {
         next.vertices[other].x === point.x &&
         next.vertices[other].y === point.y,
     );
-    if (target && canJoin(next, id, target)) {
+    if (target && getCanJoin(next, id, target)) {
       next = replaceCorner(next, id, target);
     }
   }
@@ -1197,10 +1197,9 @@ function pruneUnused(map: GameMap): GameMap {
   });
 }
 
-// A corner dropped onto another becomes that corner.
 // Two corners of one outline can only join when they sit side by side, or
 // the outline would run through a corner twice.
-function canJoin(map: GameMap, from: string, to: string) {
+function getCanJoin(map: GameMap, from: string, to: string) {
   return map.sectors.every((sector) =>
     [
       ...sectorLoops(sector).map((loop) => ({ loop, closed: true })),

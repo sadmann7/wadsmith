@@ -92,7 +92,7 @@ export function mapWarnings(map: GameMap): CheckedIssue[] {
       detail: `${listPlayers(missing)} ${missing.length === 1 ? "has" : "have"} none`,
     });
   }
-  if (!hasExit(map) && !isArena(map)) {
+  if (!getHasExit(map) && !getIsArena(map)) {
     warnings.push({
       id: "no-exit",
       severity: "warning",
@@ -103,7 +103,7 @@ export function mapWarnings(map: GameMap): CheckedIssue[] {
   return warnings;
 }
 
-export function hasExit(map: GameMap) {
+export function getHasExit(map: GameMap) {
   return (
     activeLineActions(map).some(({ action }) => endsLevel(action.kind)) ||
     map.sectors.some((sector) => sector.effect === "damage-20-exit")
@@ -132,7 +132,7 @@ function listPlayers(players: number[]) {
 }
 
 // A deathmatch arena ends on the frag limit, so it needs no exit.
-function isArena(map: GameMap) {
+function getIsArena(map: GameMap) {
   return (
     map.things.filter((thing) => thing.kind === "deathmatch-start").length >=
       deathmatchStarts &&

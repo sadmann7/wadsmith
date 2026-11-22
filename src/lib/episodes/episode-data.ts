@@ -238,7 +238,7 @@ export function episodeMaps(
   );
 }
 
-export function isSlotConflict(error: unknown) {
+export function getIsSlotConflict(error: unknown) {
   return (error as Error | null)?.name === "ConstraintError";
 }
 

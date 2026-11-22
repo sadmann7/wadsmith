@@ -51,7 +51,7 @@ import {
   episodeMaps,
   type EpisodeStore,
   freeSlots,
-  isSlotConflict,
+  getIsSlotConflict,
   lastEpisodeKey,
   lastMapKey,
   levelDetails,
@@ -89,13 +89,13 @@ import { compileEpisode, compileMap } from "@/lib/wad/compile";
 import { decompileMap } from "@/lib/wad/decompile";
 import {
   type GameFile,
+  getIsWad,
   inspectWads,
-  isWad,
   WadFileError,
   type WadSummary,
 } from "@/lib/wad/inspect";
 import { readMaps } from "@/lib/wad/read-map";
-import { isZip, unzip } from "@/lib/wad/zip";
+import { getIsZip, unzip } from "@/lib/wad/zip";
 
 import { EpisodeBuildDialog } from "./episode-build-dialog";
 import { EpisodeHome } from "./episode-home";
@@ -827,7 +827,7 @@ export function EpisodeScreen() {
 
   const openWads = async (picked: File[]) => {
     const run = ++wadRun.current;
-    if (picked.length === 1 && (await isIwad(picked[0]))) {
+    if (picked.length === 1 && (await getIsIwad(picked[0]))) {
       await adoptIwad(picked[0]);
       return;
     }
@@ -870,7 +870,7 @@ export function EpisodeScreen() {
     const label = picked.length === 1 ? picked[0].name : "those files";
     try {
       const files = (await readGameFiles(picked)).filter((file) =>
-        isWad(file.data),
+        getIsWad(file.data),
       );
       if (files.length === 0) {
         throw new WadFileError("Choose a map file, a WAD or a zip.");
@@ -932,7 +932,7 @@ export function EpisodeScreen() {
       );
     } catch (error) {
       setMessage(
-        isSlotConflict(error)
+        getIsSlotConflict(error)
           ? "A slot was just taken. Try again."
           : "Couldn't save the imported maps.",
       );
@@ -946,7 +946,7 @@ export function EpisodeScreen() {
     const rest: File[] = [];
     for (const file of picked) {
       if (maps.includes(file)) continue;
-      if (await isIwad(file)) await adoptIwad(file);
+      if (await getIsIwad(file)) await adoptIwad(file);
       else rest.push(file);
     }
     if (rest.length > 0) await importWadMaps(rest);
@@ -974,7 +974,7 @@ export function EpisodeScreen() {
       setMessage(
         error instanceof MapFileError
           ? `Couldn't import ${file.name}. ${error.message}`
-          : isSlotConflict(error)
+          : getIsSlotConflict(error)
             ? "That slot was just taken. Try again."
             : `Couldn't import ${file.name}.`,
       );
@@ -1454,11 +1454,11 @@ function soloFeatured(id: string | undefined) {
 }
 
 function problemOf(error: unknown, slot: string) {
-  return isSlotConflict(error) ? `${slot} is already in use.` : saveFailure;
+  return getIsSlotConflict(error) ? `${slot} is already in use.` : saveFailure;
 }
 
 // A game IWAD becomes the game rather than something to play or import.
-async function isIwad(file: File) {
+async function getIsIwad(file: File) {
   if (!/\.wad$/i.test(file.name)) return false;
   try {
     identifyIwad(file.name, new Uint8Array(await file.arrayBuffer()));
@@ -1472,7 +1472,7 @@ async function readGameFiles(picked: File[]) {
   const files = await Promise.all(
     picked.map(async (file): Promise<GameFile[]> => {
       const data = new Uint8Array(await file.arrayBuffer());
-      return isZip(data)
+      return getIsZip(data)
         ? unzip({ name: file.name, data })
         : [{ name: file.name, data }];
     }),

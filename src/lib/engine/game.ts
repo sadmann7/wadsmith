@@ -98,7 +98,7 @@ export function lumpSlotIndex(name: string) {
   return (Number(episode[1]) - 1) * mapsPerEpisode + Number(episode[2]);
 }
 
-export function isMapLump(name: string) {
+export function getIsMapLump(name: string) {
   return mapSlot.test(name) || episodeSlot.test(name);
 }
 
@@ -115,7 +115,6 @@ export function indexSlot(index: number) {
   return `MAP${String(index).padStart(2, "0")}`;
 }
 
-// A map's name in a game that counts episodes, or in one that doesn't.
 export function slotName(index: number, episodes: boolean) {
   return episodes
     ? `E${Math.ceil(index / mapsPerEpisode)}M${((index - 1) % mapsPerEpisode) + 1}`

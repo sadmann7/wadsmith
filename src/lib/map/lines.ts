@@ -378,7 +378,7 @@ export const triggerLabels: Record<LineTrigger, string> = {
   shoot: "Shoot",
 };
 
-export function isLineActionKind(value: unknown): value is LineActionKind {
+export function getIsLineActionKind(value: unknown): value is LineActionKind {
   return typeof value === "string" && Object.hasOwn(lineActions, value);
 }
 
@@ -413,7 +413,7 @@ export function closesDoor(kind: LineActionKind) {
   return kind === "door-raise" || kind === "door-raise-fast";
 }
 
-export function isFast(kind: LineActionKind) {
+export function getIsFast(kind: LineActionKind) {
   return kind.endsWith("-fast");
 }
 
@@ -428,7 +428,7 @@ export function usedFromFront({ kind, trigger }: LineAction) {
   );
 }
 
-export function canRepeatChoice(action: LineAction) {
+export function getCanRepeatChoice(action: LineAction) {
   const specials = specialsOf(action);
   return specials?.once !== undefined && specials.repeat !== undefined;
 }

@@ -80,10 +80,10 @@ import { atLeast } from "@/lib/map/complevel";
 import { defaultDoor, gridSize } from "@/lib/map/edit";
 import { containerOf } from "@/lib/map/geometry";
 import {
-  canRepeatChoice,
   describeLine,
   fitLineAction,
-  isLineActionKind,
+  getCanRepeatChoice,
+  getIsLineActionKind,
   keysFor,
   lineActionGroups,
   lineActionKinds,
@@ -545,7 +545,7 @@ export function LineInspector({
                       tag: settings.raw?.tag ?? 0,
                     },
                   });
-                } else if (!isLineActionKind(kind)) {
+                } else if (!getIsLineActionKind(kind)) {
                   onLineChange({
                     action: undefined,
                     raw: generalized ? undefined : settings.raw,
@@ -640,7 +640,7 @@ export function LineInspector({
                     }
                   />
                 ) : null}
-                {canRepeatChoice(action) ? (
+                {getCanRepeatChoice(action) ? (
                   <ToggleField
                     label="Can repeat"
                     checked={action.repeat}

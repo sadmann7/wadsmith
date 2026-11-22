@@ -10,7 +10,7 @@ import {
   generalizedKind,
   generalizedKinds,
   generalizedTrigger,
-  isGeneralized,
+  getIsGeneralized,
   type SectorBits,
   sectorSpecialOf,
   sectorSpecialPatch,
@@ -40,8 +40,8 @@ describe("Boom generalized line specials", () => {
     }
     expect(generalizedKind(0x2f7f)).toBeNull();
     expect(generalizedKind(0x8000)).toBeNull();
-    expect(isGeneralized(141)).toBe(false);
-    expect(isGeneralized(0x3c00)).toBe(true);
+    expect(getIsGeneralized(141)).toBe(false);
+    expect(getIsGeneralized(0x3c00)).toBe(true);
     expect(generalizedTrigger(0x6000 | 3)).toEqual({
       trigger: "switch",
       repeat: true,

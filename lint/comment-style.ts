@@ -115,8 +115,8 @@ function getCommentGroups(context: Context) {
       group &&
       comment.type === "Line" &&
       previous?.type === "Line" &&
-      !isTrailing(text, previous) &&
-      !isTrailing(text, comment) &&
+      !getIsTrailing(text, previous) &&
+      !getIsTrailing(text, comment) &&
       /^[ \t]*\n[ \t]*$/.test(text.slice(previous.range[1], comment.range[0]));
     if (continues) {
       group.comments.push(comment);
@@ -253,7 +253,7 @@ function getSentenceEnd(comment: Comment) {
 function restatesNextName(context: Context, comment: Comment, lines: string[]) {
   if (lines.some((line) => line.startsWith("@"))) return false;
   const { text } = context.sourceCode;
-  if (isTrailing(text, comment)) return false;
+  if (getIsTrailing(text, comment)) return false;
   const lineEnd = text.indexOf("\n", comment.range[1]);
   if (lineEnd === -1) return false;
   const nextLineEnd = text.indexOf("\n", lineEnd + 1);
@@ -293,7 +293,7 @@ function stripLine(line: string) {
   return line.replace(/^\s*\*?\s?/, "").trim();
 }
 
-function isTrailing(text: string, comment: Comment) {
+function getIsTrailing(text: string, comment: Comment) {
   const lineStart = text.lastIndexOf("\n", comment.range[0] - 1) + 1;
   return text.slice(lineStart, comment.range[0]).trim() !== "";
 }

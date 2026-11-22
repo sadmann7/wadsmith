@@ -241,7 +241,7 @@ export const generalizedKinds: GeneralizedKind[] = [
   },
 ];
 
-export function isGeneralized(special: number) {
+export function getIsGeneralized(special: number) {
   return special >= generalizedStart && special < generalizedEnd;
 }
 

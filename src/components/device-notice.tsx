@@ -9,7 +9,10 @@ const savedNotice = createLocalStorage("wadsmith:device-notice");
 const touchOnlyQuery = "(hover: none) and (pointer: coarse)";
 
 export function DeviceNotice() {
-  const touchOnly = React.useSyncExternalStore(subscribeTouchOnly, isTouchOnly);
+  const touchOnly = React.useSyncExternalStore(
+    subscribeTouchOnly,
+    getIsTouchOnly,
+  );
   const [dismissed, setDismissed] = React.useState(
     () => savedNotice.get() !== null,
   );
@@ -53,6 +56,6 @@ function subscribeTouchOnly(listener: () => void) {
   return () => query.removeEventListener("change", listener);
 }
 
-function isTouchOnly() {
+function getIsTouchOnly() {
   return matchMedia(touchOnlyQuery).matches;
 }

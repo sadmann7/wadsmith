@@ -7,7 +7,7 @@ const stored = 0;
 const deflated = 8;
 const wanted = /\.(wad|deh|bex)$/i;
 
-export function isZip(data: Uint8Array) {
+export function getIsZip(data: Uint8Array) {
   return (
     data.length >= 4 &&
     new DataView(data.buffer, data.byteOffset).getUint32(0, true) ===

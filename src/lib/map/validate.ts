@@ -6,8 +6,13 @@ import type { TextureNames } from "./textures";
 import type { Complevel, GameMap, Point, Sector, ThingSkill } from "./types";
 
 import { appearsOn } from "./balance";
-import { generalizedKind, generalizedTrigger, isGeneralized } from "./boom";
-import { isPlayerStart, keyThings, thingCatalog, thingKinds } from "./catalog";
+import { generalizedKind, generalizedTrigger, getIsGeneralized } from "./boom";
+import {
+  getIsPlayerStart,
+  keyThings,
+  thingCatalog,
+  thingKinds,
+} from "./catalog";
 import {
   atLeast,
   complevelLabels,
@@ -121,7 +126,7 @@ export function inspectMap(map: GameMap, context: CheckContext = {}) {
     issues.push({ id: "no-player", message: "Place a player start." });
   }
   for (const kind of thingKinds) {
-    if (!isPlayerStart(kind)) continue;
+    if (!getIsPlayerStart(kind)) continue;
     const starts = map.things.filter((thing) => thing.kind === kind);
     if (starts.length < 2) continue;
     issues.push({
@@ -134,7 +139,7 @@ export function inspectMap(map: GameMap, context: CheckContext = {}) {
     for (const thing of map.things) {
       const room = sectorAt(map, thing);
       if (room?.door) {
-        (isPlayerStart(thing.kind) ? issues : warnings).push({
+        (getIsPlayerStart(thing.kind) ? issues : warnings).push({
           id: `in-door:${thing.id}`,
           message: `${thing.id} is inside a closed door.`,
           target: thing.id,
@@ -626,7 +631,7 @@ function validateDoors(
       }
       return (
         !line?.raw ||
-        (isGeneralized(line.raw.special) &&
+        (getIsGeneralized(line.raw.special) &&
           generalizedTrigger(line.raw.special).trigger === "door")
       );
     });
