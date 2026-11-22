@@ -313,11 +313,14 @@ export function SectorInspector({
 
 const mixed = "Mixed";
 
+type RoomNumber = "floor" | "ceiling" | "light";
+
 interface RoomsInspectorProps {
   map: GameMap;
   rooms: Sector[];
   assets: SceneAssets;
   onChange: (patch: Partial<Sector>) => void;
+  onShift: (key: RoomNumber, delta: number) => void;
 }
 
 export function RoomsInspector({
@@ -325,11 +328,19 @@ export function RoomsInspector({
   rooms,
   assets,
   onChange,
+  onShift,
 }: RoomsInspectorProps) {
   const [first] = rooms;
-  // What every room agrees on, or null where they differ.
-  const shared = <Key extends "floor" | "ceiling" | "light">(key: Key) =>
-    rooms.every((room) => room[key] === first[key]) ? first[key] : null;
+  // What every room agrees on, or null where they differ. A door has no
+  // ceiling height of its own, so it has no say in that one.
+  const shared = (key: RoomNumber) => {
+    const having =
+      key === "ceiling" ? rooms.filter((room) => !room.door) : rooms;
+    return having.length > 0 &&
+      having.every((room) => room[key] === having[0][key])
+      ? having[0][key]
+      : null;
+  };
   const texture = (key: "floorTexture" | "ceilingTexture" | "wallTexture") =>
     rooms.every((room) => room[key] === first[key]) ? first[key] : mixed;
   const context = `${rooms.length} rooms`;
@@ -351,6 +362,7 @@ export function RoomsInspector({
             min={-1024}
             max={2048}
             onChange={(ceiling) => onChange({ ceiling })}
+            onShift={(delta) => onShift("ceiling", delta)}
           />
           <NumberSetting
             label="Floor"
@@ -359,6 +371,7 @@ export function RoomsInspector({
             min={-1024}
             max={1024}
             onChange={(floor) => onChange({ floor })}
+            onShift={(delta) => onShift("floor", delta)}
           />
         </div>
       </InspectorSection>
@@ -402,6 +415,7 @@ export function RoomsInspector({
           min={0}
           max={255}
           onChange={(next) => onChange({ light: next })}
+          onShift={(delta) => onShift("light", delta)}
         />
       </InspectorSection>
     </>
@@ -1155,6 +1169,8 @@ interface NumberSettingProps {
   min: number;
   max: number;
   onChange: (value: number) => void;
+  // A step from an empty field, which moves each room from where it is.
+  onShift?: (delta: number) => void;
 }
 
 function NumberSetting({
@@ -1164,6 +1180,7 @@ function NumberSetting({
   min,
   max,
   onChange,
+  onShift,
 }: NumberSettingProps) {
   return (
     <FieldItem>
@@ -1175,8 +1192,14 @@ function NumberSetting({
         step={step}
         min={min}
         max={max}
-        onValueChange={(next) => {
-          if (next !== null) onChange(Math.round(next));
+        onValueChange={(next, details) => {
+          if (next === null) return;
+          const typed =
+            details.reason === "input-change" ||
+            details.reason === "input-commit";
+          // An empty field steps from zero, so the step is how far to move.
+          if (value === null && !typed) onShift?.(Math.round(next));
+          else onChange(Math.round(next));
         }}
       />
     </FieldItem>

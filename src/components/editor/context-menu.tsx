@@ -105,7 +105,13 @@ import {
   newLineAction,
   triggersFor,
 } from "@/lib/map/lines";
-import { describeSurface, paintSurface, surfaceKey } from "@/lib/map/surfaces";
+import {
+  describeSurface,
+  paintSurface,
+  parseSurface,
+  surfaceKey,
+  type WallPart,
+} from "@/lib/map/surfaces";
 import { alignWalls } from "@/lib/map/texture-tools";
 import { validateMap } from "@/lib/map/validate";
 
@@ -709,17 +715,17 @@ function RoomMenu({ id, ...props }: RoomMenuProps) {
         <Rule />
         {(
           [
-            ["wall", "walls", room.wallTexture],
-            ["flat", "floor", room.floorTexture],
-            ["flat", "ceiling", room.ceilingTexture],
+            ["wall", "walls'", room.wallTexture],
+            ["flat", "floor's", room.floorTexture],
+            ["flat", "ceiling's", room.ceilingTexture],
           ] as const
-        ).map(([kind, part, texture]) => (
+        ).map(([kind, whose, texture]) => (
           <MenuItem
-            key={part}
+            key={whose}
             className={itemClass}
             onSelect={() => props.textures.onReplace(kind, texture)}
           >
-            Replace the {part}' {texture} everywhere…
+            Replace the {whose} {texture} everywhere…
           </MenuItem>
         ))}
       </SubMenu>
@@ -836,11 +842,27 @@ function WallMenu({ sector, wall, ...props }: WallMenuProps) {
     target.point ?? wallMiddle(map, wall),
     grid,
   );
-  const surface =
-    target.surface ??
-    surfaceKey({ kind: "wall", sector, wall, part: "middle" });
-  const shown = describeSurface(map, surface);
-  const texture = shown?.paints === "wall" ? shown.texture : null;
+  // The parts of this side that show a wall texture. The map doesn't say
+  // which part of an open wall was pressed, so there it is every part the
+  // rooms' heights leave showing.
+  const pressed = target.surface ? parseSurface(target.surface) : null;
+  const part = pressed?.kind === "wall" ? pressed.part : "middle";
+  const beyond = [line.front, line.back].find(
+    (item) => item && item !== line.sector,
+  );
+  const parts: WallPart[] =
+    part !== "middle" || !beyond || detail
+      ? [part]
+      : [
+          ...(beyond.floor > line.sector.floor ? (["lower"] as const) : []),
+          ...(beyond.ceiling < line.sector.ceiling ? (["upper"] as const) : []),
+        ];
+  const surfaces = parts
+    .map((item) => surfaceKey({ kind: "wall", sector, wall, part: item }))
+    .filter((key) => describeSurface(map, key)?.paints === "wall");
+  const texture = surfaces[0]
+    ? (describeSurface(map, surfaces[0])?.texture ?? null)
+    : null;
   const { picked } = props.textures;
   const aligned = alignWalls(map, sector, wall, props.textures.widthOf);
   const chooseAction = (kind: string) => {
@@ -947,8 +969,12 @@ function WallMenu({ sector, wall, ...props }: WallMenuProps) {
       >
         Hide on automap
       </CheckItem>
-      {texture && !detail ? (
-        <SubMenu icon={Paintbrush} label="Texture">
+      {detail ? null : (
+        <SubMenu
+          icon={Paintbrush}
+          label="Texture"
+          disabled={!texture && aligned === map}
+        >
           <MenuItem
             className={itemClass}
             disabled={aligned === map}
@@ -958,15 +984,22 @@ function WallMenu({ sector, wall, ...props }: WallMenuProps) {
           </MenuItem>
           <MenuItem
             className={itemClass}
-            onSelect={() => props.textures.onPick(texture)}
+            disabled={!texture}
+            onSelect={() => texture && props.textures.onPick(texture)}
           >
-            Pick up {texture}
+            {texture ? `Pick up ${texture}` : "Pick up the texture"}
           </MenuItem>
           <MenuItem
             className={itemClass}
-            disabled={!picked || picked === texture}
+            disabled={!picked || !texture || picked === texture}
             onSelect={() =>
-              picked && onCommit(paintSurface(map, surface, picked))
+              picked &&
+              onCommit(
+                surfaces.reduce(
+                  (next, key) => paintSurface(next, key, picked),
+                  map,
+                ),
+              )
             }
           >
             {picked ? `Apply ${picked}` : "Apply the picked texture"}
@@ -974,12 +1007,17 @@ function WallMenu({ sector, wall, ...props }: WallMenuProps) {
           <Rule />
           <MenuItem
             className={itemClass}
-            onSelect={() => props.textures.onReplace("wall", texture)}
+            disabled={!texture}
+            onSelect={() =>
+              texture && props.textures.onReplace("wall", texture)
+            }
           >
-            Replace {texture} everywhere…
+            {texture
+              ? `Replace ${texture} everywhere…`
+              : "Replace the texture everywhere…"}
           </MenuItem>
         </SubMenu>
-      ) : null}
+      )}
       <Rule />
       <ShowItem {...props} />
       {detail ? (

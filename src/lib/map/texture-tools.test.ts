@@ -4,7 +4,7 @@ import type { GameMap } from "./types";
 
 import { addRoom, updateLineSide, updateSector } from "./edit";
 import { wallKey } from "./geometry";
-import { testMap } from "./test-map";
+import { islandMap, testMap } from "./test-map";
 import { alignWalls, countTexture, replaceTexture } from "./texture-tools";
 
 const empty: GameMap = { vertices: {}, sectors: [], things: [], switches: [] };
@@ -62,6 +62,53 @@ describe("aligning textures along walls", () => {
     expect([right, left].map((wall) => offsetOf(aligned, wall))).toEqual([
       32, 24,
     ]);
+  });
+
+  it("leaves a switch's and a door's art alone and carries on past them", () => {
+    const first = wallKey("v1", "v15");
+    const aligned = alignWalls(testMap, "sector-1", first, () => 128);
+    const side = (wall: string, sector = "sector-1") =>
+      aligned.lines?.[wall]?.sides?.[sector]?.offsetX ?? 0;
+    // The switch sits on v15 to v16, 64 long, between two stretches of wall.
+    expect(side(wallKey("v15", "v16"))).toBe(0);
+    const before = side(first);
+    const after = side(wallKey("v16", "v2"));
+    expect(before).toBe(0);
+    expect(after).toBe((160 + 64) % 128);
+    // The corridor's wall into the arena door wears the door's face.
+    const corridor = alignWalls(
+      testMap,
+      "sector-2",
+      wallKey("v3", "v13"),
+      () => 64,
+    );
+    expect(
+      corridor.lines?.[wallKey("v13", "v14")]?.sides?.["sector-2"],
+    ).toBeUndefined();
+    // A door's own tracks stay put.
+    expect(
+      alignWalls(testMap, "sector-4", wallKey("v13", "v7"), () => 64),
+    ).toBe(testMap);
+  });
+
+  it("aligns the walls a room shows around a room drawn inside it", () => {
+    const riser = wallKey("e", "f");
+    const shifted = updateLineSide(islandMap, riser, "yard", { offsetX: 16 });
+    const aligned = alignWalls(shifted, "yard", riser, () => 64);
+    expect(aligned).not.toBe(shifted);
+    const offsets = ["e|f", "f|g", "g|h", "e|h"].map(
+      (wall) => aligned.lines?.[wall]?.sides?.yard?.offsetX ?? 0,
+    );
+    // The stage is 128 a side, so every wall round it starts 16 in.
+    expect(offsets).toEqual([16, 16, 16, 16]);
+    expect(aligned.lines?.[riser]?.sides?.stage).toBeUndefined();
+  });
+
+  it("doesn't wrap at a guess while a texture's width isn't known", () => {
+    const aligned = alignWalls(room.map, room.id, top, () => 1);
+    expect(
+      [top, right, bottom, left].map((wall) => offsetOf(aligned, wall)),
+    ).toEqual([0, 96, 136, 232]);
   });
 
   it("changes nothing for a room or wall that isn't there", () => {

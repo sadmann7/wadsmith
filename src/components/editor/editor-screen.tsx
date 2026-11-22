@@ -194,6 +194,13 @@ const shapeHints: Record<Exclude<DrawShape, "outline">, string> = {
 
 const noLinks: MapLink[] = [];
 
+// The same ranges the inspector's fields keep a single room within.
+const roomLimits = {
+  floor: { min: -1024, max: 1024 },
+  ceiling: { min: -1024, max: 2048 },
+  light: { min: 0, max: 255 },
+};
+
 const roomSides: RoomSide[] = ["north", "east", "south", "west"];
 
 type ViewLayout = "map" | "split" | "scene";
@@ -1919,6 +1926,26 @@ export function EditorScreen({
                               room.id,
                               room.door && "ceiling" in patch ? {} : patch,
                             ),
+                      map,
+                    ),
+                    `rooms:${selectedRooms.map((room) => room.id).join()}`,
+                  )
+                }
+                onShift={(key, delta) =>
+                  commit(
+                    selectedRooms.reduce(
+                      (next, room) =>
+                        room.door && key === "ceiling"
+                          ? next
+                          : updateSector(next, room.id, {
+                              [key]: Math.max(
+                                roomLimits[key].min,
+                                Math.min(
+                                  roomLimits[key].max,
+                                  room[key] + delta,
+                                ),
+                              ),
+                            }),
                       map,
                     ),
                     `rooms:${selectedRooms.map((room) => room.id).join()}`,

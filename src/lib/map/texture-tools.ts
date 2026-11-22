@@ -1,9 +1,10 @@
-import type { GameMap, Sector } from "./types";
+import type { GameMap, LineSettings, Sector } from "./types";
 
 import { updateLineSide, updateSector } from "./edit";
 import {
   engineOrder,
   loopEdges,
+  sectorContainers,
   sectorLoops,
   wallKey,
   wallOwners,
@@ -12,12 +13,15 @@ import {
 
 export type TextureKind = "wall" | "flat";
 
-const fallbackWidth = 64;
+// Powers of two up to this wrap cleanly here, which covers a texture whose
+// width isn't known yet.
+const unknownSpan = 1024;
+const sideParts = ["upper", "lower", "middle"] as const;
 
 // Runs a room's texture on unbroken from one wall: each wall beside it that
-// shows the same texture starts where the last one ended, both ways round the
-// room, until a wall shows something else. `widthOf` gives a texture's width,
-// which the offsets wrap at.
+// shows the same texture starts where the last one ended, both ways round,
+// until a wall shows something else. A switch and a door's face keep their
+// art and the run carries on past them. Offsets wrap at `widthOf` a texture.
 export function alignWalls(
   map: GameMap,
   sectorId: string,
@@ -25,17 +29,39 @@ export function alignWalls(
   widthOf: (texture: string) => number,
 ): GameMap {
   const sector = map.sectors.find((item) => item.id === sectorId);
-  if (!sector) return map;
+  if (!sector || sector.door) return map;
   const owners = wallOwners(map);
-  const shown = (key: string) =>
-    (owners.get(key)?.length ?? 0) > 1
+  const switches = new Set(
+    map.switches.map((item) => wallKey(item.from, item.to)),
+  );
+  // What this room's side of a wall shows, as the compiler writes it: null
+  // for a wall that isn't this room's to paint, and no textures for one that
+  // wears a switch's or a door's.
+  const shown = (key: string) => {
+    const sides = owners.get(key) ?? [];
+    if (!sides.includes(sector)) return null;
+    const other = sides.find((item) => item !== sector);
+    if (switches.has(key) || other?.door) return [];
+    return other
       ? [
           wallPartTexture(map, sector, key, "upper"),
           wallPartTexture(map, sector, key, "lower"),
         ]
       : [wallPartTexture(map, sector, key, "middle")];
-  for (const [at, loop] of sectorLoops(sector).entries()) {
-    const edges = loopEdges(engineOrder(map, loop, at > 0)).map((edge) => ({
+  };
+  const textures = shown(wall);
+  if (!textures || textures.length === 0) return map;
+  // A room drawn inside this one shows this room its walls from outside, the
+  // way a pillar does.
+  const containers = sectorContainers(map);
+  const loops = [
+    ...sectorLoops(sector).map((loop, at) => ({ loop, pillar: at > 0 })),
+    ...map.sectors
+      .filter((item) => containers.get(item.id) === sector)
+      .map((item) => ({ loop: item.vertices, pillar: true })),
+  ];
+  for (const { loop, pillar } of loops) {
+    const edges = loopEdges(engineOrder(map, loop, pillar)).map((edge) => ({
       key: wallKey(edge.from, edge.to),
       length: Math.round(
         Math.hypot(
@@ -46,11 +72,16 @@ export function alignWalls(
     }));
     const start = edges.findIndex((edge) => edge.key === wall);
     if (start < 0) continue;
-    const textures = shown(wall);
-    const width = Math.max(widthOf(textures[0]), 1);
-    const span = width > 1 ? width : fallbackWidth;
-    const carries = (key: string) =>
-      shown(key).some((texture) => textures.includes(texture));
+    const width = widthOf(textures[0]);
+    const span = width > 1 ? width : unknownSpan;
+    const carries = (key: string) => {
+      const here = shown(key);
+      return (
+        here !== null &&
+        (here.length === 0 ||
+          here.some((texture) => textures.includes(texture)))
+      );
+    };
     const offsets = new Map([
       [wall, map.lines?.[wall]?.sides?.[sector.id]?.offsetX ?? 0],
     ]);
@@ -70,6 +101,7 @@ export function alignWalls(
       offsets.set(edge.key, offset);
     }
     return [...offsets].reduce((next, [key, value]) => {
+      if (shown(key)?.length === 0) return next;
       const wrapped = ((value % span) + span) % span;
       const current = next.lines?.[key]?.sides?.[sector.id]?.offsetX ?? 0;
       return wrapped === current
@@ -86,7 +118,34 @@ export function alignWalls(
 // line sides for a wall texture, floors and ceilings for a flat. A door's and
 // a switch's own face stay as they are, since each takes a face of its kind.
 export function countTexture(map: GameMap, name: string, kind: TextureKind) {
-  return replaceTexture(map, name, name, kind).count;
+  if (kind === "flat") {
+    return map.sectors.reduce(
+      (count, sector) =>
+        count +
+        Number(sector.floorTexture === name) +
+        Number(sector.ceilingTexture === name),
+      0,
+    );
+  }
+  const walls = map.sectors.reduce(
+    (count, sector) =>
+      count +
+      Number(sector.wallTexture === name) +
+      Object.values(sector.wallOverrides ?? {}).filter(
+        (texture) => texture === name,
+      ).length,
+    0,
+  );
+  return Object.values(map.lines ?? {}).reduce(
+    (count, line) =>
+      count +
+      Object.values(line.sides ?? {}).reduce(
+        (total, side) =>
+          total + sideParts.filter((part) => side[part] === name).length,
+        0,
+      ),
+    walls,
+  );
 }
 
 export function replaceTexture(
@@ -95,44 +154,64 @@ export function replaceTexture(
   to: string,
   kind: TextureKind,
 ): { map: GameMap; count: number } {
-  let count = 0;
-  const swap = (texture: string) => {
-    if (texture !== from) return texture;
-    count += 1;
-    return to;
-  };
+  const count = countTexture(map, from, kind);
+  if (count === 0 || from === to) return { map, count };
+  const swap = (texture: string) => (texture === from ? to : texture);
   if (kind === "flat") {
-    const sectors = map.sectors.map((sector) =>
-      sector.floorTexture === from || sector.ceilingTexture === from
-        ? {
-            ...sector,
-            floorTexture: swap(sector.floorTexture),
-            ceilingTexture: swap(sector.ceilingTexture),
-          }
-        : sector,
-    );
-    return { map: count > 0 ? { ...map, sectors } : map, count };
+    return {
+      count,
+      map: {
+        ...map,
+        sectors: map.sectors.map((sector) =>
+          sector.floorTexture === from || sector.ceilingTexture === from
+            ? {
+                ...sector,
+                floorTexture: swap(sector.floorTexture),
+                ceilingTexture: swap(sector.ceilingTexture),
+              }
+            : sector,
+        ),
+      },
+    };
   }
-  let next = map.sectors.reduce((changed, sector) => {
+  const sectors = map.sectors.reduce((changed, sector) => {
     const patch = wallPatch(sector, swap);
     return patch ? updateSector(changed, sector.id, patch) : changed;
-  }, map);
-  for (const [wall, line] of Object.entries(map.lines ?? {})) {
-    for (const [sector, side] of Object.entries(line.sides ?? {})) {
-      const parts = (["upper", "lower", "middle"] as const).filter(
-        (part) => side[part] === from,
-      );
-      if (parts.length === 0) continue;
-      count += parts.length;
-      next = updateLineSide(
-        next,
+  }, map).sectors;
+  const lines =
+    map.lines &&
+    Object.fromEntries(
+      Object.entries(map.lines).map(([wall, line]) => [
         wall,
-        sector,
-        Object.fromEntries(parts.map((part) => [part, to])),
-      );
-    }
+        swapSides(line, from, to),
+      ]),
+    );
+  return { count, map: { ...map, sectors, ...(lines ? { lines } : {}) } };
+}
+
+function swapSides(line: LineSettings, from: string, to: string) {
+  const sides = Object.entries(line.sides ?? {});
+  if (
+    !sides.some(([, side]) => sideParts.some((part) => side[part] === from))
+  ) {
+    return line;
   }
-  return { map: count > 0 ? next : map, count };
+  return {
+    ...line,
+    sides: Object.fromEntries(
+      sides.map(([sector, side]) => [
+        sector,
+        {
+          ...side,
+          ...Object.fromEntries(
+            sideParts
+              .filter((part) => side[part] === from)
+              .map((part) => [part, to]),
+          ),
+        },
+      ]),
+    ),
+  };
 }
 
 function wallPatch(sector: Sector, swap: (texture: string) => string) {
