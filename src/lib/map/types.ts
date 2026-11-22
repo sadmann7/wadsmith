@@ -288,7 +288,14 @@ interface MapSwitch {
   door: string | null;
 }
 
-type MapNote = Point & { id: string; text: string };
+// When in a playtest a note was left: the run's id and the level's time in
+// tics.
+interface NoteMoment {
+  run: string;
+  tic: number;
+}
+
+type MapNote = Point & { id: string; text: string } & Partial<NoteMoment>;
 
 interface GameMap {
   name?: string;
@@ -313,6 +320,7 @@ export type {
   LineTrigger,
   MapNote,
   MapSwitch,
+  NoteMoment,
   Point,
   RawSpecial,
   Sector,

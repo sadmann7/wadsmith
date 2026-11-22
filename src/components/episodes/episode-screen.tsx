@@ -21,6 +21,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useBuildChecks } from "@/hooks/use-build-checks";
 import { useIwad } from "@/hooks/use-iwad";
+import { clearPlaytest } from "@/lib/editor/playtests";
 import {
   defaultGame,
   engineSlot,
@@ -815,6 +816,15 @@ export function EpisodeScreen() {
     }
   };
 
+  const setPar = async (id: string, par: number) => {
+    const saved = await store
+      .updateMap(id, (entry) => ({ ...entry, par, editedAt: Date.now() }))
+      .catch(() => null);
+    if (!saved) return;
+    announce(id);
+    if (sessionRef.current?.id === id) setDetails(detailsOf(saved));
+  };
+
   const adoptIwad = async (file: File) => {
     try {
       const next = await adoptOwnIwad(
@@ -1147,6 +1157,7 @@ export function EpisodeScreen() {
           navigation={<SidebarDrawer {...sidebar} />}
           onNewMap={() => openDialog("new")}
           onMapSettings={() => openDialog("settings")}
+          onParChange={(par) => void setPar(session.id, par)}
           playing={mapPlaying}
           onPlayingChange={(next, hosted) => {
             setMapPlaying(next);
@@ -1388,6 +1399,7 @@ export function EpisodeScreen() {
         onDeleteEpisode={() =>
           void attempt(async () => {
             await store.deleteEpisode(episode.id);
+            for (const entry of maps) void forgetPlaytest(entry.id);
             const [next] = await store.listEpisodes();
             selectEpisode(next.id);
             await store.setSetting(lastEpisodeKey, next.id);
@@ -1433,6 +1445,7 @@ export function EpisodeScreen() {
         onDeleteMap={(entry) =>
           void attempt(async () => {
             await store.deleteMap(entry.id);
+            void forgetPlaytest(entry.id);
             announce(entry.id);
             await refresh(store, entry.episodeId);
           })
@@ -1464,6 +1477,11 @@ function knownFeatured(id: string | undefined) {
   return id !== undefined && featuredMaps.some((item) => item.id === id)
     ? id
     : null;
+}
+
+// A deleted map's last playtest goes with it.
+function forgetPlaytest(mapId: string) {
+  return clearPlaytest(mapId).catch(() => undefined);
 }
 
 function detailsOf(entry: EpisodeMap): SessionDetails {

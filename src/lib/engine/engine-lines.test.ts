@@ -27,6 +27,7 @@ import {
   stopGames,
   waitForPlay,
 } from "./test-engine";
+import { RunRecorder } from "./trail";
 
 afterEach(stopGames);
 
@@ -273,5 +274,13 @@ describe.skipIf(!ready)("starter map in the engine", () => {
     await pressUse(game);
     await play(game, 3000, () => !game.status().inLevel);
     expect(game.status().inLevel).toBe(false);
+    // The trail ends with how the level stood at the exit.
+    const recorder = new RunRecorder();
+    const trail = game.takeTrail();
+    if (trail) recorder.add(trail);
+    const result = recorder.run()?.result;
+    expect(result?.tics).toBeGreaterThan(35);
+    expect(result).toMatchObject({ kills: 0, totalKills: 0 });
+    expect(result?.totalSecrets).toBe(game.status().totalSecrets);
   }, 40_000);
 });

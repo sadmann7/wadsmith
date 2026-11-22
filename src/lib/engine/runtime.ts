@@ -2,6 +2,7 @@ import type { NetInbox } from "./net-inbox";
 
 import { FramePacer } from "./frame-pacer";
 import { type GameInfo, warpArgs } from "./game";
+import { trailFields } from "./trail";
 
 interface DoomModule {
   FS: {
@@ -46,6 +47,8 @@ interface DoomModule {
   _wadsmith_level_tics(): number;
   _wadsmith_sector_ceiling(index: number): number;
   _wadsmith_sector_floor(index: number): number;
+  _wadsmith_trail(): number;
+  _wadsmith_trail_take(): number;
   _wadsmith_audio_init(sampleRate: number): void;
   _wadsmith_audio_render(frames: number): number;
   _wadsmith_set_sound(volume: number, muted: number): void;
@@ -448,6 +451,19 @@ export class DoomGame {
 
   sectorCeiling(index: number) {
     return this.module._wadsmith_sector_ceiling(index);
+  }
+
+  // What happened to the players since the last call, as the engine's trail
+  // events, or null when nothing did.
+  takeTrail() {
+    const count = this.module._wadsmith_trail_take();
+    if (count === 0) return null;
+    const start = this.module._wadsmith_trail();
+    return new Int32Array(
+      this.module.HEAPU8.buffer,
+      start,
+      count * trailFields,
+    ).slice();
   }
 
   status(): GameStatus {

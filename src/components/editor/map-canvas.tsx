@@ -2,6 +2,7 @@ import { Focus, LocateFixed, Maximize, StickyNote } from "lucide-react";
 import * as React from "react";
 
 import type { MapLink } from "@/lib/map/links";
+import type { PlaytestRun, RunMark } from "@/lib/map/playtest";
 import type { GameMap, Sector, ThingKind } from "@/lib/map/types";
 
 import { buttonVariants } from "@/components/ui/button";
@@ -45,6 +46,7 @@ interface Area {
 }
 
 const linkEnd = 4;
+const markSize = 4;
 
 interface MapCanvasProps extends React.ComponentProps<typeof MapEditor> {
   map: GameMap;
@@ -52,12 +54,15 @@ interface MapCanvasProps extends React.ComponentProps<typeof MapEditor> {
   // From the selected line to what it acts on, or to the selected room from
   // the lines that act on it.
   links: MapLink[];
+  // The last playtest's paths and marks, or null to leave them off the map.
+  trail: PlaytestRun | null;
 }
 
 export function MapCanvas({
   map,
   callouts,
   links,
+  trail,
   onViewChange,
   ...props
 }: MapCanvasProps) {
@@ -115,6 +120,20 @@ export function MapCanvas({
       </>
     ),
     [map],
+  );
+
+  const walked = React.useMemo(
+    () =>
+      trail?.paths.map((path, index) => (
+        <polyline
+          // oxlint-disable-next-line react/no-array-index-key -- A run's paths never change order.
+          key={index}
+          className="map-trail-path"
+          data-player={path.player % trailColors}
+          points={path.points.join(" ")}
+        />
+      )),
+    [trail],
   );
 
   const rooms = React.useMemo(
@@ -292,6 +311,15 @@ export function MapCanvas({
               />
             </g>
           ))}
+          {walked}
+          {trail?.marks.map((mark, index) => (
+            <TrailMark
+              // oxlint-disable-next-line react/no-array-index-key -- A run's marks never change order.
+              key={index}
+              mark={mark}
+              size={markSize / step}
+            />
+          ))}
           <MapConnecting className="map-wire map-connecting" />
           <MapDraft className="map-draft" />
         </svg>
@@ -455,6 +483,37 @@ function thingLook(kind: ThingKind) {
     thingLooks.set(kind, look);
   }
   return look;
+}
+
+// Doom gives its four players a color each, and a path wears its player's.
+const trailColors = 4;
+
+// A hit's mark grows with the damage, up to this many times its size.
+const heavyHit = 40;
+const hitGrowth = 2;
+
+interface TrailMarkProps {
+  mark: RunMark;
+  size: number;
+}
+
+function TrailMark({ mark, size }: TrailMarkProps) {
+  const { kind, x, y, value } = mark;
+  if (kind === "death") {
+    return (
+      <path
+        className="map-trail-death"
+        d={`M${x - size} ${y - size}L${x + size} ${y + size}M${x + size} ${y - size}L${x - size} ${y + size}`}
+      />
+    );
+  }
+  const grown =
+    kind === "damage"
+      ? 1 + (Math.min(value, heavyHit) / heavyHit) * (hitGrowth - 1)
+      : 1;
+  return (
+    <circle className={`map-trail-${kind}`} cx={x} cy={y} r={size * grown} />
+  );
 }
 
 // Zoom in quarter octaves, rounded up, so the canvas renders again only when

@@ -2,7 +2,8 @@ import { createLocalStorage } from "@ui-sdk/core";
 import * as React from "react";
 
 import type { NetworkState } from "@/lib/engine/doom-worker";
-import type { GameMap, Point } from "@/lib/map/types";
+import type { PlaytestRun } from "@/lib/map/playtest";
+import type { GameMap, NoteMoment, Point } from "@/lib/map/types";
 
 import { Alert } from "@/components/ui/alert";
 import {
@@ -40,6 +41,7 @@ import {
   screenSize,
   type Skill,
 } from "@/lib/engine/runtime";
+import { RunRecorder } from "@/lib/engine/trail";
 import { compileEpisode, compileMap, type Lump } from "@/lib/wad/compile";
 import { inspectWads } from "@/lib/wad/inspect";
 
@@ -95,8 +97,10 @@ interface GameViewProps {
   sky?: string;
   intertext?: string;
   onExit: () => void;
-  onAddNote?: (point: Point, text: string) => void;
+  onAddNote?: (point: Point, text: string, moment?: NoteMoment) => void;
   onEditSpot?: (spot: PlayerSpot) => void;
+  // What the engine saw of a single map's playtest, once the game is left.
+  onRun?: (run: PlaytestRun) => void;
   coop?: CoopSession | null;
   episode?: Level[] | null;
   exit?: GameExit;
@@ -115,6 +119,7 @@ export function GameView({
   onExit,
   onAddNote,
   onEditSpot,
+  onRun,
   coop = null,
   episode = null,
   exit = "editor",
@@ -173,6 +178,7 @@ export function GameView({
         onExit={onExit}
         onAddNote={onAddNote}
         onEditSpot={onEditSpot}
+        onRun={onRun}
         coop={coop}
         exit={exit}
         skill={skill}
@@ -255,8 +261,10 @@ type GameSessionProps = Omit<Level, "map"> & {
   onRestart: () => void;
   onToggleFullscreen: () => void;
   onExit: () => void;
-  onAddNote?: (point: Point, text: string) => void;
+  onAddNote?: (point: Point, text: string, moment?: NoteMoment) => void;
   onEditSpot?: (spot: PlayerSpot) => void;
+  // What the engine saw of a single map's playtest, once the game is left.
+  onRun?: (run: PlaytestRun) => void;
   coop: CoopSession | null;
   exit: GameExit;
   skill: Skill;
@@ -282,6 +290,7 @@ function GameSession({
   onExit,
   onAddNote,
   onEditSpot,
+  onRun,
   coop,
   exit,
   skill,
@@ -294,11 +303,15 @@ function GameSession({
   const soundRef = React.useRef(sound);
   const noteTimer = React.useRef<ReturnType<typeof setTimeout>>(undefined);
   const leaveGame = React.useEffectEvent(onExit);
+  const reportRun = React.useEffectEvent((run: PlaytestRun) => onRun?.(run));
+  const recorderRef = React.useRef<RunRecorder | null>(null);
   const [status, setStatus] = React.useState<GameStatus | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [audioUnavailable, setAudioUnavailable] = React.useState(false);
   const [showHelp, setShowHelp] = React.useState(true);
-  const [noteSpot, setNoteSpot] = React.useState<Point | null>(null);
+  const [noteSpot, setNoteSpot] = React.useState<
+    (Point & { tic: number }) | null
+  >(null);
   const [noteSaved, setNoteSaved] = React.useState(false);
   const [finished, setFinished] = React.useState(false);
   const [levelIndex, setLevelIndex] = React.useState(0);
@@ -365,6 +378,10 @@ function GameSession({
     let lastInLevel: GameStatus | null = null;
     let ticsChangedAt = performance.now();
     let stalled: number[] = [];
+    // Only one map's playtest is recorded: an episode or a loaded WAD plays
+    // maps the editor isn't showing.
+    const recorder = map && !episode && !files ? new RunRecorder() : null;
+    recorderRef.current = recorder;
     const showStall = (peers: number[]) =>
       setStall((current) =>
         current.peers.join() === peers.join()
@@ -472,6 +489,7 @@ function GameSession({
             }
             setStatus(next);
           },
+          onTrail: (events) => recorder?.add(events),
           onDropouts: (count) => {
             canvas.dataset.audioDropouts = String(count);
           },
@@ -533,6 +551,8 @@ function GameSession({
       stopped = true;
       client?.stop();
       gameRef.current = null;
+      const run = recorder?.run();
+      if (run) reportRun(run);
     };
   }, [
     map,
@@ -676,7 +696,7 @@ function GameSession({
   const openNote = () => {
     if (!status?.inLevel || !canEdit) return;
     setNoteSaved(false);
-    setNoteSpot(spotOf(status));
+    setNoteSpot({ ...spotOf(status), tic: status.tics });
     const { mode } = captureRef.current;
     recaptureAfterNote.current = mode === "locked" || mode === "capturing";
     cancelCapture();
@@ -847,7 +867,11 @@ function GameSession({
             onExit={requestExit}
             onOpenNote={openNote}
             onSaveNote={(text) => {
-              if (noteSpot) onAddNote?.(noteSpot, text);
+              if (noteSpot) {
+                const { tic, ...point } = noteSpot;
+                const run = recorderRef.current?.id;
+                onAddNote?.(point, text, run ? { run, tic } : undefined);
+              }
               closeNote();
               setNoteSaved(true);
               clearTimeout(noteTimer.current);

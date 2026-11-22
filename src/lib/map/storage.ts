@@ -514,14 +514,23 @@ function parseLineSide(value: unknown, label: string): LineSide {
 
 const maxNoteLength = 280;
 
+const maxRunIdLength = 40;
+
 function parseNote(value: unknown): MapNote {
   const note = record(value, "A note");
   const noteId = id(note.id, "A note");
   if (typeof note.text !== "string") fail(`Note ${noteId} is not valid.`);
+  // A note left in a playtest also holds the run and the moment in it.
+  const timed =
+    typeof note.run === "string" &&
+    note.run.length <= maxRunIdLength &&
+    Number.isInteger(note.tic) &&
+    (note.tic as number) >= 0;
   return {
     id: noteId,
     ...parsePoint(note, `Note ${noteId}`),
     text: note.text.slice(0, maxNoteLength),
+    ...(timed && { run: note.run as string, tic: note.tic as number }),
   };
 }
 
