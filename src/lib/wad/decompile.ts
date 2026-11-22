@@ -798,18 +798,22 @@ export function decompileMap(
   });
 
   // A teleporter whose tagged sector holds no landing at all goes nowhere.
+  // A landing belongs to the room it stands in, the innermost one around it.
   const landings = new Set(
     things
       .filter((thing) => thing.kind === "teleport-destination")
-      .flatMap((thing) =>
-        sectors
-          .filter(
-            (sector, at) =>
-              sector.tag !== undefined &&
-              insideRoom({ x: thing.x, y: -thing.y }, at),
-          )
-          .map((sector) => sector.tag),
-      ),
+      .flatMap((thing) => {
+        const point = { x: thing.x, y: -thing.y };
+        const around = sectors
+          .map((sector, at) => ({
+            sector,
+            area: Math.abs(signedArea(regionsOf[at].outer)),
+            holds: insideRoom(point, at),
+          }))
+          .filter(({ holds }) => holds)
+          .toSorted((a, b) => a.area - b.area);
+        return around[0]?.sector.tag ?? [];
+      }),
   );
   for (const [key, entry] of Object.entries(settings)) {
     const action = entry.action;

@@ -23,9 +23,9 @@ Maps save per browser address. The dev server now uses `localhost:3000`, so a ma
 ## Using it
 
 - **Select:** drag corners and things, click a room to edit it, and drag empty space to pan.
-- **Draw room:** click corners, then click the first corner or press Enter. Reuse another room's corners to connect the two.
+- **Draw room:** click corners, then click the first corner or press Enter. The **Shape** menu in the status bar draws a rectangle from two opposite corners, or a polygon of 3 to 24 sides from its middle and one corner. A room drawn against or across a wall shares corners with it, so the two connect. A label by the pointer shows the length and angle of the wall being drawn.
 - **Rooms inside rooms:** draw a room inside another for a platform, a pit or an island. Choose **Make pillar** on it to turn it into solid wall, and right-click a pillar to make it a room again or delete it. A wall of an inner room can stay solid towards the room around it from the line's **Flags**.
-- **Walls:** right-click a wall and choose **Add corner here** to split it. Drop a corner onto another to join them, and drag a wall in line mode to move both of its corners.
+- **Walls:** right-click a wall and choose **Add corner here** to split it. Drop a corner onto another to join them, and drag a wall in line mode to move both of its corners. A selected wall shows its length and angle, and a dashed line to each room it acts on or the spot its teleporter lands on. A selected room shows the lines that act on it.
 - **Lines:** choose **Draw line** and click points inside a room, then click the last one again or press Enter. A line has the room on both sides, so it can hold a see-through middle texture or a walk-over action. Right-click it to delete it.
 - **Grid:** the grid menu in the status bar picks a size from 1 to 64 and turns snapping off. Press [ and ] to halve or double it and G to toggle snapping.
 - **Your own game:** drop doom.wad, doom2.wad, plutonia.wad or tnt.wad onto the page, or choose **Use your own IWAD** on the featured maps page, and the editor, the texture catalog and the game use it instead of Freedoom. The file stays in your browser. With Doom's own IWAD, episodes play as E1M1 to E4M9 and the checks flag Doom II's monsters and items.

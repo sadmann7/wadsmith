@@ -113,6 +113,8 @@ import {
   wallOwners,
 } from "@/lib/map/geometry";
 import { describeLine } from "@/lib/map/lines";
+import { lineLinks, type MapLink, sectorLinks } from "@/lib/map/links";
+import { type DrawShape, polygonSides } from "@/lib/map/shapes";
 import {
   MapFileError,
   maxFileBytes,
@@ -159,13 +161,22 @@ const modeHints: Record<EditMode, string> = {
 };
 
 const toolHints: Record<Exclude<MapTool, "select">, string> = {
-  draw: "Click corners, then click the first one or press Enter. Reuse a wall's corners to connect rooms.",
+  draw: "Click corners, then click the first one or press Enter. A room drawn against a wall shares corners with it.",
   line: "Click points inside a room, then click the last one again or press Enter. A line can hold a middle texture or a walk-over action.",
   thing:
     "Click a floor to place it, or press Enter in 3D to place it ahead. Esc stops placing.",
   switch:
     "Click a solid wall to add a switch, then drag from it to a door. Esc cancels.",
 };
+
+const shapeHints: Record<Exclude<DrawShape, "outline">, string> = {
+  rectangle:
+    "Click one corner, then the opposite one. Choose another shape in the status bar.",
+  polygon:
+    "Click the middle, then where one corner goes. Choose another shape in the status bar.",
+};
+
+const noLinks: MapLink[] = [];
 
 const roomSides: RoomSide[] = ["north", "east", "south", "west"];
 
@@ -318,6 +329,8 @@ export function EditorScreen({
   // A dialog opened from a room's menu keeps what the menu worked on, which
   // the selection alone may not say once the menu has closed.
   const [transforming, setTransforming] = React.useState<string[] | null>(null);
+  const [drawShape, setDrawShape] = React.useState<DrawShape>("outline");
+  const [drawSides, setDrawSides] = React.useState(8);
   const [prefabsAt, setPrefabsAt] = React.useState<{
     point: Point | null;
     selected: GameMap | null;
@@ -871,6 +884,16 @@ export function EditorScreen({
       ? describeLine(map, selectedWall.wall, selectedWall.sector)
       : null;
   const freeWall = line ? freeWallAt(map, line.wall) : null;
+  const linkedWall = line?.wall;
+  const links = React.useMemo(
+    () =>
+      linkedWall
+        ? lineLinks(map, linkedWall)
+        : pickedRoom
+          ? sectorLinks(map, pickedRoom)
+          : noLinks,
+    [linkedWall, map, pickedRoom],
+  );
 
   const selectSurface = (key: string | null) => {
     setSurface(key);
@@ -1542,6 +1565,9 @@ export function EditorScreen({
                       fitRequest={fitRequest}
                       focusRequest={focusRequest}
                       callouts={callouts}
+                      links={links}
+                      drawShape={drawShape}
+                      drawSides={drawSides}
                       drawRequest={drawRequest}
                       lookAtRequest={lookAtRequest}
                       onContextTarget={reportMenuTarget}
@@ -1948,9 +1974,53 @@ export function EditorScreen({
               ? modeHints[editMode]
               : tool === "thing"
                 ? `Placing ${thingCatalog[thingKind].label}. ${toolHints.thing}`
-                : toolHints[tool]}
+                : tool === "draw" && drawShape !== "outline"
+                  ? shapeHints[drawShape]
+                  : toolHints[tool]}
           </p>
           <div>
+            {tool === "draw" ? (
+              <Menu>
+                <MenuTrigger
+                  className={buttonVariants({
+                    variant: "text",
+                    className: "min-h-5 px-1 font-mono text-[11px]",
+                  })}
+                  title="The shape a new room is drawn as"
+                >
+                  Shape {shapeLabel(drawShape, drawSides)}
+                </MenuTrigger>
+                <MenuContent align="end">
+                  <MenuRadioGroup
+                    value={
+                      drawShape === "polygon" ? String(drawSides) : drawShape
+                    }
+                    onValueChange={(value) => {
+                      const sides = Number(value);
+                      if (Number.isFinite(sides)) {
+                        setDrawShape("polygon");
+                        setDrawSides(sides);
+                      } else {
+                        setDrawShape(value as DrawShape);
+                      }
+                    }}
+                  >
+                    {["outline", "rectangle", ...polygonSides.map(String)].map(
+                      (value) => (
+                        <MenuRadioItem key={value} value={value} closeOnSelect>
+                          {Number.isFinite(Number(value))
+                            ? shapeLabel("polygon", Number(value))
+                            : shapeLabel(value as DrawShape, 0)}
+                          <MenuItemIndicator className="ml-auto text-primary">
+                            <Check size={14} />
+                          </MenuItemIndicator>
+                        </MenuRadioItem>
+                      ),
+                    )}
+                  </MenuRadioGroup>
+                </MenuContent>
+              </Menu>
+            ) : null}
             <span className="max-2xl:hidden">
               {Object.keys(map.vertices).length} vertices · {lineCount} lines
             </span>
@@ -2205,6 +2275,12 @@ function createDraftChannel() {
     for (const listener of listeners) listener(map);
   };
   return { subscribe, publish };
+}
+
+function shapeLabel(shape: DrawShape, sides: number) {
+  if (shape === "outline") return "Outline";
+  if (shape === "rectangle") return "Rectangle";
+  return `${sides} sides`;
 }
 
 function shortcut(name: EditorShortcut, when?: () => boolean) {
