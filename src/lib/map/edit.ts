@@ -6,6 +6,7 @@ import type {
   LineSettings,
   LineSide,
   MapSwitch,
+  NoteMoment,
   Point,
   Sector,
   Thing,
@@ -269,7 +270,33 @@ export function setRoomWalls(
   );
 }
 
-export function addNote(map: GameMap, point: Point, text: string): GameMap {
+// The map with player one starting somewhere else, for a playtest from
+// there. The engine turns a start to the nearest eighth of a circle.
+export function withPlayerStart(
+  map: GameMap,
+  point: Point,
+  angle: number,
+): GameMap {
+  const spot = {
+    x: Math.round(point.x),
+    y: Math.round(point.y),
+    angle: ((Math.round(angle) % 360) + 360) % 360,
+  };
+  const start = map.things.find((thing) => thing.kind === "player");
+  if (start) return updateThing(map, start.id, spot);
+  const id = nextId(
+    "player-",
+    map.things.map((thing) => thing.id),
+  );
+  return { ...map, things: [...map.things, { id, kind: "player", ...spot }] };
+}
+
+export function addNote(
+  map: GameMap,
+  point: Point,
+  text: string,
+  moment?: NoteMoment,
+): GameMap {
   const notes = map.notes ?? [];
   const id = nextId(
     "note-",
@@ -279,7 +306,13 @@ export function addNote(map: GameMap, point: Point, text: string): GameMap {
     ...map,
     notes: [
       ...notes,
-      { id, x: Math.round(point.x), y: Math.round(point.y), text },
+      {
+        id,
+        x: Math.round(point.x),
+        y: Math.round(point.y),
+        text,
+        ...(moment && { run: moment.run, tic: moment.tic }),
+      },
     ],
   };
 }

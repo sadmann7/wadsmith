@@ -24,6 +24,8 @@ interface GameClientOptions {
   skill: Skill;
   onFrame: (pixels: Uint8ClampedArray<ArrayBuffer>) => void;
   onStatus: (status: GameStatus) => void;
+  // The engine's trail events since the last report, for a run recorder.
+  onTrail?: (events: Int32Array) => void;
   onDropouts: (count: number) => void;
   onAudioUnavailable: () => void;
   onError: (message: string) => void;
@@ -144,6 +146,9 @@ export function startGameClient(options: GameClientOptions) {
       if (message.type === "frame") {
         if (pendingFrame) recycle(pendingFrame);
         pendingFrame = message.buffer;
+        // The trail comes first, so a status that ends the game finds the
+        // run complete.
+        if (message.trail) options.onTrail?.(message.trail);
         if (message.status) options.onStatus(message.status);
         if (message.network) network?.onState(message.network);
       } else if (message.type === "net") {

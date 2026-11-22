@@ -186,10 +186,34 @@ index 7ccdd33..c56fc22 100644
  
  //----------------------------------------------------------------------------
 diff --git a/src/g_game.c b/src/g_game.c
-index f65c6c5..0c14e62 100644
+index f65c6c5..feb1b68 100644
 --- a/src/g_game.c
 +++ b/src/g_game.c
-@@ -3908,7 +3908,8 @@ static void CheckDemoParams(boolean specified_complevel)
+@@ -106,6 +106,7 @@
+ #include "v_palette.h"
+ #include "v_video.h"
+ #include "w_wad.h"
++#include "wadsmith.h"
+ #include "wi_stuff.h"
+ #include "ws_stuff.h"
+ #include "z_zone.h"
+@@ -984,6 +985,7 @@ static void G_DoLoadLevel(boolean from_savegame)
+   P_ClearDirtyArrays();
+ 
+   P_SetupLevel(gameepisode, gamemap, gameskill, from_savegame);
++  WADSMITH_TrailStart();
+ 
+   MN_OptionsUpdateFreeLook();
+   HU_UpdateTurnFormat();
+@@ -1630,6 +1632,7 @@ static void G_DoCompleted(void)
+ {
+   int i;
+ 
++  WADSMITH_TrailExit();
+   S_StopAmbientSounds();
+ 
+   if (M_CheckParm("-levelstat"))
+@@ -3908,7 +3911,8 @@ static void CheckDemoParams(boolean specified_complevel)
    }
    else
    {
@@ -477,12 +501,69 @@ index d9f81d4..b706b84 100644
  
  // Add a network module to the context used by the server
  
+diff --git a/src/p_inter.c b/src/p_inter.c
+index d974455..959381b 100644
+--- a/src/p_inter.c
++++ b/src/p_inter.c
+@@ -41,6 +41,7 @@
+ #include "sounds.h"
+ #include "st_widgets.h"
+ #include "tables.h"
++#include "wadsmith.h"
+ 
+ #define BONUSADD        6
+ 
+@@ -625,6 +626,7 @@ void P_TouchSpecialThing(mobj_t *special, mobj_t *toucher)
+ 
+   if (special->flags & MF_COUNTITEM)
+     player->itemcount++;
++  WADSMITH_TrailEvent(WADSMITH_TRAIL_PICKUP, toucher, special->info->doomednum);
+   P_RemoveMobj (special);
+   player->bonuscount += BONUSADD;
+ 
+@@ -725,6 +727,8 @@ static void P_KillMobj(mobj_t *source, mobj_t *inflictor, mobj_t *target, method
+       if (!source)
+         target->player->frags[target->player-players]++;
+ 
++      WADSMITH_TrailEvent(WADSMITH_TRAIL_DEATH, target,
++                          source && !source->player ? source->info->doomednum : 0);
+       target->flags &= ~MF_SOLID;
+       target->player->playerstate = PST_DEAD;
+       P_DropWeapon (target->player);
+@@ -869,6 +873,7 @@ void P_DamageMobjBy(mobj_t *target,mobj_t *inflictor, mobj_t *source, int damage
+           damage -= saved;
+         }
+ 
++      WADSMITH_TrailEvent(WADSMITH_TRAIL_DAMAGE, target, damage);
+       player->health -= damage;       // mirror mobj health here for Dave
+       // BUDDHA cheat
+       if (player->cheats & CF_BUDDHA &&
+diff --git a/src/p_tick.c b/src/p_tick.c
+index a16ecd1..e79fe25 100644
+--- a/src/p_tick.c
++++ b/src/p_tick.c
+@@ -30,6 +30,7 @@
+ #include "p_user.h"
+ #include "r_things.h"
+ #include "s_musinfo.h"
++#include "wadsmith.h"
+ 
+ int leveltime;
+ int oldleveltime;
+@@ -413,6 +414,7 @@ void P_Ticker (void)
+   P_MapEnd();
+   }
+ 
++  WADSMITH_TrailTick();
+   leveltime++;                       // for par times
+ }
+ 
 diff --git a/src/wadsmith.c b/src/wadsmith.c
 new file mode 100644
-index 0000000..b9712c3
+index 0000000..bba984f
 --- /dev/null
 +++ b/src/wadsmith.c
-@@ -0,0 +1,277 @@
+@@ -0,0 +1,381 @@
 +// The interface between Woof and Wadsmith's game worker.
 +
 +#include <emscripten.h>
@@ -543,6 +624,110 @@ index 0000000..b9712c3
 +static player_t *Player(void)
 +{
 +    return &players[consoleplayer];
++}
++
++#define TRAIL_FIELDS 6
++#define TRAIL_EVENTS 8192
++// A player's place is recorded this often, in tics, while they move.
++#define TRAIL_STEP_TICS 4
++
++static int trail[TRAIL_EVENTS * TRAIL_FIELDS];
++static int trail_count;
++static int trail_x[MAXPLAYERS], trail_y[MAXPLAYERS];
++static boolean trail_placed[MAXPLAYERS];
++
++// Events past a full buffer are dropped. The page empties it many times a
++// second, so that takes a page that stopped listening.
++static void Trail(int kind, int player, int x, int y, int value)
++{
++    if (trail_count == TRAIL_EVENTS)
++    {
++        return;
++    }
++
++    int *event = trail + trail_count++ * TRAIL_FIELDS;
++    event[0] = leveltime;
++    event[1] = kind;
++    event[2] = player;
++    event[3] = x;
++    event[4] = y;
++    event[5] = value;
++}
++
++void WADSMITH_TrailStart(void)
++{
++    for (int i = 0; i < MAXPLAYERS; i++)
++    {
++        trail_placed[i] = false;
++    }
++
++    Trail(WADSMITH_TRAIL_START, -1, gameepisode, gamemap, gameskill);
++}
++
++void WADSMITH_TrailTick(void)
++{
++    if (leveltime % TRAIL_STEP_TICS)
++    {
++        return;
++    }
++
++    for (int i = 0; i < MAXPLAYERS; i++)
++    {
++        const mobj_t *mo = playeringame[i] ? players[i].mo : NULL;
++
++        if (!mo)
++        {
++            continue;
++        }
++
++        const int x = mo->x >> FRACBITS, y = mo->y >> FRACBITS;
++
++        if (trail_placed[i] && x == trail_x[i] && y == trail_y[i])
++        {
++            continue;
++        }
++
++        trail_placed[i] = true;
++        trail_x[i] = x;
++        trail_y[i] = y;
++        Trail(WADSMITH_TRAIL_STEP, i, x, y, players[i].health);
++    }
++}
++
++void WADSMITH_TrailEvent(int kind, const mobj_t *mo, int value)
++{
++    if (mo && mo->player)
++    {
++        Trail(kind, mo->player - players, mo->x >> FRACBITS,
++              mo->y >> FRACBITS, value);
++    }
++}
++
++void WADSMITH_TrailExit(void)
++{
++    Trail(WADSMITH_TRAIL_TOTALS, -1, totalkills, totalsecret, totalitems);
++
++    for (int i = 0; i < MAXPLAYERS; i++)
++    {
++        if (playeringame[i])
++        {
++            Trail(WADSMITH_TRAIL_EXIT, i, players[i].killcount,
++                  players[i].secretcount, players[i].itemcount);
++        }
++    }
++}
++
++EXPORT const int *wadsmith_trail(void)
++{
++    return trail;
++}
++
++// The events are read from wadsmith_trail before the engine runs again.
++EXPORT int wadsmith_trail_take(void)
++{
++    const int count = trail_count;
++    trail_count = 0;
++    return count;
 +}
 +
 +EXPORT void wadsmith_run_frame(void)
@@ -762,10 +947,10 @@ index 0000000..b9712c3
 +}
 diff --git a/src/wadsmith.h b/src/wadsmith.h
 new file mode 100644
-index 0000000..184fb98
+index 0000000..31ba8f9
 --- /dev/null
 +++ b/src/wadsmith.h
-@@ -0,0 +1,11 @@
+@@ -0,0 +1,31 @@
 +#ifndef WADSMITH_H
 +#define WADSMITH_H
 +
@@ -775,6 +960,26 @@ index 0000000..184fb98
 +void WADSMITH_FramePresented(void);
 +void WADSMITH_SetPalette(const SDL_Color *colors);
 +void WADSMITH_Exit(int code);
++
++struct mobj_s;
++
++// What a playtest's trail records. Every event holds the level's time, one of
++// these kinds, the player, a place on the map and a value.
++enum
++{
++    WADSMITH_TRAIL_START,
++    WADSMITH_TRAIL_STEP,
++    WADSMITH_TRAIL_DAMAGE,
++    WADSMITH_TRAIL_DEATH,
++    WADSMITH_TRAIL_PICKUP,
++    WADSMITH_TRAIL_TOTALS,
++    WADSMITH_TRAIL_EXIT,
++};
++
++void WADSMITH_TrailStart(void);
++void WADSMITH_TrailTick(void);
++void WADSMITH_TrailEvent(int kind, const struct mobj_s *mo, int value);
++void WADSMITH_TrailExit(void);
 +
 +#endif
 diff --git a/src/wadsmith_audio.c b/src/wadsmith_audio.c

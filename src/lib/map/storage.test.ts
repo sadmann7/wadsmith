@@ -83,6 +83,15 @@ describe("map files", () => {
     ]);
     expect(parseMapFile(serializeMap(map))).toEqual(map);
     expect(removeNote(map, "note-1").notes).toBeUndefined();
+    // A note left in a playtest keeps its moment in that run.
+    const timed = addNote(testMap, { x: 96, y: 160 }, "Ambush", {
+      run: "run-abc",
+      tic: 700,
+    });
+    expect(timed.notes).toEqual([
+      { id: "note-1", x: 96, y: 160, text: "Ambush", run: "run-abc", tic: 700 },
+    ]);
+    expect(parseMapFile(serializeMap(timed))).toEqual(timed);
   });
 
   it("keeps thing difficulty settings", () => {

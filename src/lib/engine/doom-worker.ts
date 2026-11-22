@@ -56,6 +56,7 @@ type DoomWorkerResponse =
       buffer: ArrayBuffer;
       status: GameStatus | null;
       network: NetworkState | null;
+      trail: Int32Array<ArrayBuffer> | null;
     }
   | { type: "net"; to: number; data: Uint8Array }
   | { type: "exit" }
@@ -166,14 +167,16 @@ function sendFrame() {
   const now = performance.now();
   const due = now - lastStatus >= statusEveryMs;
   if (due) lastStatus = now;
+  const trail = due ? game.takeTrail() : null;
   post(
     {
       type: "frame",
       buffer,
       status: due ? game.status() : null,
       network: due && networked ? game.network() : null,
+      trail,
     },
-    [buffer],
+    trail ? [buffer, trail.buffer] : [buffer],
   );
 }
 
