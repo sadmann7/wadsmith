@@ -139,7 +139,7 @@ function WadPlayDialog({
           </div>
         </div>
         <DialogFooter className="justify-between">
-          <p className="text-muted-foreground min-w-0">
+          <p className="min-w-0 text-muted-foreground">
             Anything the WAD doesn&apos;t replace comes from {game.label}.
           </p>
           <Button

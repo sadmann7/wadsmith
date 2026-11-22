@@ -98,14 +98,14 @@ function announce() {
 }
 
 // The file stays in this browser; nothing uploads it.
-async function useOwnIwad(name: string, data: Uint8Array) {
+async function adoptOwnIwad(name: string, data: Uint8Array) {
   const game = identifyIwad(name, data);
   await writeStoredFile(storedKey, { key: storedKey, name, data });
   announce();
   return game;
 }
 
-async function useBundledIwad() {
+async function restoreBundledIwad() {
   await writeStoredFile(storedKey, null);
   announce();
 }
@@ -116,11 +116,11 @@ function onIwadChange(listener: () => void) {
 }
 
 export {
+  adoptOwnIwad,
   engineBase,
   identifyIwad,
   loadIwad,
   onIwadChange,
-  useBundledIwad,
-  useOwnIwad,
+  restoreBundledIwad,
   type Iwad,
 };

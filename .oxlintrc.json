@@ -18,9 +18,18 @@
     ".cache/**",
     "**/.wrangler/**"
   ],
+  "overrides": [
+    {
+      "files": ["**/*.test.ts"],
+      "rules": {
+        "unicorn/consistent-function-scoping": "off"
+      }
+    }
+  ],
   "rules": {
     "no-shadow": "off",
     "no-underscore-dangle": "off",
+    "unicorn/require-post-message-target-origin": "off",
     "import/no-unassigned-import": "off",
     "no-unused-vars": ["error", { "args": "all", "argsIgnorePattern": "^_" }],
     "typescript/no-explicit-any": "off",

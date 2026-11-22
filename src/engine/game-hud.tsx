@@ -442,7 +442,7 @@ function GameTopBar({
         ? "Episode"
         : "Solo";
   return (
-    <header className="flex h-[48px] min-w-0 items-center gap-4 max-[640px]:gap-2 border-b border-border bg-card px-3 text-foreground">
+    <header className="flex h-[48px] min-w-0 items-center gap-4 border-b border-border bg-card px-3 text-foreground max-[640px]:gap-2">
       <Button className="shrink-0" onClick={onExit}>
         <ArrowLeft size={14} aria-hidden="true" />
         <span>

@@ -234,7 +234,7 @@ function WadImportDialog({
           ) : null}
         </div>
         <DialogFooter className="justify-between">
-          <p className="text-muted-foreground min-w-0">
+          <p className="min-w-0 text-muted-foreground">
             {split > 0
               ? `${plural(split, "sector")} made of separate areas become several rooms.`
               : "Each sector becomes a room."}

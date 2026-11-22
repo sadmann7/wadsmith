@@ -406,7 +406,7 @@ function MapCanvas({
             x={note.x}
             y={note.y}
             title={note.text}
-            className="pointer-events-none flex size-5 origin-center items-center justify-center rounded-[3px] bg-map-note text-primary-foreground [transform:translate(-50%,-50%)_scale(calc(1/var(--canvas-zoom,1)))]"
+            className="pointer-events-none flex size-5 origin-center [transform:translate(-50%,-50%)_scale(calc(1/var(--canvas-zoom,1)))] items-center justify-center rounded-[3px] bg-map-note text-primary-foreground"
           >
             <StickyNote size={12} aria-hidden="true" />
           </MapMarker>
@@ -417,7 +417,7 @@ function MapCanvas({
             value={callout.id}
             x={callout.x}
             y={callout.y}
-            className="pointer-events-none origin-bottom-left border border-destructive bg-destructive/15 px-2 py-1 font-mono text-xs whitespace-nowrap text-foreground [transform:translateY(-100%)_scale(calc(1/var(--canvas-zoom,1)))]"
+            className="pointer-events-none origin-bottom-left [transform:translateY(-100%)_scale(calc(1/var(--canvas-zoom,1)))] border border-destructive bg-destructive/15 px-2 py-1 font-mono text-xs whitespace-nowrap text-foreground"
           >
             {callout.text}
           </MapMarker>
