@@ -57,6 +57,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Alert } from "@/components/ui/alert";
 
+type MapAction = "open" | "settings" | "duplicate" | "delete" | "up" | "down";
+
 interface Confirmation {
   title: string;
   body: string;
@@ -171,18 +173,16 @@ function ConfirmDialog({
   );
 }
 
-function MapRow({
+// Memoized so a drag, which rerenders the list on every swap, redraws only the
+// rows whose props changed.
+const MapRow = React.memo(function MapRow({
   entry,
   slot,
   canDuplicate,
   canMoveUp,
   canMoveDown,
   hint,
-  onOpen,
-  onSettings,
-  onDuplicate,
-  onDelete,
-  onMove,
+  onAction,
 }: {
   entry: EpisodeMap;
   slot: string;
@@ -190,19 +190,16 @@ function MapRow({
   canMoveUp: boolean;
   canMoveDown: boolean;
   hint: string;
-  onOpen: () => void;
-  onSettings: () => void;
-  onDuplicate: () => void;
-  onDelete: () => void;
-  onMove: (step: -1 | 1) => void;
+  onAction: (action: MapAction, entry: EpisodeMap) => void;
 }) {
-  useBuildChecks([entry]);
+  const onOpen = () => onAction("open", entry);
+  useBuildChecks(React.useMemo(() => [entry], [entry]));
   const status = mapStatus(entry, knownBuildProblem(entry));
   const name = mapName(entry);
   return (
     <MapOrderRow
       value={entry.id}
-      className="group h-24 border-b border-border select-none hover:bg-muted data-dragging:bg-muted/60 data-dragging:outline-2 data-dragging:-outline-offset-2 data-dragging:outline-border data-dragging:outline-dashed data-dragging:*:invisible data-moving:bg-muted data-moving:shadow-[inset_2px_0_0_var(--color-primary)] data-drag-preview:flex data-drag-preview:items-center data-drag-preview:rounded-[4px] data-drag-preview:border! data-drag-preview:border-border! data-drag-preview:bg-card! data-drag-preview:shadow-xl data-drag-preview:*:shrink-0"
+      className="group h-24 select-none *:border-b *:border-border data-drag-preview:*:border-b-0 hover:*:bg-muted data-dragging:text-transparent data-dragging:*:border-y-2 data-dragging:*:border-dashed data-dragging:*:bg-muted/60 data-dragging:*:first:border-l-2 data-dragging:*:last:border-r-2 data-dragging:*:*:invisible data-moving:*:bg-muted data-moving:*:first:shadow-[inset_2px_0_0_var(--color-primary)] data-drag-preview:flex data-drag-preview:items-center data-drag-preview:rounded-[4px] data-drag-preview:border! data-drag-preview:border-border! data-drag-preview:bg-card! data-drag-preview:shadow-xl data-drag-preview:*:shrink-0"
       onClick={(event) => {
         if (
           !entry.broken &&
@@ -280,24 +277,37 @@ function MapRow({
             <MenuItem disabled={entry.broken} onSelect={onOpen}>
               Open
             </MenuItem>
-            <MenuItem disabled={entry.broken} onSelect={onSettings}>
+            <MenuItem
+              disabled={entry.broken}
+              onSelect={() => onAction("settings", entry)}
+            >
               Map settings
             </MenuItem>
             <MenuItem
               disabled={entry.broken || !canDuplicate}
-              onSelect={onDuplicate}
+              onSelect={() => onAction("duplicate", entry)}
             >
               Duplicate
             </MenuItem>
             <MenuSeparator />
-            <MenuItem disabled={!canMoveUp} onSelect={() => onMove(-1)}>
+            <MenuItem
+              disabled={!canMoveUp}
+              onSelect={() => onAction("up", entry)}
+            >
               Move up
             </MenuItem>
-            <MenuItem disabled={!canMoveDown} onSelect={() => onMove(1)}>
+            <MenuItem
+              disabled={!canMoveDown}
+              onSelect={() => onAction("down", entry)}
+            >
               Move down
             </MenuItem>
             <MenuSeparator />
-            <MenuItem variant="destructive" destructive onSelect={onDelete}>
+            <MenuItem
+              variant="destructive"
+              destructive
+              onSelect={() => onAction("delete", entry)}
+            >
               Delete
             </MenuItem>
           </MenuContent>
@@ -305,7 +315,7 @@ function MapRow({
       </td>
     </MapOrderRow>
   );
-}
+});
 
 const importTypes = [".json", ".wad", ".zip", ".deh", ".bex"];
 const noFiles: File[] = [];
@@ -361,7 +371,11 @@ function EpisodeHome({
   const accepted = React.useRef(false);
   const episodeFile = React.useRef<HTMLInputElement>(null);
   const { durable } = sidebar;
-  const sorted = bySlot(maps);
+  const sorted = React.useMemo(() => bySlot(maps), [maps]);
+  const byId = React.useMemo(
+    () => new Map(sorted.map((entry) => [entry.id, entry])),
+    [sorted],
+  );
   const nextSlot = freeSlots(maps)[0];
   const lastEdited = Math.max(...maps.map((entry) => entry.editedAt));
   const range =
@@ -381,6 +395,34 @@ function EpisodeHome({
     order.splice(index > from ? index - 1 : index, 0, id);
     saveOrder(order);
   };
+
+  const act = (action: MapAction, entry: EpisodeMap) => {
+    const index = sorted.findIndex((item) => item.id === entry.id);
+    if (action === "open") onOpenMap(entry);
+    else if (action === "settings") setEditing(entry);
+    else if (action === "duplicate") onDuplicateMap(entry);
+    else if (action === "up") reorder(entry.id, index - 1);
+    else if (action === "down") reorder(entry.id, index + 2);
+    else {
+      setConfirmation({
+        title: `Delete ${mapName(entry)}?`,
+        body: `${entry.slot} is removed from this browser. Back up the episode first if you might need it.`,
+        run: () => onDeleteMap(entry),
+      });
+    }
+  };
+  const latestAct = React.useRef(act);
+  React.useLayoutEffect(() => {
+    latestAct.current = act;
+  });
+  const onAction = React.useCallback(
+    (action: MapAction, entry: EpisodeMap) => latestAct.current(action, entry),
+    [],
+  );
+  const order = React.useMemo(
+    () => saving ?? sorted.map((entry) => entry.id),
+    [saving, sorted],
+  );
 
   return (
     <AppShell
@@ -503,9 +545,9 @@ function EpisodeHome({
         >
           <FileInputDropzone className="group relative flex flex-col gap-5 rounded-[6px] outline-2 outline-offset-4 outline-transparent data-[dragging]:outline-primary data-[dragging]:outline-dashed">
             {sorted.length > 0 ? (
-              <table className="w-full border-collapse text-left">
+              <table className="w-full border-separate border-spacing-0 text-left">
                 <thead>
-                  <tr className="h-8 border-b border-border font-mono text-xs tracking-wide text-muted-foreground [&>th]:font-normal">
+                  <tr className="h-8 font-mono text-xs tracking-wide text-muted-foreground [&>th]:border-b [&>th]:border-border [&>th]:font-normal">
                     <th className="w-6">
                       <span className="sr-only">Order</span>
                     </th>
@@ -529,16 +571,16 @@ function EpisodeHome({
                   </tr>
                 </thead>
                 <MapOrder
-                  value={saving ?? sorted.map((entry) => entry.id)}
+                  value={order}
                   onValueChange={saveOrder}
                   label={(id) => {
-                    const entry = sorted.find((item) => item.id === id);
+                    const entry = byId.get(id);
                     return entry ? mapName(entry) : undefined;
                   }}
                 >
-                  {({ order }) =>
-                    order.map((id, index) => {
-                      const entry = sorted.find((item) => item.id === id);
+                  {({ order: shown }) =>
+                    shown.map((id, index) => {
+                      const entry = byId.get(id);
                       if (!entry) return null;
                       return (
                         <MapRow
@@ -549,19 +591,7 @@ function EpisodeHome({
                           canMoveUp={index > 0}
                           canMoveDown={index < sorted.length - 1}
                           hint={hint}
-                          onOpen={() => onOpenMap(entry)}
-                          onSettings={() => setEditing(entry)}
-                          onDuplicate={() => onDuplicateMap(entry)}
-                          onDelete={() =>
-                            setConfirmation({
-                              title: `Delete ${mapName(entry)}?`,
-                              body: `${entry.slot} is removed from this browser. Back up the episode first if you might need it.`,
-                              run: () => onDeleteMap(entry),
-                            })
-                          }
-                          onMove={(step) =>
-                            reorder(entry.id, step < 0 ? index - 1 : index + 2)
-                          }
+                          onAction={onAction}
                         />
                       );
                     })

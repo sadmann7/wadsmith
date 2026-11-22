@@ -19,9 +19,9 @@ const colorUtility =
 // Utilities with these prefixes that set something other than a color.
 const otherUtilities: Record<string, RegExp> = {
   bg: /^(?:transparent|linear-to-[a-z]+)$/,
-  text: /^(?:xs|sm|base|lg|xl|\dxl|left|center|right|inherit|input|\[\d+px\])$/,
+  text: /^(?:xs|sm|base|lg|xl|\dxl|left|center|right|inherit|transparent|input|\[\d+px\])$/,
   border:
-    /^(?:[tblrxy](?:-\d+)?|\d+|\[[\d.]+px\]|solid|dashed|dotted|transparent|collapse|box)$/,
+    /^(?:[tblrxy](?:-\d+)?|\d+|\[[\d.]+px\]|solid|dashed|dotted|transparent|collapse|separate|spacing-\d+|box)$/,
   outline: /^(?:none|transparent|offset-\d+|solid|dashed|dotted|double)$/,
   from: /^$/,
 };

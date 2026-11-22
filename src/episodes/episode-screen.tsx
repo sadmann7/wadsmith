@@ -3,7 +3,7 @@
 import * as React from "react";
 
 import { wadFileName } from "@/editor/build-dialog";
-import { App } from "@/editor/editor-app";
+import { EditorScreen } from "@/editor/editor-screen";
 import { PlayTogether, type HostedGame } from "@/engine/play-together";
 import { GameView, type Level } from "@/engine/play-panel";
 import { loadIwad } from "@/engine/iwad";
@@ -200,7 +200,7 @@ async function readGameFiles(picked: File[]) {
   return files.flat();
 }
 
-function EpisodeApp() {
+function EpisodeScreen() {
   const [store, setStore] = React.useState<EpisodeStore | null>(null);
   const [episodes, setEpisodes] = React.useState<Episode[]>([]);
   const [counts, setCounts] = React.useState<Record<string, number>>({});
@@ -1042,7 +1042,7 @@ function EpisodeApp() {
     const current = maps.find((entry) => entry.id === session.id);
     return (
       <>
-        <App
+        <EditorScreen
           key={session.id}
           initialMap={session.initialMap}
           mapName={details.name}
@@ -1333,4 +1333,4 @@ function EpisodeApp() {
   );
 }
 
-export { EpisodeApp };
+export { EpisodeScreen };
