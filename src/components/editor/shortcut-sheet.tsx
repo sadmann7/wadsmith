@@ -148,6 +148,23 @@ function groups(): { title: string; items: Shortcut[] }[] {
           keys: [key("O")],
           does: "Open or shut the door or lift under the pointer",
         },
+        {
+          keys: [chord("mod+c"), chord("mod+v")],
+          does: "Copy a surface's look, and paste it on another",
+        },
+        { keys: [key("Alt-click")], does: "Paint the copied look on" },
+        {
+          keys: [key("F")],
+          does: "Flood the copied texture along joined walls",
+        },
+        {
+          keys: [key("Shift-click")],
+          does: "Pick several surfaces, for a gradient",
+        },
+        {
+          keys: [key("Wheel")],
+          does: "Raise or lower a floor or ceiling, with Shift for brightness",
+        },
         { keys: [key("Alt-arrows")], does: "Nudge the selected thing" },
         { keys: [backspace], does: "Delete the selected thing" },
         {

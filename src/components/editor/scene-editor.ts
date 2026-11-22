@@ -24,9 +24,17 @@ import {
   gridSize,
   removeThing,
   snapPoint,
+  updateLineSide,
+  updateSector,
   updateThing,
 } from "@/lib/map/edit";
 import { sectorAt } from "@/lib/map/geometry";
+import {
+  applyLook,
+  floodWalls,
+  lookOf,
+  type SurfaceLook,
+} from "@/lib/map/look";
 import {
   describeSurface,
   moveSurfaceHeight,
@@ -49,6 +57,9 @@ export type DraftSource = (
 type SceneChangeReason =
   | "height-drag"
   | "height-key"
+  | "offset-drag"
+  | "paint"
+  | "wheel"
   | "place"
   | "thing-drag"
   | "thing-key"
@@ -69,6 +80,12 @@ interface SceneOptions {
   contextMenuOpen?: boolean;
   placing?: ThingKind | null;
   sky?: string | null;
+  // The look last copied from a surface, to paste, paint and flood with.
+  look?: SurfaceLook | null;
+  onLookChange?: (look: SurfaceLook) => void;
+  // The surfaces picked together with Shift, in the order they were picked.
+  picked?: string[];
+  onPickedChange?: (picked: string[]) => void;
   renderWidth?: number;
   renderHeight?: number;
   grid?: number;
@@ -93,6 +110,7 @@ interface SceneState {
   placing: ThingKind | null;
   ghost: Point | null;
   sky: string | null;
+  picked: string[];
   // The doors and lifts shown open, to check what they leave room for.
   opened: string[];
   width: number;
@@ -100,6 +118,12 @@ interface SceneState {
 }
 
 const touchSlop = 4;
+const noSurfaces: string[] = [];
+const lightLimit = 255;
+const lightStep = 16;
+// What one notch of a mouse wheel turns by.
+const wheelNotch = 100;
+
 const moveSpeed = 260;
 const turnSpeed = 120;
 const placeDistances = [128, 96, 64, 32];
@@ -118,6 +142,10 @@ const sceneEditor = definePrimitive({
     contextMenuOpen: "boolean",
     placing: "value",
     sky: "value",
+    look: "value",
+    onLookChange: "callback",
+    picked: "value",
+    onPickedChange: "callback",
     renderWidth: "number",
     renderHeight: "number",
     grid: "number",
@@ -136,6 +164,7 @@ const sceneEditor = definePrimitive({
     placing: options.placing ?? null,
     ghost: null,
     sky: options.sky ?? null,
+    picked: options.picked ?? noSurfaces,
     opened: [],
     width: options.renderWidth ?? 320,
     height: options.renderHeight ?? 200,
@@ -147,6 +176,7 @@ const sceneEditor = definePrimitive({
     linked: options.linked ?? null,
     placing: options.placing ?? null,
     sky: options.sky ?? null,
+    picked: options.picked ?? noSurfaces,
     ...(options.placing ? {} : { ghost: null }),
   }),
   live: ["hovered"],
@@ -162,6 +192,7 @@ const sceneEditor = definePrimitive({
     let dragging = false;
     let touchPress: Point | null = null;
     const held = new Set<string>();
+    let wheeled = { surface: "", sum: 0 };
 
     const shownMap = () => {
       const { draftMap, map } = store.get();
@@ -200,6 +231,7 @@ const sceneEditor = definePrimitive({
         placing,
         ghost,
         sky,
+        picked,
         opened,
       } = store.get();
       const view = cameraState();
@@ -219,6 +251,7 @@ const sceneEditor = definePrimitive({
           selected: selected ?? linked,
           ghost: placing && ghost ? { ...ghost, kind: placing } : null,
           sky,
+          picked,
           opened,
         },
       );
@@ -429,6 +462,93 @@ const sceneEditor = definePrimitive({
 
     const select = (key: string | null, reason: "press" | "key") => {
       change("selected", key, { reason });
+      if (store.get().picked.length > 0) context.options().onPickedChange?.([]);
+    };
+
+    // Shift adds a surface to the ones picked, or takes it out again. The
+    // selected surface starts the list, so the first two picked are a pair.
+    const pick = (key: string) => {
+      const { picked, selected } = store.get();
+      const list =
+        picked.length === 0 && selected && selected !== key
+          ? [selected]
+          : picked;
+      context
+        .options()
+        .onPickedChange?.(
+          list.includes(key)
+            ? list.filter((item) => item !== key)
+            : [...list, key],
+        );
+    };
+
+    const aimed = () => {
+      const { hovered, selected } = store.get();
+      return hovered ?? selected;
+    };
+
+    const paste = (key: string | null, event: Event) => {
+      const { map } = store.get();
+      const { look } = context.options();
+      if (!map || !look) return false;
+      const painted = applyLook(map, key, look);
+      if (painted === map) return false;
+      change("map", painted, { reason: "paint", event });
+      return true;
+    };
+
+    // A wall's texture follows the pointer: a drag to the right or down moves
+    // the picture that way, which takes its offsets down.
+    const dragOffsets = (
+      event: PointerEvent,
+      key: string,
+      distance: number,
+    ) => {
+      const { map } = store.get();
+      const info = map ? describeSurface(map, key) : null;
+      if (!canvas || !target || !map || !info?.sector) return;
+      if (info.paints !== "wall" || info.surface.kind !== "wall") return;
+      const { wall } = info.surface;
+      const sector = info.sector.id;
+      const side = map.lines?.[wall]?.sides?.[sector];
+      const unitsPerPixel =
+        ((distance / target.focal) * target.width) /
+        canvas.getBoundingClientRect().width;
+      const start = { x: event.clientX, y: event.clientY };
+      let moved = false;
+      stopDrag = bindDrag(canvas, event, {
+        threshold: dragThreshold,
+        cancelOnEscape: true,
+        onStart: () => {
+          dragging = true;
+        },
+        onMove: ({ x, y }) => {
+          const offsetX = Math.round(
+            (side?.offsetX ?? 0) - (x - start.x) * unitsPerPixel,
+          );
+          const offsetY = Math.round(
+            (side?.offsetY ?? 0) - (y - start.y) * unitsPerPixel,
+          );
+          moved =
+            offsetX !== (side?.offsetX ?? 0) ||
+            offsetY !== (side?.offsetY ?? 0);
+          store.set({
+            draftMap: updateLineSide(map, wall, sector, {
+              offsetX: wrapOffset(offsetX) || undefined,
+              offsetY: wrapOffset(offsetY) || undefined,
+            }),
+          });
+        },
+        onEnd: (end, canceled) => {
+          const { draftMap } = store.get();
+          stopDrag = undefined;
+          dragging = false;
+          store.set({ draftMap: null });
+          if (!canceled && moved && draftMap) {
+            change("map", draftMap, { reason: "offset-drag", event: end });
+          }
+        },
+      });
     };
 
     // A door or lift shown open isn't at the height the map holds for it, so
@@ -577,10 +697,25 @@ const sceneEditor = definePrimitive({
           if (point) place(point, "press", event);
           return;
         }
+        if (key && surface?.kind !== "thing") {
+          // Alt paints the copied look on, and Shift picks several surfaces.
+          if (event.altKey) {
+            paste(key, event);
+            return;
+          }
+          if (event.shiftKey) {
+            pick(key);
+            return;
+          }
+        }
         select(key, "press");
         const { map } = store.get();
         if (surface?.kind === "thing") {
           if (!store.get().placing) dragThing(event, surface.thing);
+          return;
+        }
+        if (hit && key && surface?.kind === "wall") {
+          dragOffsets(event, key, hit.distance);
           return;
         }
         if (!hit || !key || !map || !getCanMoveHeight(key)) return;
@@ -619,11 +754,62 @@ const sceneEditor = definePrimitive({
           },
         });
       },
+      wheel(event: WheelEvent) {
+        const { map, hovered } = store.get();
+        // Only a view that was clicked into takes the wheel, so scrolling the
+        // page over it changes nothing.
+        if (!map || !hovered || stopDrag || document.activeElement !== canvas) {
+          return;
+        }
+        const info = describeSurface(map, hovered);
+        if (!info?.sector) return;
+        event.preventDefault();
+        // A trackpad sends many small turns, so they add up to whole notches.
+        if (wheeled.surface !== hovered) wheeled = { surface: hovered, sum: 0 };
+        wheeled.sum += event.deltaY;
+        const notches = Math.trunc(wheeled.sum / wheelNotch);
+        if (notches === 0) return;
+        wheeled.sum -= notches * wheelNotch;
+        // The wheel moves a floor or ceiling a step a notch, and with Shift
+        // it makes the surface's room a step brighter or darker.
+        const next = event.shiftKey
+          ? updateSector(map, info.sector.id, {
+              light: Math.max(
+                0,
+                Math.min(lightLimit, info.sector.light - notches * lightStep),
+              ),
+            })
+          : getCanMoveHeight(hovered)
+            ? moveSurfaceHeight(map, hovered, -notches * gridSize)
+            : map;
+        if (next !== map) change("map", next, { reason: "wheel", event });
+      },
       keydown(event: KeyboardEvent) {
         if (stopDrag || openMenuFromKey(event)) return;
         const { map, placing } = store.get();
         const thing = selectedThing();
         if (event.altKey && nudgeThing(event)) return;
+        const command = event.metaKey || event.ctrlKey;
+        if (command && map && event.code === "KeyC") {
+          const look = lookOf(map, aimed());
+          if (!look) return;
+          event.preventDefault();
+          context.options().onLookChange?.(look);
+          return;
+        }
+        if (command && event.code === "KeyV") {
+          if (paste(aimed(), event)) event.preventDefault();
+          return;
+        }
+        if (command) return;
+        const { look } = context.options();
+        if (event.code === "KeyF" && map && look?.kind === "wall") {
+          const flooded = floodWalls(map, aimed(), look.texture);
+          if (flooded === map) return;
+          event.preventDefault();
+          change("map", flooded, { reason: "paint", event });
+          return;
+        }
         if (event.key === "Enter" && placing) {
           event.preventDefault();
           placeAhead(event);
@@ -699,6 +885,7 @@ const sceneEditor = definePrimitive({
         pointermove: (event, { api }) => api.pointermove(event),
         pointerleave: (_event, { api }) => api.pointerleave(),
         pointerdown: (event, { api }) => api.pointerdown(event),
+        wheel: (event, { api }) => api.wheel(event),
         contextmenu: (event, { api }) => api.contextmenu(event),
         keydown: (event, { api }) => api.keydown(event),
         keyup: (event, { api }) => api.keyup(event),
@@ -708,6 +895,13 @@ const sceneEditor = definePrimitive({
   }),
   agent: { shown: () => false },
 });
+
+// A sidedef's offset is 16 bits, and no texture is wider or taller than this.
+const offsetSpan = 1024;
+
+function wrapOffset(value: number) {
+  return ((value % offsetSpan) + offsetSpan) % offsetSpan;
+}
 
 function standable(map: GameMap, point: Point) {
   const sector = sectorAt(map, point);

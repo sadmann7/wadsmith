@@ -60,6 +60,8 @@ interface SceneOptions {
   sky?: string | null;
   // The doors and lifts shown as they stand once worked.
   opened?: readonly string[];
+  // Surfaces picked along with the selected one, outlined the same way.
+  picked?: readonly string[];
 }
 
 // A see-through texture on an open line, kept until what lies behind it in
@@ -169,7 +171,15 @@ export function renderScene(
   target: RenderTarget,
   sourceMap: GameMap,
   camera: Camera,
-  { assets, hovered, selected, ghost, sky, opened = noMovers }: SceneOptions,
+  {
+    assets,
+    hovered,
+    selected,
+    ghost,
+    sky,
+    opened = noMovers,
+    picked = noMovers,
+  }: SceneOptions,
 ) {
   const { width, height, colors, pick, extent, reach, focal } = target;
   const depths = target.depth;
@@ -562,7 +572,12 @@ export function renderScene(
   }
 
   const hoveredId = hovered ? surfaceIds.get(hovered) : undefined;
-  const selectedId = selected ? surfaceIds.get(selected) : undefined;
+  const marked = new Set(
+    [selected, ...picked].flatMap((key) => {
+      const id = key ? surfaceIds.get(key) : undefined;
+      return id === undefined ? [] : [id];
+    }),
+  );
   const getIsEdge = (x: number, y: number, id: number, ids: Uint16Array) => {
     const own = depths[y * width + x];
     for (let step = 1; step <= outlineWidth; step += 1) {
@@ -586,7 +601,7 @@ export function renderScene(
     }
     return false;
   };
-  if (hoveredId !== undefined || selectedId !== undefined) {
+  if (hoveredId !== undefined || marked.size > 0) {
     for (let y = 0; y < height; y += 1) {
       for (let x = 0; x < width; x += 1) {
         const index = y * width + x;
@@ -595,17 +610,16 @@ export function renderScene(
         const span = extent[index];
         const shown = pick[index];
         const spanEdge =
-          (span === selectedId || span === hoveredId) &&
+          (marked.has(span) || span === hoveredId) &&
           getIsEdge(x, y, span, extent);
         const shownEdge =
-          (shown === selectedId || shown === hoveredId) &&
+          (marked.has(shown) || shown === hoveredId) &&
           !seeThrough.has(shown) &&
           getIsEdge(x, y, shown, pick);
         if (!spanEdge && !shownEdge) continue;
-        const isSelected =
-          (spanEdge && span === selectedId) ||
-          (shownEdge && shown === selectedId);
-        colors[index] = isSelected ? selectedOutline : hoveredOutline;
+        const isMarked =
+          (spanEdge && marked.has(span)) || (shownEdge && marked.has(shown));
+        colors[index] = isMarked ? selectedOutline : hoveredOutline;
       }
     }
   }

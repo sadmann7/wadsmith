@@ -466,6 +466,20 @@ describe("the sky, open lines and movers", () => {
     expect(columns({ x: 160, y: 288, angle: 180 })).toEqual([28, 36]);
   });
 
+  it("outlines every picked surface like the selected one", () => {
+    const outlined = (picked: string[]) => {
+      const target = createRenderTarget(320, 200);
+      renderScene(target, testMap, startCamera(testMap), { assets, picked });
+      return target.colors.filter((color) => color === 0xff2b6aff).length;
+    };
+    expect(outlined([])).toBe(0);
+    const floor = outlined(["floor:sector-1"]);
+    expect(floor).toBeGreaterThan(0);
+    expect(outlined(["floor:sector-1", "ceiling:sector-1"])).toBeGreaterThan(
+      floor,
+    );
+  });
+
   it("shows a door open when asked, to look through it", () => {
     const target = createRenderTarget(320, 200);
     renderScene(target, testMap, startCamera(testMap), {
