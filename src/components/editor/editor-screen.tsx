@@ -121,7 +121,7 @@ import {
 } from "@/lib/map/geometry";
 import { describeLine } from "@/lib/map/lines";
 import { lineLinks, type MapLink, sectorLinks } from "@/lib/map/links";
-import { gradient, type SurfaceLook } from "@/lib/map/look";
+import { gradient, gradientEnds, type SurfaceLook } from "@/lib/map/look";
 import { type DrawShape, polygonSides } from "@/lib/map/shapes";
 import {
   MapFileError,
@@ -665,10 +665,9 @@ export function EditorScreen({
   // the system clipboard without asking, and text selected on the page still
   // copies as text.
   const onClipboard = React.useEffectEvent((event: ClipboardEvent) => {
-    // In the 3D view the same keys copy and paste a surface's look.
     if (
       !notTyping() ||
-      document.activeElement?.closest('[role="dialog"], .scene') ||
+      document.activeElement?.closest('[role="dialog"]') ||
       document.querySelector(".game-stage")
     ) {
       return;
@@ -1083,14 +1082,7 @@ export function EditorScreen({
     const info = describeSurface(map, key);
     return info?.sector ? [{ key, info }] : [];
   });
-  const firstHeight = pickedSurfaces.find((item) => item.info.height !== null);
-  const lastHeight = pickedSurfaces.findLast(
-    (item) => item.info.height !== null,
-  );
-  const pickedHeights: [number, number] | null =
-    firstHeight && lastHeight
-      ? [firstHeight.info.height ?? 0, lastHeight.info.height ?? 0]
-      : null;
+  const pickedKeys = pickedSurfaces.map((item) => item.key);
 
   const sceneStatus = (
     <p className="scene-status" role="status">
@@ -1287,6 +1279,7 @@ export function EditorScreen({
   const replaceMap = (next: GameMap) => {
     commit(next);
     setSelection([]);
+    setScenePicked([]);
     setActiveSector(null);
     setSurface(null);
     setFileError(null);
@@ -1630,7 +1623,10 @@ export function EditorScreen({
                       }
                       onToolChange={setTool}
                       onActiveSectorChange={setActiveSector}
-                      onSelectionChange={setSelection}
+                      onSelectionChange={(next) => {
+                        setSelection(next);
+                        setScenePicked([]);
+                      }}
                       onMapSelect={() => setSurface(null)}
                       onDraftMapChange={(draft) => drafts.publish(draft)}
                       camera={camera}
@@ -1852,24 +1848,14 @@ export function EditorScreen({
 
             {pickedSurfaces.length > 1 ? (
               <GradientPanel
-                key={pickedSurfaces.map((item) => item.key).join()}
+                key={pickedKeys.join()}
                 count={pickedSurfaces.length}
-                heights={pickedHeights}
-                lights={[
-                  pickedSurfaces[0].info.sector?.light ?? 0,
-                  pickedSurfaces.at(-1)?.info.sector?.light ?? 0,
-                ]}
-                onApply={(what, from, to) =>
-                  commit(
-                    gradient(
-                      map,
-                      pickedSurfaces.map((item) => item.key),
-                      what,
-                      from,
-                      to,
-                    ),
-                  )
-                }
+                heights={gradientEnds(map, pickedKeys, "height")}
+                lights={gradientEnds(map, pickedKeys, "light")}
+                onApply={(what, from, to) => {
+                  const next = gradient(map, pickedKeys, what, from, to);
+                  if (next !== map) commit(next);
+                }}
               />
             ) : null}
 

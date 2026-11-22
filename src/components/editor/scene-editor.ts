@@ -32,6 +32,7 @@ import { sectorAt } from "@/lib/map/geometry";
 import {
   applyLook,
   floodWalls,
+  getCanTakeLook,
   lookOf,
   type SurfaceLook,
 } from "@/lib/map/look";
@@ -50,6 +51,7 @@ import {
   renderScene,
   type RenderTarget,
 } from "@/lib/preview/render";
+import { countNotches } from "@/lib/preview/wheel";
 
 export type DraftSource = (
   listener: (map: GameMap | null) => void,
@@ -122,8 +124,6 @@ const touchSlop = 4;
 const noSurfaces: string[] = [];
 const lightLimit = 255;
 const lightStep = 16;
-// What one notch of a mouse wheel turns by.
-const wheelNotch = 100;
 
 const moveSpeed = 260;
 const turnSpeed = 120;
@@ -194,7 +194,7 @@ const sceneEditor = definePrimitive({
     let touchPress: Point | null = null;
     const held = new Set<string>();
     let shiftHeld = false;
-    let wheeled = { surface: "", sum: 0 };
+    let wheeled = { surface: "", sum: 0, at: 0 };
 
     const shownMap = () => {
       const { draftMap, map } = store.get();
@@ -492,11 +492,9 @@ const sceneEditor = definePrimitive({
     const paste = (key: string | null, event: Event) => {
       const { map } = store.get();
       const { look } = context.options();
-      if (!map || !look) return false;
+      if (!map || !look) return;
       const painted = applyLook(map, key, look);
-      if (painted === map) return false;
-      change("map", painted, { reason: "paint", event });
-      return true;
+      if (painted !== map) change("map", painted, { reason: "paint", event });
     };
 
     // A wall's texture follows the pointer: a drag to the right or down moves
@@ -505,26 +503,35 @@ const sceneEditor = definePrimitive({
       event: PointerEvent,
       key: string,
       distance: number,
+      onTap?: () => void,
     ) => {
-      const { map } = store.get();
+      const { map, assets } = store.get();
       const info = map ? describeSurface(map, key) : null;
-      if (!canvas || !target || !map || !info?.sector) return;
-      if (info.paints !== "wall" || info.surface.kind !== "wall") return;
+      if (!canvas || !target || !map || !info?.sector) return false;
+      if (info.paints !== "wall" || info.surface.kind !== "wall") return false;
       const { wall } = info.surface;
       const sector = info.sector.id;
       const side = map.lines?.[wall]?.sides?.[sector];
+      // An offset wraps where the picture repeats, so it stays the same
+      // picture whatever the texture's size.
+      const picture = info.texture ? assets?.texture(info.texture) : null;
+      const spanX = picture?.width || offsetSpan;
+      const spanY = picture?.height || offsetSpan;
       const unitsPerPixel =
         ((distance / target.focal) * target.width) /
         canvas.getBoundingClientRect().width;
       const start = { x: event.clientX, y: event.clientY };
       let moved = false;
+      let started = false;
       stopDrag = bindDrag(canvas, event, {
         threshold: dragThreshold,
         cancelOnEscape: true,
         onStart: () => {
           dragging = true;
+          started = true;
         },
-        onMove: ({ x, y }) => {
+        onMove: ({ x, y, event: move }) => {
+          shiftHeld = move.shiftKey;
           const offsetX = Math.round(
             (side?.offsetX ?? 0) - (x - start.x) * unitsPerPixel,
           );
@@ -535,8 +542,8 @@ const sceneEditor = definePrimitive({
             offsetX !== (side?.offsetX ?? 0) ||
             offsetY !== (side?.offsetY ?? 0);
           const shifted = updateLineSide(map, wall, sector, {
-            offsetX: wrapOffset(offsetX) || undefined,
-            offsetY: wrapOffset(offsetY) || undefined,
+            offsetX: wrapOffset(offsetX, spanX) || undefined,
+            offsetY: wrapOffset(offsetY, spanY) || undefined,
           });
           // With Shift held the walls beside this one follow, so the texture
           // stays unbroken along the room as it moves.
@@ -559,8 +566,10 @@ const sceneEditor = definePrimitive({
           if (!canceled && moved && draftMap) {
             change("map", draftMap, { reason: "offset-drag", event: end });
           }
+          if (!canceled && !started) onTap?.();
         },
       });
+      return true;
     };
 
     // A door or lift shown open isn't at the height the map holds for it, so
@@ -578,10 +587,8 @@ const sceneEditor = definePrimitive({
       const { map, selected } = store.get();
       if (!map || !selected || !getCanMoveHeight(selected)) return;
       const step = gridSize * (event.shiftKey ? 3 : 1);
-      change("map", moveSurfaceHeight(map, selected, direction * step), {
-        reason: "height-key",
-        event,
-      });
+      const next = moveSurfaceHeight(map, selected, direction * step);
+      if (next !== map) change("map", next, { reason: "height-key", event });
     };
 
     const cycle = (direction: number) => {
@@ -710,13 +717,16 @@ const sceneEditor = definePrimitive({
           return;
         }
         if (key && surface?.kind !== "thing") {
-          // Alt paints the copied look on, and Shift picks several surfaces.
+          // Alt paints the copied look on. Shift picks several surfaces with
+          // a click, and aligns the walls beside one with a drag.
           if (event.altKey) {
             paste(key, event);
             return;
           }
           if (event.shiftKey) {
-            pick(key);
+            shiftHeld = true;
+            const onTap = () => pick(key);
+            if (!hit || !dragOffsets(event, key, hit.distance, onTap)) onTap();
             return;
           }
         }
@@ -752,8 +762,9 @@ const sceneEditor = definePrimitive({
           onMove: ({ y }) => {
             const units = (startY - y) * rowsPerPixel * unitsPerRow;
             const delta = Math.round(units / gridSize) * gridSize;
-            moved = delta !== 0;
-            store.set({ draftMap: moveSurfaceHeight(map, key, delta) });
+            const draftMap = moveSurfaceHeight(map, key, delta);
+            moved = draftMap !== map;
+            store.set({ draftMap });
           },
           onEnd: (end, canceled) => {
             const { draftMap } = store.get();
@@ -776,24 +787,32 @@ const sceneEditor = definePrimitive({
         const info = describeSurface(map, hovered);
         if (!info?.sector) return;
         event.preventDefault();
-        // A trackpad sends many small turns, so they add up to whole notches.
-        if (wheeled.surface !== hovered) wheeled = { surface: hovered, sum: 0 };
-        wheeled.sum += event.deltaY;
-        const notches = Math.trunc(wheeled.sum / wheelNotch);
+        // With Shift held, most browsers report a mouse wheel's turn sideways.
+        const delta = event.shiftKey
+          ? event.deltaY || event.deltaX
+          : event.deltaY;
+        const { notches, ...turns } = countNotches(
+          wheeled.surface === hovered ? wheeled : { sum: 0, at: 0 },
+          delta,
+          event.deltaMode,
+          event.timeStamp,
+        );
+        wheeled = { ...turns, surface: hovered };
         if (notches === 0) return;
-        wheeled.sum -= notches * wheelNotch;
         // The wheel moves a floor or ceiling a step a notch, and with Shift
         // it makes the surface's room a step brighter or darker.
-        const next = event.shiftKey
-          ? updateSector(map, info.sector.id, {
-              light: Math.max(
-                0,
-                Math.min(lightLimit, info.sector.light - notches * lightStep),
-              ),
-            })
-          : getCanMoveHeight(hovered)
-            ? moveSurfaceHeight(map, hovered, -notches * gridSize)
-            : map;
+        const light = Math.max(
+          0,
+          Math.min(lightLimit, info.sector.light - notches * lightStep),
+        );
+        let next = map;
+        if (!event.shiftKey) {
+          if (getCanMoveHeight(hovered)) {
+            next = moveSurfaceHeight(map, hovered, -notches * gridSize);
+          }
+        } else if (light !== info.sector.light) {
+          next = updateSector(map, info.sector.id, { light });
+        }
         if (next !== map) change("map", next, { reason: "wheel", event });
       },
       keydown(event: KeyboardEvent) {
@@ -803,20 +822,26 @@ const sceneEditor = definePrimitive({
         const thing = selectedThing();
         if (event.altKey && nudgeThing(event)) return;
         const command = event.metaKey || event.ctrlKey;
-        if (command && map && event.code === "KeyC") {
-          const look = lookOf(map, aimed());
-          if (!look) return;
-          event.preventDefault();
-          context.options().onLookChange?.(look);
-          return;
-        }
-        if (command && event.code === "KeyV") {
-          if (paste(aimed(), event)) event.preventDefault();
-          return;
-        }
-        if (command) return;
         const { look } = context.options();
-        if (event.code === "KeyF" && map && look?.kind === "wall") {
+        // A surface's look is copied and pasted here. Anything else, like a
+        // selected thing, is left to the page's own copy and paste.
+        if (command && map && event.code === "KeyC" && !thing) {
+          const copied = lookOf(map, aimed());
+          if (copied) {
+            event.preventDefault();
+            if (!event.repeat) context.options().onLookChange?.(copied);
+            return;
+          }
+        }
+        if (command && map && look && event.code === "KeyV") {
+          const key = aimed();
+          if (getCanTakeLook(map, key, look)) {
+            event.preventDefault();
+            if (!event.repeat) paste(key, event);
+            return;
+          }
+        }
+        if (!command && event.code === "KeyF" && map && look?.kind === "wall") {
           const flooded = floodWalls(map, aimed(), look.texture);
           if (flooded === map) return;
           event.preventDefault();
@@ -841,7 +866,7 @@ const sceneEditor = definePrimitive({
           event.preventDefault();
           held.add(event.code);
           if (!walkFrame) walk(performance.now());
-        } else if (event.code === "KeyO" && map && !event.repeat) {
+        } else if (event.code === "KeyO" && map && !command && !event.repeat) {
           // The door or lift under the pointer, or else the selected one,
           // stands open until the key is pressed on it again.
           const { hovered, selected, opened } = store.get();
@@ -911,11 +936,11 @@ const sceneEditor = definePrimitive({
   agent: { shown: () => false },
 });
 
-// A sidedef's offset is 16 bits, and no texture is wider or taller than this.
+// Where an offset wraps when the texture's size isn't known. No texture is
+// wider or taller than this.
 const offsetSpan = 1024;
-
-function wrapOffset(value: number) {
-  return ((value % offsetSpan) + offsetSpan) % offsetSpan;
+function wrapOffset(value: number, span: number) {
+  return ((value % span) + span) % span;
 }
 
 function standable(map: GameMap, point: Point) {

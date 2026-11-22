@@ -1,15 +1,18 @@
 import * as React from "react";
 
+import type { GradientKind } from "@/lib/map/look";
+
 import { Button } from "@/components/ui/button";
 import { FieldItem, Label } from "@/components/ui/field";
 import { NumberField } from "@/components/ui/number-field";
 
 interface GradientPanelProps {
   count: number;
-  // The first and last picked surfaces' heights and brightness, to start from.
+  // What the first and last surfaces of each gradient hold now, to start
+  // from, or null when no picked surface takes one.
   heights: [number, number] | null;
-  lights: [number, number];
-  onApply: (what: "height" | "light", from: number, to: number) => void;
+  lights: [number, number] | null;
+  onApply: (what: GradientKind, from: number, to: number) => void;
 }
 
 export function GradientPanel({
@@ -35,14 +38,16 @@ export function GradientPanel({
           onApply={(from, to) => onApply("height", from, to)}
         />
       ) : null}
-      <GradientRow
-        label="Brightness"
-        step={16}
-        min={0}
-        max={255}
-        start={lights}
-        onApply={(from, to) => onApply("light", from, to)}
-      />
+      {lights ? (
+        <GradientRow
+          label="Brightness"
+          step={16}
+          min={0}
+          max={255}
+          start={lights}
+          onApply={(from, to) => onApply("light", from, to)}
+        />
+      ) : null}
     </section>
   );
 }
