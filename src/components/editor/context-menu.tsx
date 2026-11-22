@@ -66,7 +66,7 @@ import {
 import { type EditorShortcut, editorShortcuts } from "@/lib/editor/shortcuts";
 import { thingIcons } from "@/lib/editor/thing-icons";
 import { getIsGeneralized } from "@/lib/map/boom";
-import { thingCatalog, thingKinds } from "@/lib/map/catalog";
+import { swappableKinds, thingCatalog } from "@/lib/map/catalog";
 import {
   addRoomOnSide,
   addSwitch,
@@ -323,13 +323,6 @@ function ThingsMenu({ ids, ...props }: ThingsMenuProps) {
       </Item>
     </>
   );
-}
-
-function swappableKinds(kind: ThingKind) {
-  const { category } = thingCatalog[kind];
-  return category === "start"
-    ? []
-    : thingKinds.filter((item) => thingCatalog[item].category === category);
 }
 
 interface HeadingProps {

@@ -862,6 +862,15 @@ export const thingKinds = Object.keys(thingCatalog) as ThingKind[];
 // Vanilla Doom stops loading a deathmatch with fewer deathmatch starts than this.
 export const deathmatchStarts = 4;
 
+// The kinds a thing can change to: any of its own category, but a player
+// start stays what it is.
+export function swappableKinds(kind: ThingKind) {
+  const { category } = thingCatalog[kind];
+  return category === "start"
+    ? []
+    : thingKinds.filter((item) => thingCatalog[item].category === category);
+}
+
 // A map has one of each player start, but any number of deathmatch starts.
 export function getIsPlayerStart(kind: ThingKind) {
   return thingCatalog[kind].category === "start" && kind !== "deathmatch-start";
