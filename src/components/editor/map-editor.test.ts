@@ -66,7 +66,8 @@ describe("map editor parts", () => {
     const instance = mapEditor({ id, map: testMap });
     const parts = listen(instance);
     instance.setOptions({ id, map: testMap, selection: ["v10"] });
-    expect(parts.heard()).toEqual(["handle v10"]);
+    // A room shows as selected once all its corners are, so it hears each one.
+    expect(parts.heard()).toEqual(["handle v10", "sector sector-3"]);
     instance.setOptions({
       id,
       map: testMap,
@@ -139,6 +140,73 @@ describe("map editor parts", () => {
     expect(changes).toBe(0);
   });
 
+  it("delete the selected rooms with the things standing in them", () => {
+    let result = null as GameMap | null;
+    const instance = mapEditor({
+      id,
+      map: testMap,
+      selection: ["v3", "v13", "v14", "v4", "thing:imp-1"],
+      onMapChange: (next) => {
+        result = next;
+      },
+    });
+    instance.api.keydown(press("Delete"));
+    const left = defined(result);
+    expect(left.sectors.map((sector) => sector.id)).toEqual([
+      "sector-1",
+      "sector-3",
+      "sector-4",
+    ]);
+    // The shotgun stood in the corridor, and the imp was picked by itself.
+    expect(left.things.map((thing) => thing.id)).toEqual([
+      "player-1",
+      "zombieman-1",
+    ]);
+  });
+
+  it("keep a player start when its room is deleted", () => {
+    let result = null as GameMap | null;
+    const instance = mapEditor({
+      id,
+      map: testMap,
+      activeSector: "sector-1",
+      onMapChange: (next) => {
+        result = next;
+      },
+    });
+    instance.api.keydown(press("Backspace"));
+    expect(defined(result).sectors.map((sector) => sector.id)).not.toContain(
+      "sector-1",
+    );
+    expect(defined(result).things.map((thing) => thing.id)).toContain(
+      "player-1",
+    );
+  });
+
+  it("wake the measure as a wall is drawn and when a wall is selected", () => {
+    const instance = mapEditor({ id, map: testMap, tool: "draw" });
+    let heard = 0;
+    const part = instance.part("measure" as never, {} as never);
+    slots.measure.selects.subscribe(
+      part,
+      () => {
+        heard += 1;
+      },
+      {},
+    );
+    const { store } = instance.part("handle", { value: "v1" });
+    store.set({ drawing: [{ x: 0, y: 0 }] });
+    store.set({ cursor: { x: 64, y: 0 } });
+    expect(heard).toBe(2);
+    instance.setOptions({
+      id,
+      map: testMap,
+      tool: "select",
+      highlightedWall: "v9|v10",
+    });
+    expect(heard).toBeGreaterThan(2);
+  });
+
   it("wake no shape for the same map rendered again", () => {
     const instance = mapEditor({ id, map: testMap });
     const parts = listen(instance);
@@ -172,6 +240,14 @@ function listen(instance: Instance) {
   hear("port", { value: "door:sector-4" });
   hear("label", { value: corridor.id, corners: corridor.vertices });
   return { heard: () => heard.splice(0).toSorted() };
+}
+
+function press(key: string) {
+  return {
+    key,
+    defaultPrevented: false,
+    preventDefault: () => {},
+  } as KeyboardEvent;
 }
 
 function moved(map: GameMap, corner: string, dx: number): GameMap {

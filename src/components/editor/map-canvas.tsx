@@ -1,6 +1,7 @@
 import { Focus, LocateFixed, Maximize, StickyNote } from "lucide-react";
 import * as React from "react";
 
+import type { MapLink } from "@/lib/map/links";
 import type { GameMap, Sector, ThingKind } from "@/lib/map/types";
 
 import { buttonVariants } from "@/components/ui/button";
@@ -20,6 +21,8 @@ import {
   MapLabel,
   MapLookHere,
   MapMarker,
+  MapMarquee,
+  MapMeasure,
   MapPort,
   MapSector,
   MapWall,
@@ -41,14 +44,20 @@ interface Area {
   bottom: number;
 }
 
+const linkEnd = 4;
+
 interface MapCanvasProps extends React.ComponentProps<typeof MapEditor> {
   map: GameMap;
   callouts: { id: string; x: number; y: number; text: string }[];
+  // From the selected line to what it acts on, or to the selected room from
+  // the lines that act on it.
+  links: MapLink[];
 }
 
 export function MapCanvas({
   map,
   callouts,
+  links,
   onViewChange,
   ...props
 }: MapCanvasProps) {
@@ -242,6 +251,23 @@ export function MapCanvas({
             fill="url(#map-grid)"
           />
           {shapes}
+          {links.map(({ from, to }) => (
+            <g key={`${from.x},${from.y},${to.x},${to.y}`}>
+              <line
+                className="map-link"
+                x1={from.x}
+                y1={from.y}
+                x2={to.x}
+                y2={to.y}
+              />
+              <circle
+                className="map-link-end"
+                cx={to.x}
+                cy={to.y}
+                r={linkEnd / step}
+              />
+            </g>
+          ))}
           <MapConnecting className="map-wire map-connecting" />
           <MapDraft className="map-draft" />
         </svg>
@@ -249,6 +275,8 @@ export function MapCanvas({
         {handles}
         {things}
         {ports}
+        <MapMarquee className="map-marquee" />
+        <MapMeasure className="pointer-events-none origin-top-left [transform:scale(calc(1/var(--canvas-zoom,1)))_translate(12px,12px)] rounded-[3px] border border-border bg-popover px-1.5 py-0.5 font-mono text-xs whitespace-nowrap text-foreground after:content-[attr(data-measure)]" />
         {map.notes?.map((note) => (
           <MapMarker
             key={note.id}

@@ -228,7 +228,19 @@ const MapRow = React.memo(function MapRow({
   );
 });
 
-const importTypes = [".json", ".wad", ".zip", ".deh", ".bex"];
+const importTypes = [
+  ".json",
+  ".wad",
+  ".zip",
+  ".deh",
+  ".bex",
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".webp",
+  ".bmp",
+];
 const noFiles: File[] = [];
 
 interface EpisodeHomeProps {

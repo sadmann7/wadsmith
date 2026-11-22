@@ -804,13 +804,15 @@ export function roomCenter(map: GameMap, sector: Sector): Point {
 }
 
 // A new corner on a wall splits it in every outline along it, and both halves
-// keep the wall's settings and textures. Snapping can take the corner off a
-// slanted wall's line, which bends the wall slightly where it lands.
+// keep the wall's settings and textures. It lands on the grid where the point
+// falls on the wall, which can bend a slanted wall slightly, or with `exact`
+// at the point itself, so the wall meets a corner another wall already has.
 export function splitWall(
   map: GameMap,
   wall: string,
   point: Point,
   grid = gridSize,
+  exact = false,
 ): { map: GameMap; id: string } | null {
   const [from, to] = wall.split("|");
   const a = map.vertices[from];
@@ -827,7 +829,9 @@ export function splitWall(
     0,
     Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / length),
   );
-  const at = snapPoint({ x: a.x + dx * along, y: a.y + dy * along }, grid);
+  const at = exact
+    ? { x: Math.round(point.x), y: Math.round(point.y) }
+    : snapPoint({ x: a.x + dx * along, y: a.y + dy * along }, grid);
   if ((at.x === a.x && at.y === a.y) || (at.x === b.x && at.y === b.y)) {
     return null;
   }
@@ -853,7 +857,7 @@ export function splitWall(
     );
   // The room around a nested room has no edge of its own on their shared
   // wall, and reads it from the other end.
-  const owners = wallOwners(map).get(wall) ?? [];
+  const owners = line?.sides ? (wallOwners(map).get(wall) ?? []) : [];
   const startFor = (sectorId: string) => {
     const sector = owners.find((item) => item.id === sectorId);
     const own = sector && wallStart(map, sector, wall);
@@ -925,18 +929,26 @@ export function splitWall(
   };
 }
 
+// Joins each of these corners to a corner it sits on. The corners that stay
+// put are filed by their spot once, so a big selection costs a lookup a corner
+// and not a pass over the map.
 export function mergeCorners(map: GameMap, ids: string[]): GameMap {
+  const moved = new Set(ids);
+  const spots = new Map<string, string[]>();
+  for (const [id, point] of Object.entries(map.vertices)) {
+    if (moved.has(id)) continue;
+    const spot = `${point.x},${point.y}`;
+    const held = spots.get(spot);
+    if (held) held.push(id);
+    else spots.set(spot, [id]);
+  }
   let next = map;
   for (const id of ids) {
     const point = next.vertices[id];
     if (!point) continue;
-    const target = Object.keys(next.vertices).find(
-      (other) =>
-        other !== id &&
-        !ids.includes(other) &&
-        next.vertices[other].x === point.x &&
-        next.vertices[other].y === point.y,
-    );
+    const target = spots
+      .get(`${point.x},${point.y}`)
+      ?.find((other) => next.vertices[other]);
     if (target && getCanJoin(next, id, target)) {
       next = replaceCorner(next, id, target);
     }
@@ -1137,7 +1149,7 @@ export function removeHole(map: GameMap, id: string, index: number): GameMap {
   });
 }
 
-function nextId(prefix: string, used: Iterable<string>) {
+export function nextId(prefix: string, used: Iterable<string>) {
   let highest = 0;
   for (const id of used) {
     if (id.startsWith(prefix)) {

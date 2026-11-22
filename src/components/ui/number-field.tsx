@@ -12,9 +12,15 @@ interface NumberFieldProps extends Omit<
 > {
   label: string;
   className?: string;
+  placeholder?: string;
 }
 
-function NumberField({ label, className, ...props }: NumberFieldProps) {
+function NumberField({
+  label,
+  className,
+  placeholder,
+  ...props
+}: NumberFieldProps) {
   return (
     <NumberInputPrimitive.NumberInput {...props}>
       <NumberInputPrimitive.NumberInputGroup
@@ -31,7 +37,8 @@ function NumberField({ label, className, ...props }: NumberFieldProps) {
         </NumberInputPrimitive.NumberInputDecrement>
         <NumberInputPrimitive.NumberInputControl
           aria-label={label}
-          className="w-full min-w-0 border-0 bg-transparent text-center tabular-nums"
+          placeholder={placeholder}
+          className="w-full min-w-0 border-0 bg-transparent text-center tabular-nums placeholder:text-muted-foreground"
         />
         <NumberInputPrimitive.NumberInputIncrement
           aria-label={`Raise ${label}`}

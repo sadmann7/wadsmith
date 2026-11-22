@@ -58,6 +58,12 @@ import {
 import { useIwad } from "@/hooks/use-iwad";
 import { agent } from "@/lib/editor/agent";
 import {
+  dropFragment,
+  heldFragment,
+  holdFragment,
+  originOf,
+} from "@/lib/editor/clipboard";
+import {
   type MapTarget,
   normalizeControlClick,
   pointOfTarget,
@@ -68,8 +74,15 @@ import {
   viewOfTarget,
 } from "@/lib/editor/map-target";
 import { type EditorShortcut, editorShortcuts } from "@/lib/editor/shortcuts";
-import { defaultGame, engineSlot } from "@/lib/engine/game";
-import { thingCatalog, thingKinds } from "@/lib/map/catalog";
+import { defaultGame, defaultSky, engineSlot } from "@/lib/engine/game";
+import { texturesOf } from "@/lib/engine/iwad";
+import {
+  floorTextures,
+  getIsPlayerStart,
+  thingCatalog,
+  thingKinds,
+  wallTextures,
+} from "@/lib/map/catalog";
 import { checkMap, fixIssue, issueText } from "@/lib/map/checks";
 import {
   addNote,
@@ -94,6 +107,17 @@ import {
   updateThings,
 } from "@/lib/map/edit";
 import {
+  type CopiedPiece,
+  copyParts,
+  partKeys,
+  pasteParts,
+  pickedRooms,
+  removeParts,
+  selectedParts,
+  type Transform,
+  transformParts,
+} from "@/lib/map/fragment";
+import {
   loopEdges,
   sectorAt,
   sectorLoops,
@@ -101,6 +125,9 @@ import {
   wallOwners,
 } from "@/lib/map/geometry";
 import { describeLine } from "@/lib/map/lines";
+import { lineLinks, type MapLink, sectorLinks } from "@/lib/map/links";
+import { gradient, gradientEnds, type SurfaceLook } from "@/lib/map/look";
+import { type DrawShape, polygonSides } from "@/lib/map/shapes";
 import {
   MapFileError,
   maxFileBytes,
@@ -113,6 +140,13 @@ import {
   parseSurface,
   surfaceKey,
 } from "@/lib/map/surfaces";
+import {
+  alignWalls,
+  countTexture,
+  replaceTexture,
+  type TextureKind,
+} from "@/lib/map/texture-tools";
+import { flatUse, wallUse } from "@/lib/map/textures";
 import { SceneCamera } from "@/lib/preview/scene-camera";
 import { createFlatAssets, readWadAssets } from "@/lib/wad/assets";
 import { compileMap } from "@/lib/wad/compile";
@@ -121,8 +155,10 @@ import type { EditMode, MapTool, MapViewStatus } from "./map-editor";
 
 import { BuildDialog } from "./build-dialog";
 import { MapContextMenu } from "./context-menu";
+import { GradientPanel } from "./gradient-panel";
 import {
   LineInspector,
+  RoomsInspector,
   SectorInspector,
   SwitchInspector,
   ThingInspector,
@@ -130,26 +166,46 @@ import {
 import { MapCanvas } from "./map-canvas";
 import { type EpisodeEntry, type MapHealth, MapSwitcher } from "./map-switcher";
 import { NewMapPanel } from "./new-map-panel";
+import { PrefabsDialog } from "./prefabs-dialog";
 import { type DraftSource, SceneCanvas } from "./scene-editor";
 import { ShortcutSheet } from "./shortcut-sheet";
 import { SurfacePanel } from "./surface-panel";
+import { TexturePicker } from "./texture-picker";
+import { TransformDialog } from "./transform-dialog";
 
 const modeHints: Record<EditMode, string> = {
   vertices:
     "Drag corners to reshape rooms, or nudge them with the arrow keys. Shift-click adds to the selection.",
   lines: "Click a wall to change its textures or what it does.",
-  sectors: "Click a room to select it. Drag its corners to reshape it.",
+  sectors:
+    "Click a room to select it, and drag it to move it. Shift-click adds a room, and Shift-drag selects a box.",
   things:
     "Click a thing to select it, or pick one in the inspector to place it.",
 };
 
 const toolHints: Record<Exclude<MapTool, "select">, string> = {
-  draw: "Click corners, then click the first one or press Enter. Reuse a wall's corners to connect rooms.",
+  draw: "Click corners, then click the first one or press Enter. A room drawn against a wall shares corners with it.",
   line: "Click points inside a room, then click the last one again or press Enter. A line can hold a middle texture or a walk-over action.",
   thing:
     "Click a floor to place it, or press Enter in 3D to place it ahead. Esc stops placing.",
   switch:
     "Click a solid wall to add a switch, then drag from it to a door. Esc cancels.",
+};
+
+const shapeHints: Record<Exclude<DrawShape, "outline">, string> = {
+  rectangle:
+    "Click one corner, then the opposite one. Choose another shape in the status bar.",
+  polygon:
+    "Click the middle, then where one corner goes. Choose another shape in the status bar.",
+};
+
+const noLinks: MapLink[] = [];
+
+// The same ranges the inspector's fields keep a single room within.
+const roomLimits = {
+  floor: { min: -1024, max: 1024 },
+  ceiling: { min: -1024, max: 2048 },
+  light: { min: 0, max: 255 },
 };
 
 const roomSides: RoomSide[] = ["north", "east", "south", "west"];
@@ -166,6 +222,9 @@ const thingCategoryLabels: Record<ThingCategory, string> = {
 };
 
 const savedLayout = createLocalStorage("wadsmith:layout");
+// How long after the 3D view copies a look the page's copy event still
+// belongs to it.
+const lookCopyMs = 250;
 const savedWelcome = createLocalStorage("wadsmith:welcomed");
 // Below this width, two panes can't hold the map controls and a usable 3D view.
 const narrowQuery = "(max-width: 1100px)";
@@ -296,7 +355,29 @@ export function EditorScreen({
   const [welcomed, setWelcomed] = React.useState(loadWelcomed);
   const playButton = React.useRef<HTMLButtonElement>(null);
   const fileInput = React.useRef<HTMLInputElement>(null);
-  const [agentLog, setAgentLog] = React.useState("");
+  const [notice, setNotice] = React.useState("");
+  // A dialog opened from a room's menu keeps what the menu worked on, which
+  // the selection alone may not say once the menu has closed.
+  const [transforming, setTransforming] = React.useState<string[] | null>(null);
+  const [replacing, setReplacing] = React.useState<{
+    kind: TextureKind;
+    from: string;
+  } | null>(null);
+  // The look last picked up, from a wall's menu on the map or by copying a
+  // surface in the 3D view.
+  const [look, setLook] = React.useState<SurfaceLook | null>(null);
+  const lookCopy = React.useRef({ texture: "", at: -Infinity });
+  // Whether a piece was copied after the look, so the 3D view's paste key
+  // pastes the piece and not the look.
+  const [pieceNewer, setPieceNewer] = React.useState(false);
+  const [scenePicked, setScenePicked] = React.useState<string[]>([]);
+  const [drawShape, setDrawShape] = React.useState<DrawShape>("outline");
+  const [drawSides, setDrawSides] = React.useState(8);
+  const [prefabsAt, setPrefabsAt] = React.useState<{
+    point: Point | null;
+    selected: GameMap | null;
+  } | null>(null);
+  const viewStatus = React.useRef<MapViewStatus | null>(null);
   const [initialLayout] = React.useState(loadLayout);
   const [layout, setLayout] = React.useState(initialLayout.view);
   const [findCameraRequest, setFindCameraRequest] = React.useState(0);
@@ -350,7 +431,7 @@ export function EditorScreen({
   const assets = React.useMemo(() => {
     if (!iwad) return createFlatAssets();
     try {
-      return readWadAssets(iwad.data);
+      return readWadAssets(iwad.data, texturesOf(iwad).resources);
     } catch {
       return createFlatAssets();
     }
@@ -438,22 +519,230 @@ export function EditorScreen({
     .filter((key) => key.startsWith(thingKeyPrefix))
     .map((key) => key.slice(thingKeyPrefix.length));
 
+  // The rooms and things the selection stands for, which copy, cut, paste
+  // and the transforms work on.
+  // A selected wall isn't its room, and a room left active in another mode
+  // isn't what that mode works on. A room's own menu works on that room.
+  const pickedRoom =
+    contextMenuOpen && menuTarget?.kind === "room"
+      ? menuTarget.sector
+      : (editMode === "vertices" || editMode === "sectors") &&
+          (surface ? parseSurface(surface)?.kind !== "wall" : true)
+        ? activeSector
+        : null;
+  const { parts, canCopy, transformKeys } = React.useMemo(() => {
+    const parts = selectedParts(map, selection, pickedRoom);
+    const picked = new Set(parts.things);
+    return {
+      parts,
+      canCopy:
+        parts.sectors.length > 0 ||
+        map.things.some(
+          (item) => picked.has(item.id) && !getIsPlayerStart(item.kind),
+        ),
+      transformKeys: [
+        ...new Set([
+          ...selection.filter(
+            (key) => map.vertices[key] || key.startsWith(thingKeyPrefix),
+          ),
+          ...partKeys(map, parts),
+        ]),
+      ],
+    };
+  }, [map, pickedRoom, selection]);
+
+  // The rooms picked themselves, without the rooms drawn inside them, which
+  // the inspector edits together.
+  const selectedRooms = React.useMemo(() => {
+    const picked = pickedRooms(map, selection, pickedRoom);
+    return map.sectors.filter((item) => picked.includes(item.id));
+  }, [map, pickedRoom, selection]);
+
+  const selectPasted = (keys: string[]) => {
+    setSurface(null);
+    setActiveSector(null);
+    setSelection(keys);
+  };
+
+  const pasteFragment = (piece: CopiedPiece | null, at: Point | null) => {
+    const pasted =
+      piece &&
+      pasteParts(
+        map,
+        piece.fragment,
+        at,
+        grid,
+        piece.origin === originOf(episode.currentId),
+      );
+    if (!pasted) {
+      setNotice("There is nothing to paste. Copy a room or a thing first.");
+      return;
+    }
+    setNotice("");
+    commit(pasted.map);
+    selectPasted(pasted.keys);
+  };
+
+  // Under the pointer when it is over the map, and in the middle of the view
+  // otherwise.
+  const pastePoint = () => {
+    const status = viewStatus.current;
+    if (!status) return null;
+    return (
+      status.pointer ?? {
+        x: (status.view.left + status.view.right) / 2,
+        y: (status.view.top + status.view.bottom) / 2,
+      }
+    );
+  };
+
+  const cutFragment = (fragment: GameMap) => {
+    commit(
+      removeParts(map, {
+        sectors: parts.sectors,
+        things: fragment.things.map((item) => item.id),
+      }),
+    );
+    selectPasted([]);
+  };
+
+  const copySelection = (cut: boolean) => {
+    const fragment = copyParts(map, parts);
+    if (!fragment) return;
+    const text = holdFragment(fragment, episode.currentId);
+    void navigator.clipboard?.writeText(text).catch(() => undefined);
+    setPieceNewer(true);
+    if (cut) cutFragment(fragment);
+  };
+
   const duplicateSelection = () => {
+    const fragment = parts.sectors.length > 0 ? copyParts(map, parts) : null;
+    if (fragment) {
+      pasteFragment({ fragment, origin: originOf(episode.currentId) }, null);
+      return;
+    }
     const copies = duplicateThings(map, selectedThingIds);
     if (copies.ids.length === 0) return;
     history.record(copies.map);
     showMap(copies.map);
-    setSurface(null);
-    setActiveSector(null);
-    setSelection(copies.ids.map((id) => `${thingKeyPrefix}${id}`));
+    selectPasted(copies.ids.map((id) => `${thingKeyPrefix}${id}`));
   };
+
+  const transformSelection = (steps: Transform[], keys = transformKeys) => {
+    if (keys.length === 0 || steps.length === 0) return;
+    let next = map;
+    for (const step of steps) {
+      const turned = transformParts(next, keys, step, grid);
+      if (!turned) {
+        setNotice(
+          "That would press two corners of a room together, or change nothing.",
+        );
+        return;
+      }
+      next = turned;
+    }
+    setNotice("");
+    commit(next);
+    // Corners that met others on the way are gone.
+    setSelection(
+      selection.filter(
+        (key) =>
+          next.vertices[key] ||
+          key.startsWith(thingKeyPrefix) ||
+          key.startsWith(switchKeyPrefix),
+      ),
+    );
+  };
+
+  // Copy and cut go through the browser's own events, so the piece lands on
+  // the system clipboard without asking, and text selected on the page still
+  // copies as text.
+  const onClipboard = React.useEffectEvent((event: ClipboardEvent) => {
+    if (
+      !notTyping() ||
+      document.activeElement?.closest('[role="dialog"]') ||
+      document.querySelector(".game-stage")
+    ) {
+      return;
+    }
+    // A look copied in the 3D view a moment ago takes the clipboard, so a
+    // piece copied before it can no longer be pasted over it.
+    if (
+      event.type === "copy" &&
+      performance.now() - lookCopy.current.at < lookCopyMs &&
+      document.activeElement?.closest(".scene")
+    ) {
+      event.preventDefault();
+      event.clipboardData?.setData("text/plain", lookCopy.current.texture);
+      dropFragment();
+      return;
+    }
+    if (event.type === "paste") {
+      const fragment = heldFragment(event.clipboardData?.getData("text/plain"));
+      if (!fragment) return;
+      event.preventDefault();
+      pasteFragment(fragment, pastePoint());
+      return;
+    }
+    // Text selected elsewhere on the page copies as text, unless the map is
+    // what has the focus.
+    if (
+      window.getSelection()?.toString() &&
+      !document.activeElement?.closest('[aria-roledescription="map editor"]')
+    ) {
+      return;
+    }
+    const fragment = copyParts(map, parts);
+    if (!fragment) return;
+    event.preventDefault();
+    event.clipboardData?.setData(
+      "text/plain",
+      holdFragment(fragment, episode.currentId),
+    );
+    setPieceNewer(true);
+    if (event.type === "cut") cutFragment(fragment);
+  });
+
+  React.useEffect(() => {
+    const kinds = ["copy", "cut", "paste"] as const;
+    for (const kind of kinds) window.addEventListener(kind, onClipboard);
+    return () => {
+      for (const kind of kinds) window.removeEventListener(kind, onClipboard);
+    };
+  }, []);
 
   useShortcut(editorShortcuts.undo.keys, undo, shortcut("undo", notTyping));
   useShortcut(editorShortcuts.redo.keys, redo, shortcut("redo", notTyping));
   useShortcut(
     editorShortcuts.duplicate.keys,
     duplicateSelection,
-    shortcut("duplicate", () => notTyping() && selectedThingIds.length > 0),
+    shortcut(
+      "duplicate",
+      () =>
+        notTyping() &&
+        (selectedThingIds.length > 0 || parts.sectors.length > 0),
+    ),
+  );
+  const canTransform = () => modeKeys() && transformKeys.length > 0;
+  useShortcut(
+    editorShortcuts.rotateRight.keys,
+    () => transformSelection([{ kind: "rotate", degrees: 90 }]),
+    shortcut("rotateRight", canTransform),
+  );
+  useShortcut(
+    editorShortcuts.rotateLeft.keys,
+    () => transformSelection([{ kind: "rotate", degrees: -90 }]),
+    shortcut("rotateLeft", canTransform),
+  );
+  useShortcut(
+    editorShortcuts.flipAcross.keys,
+    () => transformSelection([{ kind: "mirror", axis: "horizontal" }]),
+    shortcut("flipAcross", canTransform),
+  );
+  useShortcut(
+    editorShortcuts.flipOver.keys,
+    () => transformSelection([{ kind: "mirror", axis: "vertical" }]),
+    shortcut("flipOver", canTransform),
   );
 
   // The registry skips key repeats, and holding mod+Z should keep stepping back.
@@ -627,6 +916,24 @@ export function EditorScreen({
       ? describeLine(map, selectedWall.wall, selectedWall.sector)
       : null;
   const freeWall = line ? freeWallAt(map, line.wall) : null;
+  const alignedMap = line
+    ? alignWalls(
+        map,
+        line.sector.id,
+        line.wall,
+        (name) => assets.texture(name).width,
+      )
+    : map;
+  const linkedWall = line?.wall;
+  const links = React.useMemo(
+    () =>
+      linkedWall
+        ? lineLinks(map, linkedWall)
+        : pickedRoom
+          ? sectorLinks(map, pickedRoom)
+          : noLinks,
+    [linkedWall, map, pickedRoom],
+  );
 
   const selectSurface = (key: string | null) => {
     setSurface(key);
@@ -729,7 +1036,7 @@ export function EditorScreen({
       onContextMenuCapture={normalizeControlClick}
     >
       <SceneCanvas
-        aria-label="3D view. Click a surface to select it. W, A, S and D walk, N and P step through surfaces."
+        aria-label="3D view. Click a surface to select it, and drag a wall to move its texture. W, A, S and D walk, N and P step through surfaces, and O opens the door or lift under the pointer."
         className="screen scene"
         map={map}
         assets={assets}
@@ -738,10 +1045,25 @@ export function EditorScreen({
         selected={surfaceInfo ? surface : null}
         linked={sceneInfo ? sceneSelection : null}
         placing={tool === "thing" ? thingKind : null}
+        sky={sky ?? defaultSky(slot, iwadGame)}
         grid={grid}
         renderWidth={640}
         renderHeight={400}
-        onMapChange={(next) => commit(next)}
+        look={look}
+        pasteLook={!pieceNewer}
+        onLookChange={(next) => {
+          setLook(next);
+          setPieceNewer(false);
+          lookCopy.current = { texture: next.texture, at: performance.now() };
+          setNotice(
+            `Copied ${next.texture}. Paste it with the paste key, paint it with Alt and a click${next.kind === "wall" ? ", or flood it along joined walls with F" : ""}.`,
+          );
+        }}
+        picked={scenePicked}
+        onPickedChange={setScenePicked}
+        onMapChange={(next, details) =>
+          commit(next, details.reason === "wheel" ? "scene-wheel" : undefined)
+        }
         onSelectedChange={selectSurface}
         onContextSurface={reportSceneTarget}
         contextMenuOpen={contextMenuOpen}
@@ -749,11 +1071,21 @@ export function EditorScreen({
     </MenuContextTrigger>
   );
 
+  // The surfaces picked together that are still on the map, with what each
+  // one is.
+  const pickedSurfaces = scenePicked.flatMap((key) => {
+    const info = describeSurface(map, key);
+    return info?.sector ? [{ key, info }] : [];
+  });
+  const pickedKeys = pickedSurfaces.map((item) => item.key);
+
   const sceneStatus = (
     <p className="scene-status" role="status">
-      {sceneInfo
-        ? `${sceneInfo.label}${sceneInfo.texture ? ` · ${sceneInfo.texture}` : ""}${sceneInfo.height !== null ? ` · height ${sceneInfo.height}` : ""}`
-        : "Click a floor, ceiling, wall or thing."}
+      {pickedSurfaces.length > 1
+        ? `${pickedSurfaces.length} surfaces picked. Shift-click adds or removes one.`
+        : sceneInfo
+          ? `${sceneInfo.label}${sceneInfo.texture ? ` · ${sceneInfo.texture}` : ""}${sceneInfo.height !== null ? ` · height ${sceneInfo.height}` : ""}`
+          : "Click a floor, ceiling, wall or thing. Drag a wall to move its texture."}
     </p>
   );
 
@@ -793,7 +1125,9 @@ export function EditorScreen({
     mapCheck.current?.focus();
   };
 
-  const updateViewStatus = ({ pointer, zoom }: MapViewStatus) => {
+  const updateViewStatus = (status: MapViewStatus) => {
+    const { pointer, zoom } = status;
+    viewStatus.current = status;
     if (pointerStatus.current) {
       pointerStatus.current.textContent = pointer
         ? `X ${pointer.x}  Y ${-pointer.y}`
@@ -940,6 +1274,7 @@ export function EditorScreen({
   const replaceMap = (next: GameMap) => {
     commit(next);
     setSelection([]);
+    setScenePicked([]);
     setActiveSector(null);
     setSurface(null);
     setFileError(null);
@@ -986,7 +1321,7 @@ export function EditorScreen({
     });
     const failure =
       typeof result.error === "string" ? result.error : result.error?.message;
-    setAgentLog(
+    setNotice(
       result.ok
         ? `${action} ran through the agent bridge.`
         : (failure ?? `${action} was refused.`),
@@ -1283,7 +1618,10 @@ export function EditorScreen({
                       }
                       onToolChange={setTool}
                       onActiveSectorChange={setActiveSector}
-                      onSelectionChange={setSelection}
+                      onSelectionChange={(next) => {
+                        setSelection(next);
+                        setScenePicked([]);
+                      }}
                       onMapSelect={() => setSurface(null)}
                       onDraftMapChange={(draft) => drafts.publish(draft)}
                       camera={camera}
@@ -1296,6 +1634,9 @@ export function EditorScreen({
                       fitRequest={fitRequest}
                       focusRequest={focusRequest}
                       callouts={callouts}
+                      links={links}
+                      drawShape={drawShape}
+                      drawSides={drawSides}
                       drawRequest={drawRequest}
                       lookAtRequest={lookAtRequest}
                       onContextTarget={reportMenuTarget}
@@ -1488,9 +1829,9 @@ export function EditorScreen({
                 </Menu>
               ) : null}
             </header>
-            {agentLog ? (
+            {notice ? (
               <p className="agent-log" role="status">
-                {agentLog}
+                {notice}
               </p>
             ) : null}
             {fileError ? (
@@ -1498,6 +1839,19 @@ export function EditorScreen({
                 <h2>Map problem</h2>
                 <p>{fileError}</p>
               </section>
+            ) : null}
+
+            {pickedSurfaces.length > 1 ? (
+              <GradientPanel
+                key={pickedKeys.join()}
+                count={pickedSurfaces.length}
+                heights={gradientEnds(map, pickedKeys, "height")}
+                lights={gradientEnds(map, pickedKeys, "light")}
+                onApply={(what, from, to) => {
+                  const next = gradient(map, pickedKeys, what, from, to);
+                  if (next !== map) commit(next);
+                }}
+              />
             ) : null}
 
             {surface && surfaceInfo && !surfaceInfo.thing && !selectedWall ? (
@@ -1567,6 +1921,9 @@ export function EditorScreen({
                 onTargetChange={(target) =>
                   commit(setLineTarget(map, line.wall, target))
                 }
+                onAlign={
+                  alignedMap === map ? undefined : () => commit(alignedMap)
+                }
               />
             ) : !selectedSwitch && (thing || placingThings) ? (
               <ThingInspector
@@ -1589,6 +1946,53 @@ export function EditorScreen({
                   setThingKind(kind);
                   setEditMode("things");
                   setTool("thing");
+                }}
+              />
+            ) : selectedRooms.length > 1 && !selectedSwitch && !thing ? (
+              <RoomsInspector
+                map={map}
+                rooms={selectedRooms}
+                assets={assets}
+                onChange={(patch) =>
+                  commit(
+                    selectedRooms.reduce(
+                      (next, room) =>
+                        patch.wallTexture
+                          ? setRoomWalls(next, room.id, patch.wallTexture)
+                          : // A door has no ceiling height of its own.
+                            updateSector(
+                              next,
+                              room.id,
+                              room.door && "ceiling" in patch ? {} : patch,
+                            ),
+                      map,
+                    ),
+                    `rooms:${selectedRooms.map((room) => room.id).join()}`,
+                  )
+                }
+                onShift={(key, delta) => {
+                  const moved = selectedRooms.flatMap((room) => {
+                    // A room already past a limit stays, and never moves
+                    // against the step.
+                    const { min, max } = roomLimits[key];
+                    const value =
+                      delta > 0
+                        ? Math.max(room[key], Math.min(max, room[key] + delta))
+                        : Math.min(room[key], Math.max(min, room[key] + delta));
+                    return (room.door && key === "ceiling") ||
+                      value === room[key]
+                      ? []
+                      : [{ id: room.id, value }];
+                  });
+                  if (moved.length === 0) return;
+                  commit(
+                    moved.reduce(
+                      (next, { id, value }) =>
+                        updateSector(next, id, { [key]: value }),
+                      map,
+                    ),
+                    `rooms:${selectedRooms.map((room) => room.id).join()}`,
+                  );
                 }}
               />
             ) : sector && !selectedSwitch && !thing ? (
@@ -1702,9 +2106,53 @@ export function EditorScreen({
               ? modeHints[editMode]
               : tool === "thing"
                 ? `Placing ${thingCatalog[thingKind].label}. ${toolHints.thing}`
-                : toolHints[tool]}
+                : tool === "draw" && drawShape !== "outline"
+                  ? shapeHints[drawShape]
+                  : toolHints[tool]}
           </p>
           <div>
+            {tool === "draw" ? (
+              <Menu>
+                <MenuTrigger
+                  className={buttonVariants({
+                    variant: "text",
+                    className: "min-h-5 px-1 font-mono text-[11px]",
+                  })}
+                  title="The shape a new room is drawn as"
+                >
+                  Shape {shapeLabel(drawShape, drawSides)}
+                </MenuTrigger>
+                <MenuContent align="end">
+                  <MenuRadioGroup
+                    value={
+                      drawShape === "polygon" ? String(drawSides) : drawShape
+                    }
+                    onValueChange={(value) => {
+                      const sides = Number(value);
+                      if (Number.isFinite(sides)) {
+                        setDrawShape("polygon");
+                        setDrawSides(sides);
+                      } else {
+                        setDrawShape(value as DrawShape);
+                      }
+                    }}
+                  >
+                    {["outline", "rectangle", ...polygonSides.map(String)].map(
+                      (value) => (
+                        <MenuRadioItem key={value} value={value} closeOnSelect>
+                          {Number.isFinite(Number(value))
+                            ? shapeLabel("polygon", Number(value))
+                            : shapeLabel(value as DrawShape, 0)}
+                          <MenuItemIndicator className="ml-auto text-primary">
+                            <Check size={14} />
+                          </MenuItemIndicator>
+                        </MenuRadioItem>
+                      ),
+                    )}
+                  </MenuRadioGroup>
+                </MenuContent>
+              </Menu>
+            ) : null}
             <span className="max-2xl:hidden">
               {Object.keys(map.vertices).length} vertices · {lineCount} lines
             </span>
@@ -1769,6 +2217,28 @@ export function EditorScreen({
         target={menuTarget}
         thingKind={thingKind}
         grid={grid}
+        edit={{
+          canCopy,
+          canTransform: transformKeys.length > 0,
+          onCopy: () => copySelection(false),
+          onCut: () => copySelection(true),
+          onPaste: (point) => pasteFragment(heldFragment(), point),
+          onDuplicate: duplicateSelection,
+          onTransform: (transform) => transformSelection([transform]),
+          onTransformBy: () => setTransforming(transformKeys),
+          onPrefabs: (point) =>
+            setPrefabsAt({ point, selected: copyParts(map, parts) }),
+        }}
+        textures={{
+          picked: look?.kind === "wall" ? look.texture : null,
+          widthOf: (name) => assets.texture(name).width,
+          onPick: (name) => {
+            setLook({ kind: "wall", texture: name });
+            setPieceNewer(false);
+            setNotice(`Picked up ${name}. Right-click a wall to apply it.`);
+          },
+          onReplace: (kind, from) => setReplacing({ kind, from }),
+        }}
         onOpenChange={(open, details) => {
           const target = menuTargetRef.current;
           if (open && !target) {
@@ -1798,6 +2268,52 @@ export function EditorScreen({
       {showShortcuts ? (
         <ShortcutSheet onClose={() => setShowShortcuts(false)} />
       ) : null}
+      {replacing ? (
+        <TexturePicker
+          kind={replacing.kind}
+          title={`Replace ${replacing.from} everywhere`}
+          context={`${countTexture(map, replacing.from, replacing.kind)} in this map`}
+          value={replacing.from}
+          common={replacing.kind === "flat" ? floorTextures : wallTextures}
+          use={replacing.kind === "flat" ? flatUse(map) : wallUse(map)}
+          picture={replacing.kind === "flat" ? assets.flat : assets.texture}
+          assets={assets}
+          light={255}
+          onApply={(to) => {
+            const replaced = replaceTexture(
+              map,
+              replacing.from,
+              to,
+              replacing.kind,
+            );
+            if (replaced.count === 0) return;
+            commit(replaced.map);
+            setNotice(
+              `Replaced ${replacing.from} with ${to} in ${replaced.count} ${replaced.count === 1 ? "place" : "places"}.`,
+            );
+          }}
+          onClose={() => setReplacing(null)}
+        />
+      ) : null}
+      {transforming ? (
+        <TransformDialog
+          onApply={(steps) => transformSelection(steps, transforming)}
+          onClose={() => setTransforming(null)}
+        />
+      ) : null}
+      {prefabsAt ? (
+        <PrefabsDialog
+          selected={prefabsAt.selected}
+          suggestedName={prefabsAt.selected?.sectors[0]?.name ?? "Prefab"}
+          onPlace={(fragment) =>
+            pasteFragment(
+              { fragment, origin: null },
+              prefabsAt.point ?? pastePoint(),
+            )
+          }
+          onClose={() => setPrefabsAt(null)}
+        />
+      ) : null}
       {building ? (
         <BuildDialog
           map={map}
@@ -1807,12 +2323,13 @@ export function EditorScreen({
           context={context}
           onBuild={(fileName) => {
             try {
-              downloadWad(map, engineSlot(slot, iwadGame), fileName, {
-                par,
-                music,
-                sky,
-                intertext,
-              });
+              downloadWad(
+                map,
+                engineSlot(slot, iwadGame),
+                fileName,
+                { par, music, sky, intertext },
+                iwad ? texturesOf(iwad) : undefined,
+              );
             } catch (error) {
               return `Couldn't build the map. ${(error as Error).message}`;
             }
@@ -1929,6 +2446,12 @@ function createDraftChannel() {
   return { subscribe, publish };
 }
 
+function shapeLabel(shape: DrawShape, sides: number) {
+  if (shape === "outline") return "Outline";
+  if (shape === "rectangle") return "Rectangle";
+  return `${sides} sides`;
+}
+
 function shortcut(name: EditorShortcut, when?: () => boolean) {
   return {
     description: editorShortcuts[name].description,
@@ -1965,10 +2488,11 @@ function downloadWad(
   slot: string,
   fileName: string,
   level: Parameters<typeof compileMap>[2],
+  textures: Parameters<typeof compileMap>[3],
 ) {
   downloadFile(
     fileName,
-    compileMap(map, slot, level).slice().buffer,
+    compileMap(map, slot, level, textures).slice().buffer,
     "application/octet-stream",
   );
 }

@@ -145,6 +145,16 @@ export function describeSurface(
   if (sector.door) {
     return { ...empty, sector, label: `${sector.name} frame` };
   }
+  // The middle of an open line is its see-through texture, which the line's
+  // own settings choose, and not a part of the room's wall.
+  if (owners.length > 1 && surface.part === "middle") {
+    return {
+      ...empty,
+      sector,
+      label: `Line in ${sector.name}`,
+      texture: map.lines?.[surface.wall]?.sides?.[sector.id]?.middle ?? null,
+    };
+  }
   // Doom flips a switch texture on any part of the line when it is pressed.
   const pressed =
     surface.part !== "middle" &&
@@ -219,14 +229,18 @@ export function moveSurfaceHeight(
   if (surface.kind === "floor") {
     const top = sector.door ? heightLimit : sector.ceiling - minimumOpening;
     const floor = Math.max(-heightLimit, Math.min(top, sector.floor + delta));
-    return updateSector(map, sector.id, { floor });
+    return floor === sector.floor
+      ? map
+      : updateSector(map, sector.id, { floor });
   }
   if (surface.kind === "ceiling") {
     const ceiling = Math.min(
       heightLimit,
       Math.max(sector.floor + minimumOpening, sector.ceiling + delta),
     );
-    return updateSector(map, sector.id, { ceiling });
+    return ceiling === sector.ceiling
+      ? map
+      : updateSector(map, sector.id, { ceiling });
   }
   return map;
 }

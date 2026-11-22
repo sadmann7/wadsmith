@@ -275,6 +275,222 @@ describe("game lighting", () => {
   });
 });
 
+describe("the sky, open lines and movers", () => {
+  // Each column of the sky is one color, so a pixel says which column it is.
+  const skyPicture = {
+    width: 256,
+    height: 128,
+    leftOffset: 0,
+    topOffset: 0,
+    pixels: Uint8Array.from({ length: 256 * 128 }, (_, index) => index >> 7),
+    opaque: new Uint8Array(256 * 128).fill(1),
+  };
+  const grate = (opaque: number) => ({
+    width: 64,
+    height: 128,
+    leftOffset: 0,
+    topOffset: 0,
+    pixels: new Uint8Array(64 * 128).fill(7),
+    opaque: new Uint8Array(64 * 128).fill(opaque),
+  });
+  const withTextures = (
+    extra: Record<string, ReturnType<typeof grate>>,
+  ): SceneAssets => ({
+    ...assets,
+    texture: (name) => extra[name] ?? assets.texture(name),
+  });
+  const open = wallKey("v3", "v4");
+  const outdoors: GameMap = {
+    ...testMap,
+    sectors: testMap.sectors.map((sector) =>
+      sector.id === "sector-1" || sector.id === "sector-2"
+        ? { ...sector, ceilingTexture: "F_SKY1" }
+        : sector,
+    ),
+  };
+  const colorAt = (map: GameMap, angle: number, x: number, y: number) => {
+    const target = createRenderTarget(320, 200);
+    renderScene(
+      target,
+      map,
+      { ...startCamera(map), angle },
+      { assets: withTextures({ SKY1: skyPicture }), sky: "SKY1" },
+    );
+    return {
+      color: target.colors[y * 320 + x],
+      surface: target.surfaces[target.pick[y * 320 + x]],
+    };
+  };
+
+  it("draws the sky where a ceiling wears the sky flat, by the way you look", () => {
+    const east = colorAt(outdoors, 0, 160, 5);
+    expect(east.surface).toBe("ceiling:sector-1");
+    expect(east.color).toBe(assets.shades[255]);
+    // An eighth of a turn is an eighth of the sky's four wraps on.
+    expect(colorAt(outdoors, 45, 160, 5).color).toBe(assets.shades[127]);
+    expect(colorAt(testMap, 0, 160, 5).color).not.toBe(east.color);
+  });
+
+  it("draws sky and no wall between two rooms open to it", () => {
+    expect(renderStarter()(160, 60)).toBe(`wall:sector-1:${open}:upper`);
+    const between = colorAt(outdoors, 0, 160, 60);
+    expect(between.surface).toBe("ceiling:sector-1");
+    expect(between.color).toBe(assets.shades[255]);
+  });
+
+  it("draws a middle texture on an open line and sees through its holes", () => {
+    const fenced = updateLineSide(testMap, open, "sector-1", {
+      middle: "GRATE",
+    });
+    const pick = (opaque: number) => {
+      const target = createRenderTarget(320, 200);
+      renderScene(target, fenced, startCamera(fenced), {
+        assets: withTextures({ GRATE: grate(opaque) }),
+      });
+      return target.surfaces[target.pick[96 * 320 + 160]];
+    };
+    expect(pick(1)).toBe(`wall:sector-1:${open}:middle`);
+    expect(pick(0)).toBe(renderStarter()(160, 96));
+  });
+
+  it("outlines a selected see-through texture round its span, not its holes", () => {
+    const fenced = updateLineSide(testMap, open, "sector-1", {
+      middle: "GRATE",
+    });
+    // Every other pixel is a hole.
+    const checkered = {
+      ...grate(1),
+      opaque: Uint8Array.from({ length: 64 * 128 }, (_, index) => index % 2),
+    };
+    const target = createRenderTarget(320, 200);
+    renderScene(target, fenced, startCamera(fenced), {
+      assets: withTextures({ GRATE: checkered }),
+      selected: `wall:sector-1:${open}:middle`,
+    });
+    const span = target.extent.filter((id) => id !== 0).length;
+    const outlined = target.colors.filter(
+      (color) => color === 0xff2b6aff,
+    ).length;
+    expect(span).toBeGreaterThan(1000);
+    expect(outlined).toBeGreaterThan(0);
+    expect(outlined).toBeLessThan(span / 4);
+  });
+
+  it("doesn't outline what shows through a see-through texture hole by hole", () => {
+    const fenced = updateLineSide(testMap, open, "sector-1", {
+      middle: "GRATE",
+    });
+    const checkered = {
+      ...grate(1),
+      opaque: Uint8Array.from({ length: 64 * 128 }, (_, index) => index % 2),
+    };
+    const hovered = (map: GameMap) => {
+      const target = createRenderTarget(320, 200);
+      renderScene(target, map, startCamera(map), {
+        assets: withTextures({ GRATE: checkered }),
+        hovered: "wall:sector-2:v13|v14:upper",
+      });
+      return target.colors.filter((color) => color === 0xffffffff).length;
+    };
+    // The door's face behind the fence gets no more outline than without it.
+    expect(hovered(testMap)).toBeGreaterThan(0);
+    expect(hovered(fenced)).toBeLessThanOrEqual(hovered(testMap));
+  });
+
+  it("outlines a thing in front of a see-through texture all the way round", () => {
+    const things = [
+      ...testMap.things,
+      { id: "imp-2", kind: "imp" as const, x: 200, y: 160, angle: 0 },
+    ];
+    const outlined = (map: GameMap) => {
+      const target = createRenderTarget(320, 200);
+      renderScene(target, map, startCamera(map), {
+        assets: withTextures({ GRATE: grate(1) }),
+        selected: "thing:imp-2",
+      });
+      return target.colors.filter((color) => color === 0xff2b6aff).length;
+    };
+    const fenced = updateLineSide(testMap, open, "sector-1", {
+      middle: "GRATE",
+    });
+    expect(outlined({ ...testMap, things })).toBeGreaterThan(0);
+    expect(outlined({ ...fenced, things })).toBe(
+      outlined({ ...testMap, things }),
+    );
+  });
+
+  it("shows a taller room's walls above a lower one when both are open to the sky", () => {
+    const yard: GameMap = {
+      ...outdoors,
+      sectors: outdoors.sectors.map((sector) =>
+        sector.id === "sector-2" ? { ...sector, ceiling: 512 } : sector,
+      ),
+    };
+    // The start room's ceiling crosses the view at row 52, and the corridor's
+    // far wall rises well above it.
+    expect(colorAt(yard, 0, 160, 30).surface).toMatch(/^wall:sector-2:/);
+    expect(colorAt(outdoors, 0, 160, 30).surface).toBe("ceiling:sector-1");
+  });
+
+  it("runs a middle texture from the viewer's left on both sides of a line", () => {
+    const lined = defined(
+      addDetail(islandMap, [
+        { x: 96, y: 128 },
+        { x: 96, y: 384 },
+      ]),
+    ).map;
+    const line = wallKey(
+      ...(defined(lined.sectors[0].details)[0] as [string, string]),
+    );
+    const striped = updateLineSide(lined, line, "yard", { middle: "STRIPES" });
+    // Each column of the texture is its own color, and the shades keep a
+    // color's number, so a pixel says which column it shows.
+    const numbered: SceneAssets = {
+      ...withTextures({
+        STRIPES: {
+          ...grate(1),
+          pixels: Uint8Array.from({ length: 64 * 128 }, (_, index) =>
+            Math.floor(index / 128),
+          ),
+        },
+      }),
+      shades: Uint32Array.from({ length: 32 * 256 }, (_, index) => index & 255),
+    };
+    const columns = (camera: { x: number; y: number; angle: number }) => {
+      const target = createRenderTarget(320, 200);
+      renderScene(target, striped, camera, { assets: numbered });
+      return [150, 170].map((x) => target.colors[100 * 320 + x]);
+    };
+    // The line is 64 away on either side, so twenty pixels are eight units.
+    expect(columns({ x: 32, y: 288, angle: 0 })).toEqual([28, 36]);
+    expect(columns({ x: 160, y: 288, angle: 180 })).toEqual([28, 36]);
+  });
+
+  it("outlines every picked surface like the selected one", () => {
+    const outlined = (picked: string[]) => {
+      const target = createRenderTarget(320, 200);
+      renderScene(target, testMap, startCamera(testMap), { assets, picked });
+      return target.colors.filter((color) => color === 0xff2b6aff).length;
+    };
+    expect(outlined([])).toBe(0);
+    const floor = outlined(["floor:sector-1"]);
+    expect(floor).toBeGreaterThan(0);
+    expect(outlined(["floor:sector-1", "ceiling:sector-1"])).toBeGreaterThan(
+      floor,
+    );
+  });
+
+  it("shows a door open when asked, to look through it", () => {
+    const target = createRenderTarget(320, 200);
+    renderScene(target, testMap, startCamera(testMap), {
+      assets,
+      opened: ["sector-4"],
+    });
+    expect(target.surfaces[target.pick[96 * 320 + 160]]).not.toMatch(/upper$/);
+    expect(renderStarter()(160, 96)).toMatch(/upper$/);
+  });
+});
+
 describe.skipIf(!existsSync(wadPath))("readWadAssets", () => {
   it("composes textures, flats and sprites from Freedoom", () => {
     const wad = readWadAssets(readFileSync(wadPath));

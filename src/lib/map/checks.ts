@@ -14,6 +14,7 @@ import {
 export type CheckedIssue = MapIssue & { severity: "error" | "warning" };
 
 const defaultRoomHeight = 96;
+const solidLine = { twoSided: false, doorBehind: false };
 
 export function mapWarnings(map: GameMap): CheckedIssue[] {
   const warnings: CheckedIssue[] = [];
@@ -160,7 +161,7 @@ const buildGroups: {
   {
     name: "Locked doors",
     passed: "Doors and keys match",
-    ids: /^(door-[a-z]+|switch-[a-z]+|line-key|key-unused)(:|$)/,
+    ids: /^(door-[a-z]+|switch-[a-z]+|line-key|line-doorless|key-unused)(:|$)/,
     needsValidRooms: true,
   },
   {
@@ -258,8 +259,8 @@ export function fixIssue(
     if (!action) return null;
     return updateLine(map, target, {
       action:
-        triggersFor(action.kind, false).length > 0
-          ? fitLineAction(action, false)
+        triggersFor(action.kind, solidLine).length > 0
+          ? fitLineAction(action, solidLine)
           : undefined,
     });
   }

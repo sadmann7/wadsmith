@@ -11,6 +11,12 @@ export const hostPeer = 1;
 const repeatEveryMs = 1000;
 const pingEveryMs = 2000;
 const chunkBytes = 16 * 1024;
+// The room server passes on 2 MiB from a connection at once and 256 KiB a
+// second after that, and drops the rest. The map goes out at half the burst
+// and three quarters of the rate, so the rest of the room's traffic still fits.
+const burstBytes = 1024 * 1024;
+const bytesPerSecond = 192 * 1024;
+const paceEveryMs = 100;
 
 export interface CoopGame {
   map: GameMap;
@@ -172,6 +178,10 @@ export function hostRoom(
   const count = Math.max(1, Math.ceil(packed.length / chunkBytes));
   let started = false;
   let closed = false;
+  const waiting: { to: number; index: number }[] = [];
+  let allowance = burstBytes;
+  let paidAt = Date.now();
+  let pacing: ReturnType<typeof setTimeout> | null = null;
 
   const sendRoster = () => {
     transport.post({ type: "roster", players });
@@ -190,6 +200,9 @@ export function hostRoom(
       return;
     }
     players = players.filter((player) => player.peer !== peer);
+    for (let at = waiting.length - 1; at >= 0; at -= 1) {
+      if (waiting[at].to === peer) waiting.splice(at, 1);
+    }
     for (const [nonce, known] of byNonce) {
       if (known === peer) byNonce.delete(nonce);
     }
@@ -208,16 +221,29 @@ export function hostRoom(
     started,
   });
 
-  const sendMap = (to: number) => {
-    for (let index = 0; index < count; index += 1) {
-      transport.post({
-        type: "chunk",
-        to,
-        index,
-        count,
-        data: packed.slice(index * chunkBytes, (index + 1) * chunkBytes),
-      });
+  const sendChunks = () => {
+    pacing = null;
+    const now = Date.now();
+    allowance = Math.min(
+      burstBytes,
+      allowance + ((now - paidAt) / 1000) * bytesPerSecond,
+    );
+    paidAt = now;
+    while (waiting.length > 0) {
+      const { to, index } = waiting[0];
+      const data = packed.slice(index * chunkBytes, (index + 1) * chunkBytes);
+      const cost = wireBytes(data.length);
+      if (cost > allowance) break;
+      allowance -= cost;
+      waiting.shift();
+      transport.post({ type: "chunk", to, index, count, data });
     }
+    if (waiting.length > 0) pacing = setTimeout(sendChunks, paceEveryMs);
+  };
+
+  const sendMap = (to: number) => {
+    for (let index = 0; index < count; index += 1) waiting.push({ to, index });
+    if (!pacing) sendChunks();
   };
 
   const pings = setInterval(() => {
@@ -309,6 +335,7 @@ export function hostRoom(
       if (closed) return;
       closed = true;
       clearInterval(pings);
+      if (pacing) clearTimeout(pacing);
       transport.post({ type: "close" });
       transport.close();
     },
@@ -449,5 +476,10 @@ export function joinRoom(
 
 export type HostRoom = ReturnType<typeof hostRoom>;
 export type GuestRoom = ReturnType<typeof joinRoom>;
+
+// A chunk travels as base64 inside a short JSON message.
+function wireBytes(length: number) {
+  return Math.ceil(length / 3) * 4 + 128;
+}
 
 export type { Skill };

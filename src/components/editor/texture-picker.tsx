@@ -16,6 +16,10 @@ import {
 } from "@/components/ui/dialog";
 import { InputGroup, InputGroupInput } from "@/components/ui/input";
 import { Toggle, ToggleGroup } from "@/components/ui/toggle";
+import {
+  type AddedTextures,
+  addTextureFiles,
+} from "@/lib/engine/texture-files";
 
 import { TextureSwatch } from "./surface-panel";
 import { TextureGrid, TextureTile } from "./texture-grid";
@@ -67,6 +71,21 @@ export function TexturePicker({
   });
   const grid = React.useRef<HTMLDivElement>(null);
   const searchInput = React.useRef<HTMLInputElement>(null);
+  const fileInput = React.useRef<HTMLInputElement>(null);
+  const [added, setAdded] = React.useState<string | null>(null);
+  const addTextures = async (files: File[]) => {
+    try {
+      const result = await addTextureFiles(files);
+      const listed =
+        kind === "flat"
+          ? result.flats.length > 0
+          : result.textures.some((name) => !result.holed.includes(name));
+      if (listed) setCategory("custom");
+      setAdded(addedMessage(kind, result, listed));
+    } catch {
+      setAdded("Couldn't add those textures.");
+    }
+  };
   const search = query.trim().toUpperCase();
   const active =
     categories.find((item) => item.id === category) ?? categories[0];
@@ -144,6 +163,28 @@ export function TexturePicker({
                 </Toggle>
               ))}
             </ToggleGroup>
+            <div className="mt-3 grid gap-1.5 border-t border-border pt-3">
+              <Button onClick={() => fileInput.current?.click()}>
+                Add textures
+              </Button>
+              <input
+                ref={fileInput}
+                type="file"
+                multiple
+                hidden
+                accept=".wad,image/*"
+                onChange={(event) => {
+                  const files = [...(event.currentTarget.files ?? [])];
+                  event.currentTarget.value = "";
+                  if (files.length > 0) void addTextures(files);
+                }}
+              />
+              {added ? (
+                <p role="status" className="m-0 text-xs text-muted-foreground">
+                  {added}
+                </p>
+              ) : null}
+            </div>
           </nav>
           <div className="flex min-h-0 flex-col gap-3 p-4">
             <InputGroup className="h-[34px] shrink-0">
@@ -272,6 +313,28 @@ export function TexturePicker({
   );
 }
 
+function addedMessage(
+  kind: TextureKind,
+  { images, wads, skipped }: AddedTextures,
+  listed: boolean,
+) {
+  const parts: string[] = [];
+  if (listed) parts.push("Added. They are under Custom.");
+  else if (images.length + wads.length > 0) {
+    parts.push(
+      kind === "flat"
+        ? "Added, with no flat among them. An image is a flat as well only at 64 by 64."
+        : images.length > 0
+          ? "Added for open lines. An image with see-through parts can't cover a solid wall."
+          : "Added, with no wall texture among them.",
+    );
+  }
+  for (const { name, reason } of skipped) {
+    parts.push(`${name} was left out. ${reason}`);
+  }
+  return parts.join(" ");
+}
+
 const flatGroups: [string, RegExp][] = [
   ["Floors", /^(FLOOR|FLAT|MFLR|SFLR|STEP)/],
   ["Ceilings", /^(CEIL|TLITE|GRNLITE)/],
@@ -295,6 +358,8 @@ function categoriesFor(
 ): Category[] {
   const names = kind === "flat" ? available.flats : available.walls;
   const groups = kind === "flat" ? flatGroups : wallGroups;
+  const added = new Set(available.custom);
+  const custom = names.filter((name) => added.has(name));
   return [
     { id: "all", label: "All", names },
     {
@@ -303,6 +368,9 @@ function categoriesFor(
       names: [...use.keys()].toSorted(),
     },
     { id: "common", label: "Common", names: common },
+    ...(custom.length > 0
+      ? [{ id: "custom", label: "Custom", names: custom }]
+      : []),
     ...groups.map(([label, pattern]) => ({
       id: label,
       label,

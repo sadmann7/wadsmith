@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/select";
 import { useIwad } from "@/hooks/use-iwad";
 import { engineSlot, type GameInfo, slotCount } from "@/lib/engine/game";
+import { texturesOf } from "@/lib/engine/iwad";
 import {
   type EpisodeMap,
   formatPar,
@@ -102,9 +103,10 @@ export function MapDialog({
   const skyNames = React.useMemo(
     () =>
       iwad
-        ? readWadAssets(iwad.data).names.textures.filter((name) =>
-            name.startsWith("SKY"),
-          )
+        ? readWadAssets(
+            iwad.data,
+            texturesOf(iwad).resources,
+          ).names.textures.filter((name) => name.startsWith("SKY"))
         : [],
     [iwad],
   );

@@ -35,6 +35,8 @@ import { doorSpecial, lineSpecial, switchDoorSpecial } from "@/lib/map/lines";
 
 import { buildBlockmap } from "./blockmap";
 import { type Box, buildNodes, type NodeLine } from "./nodes";
+import { packWad } from "./pack";
+import { textureLumps, type TextureSource } from "./resources";
 
 export const mapLumpName = "MAP01";
 const lineBlocksPlayer = 0x0001;
@@ -419,13 +421,18 @@ export function compileLumps(map: GameMap, slot = mapLumpName): Lump[] {
   ];
 }
 
+// With a texture source, the WAD also carries the textures and flats the map
+// uses that the game doesn't have.
 export function compileMap(
   map: GameMap,
   slot = mapLumpName,
   level: Omit<EpisodeLevel, "slot" | "map" | "lumps"> = {},
+  textures?: TextureSource,
 ) {
+  const lumps = compileLumps(map, slot);
   return packWad([
-    ...compileLumps(map, slot),
+    ...lumps,
+    ...customLumps(lumps, [level], textures),
     ...umapinfoLump([{ slot, map, ...level }], defaultGame),
     complevelLump([map]),
   ]);
@@ -436,16 +443,32 @@ export function compileMap(
 export function compileEpisode(
   maps: EpisodeLevel[],
   game: GameInfo = defaultGame,
+  textures?: TextureSource,
 ) {
+  const lumps = maps.flatMap(({ slot, map, lumps: built }) =>
+    built
+      ? [{ name: slot, data: new Uint8Array() }, ...built.slice(1)]
+      : compileLumps(map, slot),
+  );
   return packWad([
-    ...maps.flatMap(({ slot, map, lumps }) =>
-      lumps
-        ? [{ name: slot, data: new Uint8Array() }, ...lumps.slice(1)]
-        : compileLumps(map, slot),
-    ),
+    ...lumps,
+    ...customLumps(lumps, maps, textures),
     ...umapinfoLump(maps, game),
     complevelLump(maps.map(({ map }) => map)),
   ]);
+}
+
+function customLumps(
+  lumps: Lump[],
+  levels: Pick<EpisodeLevel, "sky">[],
+  textures: TextureSource | undefined,
+) {
+  if (!textures) return [];
+  return textureLumps(
+    lumps,
+    textures,
+    levels.flatMap((level) => level.sky ?? []),
+  );
 }
 
 const thingSkillFlags: Record<ThingSkill, number> = {
@@ -518,30 +541,6 @@ function lineFlags(line: LineSettings | undefined) {
 
 function writeBox(writer: LumpWriter, box: Box) {
   writer.int16(box.top).int16(box.bottom).int16(box.left).int16(box.right);
-}
-
-function packWad(lumps: Lump[]) {
-  const headerSize = 12;
-  const dataSize = lumps.reduce((total, lump) => total + lump.data.length, 0);
-  const output = new Uint8Array(headerSize + dataSize + lumps.length * 16);
-  const view = new DataView(output.buffer);
-  output.set([0x50, 0x57, 0x41, 0x44]);
-  view.setInt32(4, lumps.length, true);
-  view.setInt32(8, headerSize + dataSize, true);
-
-  let offset = headerSize;
-  let entry = headerSize + dataSize;
-  for (const lump of lumps) {
-    output.set(lump.data, offset);
-    view.setInt32(entry, offset, true);
-    view.setInt32(entry + 4, lump.data.length, true);
-    for (let index = 0; index < 8; index += 1) {
-      output[entry + 8 + index] = lump.name.charCodeAt(index) || 0;
-    }
-    offset += lump.data.length;
-    entry += 16;
-  }
-  return output;
 }
 
 const mostEpisodeSlots = 36;

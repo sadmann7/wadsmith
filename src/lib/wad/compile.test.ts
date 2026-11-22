@@ -81,6 +81,7 @@ import {
   lineActionKinds,
   lineActions,
   newLineAction,
+  triggerChoices,
   triggersFor,
 } from "@/lib/map/lines";
 import { parseMapFile, serializeMap } from "@/lib/map/storage";
@@ -115,6 +116,10 @@ const lShape: GameMap = {
   things: [{ id: "player-1", kind: "player", x: 64, y: 64, angle: 0 }],
   switches: [],
 };
+
+const solidLine = { twoSided: false, doorBehind: false };
+const openLine = { twoSided: true, doorBehind: false };
+const doorLine = { twoSided: true, doorBehind: true };
 
 describe("compileMap", () => {
   it("writes a patch WAD with every map lump in engine order", () => {
@@ -1469,6 +1474,75 @@ describe("line editing", () => {
     expect(lineIssues(openWall, { tag: 99 })).toContain(`line-tag:${openWall}`);
   });
 
+  it("warns about a press-to-open door with no door behind its line", () => {
+    const pressed = {
+      kind: "door-raise",
+      trigger: "door",
+      repeat: true,
+      tag: 0,
+    } as const;
+    const ids = (map: GameMap) => {
+      const { errors, warnings } = inspectMap(map);
+      return {
+        errors: errors.map((issue) => issue.id),
+        warnings: warnings.map((issue) => issue.id),
+      };
+    };
+    // The corridor behind this line isn't a door, so pressing would move it.
+    const open = ids(updateLine(testMap, openWall, { action: pressed }));
+    expect(open.errors).toEqual([]);
+    expect(open.warnings).toContain(`line-doorless:${openWall}`);
+    expect(describeLine(testMap, openWall, "sector-1").doorBehind).toBe(false);
+
+    const doorWall = wallKey("v13", "v14");
+    expect(describeLine(testMap, doorWall, "sector-2").doorBehind).toBe(true);
+    const door = ids(updateLine(testMap, doorWall, { action: pressed }));
+    expect(door.warnings).not.toContain(`line-doorless:${doorWall}`);
+
+    // A pressed Boom door does the same to the room behind it.
+    const boomDoor = defined(generalizedClass("door")).start;
+    const boom = (wall: string) =>
+      ids({
+        ...updateLine(testMap, wall, { raw: { special: boomDoor, tag: 0 } }),
+        complevel: "boom",
+      });
+    expect(boom(openWall).errors).toEqual([]);
+    expect(boom(openWall).warnings).toContain(`line-doorless:${openWall}`);
+    expect(boom(doorWall).warnings).not.toContain(`line-doorless:${doorWall}`);
+    // Started as a switch instead, it waits for a sector to open.
+    const switched = ids({
+      ...updateLine(testMap, openWall, {
+        raw: {
+          special: newGeneralized(defined(generalizedClass("door")), openLine),
+          tag: 0,
+        },
+      }),
+      complevel: "boom",
+    });
+    expect(switched.errors).toEqual([]);
+    expect(switched.warnings).toEqual([`line-target:${openWall}`]);
+
+    // A line inside a room has the room itself behind it.
+    const inside = defined(
+      addDetail(testMap, [
+        { x: 640, y: 128 },
+        { x: 768, y: 128 },
+      ]),
+    ).map;
+    const [from, to] = defined(inside.sectors[2].details)[0];
+    const innerWall = wallKey(from, to);
+    expect(describeLine(inside, innerWall, "sector-3")).toMatchObject({
+      twoSided: true,
+      doorBehind: false,
+    });
+    expect(
+      triggersFor("door-raise", describeLine(inside, innerWall, "sector-3")),
+    ).toEqual(["switch", "walk"]);
+    expect(
+      ids(updateLine(inside, innerWall, { action: pressed })).warnings,
+    ).toContain(`line-doorless:${innerWall}`);
+  });
+
   it("requires the key a locked line needs", () => {
     const locked = updateLine(testMap, openWall, {
       action: {
@@ -1579,14 +1653,61 @@ describe("line editing", () => {
   });
 
   it("only offers triggers the line can use", () => {
-    expect(triggersFor("door-raise", false)).toEqual(["switch"]);
-    expect(triggersFor("door-raise", true)).toContain("door");
+    expect(triggersFor("door-raise", solidLine)).toEqual(["switch"]);
+    // Pressing a line with no door behind it would move the room there.
+    expect(triggersFor("door-raise", openLine)).toEqual(["switch", "walk"]);
+    expect(triggersFor("door-raise", doorLine)).toContain("door");
+    expect(newLineAction(openLine, "door-raise").trigger).toBe("switch");
+    expect(newLineAction(doorLine, "door-raise").trigger).toBe("door");
     expect(
       fitLineAction(
         { kind: "exit", trigger: "door", repeat: true, tag: 0 },
-        true,
+        doorLine,
       ),
     ).toMatchObject({ trigger: "switch", repeat: false });
+    const pressed = {
+      kind: "door-raise",
+      trigger: "door",
+      repeat: true,
+      tag: 0,
+    } as const;
+    expect(triggerChoices(pressed, openLine)).toEqual([
+      "door",
+      "switch",
+      "walk",
+    ]);
+    // A trigger the line no longer suits is listed first, ahead of the rest.
+    expect(
+      triggerChoices(
+        { kind: "floor-lower", trigger: "walk", repeat: true, tag: 0 },
+        solidLine,
+      ),
+    ).toEqual(["walk", "switch"]);
+    expect(
+      triggerChoices(
+        { kind: "floor-lower", trigger: "walk", repeat: true, tag: 0 },
+        openLine,
+      ),
+    ).toEqual(["switch", "walk"]);
+  });
+
+  it("leaves an old press-to-open trigger alone when its key changes", () => {
+    const pressed = {
+      kind: "door-raise",
+      trigger: "door",
+      repeat: true,
+      tag: 0,
+    } as const;
+    expect(
+      fitLineAction({ ...pressed, key: "blue" }, openLine, "door"),
+    ).toEqual({ ...pressed, key: "blue" });
+    // Choosing another kind fits the trigger to the line again.
+    expect(
+      fitLineAction({ ...pressed, kind: "door-open" }, openLine),
+    ).toMatchObject({ trigger: "switch", key: undefined });
+    expect(
+      fitLineAction({ ...pressed, trigger: "walk" }, openLine, "door"),
+    ).toMatchObject({ trigger: "walk" });
   });
 
   it("forgets a deleted room's side and any line left without a wall", () => {
@@ -2098,7 +2219,7 @@ describe("map check", () => {
 
   it("keeps a teleporter on a solid wall loadable and offers to remove it", () => {
     const map = updateLine(testMap, "v1|v15", {
-      action: newLineAction(false, "teleport"),
+      action: newLineAction(solidLine, "teleport"),
     });
     expect(() => parseMapFile(serializeMap(map))).not.toThrow();
     const issue = defined(
@@ -2147,7 +2268,7 @@ describe("map check", () => {
     expect(
       special(
         updateLine(scrolling, "v3|v4", {
-          action: newLineAction(true, "floor-lower"),
+          action: newLineAction(openLine, "floor-lower"),
         }),
       ),
     ).not.toBe(48);
@@ -2385,10 +2506,19 @@ describe("doors line by line", () => {
     const wall = wallKey("e", "f");
     const start = defined(generalizedClass("floor")).start;
     const crusher = defined(generalizedClass("crusher"));
-    expect(newGeneralized(crusher, true)).toBe(crusher.start);
-    expect(generalizedTrigger(newGeneralized(crusher, false))).toMatchObject({
+    expect(newGeneralized(crusher, openLine)).toBe(crusher.start);
+    expect(
+      generalizedTrigger(newGeneralized(crusher, solidLine)),
+    ).toMatchObject({ trigger: "switch" });
+    // A pressed Boom door opens whatever is behind its line.
+    const door = defined(generalizedClass("door"));
+    expect(newGeneralized(door, doorLine)).toBe(door.start);
+    expect(generalizedTrigger(newGeneralized(door, openLine))).toEqual({
       trigger: "switch",
+      repeat: true,
     });
+    const lift = defined(generalizedClass("lift"));
+    expect(newGeneralized(lift, openLine)).toBe(lift.start);
     const raw = updateLine(islandMap, wall, {
       raw: { special: start, tag: 0 },
     });
@@ -2455,6 +2585,7 @@ describe("the game's own things and textures", () => {
       "TLITE6_4",
     ],
     middles: [],
+    custom: [],
     textures: ["STARTAN3", "BROWN1", "METAL", "BIGDOOR2", "SW1STRTN"],
   };
 

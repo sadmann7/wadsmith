@@ -104,7 +104,17 @@ function groups(): { title: string; items: Shortcut[] }[] {
           keys: [key("Arrows")],
           does: "Nudge the selection, with Shift for 8 steps",
         },
-        { keys: [key("Shift-click")], does: "Add to the selection" },
+        {
+          keys: [key("Shift-click")],
+          does: "Add a corner, a thing or a room to the selection",
+        },
+        {
+          keys: [key("Shift-drag")],
+          does: "Select every corner and thing in a box",
+        },
+        { keys: [chord("mod+c")], does: "Copy the selected rooms and things" },
+        { keys: [chord("mod+x")], does: "Cut them" },
+        { keys: [chord("mod+v")], does: "Paste at the pointer" },
         { keys: [backspace], does: "Delete the selection" },
         { keys: [key("+"), key("−", "minus")], does: "Zoom in or out" },
         { keys: [key("0")], does: "Reset the zoom" },
@@ -133,6 +143,31 @@ function groups(): { title: string; items: Shortcut[] }[] {
         {
           keys: [key("Page Up"), key("Page Down")],
           does: "Raise or lower the selected surface, with Shift for 3 steps",
+        },
+        {
+          keys: [key("O")],
+          does: "Open or shut the door or lift under the pointer",
+        },
+        {
+          keys: [chord("mod+c"), chord("mod+v")],
+          does: "Copy a surface's look, and paste it on another",
+        },
+        { keys: [key("Alt-click")], does: "Paint the copied look on" },
+        {
+          keys: [key("Shift")],
+          does: "While dragging a wall's texture, align the walls beside it",
+        },
+        {
+          keys: [key("F")],
+          does: "Flood the copied texture along joined walls",
+        },
+        {
+          keys: [key("Shift-click")],
+          does: "Pick several surfaces, for a gradient",
+        },
+        {
+          keys: [key("Wheel")],
+          does: "Raise or lower a floor or ceiling, with Shift for brightness",
         },
         { keys: [key("Alt-arrows")], does: "Nudge the selected thing" },
         { keys: [backspace], does: "Delete the selected thing" },
