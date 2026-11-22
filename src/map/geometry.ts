@@ -32,12 +32,19 @@ function sectorLoops(sector: Sector) {
   return [sector.vertices, ...(sector.holes ?? [])];
 }
 
+// Lines drawn inside a room, as open chains of corners.
+function sectorDetails(sector: Sector): Edge[] {
+  return (sector.details ?? []).flatMap((chain) =>
+    chain.slice(1).map((to, index) => ({ from: chain[index], to })),
+  );
+}
+
 function sectorVertices(sector: Sector) {
-  return sectorLoops(sector).flat();
+  return [...sectorLoops(sector).flat(), ...(sector.details ?? []).flat()];
 }
 
 function sectorEdges(sector: Sector): Edge[] {
-  return sectorLoops(sector).flatMap(loopEdges);
+  return [...sectorLoops(sector).flatMap(loopEdges), ...sectorDetails(sector)];
 }
 
 function wallKey(a: string, b: string) {
@@ -340,6 +347,11 @@ function wallOwners(map: GameMap) {
         if (at > 0) pillarSides.add(`${sector.id}:${key}`);
       }
     });
+    // A line drawn inside a room has that room on both of its sides.
+    for (const { from, to } of sectorDetails(sector)) {
+      const key = wallKey(from, to);
+      owners.set(key, [...(owners.get(key) ?? []), sector, sector]);
+    }
   }
   for (const sector of map.sectors) {
     const container = containerOf(map, sector);
@@ -393,11 +405,13 @@ export {
   loopEdges,
   loopPolygon,
   loopsPath,
+  onSegment,
   paintOrder,
   pointInPolygon,
   pointInSector,
   sectorAt,
   sectorContainers,
+  sectorDetails,
   sectorEdges,
   sectorHoles,
   sectorLoops,

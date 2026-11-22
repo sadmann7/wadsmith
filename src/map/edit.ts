@@ -797,7 +797,8 @@ function pruneUnused(map: GameMap): GameMap {
 function makePillar(map: GameMap, id: string): GameMap | null {
   const sector = map.sectors.find((item) => item.id === id);
   const container = sector && containerOf(map, sector);
-  if (!sector || !container || sector.door || sector.holes?.length) return null;
+  if (!sector || !container || sector.door) return null;
+  if (sector.holes?.length || sector.details?.length) return null;
   const sectors = map.sectors
     .filter((item) => item.id !== id)
     .map((item) =>
@@ -861,6 +862,117 @@ function fillHole(
   };
 }
 
+function withDetails(sector: Sector, details: string[][]): Sector {
+  const next: Sector = { ...sector, details };
+  if (details.length === 0) delete next.details;
+  return next;
+}
+
+// A line drawn inside a room, with the room on both of its sides, for a
+// middle texture or a walk-over action. Every stretch of it must cross that
+// room's floor.
+function addDetail(
+  map: GameMap,
+  points: Point[],
+): { map: GameMap; id: string } | null {
+  const chain = points
+    .map(snapPoint)
+    .filter(
+      (point, index, list) =>
+        index === 0 ||
+        point.x !== list[index - 1].x ||
+        point.y !== list[index - 1].y,
+    );
+  if (chain.length < 2) return null;
+  const middle = (a: Point, b: Point) => ({
+    x: (a.x + b.x) / 2,
+    y: (a.y + b.y) / 2,
+  });
+  const owner = sectorAt(map, middle(chain[0], chain[1]));
+  if (!owner || owner.door) return null;
+  const strays = chain
+    .slice(1)
+    .some(
+      (point, index) => sectorAt(map, middle(chain[index], point)) !== owner,
+    );
+  if (strays) return null;
+  const vertices = { ...map.vertices };
+  const corners = chain.map((point) => {
+    const existing = findVertexAt({ ...map, vertices }, point);
+    if (existing) return existing;
+    const id = nextId("v", Object.keys(vertices));
+    vertices[id] = point;
+    return id;
+  });
+  const walls = wallOwners(map);
+  if (
+    corners.slice(1).some((to, index) => walls.has(wallKey(corners[index], to)))
+  ) {
+    return null;
+  }
+  return {
+    id: owner.id,
+    map: {
+      ...map,
+      vertices,
+      sectors: map.sectors.map((sector) =>
+        sector.id === owner.id
+          ? { ...sector, details: [...(sector.details ?? []), corners] }
+          : sector,
+      ),
+    },
+  };
+}
+
+// Takes one line out of a chain and keeps what is left on either side of it.
+function removeDetailLine(map: GameMap, id: string, wall: string): GameMap {
+  return pruneUnused({
+    ...map,
+    sectors: map.sectors.map((sector) => {
+      if (sector.id !== id || !sector.details) return sector;
+      const details = sector.details.flatMap((chain) => {
+        const at = chain.findIndex(
+          (vertex, index) =>
+            index > 0 && wallKey(chain[index - 1], vertex) === wall,
+        );
+        if (at < 0) return [chain];
+        return [chain.slice(0, at), chain.slice(at)].filter(
+          (part) => part.length >= 2,
+        );
+      });
+      return withDetails(sector, details);
+    }),
+  });
+}
+
+// The engine works a switch or a teleporter on a line from its front, the
+// right-hand side of the direction it was drawn in. The rest of its chain
+// keeps facing the way it was.
+function flipDetailLine(map: GameMap, id: string, wall: string): GameMap {
+  return {
+    ...map,
+    sectors: map.sectors.map((sector) =>
+      sector.id === id && sector.details
+        ? {
+            ...sector,
+            details: sector.details.flatMap((chain) => {
+              const at = chain.findIndex(
+                (vertex, index) =>
+                  index > 0 && wallKey(chain[index - 1], vertex) === wall,
+              );
+              if (at < 0) return [chain];
+              return [
+                chain.slice(0, at),
+                [chain[at], chain[at - 1]],
+                chain.slice(at),
+              ].filter((part) => part.length >= 2);
+            }),
+          }
+        : sector,
+    ),
+  };
+}
+
 function removeHole(map: GameMap, id: string, index: number): GameMap {
   return pruneUnused({
     ...map,
@@ -876,6 +988,7 @@ function removeHole(map: GameMap, id: string, index: number): GameMap {
 }
 
 export {
+  addDetail,
   addNote,
   addPlayerStarts,
   addRoom,
@@ -892,11 +1005,13 @@ export {
   faceThings,
   fillHole,
   findVertexAt,
+  flipDetailLine,
   freeWallAt,
   freeWallNear,
   gridSize,
   makePillar,
   positionsOf,
+  removeDetailLine,
   removeHole,
   removeNote,
   removeSector,

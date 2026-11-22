@@ -2,6 +2,7 @@ import { doorTrackTexture, sectorEffects, thingCatalog } from "../map/catalog";
 import {
   loopEdges,
   sectorContainers,
+  sectorDetails,
   sectorLoops,
   sectorVertices,
   signedArea,
@@ -87,7 +88,13 @@ function writeBox(writer: LumpWriter, box: Box) {
 
 type LevelLine = NodeLine & { wall: string };
 
-type WallSide = { sector: number; from: string; to: string; pillar: boolean };
+type WallSide = {
+  sector: number;
+  from: string;
+  to: string;
+  pillar: boolean;
+  detail: boolean;
+};
 
 function buildLevel(map: GameMap) {
   const used = new Set(map.sectors.flatMap(sectorVertices));
@@ -105,10 +112,17 @@ function buildLevel(map: GameMap) {
         const key = wallKey(from, to);
         sides.set(key, [
           ...(sides.get(key) ?? []),
-          { sector: index, from, to, pillar: at > 0 },
+          { sector: index, from, to, pillar: at > 0, detail: false },
         ]);
       }
     });
+    for (const { from, to } of sectorDetails(sector)) {
+      const key = wallKey(from, to);
+      sides.set(key, [
+        ...(sides.get(key) ?? []),
+        { sector: index, from, to, pillar: false, detail: true },
+      ]);
+    }
   });
 
   // A room drawn against a pillar covers that side of it, so the wall there
@@ -119,6 +133,22 @@ function buildLevel(map: GameMap) {
 
   const lines: LevelLine[] = [];
   for (const [wall, listed] of sides) {
+    if (listed.some((item) => item.detail)) {
+      const [side] = listed;
+      if (listed.length > 1) {
+        throw new Error(
+          `${sectors[side.sector].name} has a line on one of its walls.`,
+        );
+      }
+      lines.push({
+        start: vertexIndex.get(side.from)!,
+        end: vertexIndex.get(side.to)!,
+        frontSector: side.sector,
+        backSector: side.sector,
+        wall,
+      });
+      continue;
+    }
     let list = listed;
     let covered = false;
     if (listed.length === 2) {
@@ -270,8 +300,10 @@ function compileLumps(map: GameMap, slot = mapLumpName): Lump[] {
 
     if (line.backSector !== null) {
       const backSector = sectors[line.backSector];
-      const door = backSector.door;
-      const doorway = door ?? frontSector.door;
+      // A line inside a room shows only its middle texture, on both sides.
+      const detail = line.backSector === line.frontSector;
+      const door = detail ? undefined : backSector.door;
+      const doorway = detail ? undefined : (door ?? frontSector.door);
       flags = lineTwoSided | (settings?.blocksAll ? lineBlocksPlayer : 0);
       if (door?.opensBy === "use") {
         special = door.fast
@@ -282,26 +314,24 @@ function compileLumps(map: GameMap, slot = mapLumpName): Lump[] {
             ? specialDoorRaise
             : specialDoorOpen;
       }
+      const textures = (sector: Sector) =>
+        detail
+          ? { middle: sideOf(sector)?.middle }
+          : {
+              upper:
+                door?.texture ??
+                wallPartTexture(map, sector, line.wall, "upper"),
+              lower: wallPartTexture(map, sector, line.wall, "lower"),
+              middle: doorway ? undefined : sideOf(sector)?.middle,
+            };
       front = writeSide(
         line.frontSector,
-        {
-          upper:
-            door?.texture ??
-            wallPartTexture(map, frontSector, line.wall, "upper"),
-          lower: wallPartTexture(map, frontSector, line.wall, "lower"),
-          middle: doorway ? undefined : sideOf(frontSector)?.middle,
-        },
+        textures(frontSector),
         sideOf(frontSector),
       );
       back = writeSide(
         line.backSector,
-        {
-          upper:
-            door?.texture ??
-            wallPartTexture(map, backSector, line.wall, "upper"),
-          lower: wallPartTexture(map, backSector, line.wall, "lower"),
-          middle: doorway ? undefined : sideOf(backSector)?.middle,
-        },
+        textures(backSector),
         sideOf(backSector),
       );
     } else if (frontSector.door) {

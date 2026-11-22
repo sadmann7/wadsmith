@@ -138,22 +138,26 @@ function parseSector(value: unknown, vertices: Record<string, Point>): Sector {
   const sector = record(value, "A room");
   const sectorId = id(sector.id, "A room");
   const label = `Room ${sectorId}`;
-  const outline = (value: unknown) => {
-    const loop = list(value, label).map((vertex) => {
+  const corners = (value: unknown, least: number) => {
+    const ids = list(value, label).map((vertex) => {
       const vertexId = id(vertex, label);
       if (!Object.hasOwn(vertices, vertexId)) {
         fail(`${label} uses a missing corner.`);
       }
       return vertexId;
     });
-    if (loop.length < 3) fail(`${label} needs at least 3 corners.`);
-    return loop;
+    if (ids.length < least) fail(`${label} needs at least ${least} corners.`);
+    return ids;
   };
-  const loop = outline(sector.vertices);
+  const loop = corners(sector.vertices, 3);
   const holes =
     sector.holes === undefined
       ? undefined
-      : list(sector.holes, label).map(outline);
+      : list(sector.holes, label).map((hole) => corners(hole, 3));
+  const details =
+    sector.details === undefined
+      ? undefined
+      : list(sector.details, label).map((chain) => corners(chain, 2));
   if (typeof sector.name !== "string") fail(`${label} has an invalid name.`);
   const light = integer(sector.light, 255, label);
   if (light < 0) fail(`${label} has invalid light.`);
@@ -181,6 +185,7 @@ function parseSector(value: unknown, vertices: Record<string, Point>): Sector {
     name: sector.name.slice(0, maxNameLength),
     vertices: loop,
     ...(holes && holes.length > 0 ? { holes } : {}),
+    ...(details && details.length > 0 ? { details } : {}),
     floor: integer(sector.floor, heightLimit, label),
     ceiling: integer(sector.ceiling, heightLimit, label),
     light,

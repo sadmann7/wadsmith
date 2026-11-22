@@ -3,6 +3,7 @@ import {
   loopEdges,
   loopPolygon,
   sectorAt,
+  sectorDetails,
   sectorEdges,
   sectorLoops,
   signedArea,
@@ -141,6 +142,20 @@ function wallsBySector(map: GameMap) {
         }
       }
     });
+    // A line drawn inside a room is a portal back into the same room.
+    for (const { from, to } of sectorDetails(sector)) {
+      walls
+        .get(sector.id)!
+        .push(
+          wallOf(
+            sector,
+            map.vertices[from],
+            map.vertices[to],
+            wallKey(from, to),
+            sector,
+          ),
+        );
+    }
   }
   sectorWalls.set(map, walls);
   return walls;

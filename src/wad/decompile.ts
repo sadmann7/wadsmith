@@ -60,8 +60,19 @@ type ImportReport = {
 
 type Edge = { from: number; to: number };
 
-// Openings are holes that other rooms fill, which still bound this one.
-type Region = { outer: number[]; holes: number[][]; openings: number[][] };
+// Openings are holes that other rooms fill, which still bound this one, and
+// details are lines with this sector on both sides.
+type Region = {
+  outer: number[];
+  holes: number[][];
+  openings: number[][];
+  details: number[][];
+};
+
+type TracedLine = DoomMap["lines"][number] & {
+  frontSector: number;
+  backSector: number | null;
+};
 
 const lineBlocksAll = 0x0001;
 const lineBlocksEnemies = 0x0002;
@@ -303,7 +314,8 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
   const sectorOf = (side: number | null) =>
     side === null ? null : doom.sides[side].sector;
 
-  const lines = doom.lines.flatMap((line) => {
+  const inner: TracedLine[] = [];
+  const lines = doom.lines.flatMap((line): TracedLine[] => {
     if (line.start >= points.length || line.end >= points.length) return [];
     const start = canonical[line.start];
     const end = canonical[line.end];
@@ -313,11 +325,18 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
       return [];
     }
     if (back !== null && back >= doom.sectors.length) return [];
+    const traced = {
+      ...line,
+      start,
+      end,
+      frontSector: front,
+      backSector: back,
+    };
     if (front === back) {
-      report.innerLines += 1;
+      inner.push(traced);
       return [];
     }
-    return [{ ...line, start, end, frontSector: front, backSector: back }];
+    return [traced];
   });
 
   const sectorEdges = doom.sectors.map((): Edge[] => []);
@@ -341,7 +360,12 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
       .toSorted(
         (a, b) => Math.abs(areaOf(a, points)) - Math.abs(areaOf(b, points)),
       )
-      .map((outer): Region => ({ outer, holes: [], openings: [] }));
+      .map((outer): Region => ({
+        outer,
+        holes: [],
+        openings: [],
+        details: [],
+      }));
     for (const loop of loops) {
       if (areaOf(loop, points) <= 0.5) continue;
       const host = regions.find((region) =>
@@ -352,6 +376,30 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
     if (regions.length > 1) report.splitSectors += 1;
     return regions;
   });
+
+  // A line with its sector on both sides is a detail of the room whose floor
+  // it crosses, like a grate or a trip line, and a trip line opens sectors
+  // like any other.
+  const polygonOf = (loop: number[]) => loop.map((index) => points[index]);
+  const details: TracedLine[] = [];
+  for (const line of inner) {
+    const a = points[line.start];
+    const b = points[line.end];
+    const middle = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    const region = pieces[line.frontSector].find(
+      (candidate) =>
+        pointInPolygon(middle, polygonOf(candidate.outer)) &&
+        ![...candidate.holes, ...candidate.openings].some((loop) =>
+          pointInPolygon(middle, polygonOf(loop)),
+        ),
+    );
+    if (!region) {
+      report.innerLines += 1;
+      continue;
+    }
+    region.details.push([line.start, line.end]);
+    details.push(line);
+  }
 
   const doorCandidates = new Map<number, DoorSettings["opensBy"] | null>();
   const doorCloses = new Map<number, boolean>();
@@ -364,7 +412,7 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
       if (fastManualDoors.has(line.special)) doorFast.add(line.backSector);
     }
   }
-  for (const line of lines) {
+  for (const line of [...lines, ...details]) {
     const action = actions.get(line.special);
     if (
       !action ||
@@ -412,7 +460,7 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
     changed = false;
     const openedTags = new Set<number>();
     const openedByUse = new Set<number>();
-    for (const line of lines) {
+    for (const line of [...lines, ...details]) {
       const action = actions.get(line.special);
       if (!action || !movesSector(action.kind)) continue;
       if (action.trigger === "door") {
@@ -476,17 +524,17 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
   );
   const edgeOwner = new Map<string, { sector: number; id: string }>();
   pieces.forEach((list, sector) =>
-    list.forEach((region, part) =>
+    list.forEach((region, part) => {
+      const own = (a: number, b: number) =>
+        edgeOwner.set(`${sector}:${wallKey(String(a), String(b))}`, {
+          sector,
+          id: ids[sector][part],
+        });
       [region.outer, ...region.holes, ...region.openings].forEach((loop) =>
-        loop.forEach((vertex, at) => {
-          const next = loop[(at + 1) % loop.length];
-          edgeOwner.set(`${sector}:${wallKey(String(vertex), String(next))}`, {
-            sector,
-            id: ids[sector][part],
-          });
-        }),
-      ),
-    ),
+        loop.forEach((vertex, at) => own(vertex, loop[(at + 1) % loop.length])),
+      );
+      region.details.forEach(([a, b]) => own(a, b));
+    }),
   );
   const vertexId = (index: number) => `v${index}`;
   const keyOf = (a: number, b: number) => wallKey(vertexId(a), vertexId(b));
@@ -563,6 +611,9 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
         ...(region.holes.length > 0
           ? { holes: region.holes.map((hole) => hole.map(vertexId)) }
           : {}),
+        ...(region.details.length > 0
+          ? { details: region.details.map((chain) => chain.map(vertexId)) }
+          : {}),
         floor: source.floor,
         ceiling,
         light: Math.min(255, Math.max(0, source.light)),
@@ -581,7 +632,8 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
 
   const settings: Record<string, LineSettings> = {};
   const switches: MapSwitch[] = [];
-  for (const line of lines) {
+  for (const line of [...lines, ...details]) {
+    const detail = line.frontSector === line.backSector;
     const kept = (
       [
         [line.frontSector, line.front],
@@ -638,6 +690,9 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
         report.seeThroughWalls += 1;
       }
       for (const item of kept) {
+        // Both sides of a line inside a room are the room, so the front's
+        // textures stand for both.
+        if (detail && item !== kept[0]) continue;
         const { id, side } = item;
         // The compiler gives the walls above a door the door's own texture.
         const facesDoor = kept.some(
@@ -648,18 +703,22 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
           entry.action?.trigger === "switch" && isSwitch(name)
             ? switchTexture(name)
             : wall(name);
-        const value: LineSide = {
-          ...offsets(side),
-          ...(side.upper !== noTexture && !facesDoor
-            ? { upper: part(side.upper) }
-            : {}),
-          ...(side.lower !== noTexture ? { lower: part(side.lower) } : {}),
-          ...(side.middle !== noTexture &&
+        const middle =
+          side.middle !== noTexture &&
           !opening &&
           middleTextures.includes(side.middle)
             ? { middle: side.middle }
-            : {}),
-        };
+            : {};
+        const value: LineSide = detail
+          ? { ...offsets(side), ...middle }
+          : {
+              ...offsets(side),
+              ...(side.upper !== noTexture && !facesDoor
+                ? { upper: part(side.upper) }
+                : {}),
+              ...(side.lower !== noTexture ? { lower: part(side.lower) } : {}),
+              ...middle,
+            };
         if (Object.keys(value).length > 0) sides[id] = value;
       }
       if (line.flags & lineBlocksAll) entry.blocksAll = true;

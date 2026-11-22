@@ -7,7 +7,7 @@ import { thingKinds } from "../map/catalog";
 import { updateLine, updateLineSide, updateSector } from "../map/edit";
 import { parseMapFile, serializeMap } from "../map/storage";
 import { wallKey } from "../map/geometry";
-import { makePillar } from "../map/edit";
+import { addDetail, makePillar } from "../map/edit";
 import { islandMap, testMap } from "../map/test-map";
 import {
   describeSurface,
@@ -303,6 +303,17 @@ describe("rooms inside rooms", () => {
     expect(pick(160, 109)).toBe("floor:stage");
     expect(pick(160, 90)).toBe("wall:yard:c|d:middle");
     expect(pick(160, 20)).toBe("ceiling:stage");
+  });
+
+  it("sees through a line drawn inside a room", () => {
+    const lined = addDetail(islandMap, [
+      { x: 128, y: 128 },
+      { x: 384, y: 128 },
+    ])!;
+    const pick = renderStarter(lined.map, camera);
+    expect(pick(160, 100)).toBe("wall:yard:c|d:middle");
+    expect(pick(160, 109)).toBe("floor:stage");
+    expect(pick(160, 170)).toBe("floor:yard");
   });
 
   it("shows a pillar as solid wall", () => {

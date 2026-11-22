@@ -57,9 +57,9 @@ function groups(): { title: string; items: Shortcut[] }[] {
       ],
     },
     {
-      title: "Drawing a room",
+      title: "Drawing a room or line",
       items: [
-        { keys: [key("Enter")], does: "Close the room" },
+        { keys: [key("Enter")], does: "Close the room or finish the line" },
         { keys: [backspace], does: "Remove the last corner" },
         { keys: [key("Esc")], does: "Throw away the corners so far" },
       ],

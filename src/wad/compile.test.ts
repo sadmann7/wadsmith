@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  addDetail,
   addPlayerStarts,
   addRoom,
   addRoomOnSide,
@@ -14,7 +15,9 @@ import {
   fillHole,
   freeWallAt,
   freeWallNear,
+  flipDetailLine,
   makePillar,
+  removeDetailLine,
   removeHole,
   removeSector,
   removeThings,
@@ -46,6 +49,7 @@ import {
   wallOwners,
 } from "../map/geometry";
 import {
+  describeLine,
   fitLineAction,
   lineActionGroups,
   lineActionKinds,
@@ -530,6 +534,216 @@ describe("rooms inside rooms", () => {
       sectors: [{ ...pillar.sectors[0], holes: [["e", "f", "zz"]] }],
     };
     expect(() => parseMapFile(serializeMap(broken))).toThrow("missing corner");
+  });
+});
+
+describe("lines inside rooms", () => {
+  const drawn = addDetail(islandMap, [
+    { x: 128, y: 400 },
+    { x: 384, y: 400 },
+  ])!;
+  const key = wallKey("v1", "v2");
+
+  it("draws a line inside a room with the room on both sides", () => {
+    expect(drawn.id).toBe("yard");
+    expect(drawn.map.sectors[0].details).toEqual([["v1", "v2"]]);
+    expect(validateMap(drawn.map)).toEqual([]);
+    expect(
+      wallOwners(drawn.map)
+        .get(key)
+        ?.map((sector) => sector.id),
+    ).toEqual(["yard", "yard"]);
+    const line = describeLine(drawn.map, key, "yard");
+    expect(line.twoSided).toBe(true);
+    expect(line.back?.id).toBe("yard");
+    expect(line.isBack).toBe(false);
+    expect(freeWallAt(drawn.map, key)).toBeNull();
+  });
+
+  it("compiles to a two-sided line with the same sector on both sides", () => {
+    const grate = updateLineSide(drawn.map, key, "yard", {
+      middle: "MIDGRATE",
+    });
+    const { lines } = buildLevel(grate);
+    expect(lines).toHaveLength(9);
+    const line = lines.find((item) => item.wall === key)!;
+    expect(line).toMatchObject({ frontSector: 0, backSector: 0 });
+    const index = lines.indexOf(line);
+    const linedefs = new DataView(lump(grate, "LINEDEFS").buffer);
+    expect(linedefs.getInt16(index * 14 + 4, true) & 4).toBe(4);
+    const sidedefs = lump(grate, "SIDEDEFS");
+    const name = (side: number, at: number) =>
+      String.fromCharCode(
+        ...sidedefs.slice(side * 30 + at, side * 30 + at + 8),
+      ).replace(/\0.*$/, "");
+    const front = linedefs.getInt16(index * 14 + 10, true);
+    const back = linedefs.getInt16(index * 14 + 12, true);
+    expect(name(front, 20)).toBe("MIDGRATE");
+    expect(name(back, 20)).toBe("MIDGRATE");
+    expect(name(front, 4)).toBe("-");
+    expect(name(back, 12)).toBe("-");
+    expectConvexLeaves(grate);
+  });
+
+  it("carries a walk-over action", () => {
+    const wired = setLineTarget(
+      updateLine(drawn.map, key, {
+        action: { kind: "floor-lower", trigger: "walk", repeat: false, tag: 0 },
+      }),
+      key,
+      "stage",
+    );
+    expect(validateMap(wired)).toEqual([]);
+    expect(linesOf(wired).find((item) => item.line.wall === key)!.special).toBe(
+      38,
+    );
+  });
+
+  it("refuses a line outside a room, on a wall, across a wall or in a door", () => {
+    expect(
+      addDetail(islandMap, [
+        { x: 700, y: 700 },
+        { x: 800, y: 800 },
+      ]),
+    ).toBeNull();
+    expect(
+      addDetail(lShape, [
+        { x: 200, y: 64 },
+        { x: 64, y: 200 },
+      ]),
+    ).toBeNull();
+    const onWall: GameMap = {
+      ...islandMap,
+      sectors: [
+        { ...islandMap.sectors[0], details: [["e", "f"]] },
+        islandMap.sectors[1],
+      ],
+    };
+    expect(validateMap(onWall).map((issue) => issue.id)).toContain(
+      `line-wall:${wallKey("e", "f")}`,
+    );
+    const across: GameMap = {
+      ...islandMap,
+      vertices: {
+        ...islandMap.vertices,
+        l1: { x: 256, y: 128 },
+        l2: { x: 256, y: 256 },
+      },
+      sectors: [
+        { ...islandMap.sectors[0], details: [["l1", "l2"]] },
+        islandMap.sectors[1],
+      ],
+    };
+    expect(
+      validateMap(across).some((issue) => issue.id.startsWith("cross:")),
+    ).toBe(true);
+    const inDoor: GameMap = {
+      ...testMap,
+      vertices: {
+        ...testMap.vertices,
+        d1: { x: 500, y: 120 },
+        d2: { x: 500, y: 200 },
+      },
+      sectors: testMap.sectors.map((sector) =>
+        sector.door ? { ...sector, details: [["d1", "d2"]] } : sector,
+      ),
+    };
+    expect(validateMap(inDoor).map((issue) => issue.id)).toContain(
+      "line-door-room:sector-4",
+    );
+  });
+
+  it("refuses a line over a wall and catches one running along a wall", () => {
+    expect(
+      addDetail(testMap, [
+        { x: 384, y: 96 },
+        { x: 384, y: 224 },
+      ]),
+    ).toBeNull();
+    const along = addDetail(islandMap, [
+      { x: 0, y: 0 },
+      { x: 256, y: 0 },
+    ])!;
+    expect(along).not.toBeNull();
+    expect(validateMap(along.map).map((issue) => issue.id)).toContain(
+      `line-wall:${wallKey("a", "v1")}`,
+    );
+    const leaning: GameMap = {
+      ...islandMap,
+      vertices: { ...islandMap.vertices, x: { x: 256, y: 0 } },
+      sectors: [
+        islandMap.sectors[0],
+        { ...islandMap.sectors[1], vertices: ["a", "x", "g", "h"] },
+      ],
+    };
+    expect(
+      validateMap(leaning).some((issue) => issue.id.startsWith("cross:")),
+    ).toBe(true);
+  });
+
+  it("flips which way a line faces and leaves the rest of its chain", () => {
+    const before = buildLevel(drawn.map).lines.find(
+      (item) => item.wall === key,
+    )!;
+    const flipped = flipDetailLine(drawn.map, "yard", key);
+    expect(flipped.sectors[0].details).toEqual([["v2", "v1"]]);
+    const after = buildLevel(flipped).lines.find((item) => item.wall === key)!;
+    expect(after.start).toBe(before.end);
+    expect(after.end).toBe(before.start);
+    const chain = addDetail(islandMap, [
+      { x: 64, y: 400 },
+      { x: 192, y: 400 },
+      { x: 320, y: 400 },
+      { x: 448, y: 400 },
+    ])!;
+    const middle = flipDetailLine(chain.map, "yard", wallKey("v2", "v3"));
+    expect(middle.sectors[0].details).toEqual([
+      ["v1", "v2"],
+      ["v3", "v2"],
+      ["v3", "v4"],
+    ]);
+  });
+
+  it("deletes one line from a chain along with its spare corners", () => {
+    const chain = addDetail(islandMap, [
+      { x: 64, y: 400 },
+      { x: 256, y: 400 },
+      { x: 448, y: 400 },
+    ])!;
+    expect(chain.map.sectors[0].details).toEqual([["v1", "v2", "v3"]]);
+    const cut = removeDetailLine(chain.map, "yard", wallKey("v1", "v2"));
+    expect(cut.sectors[0].details).toEqual([["v2", "v3"]]);
+    expect(cut.vertices.v1).toBeUndefined();
+    const gone = removeDetailLine(cut, "yard", wallKey("v2", "v3"));
+    expect(gone.sectors[0].details).toBeUndefined();
+    expect(Object.keys(gone.vertices).toSorted()).toEqual([
+      "a",
+      "b",
+      "c",
+      "d",
+      "e",
+      "f",
+      "g",
+      "h",
+    ]);
+    const staged = addDetail(islandMap, [
+      { x: 224, y: 256 },
+      { x: 288, y: 256 },
+    ])!;
+    expect(staged.id).toBe("stage");
+    expect(makePillar(staged.map, "stage")).toBeNull();
+  });
+
+  it("saves and reopens lines, and refuses one with a single end", () => {
+    expect(parseMapFile(serializeMap(drawn.map))).toEqual(drawn.map);
+    const broken = {
+      ...drawn.map,
+      sectors: [
+        { ...drawn.map.sectors[0], details: [["v1"]] },
+        drawn.map.sectors[1],
+      ],
+    };
+    expect(() => parseMapFile(serializeMap(broken))).toThrow("corners");
   });
 });
 

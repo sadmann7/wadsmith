@@ -4,6 +4,7 @@ const editorShortcuts = {
   sectors: { keys: "s", description: "Edit sectors", area: "map" },
   things: { keys: "t", description: "Edit things", area: "map" },
   draw: { keys: "d", description: "Draw a room", area: "map" },
+  drawLine: { keys: "shift+d", description: "Draw a line", area: "map" },
   undo: { keys: "mod+z", description: "Undo" },
   redo: { keys: "mod+shift+z", description: "Redo" },
   duplicate: { keys: "mod+d", description: "Duplicate the selected things" },
