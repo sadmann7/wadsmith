@@ -60,8 +60,10 @@ describe("the wadsmith MCP server", () => {
     expect(server.map().things.at(-1)).toMatchObject({ kind: "medikit" });
     // A read answers with what it found, and leaves the map alone.
     const before = server.map();
-    const rooms = JSON.parse(call("listRooms").text) as { id: string }[];
-    expect(rooms.map((room) => room.id)).toEqual([
+    const rooms = JSON.parse(call("listRooms").text) as {
+      items: { id: string }[];
+    };
+    expect(rooms.items.map((room) => room.id)).toEqual([
       "sector-1",
       "sector-2",
       "sector-3",

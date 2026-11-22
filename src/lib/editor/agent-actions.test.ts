@@ -379,16 +379,28 @@ describe("agent actions", () => {
     const overview = runAgentAction(testMap, "describeMap");
     expect(overview.map).toBe(testMap);
     expect(overview.result).toMatchObject({
+      roomCount: 4,
       rooms: [
         { id: "sector-1", name: "Start room" },
         { id: "sector-2" },
         { id: "sector-3" },
-        { id: "sector-4", door: "switch" },
+        { id: "sector-4" },
       ],
       things: { player: 1, imp: 1 },
     });
     const things = runAgentAction(testMap, "listThings", ["Arena"]).result;
-    expect(things).toMatchObject([{ id: "zombieman-1" }, { id: "imp-1" }]);
+    expect(things).toMatchObject({
+      total: 2,
+      items: [{ id: "zombieman-1" }, { id: "imp-1" }],
+    });
+    const rooms = runAgentAction(testMap, "listRooms", [
+      { x: 800, y: 0, limit: 2 },
+    ]).result;
+    expect(rooms).toMatchObject({
+      total: 4,
+      items: [{ id: "sector-3" }, { door: "switch" }],
+      next: 2,
+    });
     const catalog = runAgentAction(testMap, "listCatalog", ["line-actions"])
       .result as { kind: string; needsRoom: boolean }[];
     expect(catalog.find((item) => item.kind === "exit")?.needsRoom).toBe(false);

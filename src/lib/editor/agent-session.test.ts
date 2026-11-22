@@ -54,14 +54,6 @@ describe("an agent session", () => {
     expect(session.getSnapshot().request?.id).toBe(3);
   });
 
-  it("leaves the page's own bridge edits to the person", () => {
-    const session = createAgentSession();
-    void session.allow(step("placeThing"));
-    session.forget();
-    expect(session.currentRequest()).toBeNull();
-    expect(session.record("placeThing", [], summary)).toBe(false);
-  });
-
   it("leaves edits it didn't allow off the trail", () => {
     const session = createAgentSession();
     expect(session.record("placeThing", [], summary)).toBe(false);

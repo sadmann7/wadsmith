@@ -218,6 +218,23 @@ const thingFlags: AgentParam[] = [
   })),
 ].map((param) => optional(param as AgentParam));
 
+const pageLimit = 50;
+
+const paging: AgentParam[] = [
+  optional({
+    name: "offset",
+    type: "number",
+    description: "How many to skip, to read the next page.",
+  }),
+  optional({
+    name: "limit",
+    type: "number",
+    description: `How many to return, up to ${pageLimit}.`,
+  }),
+];
+
+const overviewRooms = 30;
+
 export const agentActions: AgentAction[] = [
   {
     name: "help",
@@ -239,7 +256,7 @@ export const agentActions: AgentAction[] = [
   {
     name: "describeMap",
     description:
-      "An overview of the map: its rooms, how many things of each kind, and what it still needs.",
+      "An overview of the map: its size, the first rooms, how many things of each kind, and what it still needs. listRooms pages through every room.",
     reads: true,
     params: [],
     run: (map, _args, context) => ({
@@ -249,7 +266,15 @@ export const agentActions: AgentAction[] = [
         // Coordinates are in map units with y running down, so north is up
         // on the map and a smaller y.
         axes: "x runs east, y runs south",
-        rooms: map.sectors.map((sector) => roomSummary(map, sector)),
+        ...(map.sectors.length > 0 && {
+          bounds: boxOf(Object.values(map.vertices)),
+        }),
+        roomCount: map.sectors.length,
+        rooms: map.sectors.slice(0, overviewRooms).map((sector) => ({
+          id: sector.id,
+          name: sector.name,
+          center: roomCenter(map, sector),
+        })),
         things: countBy(map.things.map((thing) => thing.kind)),
         switches: map.switches.length,
         notes: map.notes?.length ?? 0,
@@ -260,12 +285,45 @@ export const agentActions: AgentAction[] = [
   {
     name: "listRooms",
     description:
-      "Every room with its corners, heights, textures, and the room or solid wall on each of its walls.",
+      "Rooms with their heights, light, box and middle, a page at a time. Filter by name, or sort by distance from a point. describeRoom has a room's walls.",
     reads: true,
-    params: [],
-    run: (map) => ({
-      result: map.sectors.map((sector) => roomDetail(map, sector)),
-    }),
+    params: [
+      optional({
+        name: "name",
+        type: "string",
+        description: "Only rooms whose name contains this.",
+      }),
+      optional({
+        name: "x",
+        type: "number",
+        description: "With y, sort nearest to this point.",
+      }),
+      optional({
+        name: "y",
+        type: "number",
+        description: "With x, sort nearest to this point.",
+      }),
+      ...paging,
+    ],
+    run: (map, args) => {
+      const query =
+        args.name === undefined ? "" : text(args, "name").toLowerCase();
+      const rooms = map.sectors
+        .filter((sector) => sector.name.toLowerCase().includes(query))
+        .map((sector) => roomSummary(map, sector));
+      if (args.x !== undefined && args.y !== undefined) {
+        const at = {
+          x: number(args, "x", -32768, 32767),
+          y: number(args, "y", -32768, 32767),
+        };
+        rooms.sort(
+          (a, b) =>
+            Math.hypot(a.center.x - at.x, a.center.y - at.y) -
+            Math.hypot(b.center.x - at.x, b.center.y - at.y),
+        );
+      }
+      return { result: page(rooms, args, 20) };
+    },
   },
   {
     name: "describeRoom",
@@ -278,44 +336,61 @@ export const agentActions: AgentAction[] = [
   },
   {
     name: "listThings",
-    description: "Every thing with its place, its room and its flags.",
+    description:
+      "Things with their place, room and flags, a page at a time, in one room or of one kind.",
     reads: true,
-    params: [optional(room("Only the things in this room."))],
+    params: [
+      optional(room("Only the things in this room.")),
+      optional({
+        name: "kind",
+        type: "string",
+        description: "Only things of this kind.",
+      }),
+      ...paging,
+    ],
     run: (map, args) => {
       const only = args.room === undefined ? null : findRoom(map, args.room).id;
-      return {
-        result: map.things
-          .map((thing) => ({
-            ...thing,
-            label: thingCatalog[thing.kind].label,
-            room: sectorAt(map, thing)?.id ?? null,
-          }))
-          .filter((thing) => only === null || thing.room === only),
-      };
+      const kind = args.kind === undefined ? null : thingKind(args, "kind");
+      const things = map.things
+        .map((thing) => ({
+          ...thing,
+          label: thingCatalog[thing.kind].label,
+          room: sectorAt(map, thing)?.id ?? null,
+        }))
+        .filter(
+          (thing) =>
+            (only === null || thing.room === only) &&
+            (kind === null || thing.kind === kind),
+        );
+      return { result: page(things, args, 50) };
     },
   },
   {
     name: "listLines",
     description:
-      "Every wall that has an action, a switch, flags or its own textures.",
+      "Walls that have an action, a switch, flags or their own textures, a page at a time.",
     reads: true,
-    params: [],
-    run: (map) => ({
-      result: [...wallOwners(map)].flatMap(([key, owners]) => {
-        const settings = map.lines?.[key];
-        const mapSwitch = map.switches.find(
-          (item) => wallKey(item.from, item.to) === key,
-        );
-        if (!settings && !mapSwitch) return [];
-        return [
-          {
-            wall: key,
-            rooms: [...new Set(owners.map((owner) => owner.id))],
-            ...settings,
-            ...(mapSwitch && { switch: mapSwitch.id }),
-          },
-        ];
-      }),
+    params: paging,
+    run: (map, args) => ({
+      result: page(
+        [...wallOwners(map)].flatMap(([key, owners]) => {
+          const settings = map.lines?.[key];
+          const mapSwitch = map.switches.find(
+            (item) => wallKey(item.from, item.to) === key,
+          );
+          if (!settings && !mapSwitch) return [];
+          return [
+            {
+              wall: key,
+              rooms: [...new Set(owners.map((owner) => owner.id))],
+              ...settings,
+              ...(mapSwitch && { switch: mapSwitch.id }),
+            },
+          ];
+        }),
+        args,
+        30,
+      ),
     }),
   },
   {
@@ -561,7 +636,7 @@ export const agentActions: AgentAction[] = [
   {
     name: "moveCorner",
     description:
-      "Moves a corner, and with it every wall that ends there. A corner moved onto another joins it. Corner ids come from listRooms.",
+      "Moves a corner, and with it every wall that ends there. A corner moved onto another joins it. Corner ids come from describeRoom.",
     params: [
       { name: "corner", type: "string", description: "The corner's id." },
       { name: "x", type: "number", description: "Where it goes, across." },
@@ -630,7 +705,7 @@ export const agentActions: AgentAction[] = [
   {
     name: "removeCorner",
     description:
-      "Takes a corner out of the walls that meet at it, joining the two into one. Corner ids come from listRooms.",
+      "Takes a corner out of the walls that meet at it, joining the two into one. Corner ids come from describeRoom.",
     params: [
       { name: "corner", type: "string", description: "The corner's id." },
     ],
@@ -666,7 +741,8 @@ export const agentActions: AgentAction[] = [
       {
         name: "index",
         type: "number",
-        description: "Which pillar, counting from 0 as listRooms lists them.",
+        description:
+          "Which pillar, counting from 0 as describeRoom lists them.",
       },
     ],
     run: (map, args) => {
@@ -1212,6 +1288,20 @@ const askFirstNames = new Set([
   "clearLineAction",
 ]);
 
+// The JSON Schema of an action's arguments, for MCP and WebMCP tools.
+export function agentInputSchema(params: AgentParam[]) {
+  return {
+    type: "object",
+    properties: Object.fromEntries(
+      params.map((param) => [param.name, propertyOf(param)]),
+    ),
+    required: params
+      .filter((param) => !param.optional)
+      .map((param) => param.name),
+    additionalProperties: false,
+  };
+}
+
 export function getIsAgentRead(name: string) {
   return byName.get(name)?.reads === true;
 }
@@ -1661,6 +1751,8 @@ function doorParam(): AgentParam {
   };
 }
 
+const namedRooms = 20;
+
 // A room by its id, or by its name where only one room has it.
 function findRoom(map: GameMap, value: unknown) {
   const name = label(value).trim();
@@ -1670,13 +1762,18 @@ function findRoom(map: GameMap, value: unknown) {
     (sector) => sector.name.toLowerCase() === name.toLowerCase(),
   );
   if (named.length === 1) return named[0];
-  const list = map.sectors
+  const shown = map.sectors
+    .slice(0, namedRooms)
     .map((sector) => `${sector.id} (${sector.name})`)
     .join(", ");
+  const more =
+    map.sectors.length > namedRooms
+      ? `, and ${map.sectors.length - namedRooms} more that listRooms finds`
+      : "";
   throw new Error(
     named.length > 1
       ? `${named.length} rooms are named "${name}". Use an id: ${named.map((sector) => sector.id).join(", ")}.`
-      : `No room "${name}". Rooms: ${list || "none yet"}.`,
+      : `No room "${name}". Rooms: ${shown || "none yet"}${more}.`,
   );
 }
 
@@ -1704,7 +1801,7 @@ function findWall(map: GameMap, value: unknown) {
   const key = from && to && rest.length === 0 ? wallKey(from, to) : "";
   if (!wallOwners(map).has(key)) {
     throw new Error(
-      `No wall "${label(value)}". A wall is two corner ids joined by "|", as listRooms shows them.`,
+      `No wall "${label(value)}". A wall is two corner ids joined by "|", as describeRoom shows them.`,
     );
   }
   return key;
@@ -1971,4 +2068,42 @@ function label(value: unknown) {
 
 function getIsRecord(value: unknown): value is Args {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// One page of a long list, so a big map's answers stay small.
+function page<T>(items: T[], args: Args, fallback: number) {
+  const offset = number(args, "offset", 0, Math.max(0, items.length), 0);
+  const limit = number(args, "limit", 1, pageLimit, fallback);
+  const shown = items.slice(offset, offset + limit);
+  return {
+    total: items.length,
+    offset,
+    items: shown,
+    ...(offset + shown.length < items.length && {
+      next: offset + shown.length,
+    }),
+  };
+}
+
+function propertyOf({ type, description, choices }: AgentParam) {
+  const picked = choices ? { enum: [...choices] } : {};
+  if (type === "points") {
+    return {
+      type: "array",
+      description,
+      items: {
+        type: "object",
+        properties: { x: { type: "number" }, y: { type: "number" } },
+        required: ["x", "y"],
+      },
+    };
+  }
+  if (type === "strings") {
+    return {
+      type: "array",
+      description,
+      items: { type: "string", ...picked },
+    };
+  }
+  return { type, description, ...picked };
 }

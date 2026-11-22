@@ -4,7 +4,12 @@ import { parseMapFile, serializeMap } from "@/lib/map/storage";
 import { type CheckContext, validateMap } from "@/lib/map/validate";
 import { compileMap } from "@/lib/wad/compile";
 
-import { agentActions, type AgentParam, runAgentAction } from "./agent-actions";
+import {
+  agentActions,
+  agentInputSchema,
+  type AgentParam,
+  runAgentAction,
+} from "./agent-actions";
 
 // How the server reaches the disk, so tests can stand in for it.
 export interface McpFiles {
@@ -215,52 +220,16 @@ const tools = [
   ...agentActions.map(({ name, description, params, reads }) => ({
     name,
     description,
-    inputSchema: schemaOf(params),
+    inputSchema: agentInputSchema(params),
     annotations: { readOnlyHint: Boolean(reads) },
   })),
   ...fileTools.map(({ name, description, params }) => ({
     name,
     description,
-    inputSchema: schemaOf(params),
+    inputSchema: agentInputSchema(params),
     annotations: { readOnlyHint: false },
   })),
 ];
-
-function schemaOf(params: AgentParam[]) {
-  return {
-    type: "object",
-    properties: Object.fromEntries(
-      params.map((param) => [param.name, propertyOf(param)]),
-    ),
-    required: params
-      .filter((param) => !param.optional)
-      .map((param) => param.name),
-    additionalProperties: false,
-  };
-}
-
-function propertyOf({ type, description, choices }: AgentParam) {
-  const picked = choices ? { enum: [...choices] } : {};
-  if (type === "points") {
-    return {
-      type: "array",
-      description,
-      items: {
-        type: "object",
-        properties: { x: { type: "number" }, y: { type: "number" } },
-        required: ["x", "y"],
-      },
-    };
-  }
-  if (type === "strings") {
-    return {
-      type: "array",
-      description,
-      items: { type: "string", ...picked },
-    };
-  }
-  return { type, description, ...picked };
-}
 
 function textOf(value: unknown) {
   return typeof value === "string"

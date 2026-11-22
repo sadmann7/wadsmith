@@ -55,7 +55,7 @@ import {
   SegmentedControlItem,
 } from "@/components/ui/segmented-control";
 import { useIwad } from "@/hooks/use-iwad";
-import { agent, agentSession } from "@/lib/editor/agent";
+import { actForPerson, agentSession } from "@/lib/editor/agent";
 import { agentStepSummary } from "@/lib/editor/agent-actions";
 import { getHasAgentCard, idleAgentSession } from "@/lib/editor/agent-session";
 import {
@@ -1469,10 +1469,7 @@ export function EditorScreen({
   };
 
   const runAgent = async (action: string, args: unknown[]) => {
-    agentSession.forget();
-    const result = await agent.act({
-      steps: [{ ref: "Map", action, args }],
-    });
+    const result = await actForPerson(action, args);
     const failure =
       typeof result.error === "string" ? result.error : result.error?.message;
     // An edit that landed has logged itself already.

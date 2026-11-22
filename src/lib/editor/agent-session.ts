@@ -178,11 +178,6 @@ export function createAgentSession({
     currentRequest() {
       return getHasPending() ? (state.request?.id ?? null) : null;
     },
-    // Edits the page makes through the bridge itself, like Quick build, are
-    // the person's, so a step the agent left unfinished can't claim them.
-    forget() {
-      pending = null;
-    },
     // The person edited the map, so the agent's next call starts a new
     // request.
     endRequest() {
