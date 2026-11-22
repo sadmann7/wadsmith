@@ -117,7 +117,7 @@ function MapDialog({
             <DialogTitle>{entry ? "Map settings" : "New map"}</DialogTitle>
             <DialogCloseButton />
           </DialogHeader>
-          <div className="grid min-h-0 gap-5 overflow-y-auto p-5">
+          <div className="relative grid min-h-0 gap-5 overflow-y-auto p-5">
             <div className="grid grid-cols-[minmax(0,1fr)_120px] gap-3">
               <Field>
                 <FieldLabel>Name</FieldLabel>

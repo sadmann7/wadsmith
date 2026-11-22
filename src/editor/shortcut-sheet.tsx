@@ -130,7 +130,7 @@ function ShortcutSheet({ onClose }: { onClose: () => void }) {
           <DialogTitle>Keyboard shortcuts</DialogTitle>
           <DialogCloseButton />
         </DialogHeader>
-        <div className="grid min-h-0 grid-cols-2 gap-x-8 gap-y-6 overflow-y-auto p-5 max-[640px]:grid-cols-1">
+        <div className="relative grid min-h-0 grid-cols-2 gap-x-8 gap-y-6 overflow-y-auto p-5 max-[640px]:grid-cols-1">
           {groups().map((group) => (
             <section key={group.title} className="grid content-start gap-2">
               <h3 className="m-0 font-mono text-xs font-normal tracking-wide text-muted-foreground uppercase">

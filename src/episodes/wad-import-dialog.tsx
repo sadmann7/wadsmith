@@ -160,7 +160,7 @@ function WadImportDialog({
           </div>
           <DialogCloseButton />
         </DialogHeader>
-        <div className="grid min-h-0 gap-5 overflow-y-auto p-5">
+        <div className="relative grid min-h-0 gap-5 overflow-y-auto p-5">
           <section aria-label="Maps to import" className="grid gap-2">
             <h3 className="m-0 flex justify-between font-mono text-xs font-normal text-muted-foreground">
               <span>MAPS</span>
