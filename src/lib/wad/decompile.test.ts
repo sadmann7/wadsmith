@@ -9,7 +9,7 @@ import { thingCatalog } from "@/lib/map/catalog";
 import { sectorAt, wallKey } from "@/lib/map/geometry";
 import { starterMap } from "@/lib/map/starter-map";
 import { parseMapFile, serializeMap } from "@/lib/map/storage";
-import { testMap } from "@/lib/map/test-map";
+import { islandMap, testMap } from "@/lib/map/test-map";
 import { validateMap } from "@/lib/map/validate";
 
 import { buildLevel, compileEpisode, compileMap } from "./compile";
@@ -372,6 +372,41 @@ describe("decompileMap", () => {
     expect(lostReport.droppedActions).toEqual({
       "Teleporters with nowhere to land": 1,
     });
+  });
+
+  it("drops a teleporter whose landing stands on a room inside the tagged one", () => {
+    const wall = wallKey("e", "f");
+    const map: GameMap = {
+      ...islandMap,
+      sectors: islandMap.sectors.map((sector) =>
+        sector.id === "yard" ? { ...sector, tag: 5 } : sector,
+      ),
+      lines: {
+        [wall]: {
+          action: { kind: "teleport", trigger: "walk", repeat: true, tag: 5 },
+        },
+      },
+      things: [
+        ...islandMap.things,
+        {
+          id: "teleport-destination-1",
+          kind: "teleport-destination",
+          x: 256,
+          y: 256,
+          angle: 0,
+        },
+      ],
+    };
+    // The engine lands on the sector the spot stands in, which is the stage.
+    expect(validateMap(map).map((issue) => issue.id)).toEqual([
+      `line-teleport:${wall}`,
+    ]);
+    const [doom] = readMaps([{ name: "map.wad", data: compileMap(map) }]);
+    const { map: read, report } = decompileMap(doom);
+    expect(report.droppedActions).toEqual({
+      "Teleporters with nowhere to land": 1,
+    });
+    expect(validateMap(read)).toEqual([]);
   });
 
   it("keeps scrolling walls on the side that scrolls", () => {
