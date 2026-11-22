@@ -1,3 +1,6 @@
+import type { Complevel } from "@/lib/map/types";
+
+import { type GameInfo, lumpSlotIndex } from "@/lib/engine/game";
 import {
   complevels,
   higherLevel,
@@ -5,8 +8,6 @@ import {
   sectorLevel,
   thingLevel,
 } from "@/lib/map/complevel";
-import type { Complevel } from "@/lib/map/types";
-import { lumpSlotIndex, type GameInfo } from "@/lib/engine/game";
 
 export interface GameFile {
   name: string;
@@ -45,28 +46,12 @@ const mapParts = new Set([
   "BEHAVIOR",
   "TEXTMAP",
 ]);
-// Old editors left junk in the high bits and set this one. MBF21 clears the
-// extended flags on such lines, and they're no sign of a Boom map.
-const lineReserved = 0x0800;
-const lineSize = 14;
-const sectorSize = 26;
-const thingSize = 10;
+
 // BEX names code pointers without the A_ prefix, as in "FRAME 100 = Spawn".
 const codePointer = (names: string) =>
   new RegExp(`=\\s*(A_)?(${names})\\s*$`, "im");
-const mbfCodePointers = codePointer(
-  "Detonate|Mushroom|Die|Spawn|Turn|Face|Scratch|PlaySound|RandomJump|LineEffect|FireOldBFG|BetaSkullAttack|Stop",
-);
-const mbf21CodePointers = codePointer(
-  "SpawnObject|MonsterProjectile|MonsterBulletAttack|MonsterMeleeAttack|RadiusDamage|NoiseAlert|HealChase|SeekTracer|FindTracer|ClearTracer|JumpIfHealthBelow|JumpIfTargetInSight|JumpIfTargetCloser|JumpIfTracerInSight|JumpIfTracerCloser|JumpIfFlagsSet|AddFlags|RemoveFlags|WeaponProjectile|WeaponBulletAttack|WeaponMeleeAttack|WeaponSound|WeaponAlert|WeaponJump|ConsumeAmmo|CheckAmmo|RefireTo|GunFlashTo",
-);
 
 const text = new TextDecoder("latin1");
-
-function lumpName(bytes: Uint8Array) {
-  const end = bytes.indexOf(0);
-  return text.decode(end < 0 ? bytes : bytes.subarray(0, end)).toUpperCase();
-}
 
 export function isWad(data: Uint8Array) {
   const magic = text.decode(data.subarray(0, 4));
@@ -96,55 +81,6 @@ export function readLumps(file: GameFile): Lump[] {
       data: data.subarray(offset, offset + size),
     };
   });
-}
-
-function records(lump: Lump | undefined, size: number) {
-  if (!lump) return [];
-  const view = new DataView(
-    lump.data.buffer,
-    lump.data.byteOffset,
-    lump.data.byteLength,
-  );
-  return Array.from(
-    { length: Math.floor(lump.data.length / size) },
-    (_, i) => ({
-      view,
-      at: i * size,
-    }),
-  );
-}
-
-function mapLevel(lumps: Lump[]): Complevel {
-  let level: Complevel = "vanilla";
-  const raise = (next: Complevel) => {
-    level = higherLevel(level, next);
-  };
-  const find = (name: string) => lumps.find((lump) => lump.name === name);
-  for (const { view, at } of records(find("LINEDEFS"), lineSize)) {
-    const rawFlags = view.getUint16(at + 4, true);
-    const flags = rawFlags & lineReserved ? 0 : rawFlags;
-    raise(lineLevel(view.getUint16(at + 6, true), flags));
-  }
-  for (const { view, at } of records(find("SECTORS"), sectorSize)) {
-    raise(sectorLevel(view.getUint16(at + 22, true)));
-  }
-  for (const { view, at } of records(find("THINGS"), thingSize)) {
-    raise(thingLevel(view.getInt16(at + 6, true)));
-  }
-  return level;
-}
-
-function patchLevel(patch: string): Complevel {
-  if (/^\s*doom version\s*=\s*2021\b/im.test(patch)) return "mbf21";
-  if (/\bMBF21 Bits\b/i.test(patch)) return "mbf21";
-  if (mbf21CodePointers.test(patch)) return "mbf21";
-  if (mbfCodePointers.test(patch)) return "mbf";
-  if (
-    /^\s*\[(CODEPTR|STRINGS|PARS|HELPER|SPRITES|SOUNDS|MUSIC)\]/im.test(patch)
-  ) {
-    return "boom";
-  }
-  return "vanilla";
 }
 
 // Maps for the other kind of Doom can't play on the game's IWAD.
@@ -223,4 +159,72 @@ export function inspectWads(files: GameFile[], game?: GameInfo): WadSummary {
     complevel: declared ?? detected,
     declared: declared !== null,
   };
+}
+
+function lumpName(bytes: Uint8Array) {
+  const end = bytes.indexOf(0);
+  return text.decode(end < 0 ? bytes : bytes.subarray(0, end)).toUpperCase();
+}
+
+const mbfCodePointers = codePointer(
+  "Detonate|Mushroom|Die|Spawn|Turn|Face|Scratch|PlaySound|RandomJump|LineEffect|FireOldBFG|BetaSkullAttack|Stop",
+);
+const mbf21CodePointers = codePointer(
+  "SpawnObject|MonsterProjectile|MonsterBulletAttack|MonsterMeleeAttack|RadiusDamage|NoiseAlert|HealChase|SeekTracer|FindTracer|ClearTracer|JumpIfHealthBelow|JumpIfTargetInSight|JumpIfTargetCloser|JumpIfTracerInSight|JumpIfTracerCloser|JumpIfFlagsSet|AddFlags|RemoveFlags|WeaponProjectile|WeaponBulletAttack|WeaponMeleeAttack|WeaponSound|WeaponAlert|WeaponJump|ConsumeAmmo|CheckAmmo|RefireTo|GunFlashTo",
+);
+
+function patchLevel(patch: string): Complevel {
+  if (/^\s*doom version\s*=\s*2021\b/im.test(patch)) return "mbf21";
+  if (/\bMBF21 Bits\b/i.test(patch)) return "mbf21";
+  if (mbf21CodePointers.test(patch)) return "mbf21";
+  if (mbfCodePointers.test(patch)) return "mbf";
+  if (
+    /^\s*\[(CODEPTR|STRINGS|PARS|HELPER|SPRITES|SOUNDS|MUSIC)\]/im.test(patch)
+  ) {
+    return "boom";
+  }
+  return "vanilla";
+}
+
+// Old editors left junk in the high bits and set this one. MBF21 clears the
+// extended flags on such lines, and they're no sign of a Boom map.
+const lineReserved = 0x0800;
+const lineSize = 14;
+const sectorSize = 26;
+const thingSize = 10;
+
+function mapLevel(lumps: Lump[]): Complevel {
+  let level: Complevel = "vanilla";
+  const raise = (next: Complevel) => {
+    level = higherLevel(level, next);
+  };
+  const find = (name: string) => lumps.find((lump) => lump.name === name);
+  for (const { view, at } of records(find("LINEDEFS"), lineSize)) {
+    const rawFlags = view.getUint16(at + 4, true);
+    const flags = rawFlags & lineReserved ? 0 : rawFlags;
+    raise(lineLevel(view.getUint16(at + 6, true), flags));
+  }
+  for (const { view, at } of records(find("SECTORS"), sectorSize)) {
+    raise(sectorLevel(view.getUint16(at + 22, true)));
+  }
+  for (const { view, at } of records(find("THINGS"), thingSize)) {
+    raise(thingLevel(view.getInt16(at + 6, true)));
+  }
+  return level;
+}
+
+function records(lump: Lump | undefined, size: number) {
+  if (!lump) return [];
+  const view = new DataView(
+    lump.data.buffer,
+    lump.data.byteOffset,
+    lump.data.byteLength,
+  );
+  return Array.from(
+    { length: Math.floor(lump.data.length / size) },
+    (_, i) => ({
+      view,
+      at: i * size,
+    }),
+  );
 }

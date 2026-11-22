@@ -1,4 +1,3 @@
-import { wallKey } from "@/lib/map/geometry";
 import type {
   DoorSettings,
   GameMap,
@@ -7,6 +6,8 @@ import type {
   ThingKind,
   ThingSkill,
 } from "@/lib/map/types";
+
+import { wallKey } from "@/lib/map/geometry";
 
 export type Corner = [number, number];
 
@@ -67,48 +68,6 @@ export function rect(
   ];
 }
 
-// Plans are drawn on a grid, so a map can list corners in grid units.
-function scaled(spec: MapSpec): MapSpec {
-  const by = spec.scale ?? 1;
-  const corner = ([x, y]: Corner): Corner => [x * by, y * by];
-  const wall = ([a, b]: [Corner, Corner]): [Corner, Corner] => [
-    corner(a),
-    corner(b),
-  ];
-  return {
-    ...spec,
-    rooms: spec.rooms.map((room) => ({
-      ...room,
-      points: room.points.map(corner),
-    })),
-    things: spec.things.map((thing) => ({ ...thing, at: corner(thing.at) })),
-    switches: spec.switches?.map((item) => ({
-      ...item,
-      wall: wall(item.wall),
-    })),
-    lines: spec.lines?.map((line) => ({ ...line, wall: wall(line.wall) })),
-  };
-}
-
-function cornerKey([x, y]: Corner) {
-  return `${x},${y}`;
-}
-
-// Positions along the wall from a to b of every other corner lying on it.
-function cornersOnWall(a: Corner, b: Corner, corners: Corner[]) {
-  const [dx, dy] = [b[0] - a[0], b[1] - a[1]];
-  const length = dx * dx + dy * dy;
-  return corners
-    .filter(([x, y]) => (x - a[0]) * dy === (y - a[1]) * dx)
-    .map((corner) => ({
-      corner,
-      along: ((corner[0] - a[0]) * dx + (corner[1] - a[1]) * dy) / length,
-    }))
-    .filter(({ along }) => along > 0 && along < 1)
-    .toSorted((left, right) => left.along - right.along)
-    .map(({ corner }) => corner);
-}
-
 // Builds a map from room outlines. Rooms that touch only need matching edges:
 // shared corners merge, and a wall gains a corner wherever another room's
 // corner lies on it, so every wall between two rooms is one shared line.
@@ -126,7 +85,7 @@ export function buildMap(unscaled: MapSpec): GameMap {
   );
   const id = (corner: Corner) => {
     const found = ids.get(cornerKey(corner));
-    if (!found) throw new Error(`${spec.name}: no corner at ${corner}.`);
+    if (!found) throw new Error(`${spec.name}: no corner at ${corner.join()}.`);
     return found;
   };
   const roomIds = new Map(
@@ -182,4 +141,46 @@ export function buildMap(unscaled: MapSpec): GameMap {
       (spec.lines ?? []).map((line) => [wall(line.wall), line.settings]),
     ),
   };
+}
+
+// Plans are drawn on a grid, so a map can list corners in grid units.
+function scaled(spec: MapSpec): MapSpec {
+  const by = spec.scale ?? 1;
+  const corner = ([x, y]: Corner): Corner => [x * by, y * by];
+  const wall = ([a, b]: [Corner, Corner]): [Corner, Corner] => [
+    corner(a),
+    corner(b),
+  ];
+  return {
+    ...spec,
+    rooms: spec.rooms.map((room) => ({
+      ...room,
+      points: room.points.map(corner),
+    })),
+    things: spec.things.map((thing) => ({ ...thing, at: corner(thing.at) })),
+    switches: spec.switches?.map((item) => ({
+      ...item,
+      wall: wall(item.wall),
+    })),
+    lines: spec.lines?.map((line) => ({ ...line, wall: wall(line.wall) })),
+  };
+}
+
+function cornerKey([x, y]: Corner) {
+  return `${x},${y}`;
+}
+
+// Positions along the wall from a to b of every other corner lying on it.
+function cornersOnWall(a: Corner, b: Corner, corners: Corner[]) {
+  const [dx, dy] = [b[0] - a[0], b[1] - a[1]];
+  const length = dx * dx + dy * dy;
+  return corners
+    .filter(([x, y]) => (x - a[0]) * dy === (y - a[1]) * dx)
+    .map((corner) => ({
+      corner,
+      along: ((corner[0] - a[0]) * dx + (corner[1] - a[1]) * dy) / length,
+    }))
+    .filter(({ along }) => along > 0 && along < 1)
+    .toSorted((left, right) => left.along - right.along)
+    .map(({ corner }) => corner);
 }

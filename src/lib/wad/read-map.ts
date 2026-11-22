@@ -1,6 +1,8 @@
-import { isMapLump } from "@/lib/engine/game";
 import type { Point } from "@/lib/map/types";
-import { WadFileError, readLumps, type GameFile } from "./inspect";
+
+import { isMapLump } from "@/lib/engine/game";
+
+import { type GameFile, readLumps, WadFileError } from "./inspect";
 
 export interface DoomLine {
   start: number;
@@ -43,28 +45,81 @@ export interface DoomMap {
   title?: string;
 }
 
-const noSide = 0xffff;
 const text = new TextDecoder("latin1");
+
+export function readMaps(files: GameFile[]): DoomMap[] {
+  const maps = new Map<string, DoomMap>();
+  const titles = new Map<string, string>();
+  for (const file of files) {
+    const lumps = readLumps(file);
+    for (const [index, lump] of lumps.entries()) {
+      if (lump.name === "DEHACKED" || lump.name === "UMAPINFO") {
+        for (const [slot, title] of readTitles(lump.name, lump.data)) {
+          titles.set(slot, title);
+        }
+      }
+      if (!isMapLump(lump.name)) continue;
+      const parts = new Map<string, Uint8Array>();
+      for (const part of lumps.slice(index + 1, index + 12)) {
+        if (part.name === "TEXTMAP") {
+          throw new WadFileError(
+            `${lump.name} in ${file.name} is a UDMF map, which the editor can't open.`,
+          );
+        }
+        if (parts.has(part.name) || isMapLump(part.name)) break;
+        parts.set(part.name, part.data);
+      }
+      if (parts.has("BEHAVIOR")) {
+        throw new WadFileError(
+          `${lump.name} in ${file.name} is a Hexen-format map, which the editor can't open.`,
+        );
+      }
+      maps.set(lump.name, parseMap(lump.name, parts));
+    }
+  }
+  if (maps.size === 0) {
+    throw new WadFileError("There are no maps in these files.");
+  }
+  return [...maps.values()]
+    .map((map) =>
+      titles.has(map.slot) ? { ...map, title: titles.get(map.slot) } : map,
+    )
+    .toSorted((a, b) => a.slot.localeCompare(b.slot));
+}
+
 const levelString = /^\s*HUSTR_(\d+)\s*=\s*(.*?)\s*$/gim;
 const levelInfo = /^\s*map\s+(MAP\d\d|E\dM\d)\s*\{([^}]*)\}/gim;
 const levelName = /^\s*levelname\s*=\s*"([^"]*)"/im;
 
-function name(bytes: Uint8Array) {
-  const end = bytes.indexOf(0);
-  return text.decode(end < 0 ? bytes : bytes.subarray(0, end)).toUpperCase();
+function readTitles(lumpName: string, data: Uint8Array) {
+  const source = text.decode(data);
+  const titles: [string, string][] = [];
+  if (lumpName === "DEHACKED") {
+    for (const [, number, value] of source.matchAll(levelString)) {
+      const slot = `MAP${number.padStart(2, "0")}`;
+      const title = titleOf(slot, value);
+      if (isMapLump(slot) && title) titles.push([slot, title]);
+    }
+  } else {
+    for (const [, slot, body] of source.matchAll(levelInfo)) {
+      const title = titleOf(
+        slot.toUpperCase(),
+        levelName.exec(body)?.[1] ?? "",
+      );
+      if (title) titles.push([slot.toUpperCase(), title]);
+    }
+  }
+  return titles;
 }
 
-function records<T>(
-  data: Uint8Array | undefined,
-  size: number,
-  read: (view: DataView, at: number, bytes: Uint8Array) => T,
-) {
-  if (!data) return [];
-  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-  return Array.from({ length: Math.floor(data.length / size) }, (_, index) =>
-    read(view, index * size, data.subarray(index * size, (index + 1) * size)),
-  );
+// A map in a later WAD replaces one in the same slot, as when the engine loads them.
+// Titles often repeat the slot, as in "MAP01: Entryway".
+function titleOf(slot: string, value: string) {
+  const title = value.replace(/^(MAP\d\d|level \d+)\s*:\s*/i, "").trim();
+  return title && title.toUpperCase() !== slot ? title : null;
 }
+
+const noSide = 0xffff;
 
 function parseMap(slot: string, lumps: Map<string, Uint8Array>): DoomMap {
   const sides = records(lumps.get("SIDEDEFS"), 30, (view, at, bytes) => ({
@@ -112,70 +167,19 @@ function parseMap(slot: string, lumps: Map<string, Uint8Array>): DoomMap {
   };
 }
 
-// A map in a later WAD replaces one in the same slot, as when the engine loads them.
-// Titles often repeat the slot, as in "MAP01: Entryway".
-function titleOf(slot: string, value: string) {
-  const title = value.replace(/^(MAP\d\d|level \d+)\s*:\s*/i, "").trim();
-  return title && title.toUpperCase() !== slot ? title : null;
+function records<T>(
+  data: Uint8Array | undefined,
+  size: number,
+  read: (view: DataView, at: number, bytes: Uint8Array) => T,
+) {
+  if (!data) return [];
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  return Array.from({ length: Math.floor(data.length / size) }, (_, index) =>
+    read(view, index * size, data.subarray(index * size, (index + 1) * size)),
+  );
 }
 
-function readTitles(lumpName: string, data: Uint8Array) {
-  const source = text.decode(data);
-  const titles: [string, string][] = [];
-  if (lumpName === "DEHACKED") {
-    for (const [, number, value] of source.matchAll(levelString)) {
-      const slot = `MAP${number.padStart(2, "0")}`;
-      const title = titleOf(slot, value);
-      if (isMapLump(slot) && title) titles.push([slot, title]);
-    }
-  } else {
-    for (const [, slot, body] of source.matchAll(levelInfo)) {
-      const title = titleOf(
-        slot.toUpperCase(),
-        levelName.exec(body)?.[1] ?? "",
-      );
-      if (title) titles.push([slot.toUpperCase(), title]);
-    }
-  }
-  return titles;
-}
-
-export function readMaps(files: GameFile[]): DoomMap[] {
-  const maps = new Map<string, DoomMap>();
-  const titles = new Map<string, string>();
-  for (const file of files) {
-    const lumps = readLumps(file);
-    for (const [index, lump] of lumps.entries()) {
-      if (lump.name === "DEHACKED" || lump.name === "UMAPINFO") {
-        for (const [slot, title] of readTitles(lump.name, lump.data)) {
-          titles.set(slot, title);
-        }
-      }
-      if (!isMapLump(lump.name)) continue;
-      const parts = new Map<string, Uint8Array>();
-      for (const part of lumps.slice(index + 1, index + 12)) {
-        if (part.name === "TEXTMAP") {
-          throw new WadFileError(
-            `${lump.name} in ${file.name} is a UDMF map, which the editor can't open.`,
-          );
-        }
-        if (parts.has(part.name) || isMapLump(part.name)) break;
-        parts.set(part.name, part.data);
-      }
-      if (parts.has("BEHAVIOR")) {
-        throw new WadFileError(
-          `${lump.name} in ${file.name} is a Hexen-format map, which the editor can't open.`,
-        );
-      }
-      maps.set(lump.name, parseMap(lump.name, parts));
-    }
-  }
-  if (maps.size === 0) {
-    throw new WadFileError("There are no maps in these files.");
-  }
-  return [...maps.values()]
-    .map((map) =>
-      titles.has(map.slot) ? { ...map, title: titles.get(map.slot) } : map,
-    )
-    .toSorted((a, b) => a.slot.localeCompare(b.slot));
+function name(bytes: Uint8Array) {
+  const end = bytes.indexOf(0);
+  return text.decode(end < 0 ? bytes : bytes.subarray(0, end)).toUpperCase();
 }

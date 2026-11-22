@@ -1,18 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { packTestWad } from "@/lib/wad/test-wad";
+
 import { games } from "./game";
 import { identifyIwad } from "./iwad";
 
 const empty = new Uint8Array(0);
 const base = ["PLAYPAL", "COLORMAP", "TEXTURE1", "PNAMES"];
-
-function iwad(lumps: string[]) {
-  return packTestWad(
-    lumps.map((name) => ({ name, data: empty })),
-    "IWAD",
-  );
-}
 
 describe("identifyIwad", () => {
   it("tells the games apart by their maps, lumps and names", () => {
@@ -63,3 +57,10 @@ describe("identifyIwad", () => {
     expect(() => identifyIwad("tex.wad", iwad(base))).toThrow("no maps");
   });
 });
+
+function iwad(lumps: string[]) {
+  return packTestWad(
+    lumps.map((name) => ({ name, data: empty })),
+    "IWAD",
+  );
+}

@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import {
   existsSync,
   lstatSync,
@@ -8,10 +9,8 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -25,12 +24,6 @@ import {
 } from "./engine-files.mjs";
 
 const directories = [];
-
-function temporaryDirectory() {
-  const directory = mkdtempSync(join(tmpdir(), "engine-files-"));
-  directories.push(directory);
-  return directory;
-}
 
 afterEach(() => {
   for (const directory of directories.splice(0)) {
@@ -155,38 +148,6 @@ describe("licence collection", () => {
   });
 });
 
-function git(directory, ...args) {
-  return execFileSync(
-    "git",
-    ["-c", "user.name=Test", "-c", "user.email=test@example.com", ...args],
-    { cwd: directory, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
-  ).trim();
-}
-
-function repositories() {
-  const root = temporaryDirectory();
-  const upstream = join(root, "upstream");
-  const parent = join(root, "parent");
-  mkdirSync(upstream);
-  mkdirSync(parent);
-  git(upstream, "init", "-q");
-  writeFileSync(join(upstream, "engine.txt"), "engine");
-  git(upstream, "add", ".");
-  git(upstream, "commit", "-q", "-m", "engine");
-  git(parent, "init", "-q");
-  writeFileSync(join(parent, "tracked.txt"), "tracked");
-  git(parent, "add", ".");
-  git(parent, "commit", "-q", "-m", "parent");
-  writeFileSync(join(parent, "tracked.txt"), "uncommitted edit");
-  return {
-    parent,
-    directory: join(parent, ".cache", "woof"),
-    repository: `file://${upstream}`,
-    commit: git(upstream, "rev-parse", "HEAD"),
-    parentHead: git(parent, "rev-parse", "HEAD"),
-  };
-}
-
 describe("pinned source checkout", () => {
   it.each([
     ["an empty .git directory", () => {}],
@@ -241,3 +202,41 @@ describe("pinned source checkout", () => {
     expect(existsSync(join(directory, "extra.txt"))).toBe(false);
   });
 });
+
+function repositories() {
+  const root = temporaryDirectory();
+  const upstream = join(root, "upstream");
+  const parent = join(root, "parent");
+  mkdirSync(upstream);
+  mkdirSync(parent);
+  git(upstream, "init", "-q");
+  writeFileSync(join(upstream, "engine.txt"), "engine");
+  git(upstream, "add", ".");
+  git(upstream, "commit", "-q", "-m", "engine");
+  git(parent, "init", "-q");
+  writeFileSync(join(parent, "tracked.txt"), "tracked");
+  git(parent, "add", ".");
+  git(parent, "commit", "-q", "-m", "parent");
+  writeFileSync(join(parent, "tracked.txt"), "uncommitted edit");
+  return {
+    parent,
+    directory: join(parent, ".cache", "woof"),
+    repository: `file://${upstream}`,
+    commit: git(upstream, "rev-parse", "HEAD"),
+    parentHead: git(parent, "rev-parse", "HEAD"),
+  };
+}
+
+function git(directory, ...args) {
+  return execFileSync(
+    "git",
+    ["-c", "user.name=Test", "-c", "user.email=test@example.com", ...args],
+    { cwd: directory, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+  ).trim();
+}
+
+function temporaryDirectory() {
+  const directory = mkdtempSync(join(tmpdir(), "engine-files-"));
+  directories.push(directory);
+  return directory;
+}

@@ -1,5 +1,7 @@
 import {
   bindDrag,
+  type ChangeDetails,
+  type ConnectDraft,
   createChange,
   createConnect,
   createMove,
@@ -8,21 +10,38 @@ import {
   definePrimitive,
   dragThreshold,
   live,
-  selects,
-  type ChangeDetails,
-  type ConnectDraft,
   type MoveDraft,
+  selects,
   type Viewport,
 } from "@ui-sdk/core";
 import { createParts } from "@ui-sdk/react/primitive";
 import * as React from "react";
 
+import type {
+  DoorSettings,
+  GameMap,
+  Point,
+  Sector,
+  ThingKind,
+} from "@/lib/map/types";
+import type { Camera } from "@/lib/preview/render";
+import type { SceneCamera } from "@/lib/preview/scene-camera";
+
+import { defined } from "@/lib/defined";
+import {
+  isDragging,
+  isKeyboardMenu,
+  isSecondaryPress,
+  type MapTarget,
+  openMenuFromKey,
+  targetForKeys,
+  wallTarget,
+} from "@/lib/editor/map-target";
 import { thingKinds } from "@/lib/map/catalog";
 import {
   addDetail,
   addRoom,
   addRoomOnSide,
-  mergeCorners,
   addSwitch,
   addSwitchInRoom,
   addThing,
@@ -31,11 +50,13 @@ import {
   doorKeyPrefix,
   freeWallNear,
   gridSize,
+  mergeCorners,
   positionsOf,
   removeSector,
   removeSwitch,
   removeThing,
   roomCenter,
+  type RoomSide,
   setRoomDoor,
   snapPoint,
   switchKeyPrefix,
@@ -43,27 +64,8 @@ import {
   updateSector,
   updateSwitch,
   wallNear,
-  type RoomSide,
 } from "@/lib/map/edit";
 import { holeAt, loopsPath, sectorAt, wallKey } from "@/lib/map/geometry";
-import {
-  isDragging,
-  isKeyboardMenu,
-  isSecondaryPress,
-  openMenuFromKey,
-  targetForKeys,
-  wallTarget,
-  type MapTarget,
-} from "@/lib/editor/map-target";
-import type { Camera } from "@/lib/preview/render";
-import type { SceneCamera } from "@/lib/preview/scene-camera";
-import type {
-  DoorSettings,
-  GameMap,
-  Point,
-  Sector,
-  ThingKind,
-} from "@/lib/map/types";
 
 export type MapTool = "select" | "draw" | "line" | "thing" | "switch";
 export type EditMode = "vertices" | "lines" | "sectors" | "things";
@@ -140,7 +142,7 @@ const emptyMap: GameMap = {
   things: [],
   switches: [],
 };
-const hiddenLine = { x1: "0", y1: "0", x2: "0", y2: "0" };
+
 const clickSlop = 4;
 const switchReach = 32;
 const cameraNudge = 16;
@@ -151,143 +153,13 @@ const arrowSteps: Record<string, Point> = {
   ArrowRight: { x: 1, y: 0 },
 };
 const wallReach = 14;
-const labelInset = 24;
-const agentHeightLimit = 2048;
+
 const agentDepthLimit = 4096;
 
-function agentNumber(value: number, min: number, max: number, label: string) {
-  if (!Number.isFinite(value)) throw new Error(`${label} must be a number.`);
-  return Math.max(min, Math.min(max, Math.round(value)));
-}
-
-function agentHeights(floor: number, ceiling: number) {
-  const heights = {
-    floor: agentNumber(floor, -agentHeightLimit, agentHeightLimit, "Floor"),
-    ceiling: agentNumber(
-      ceiling,
-      -agentHeightLimit,
-      agentHeightLimit,
-      "Ceiling",
-    ),
-  };
-  if (heights.ceiling <= heights.floor) {
-    throw new Error("The ceiling must be above the floor.");
-  }
-  return heights;
-}
-
-const sectorIndexes = new WeakMap<GameMap, Map<string, Sector>>();
-
-// Maps are replaced on every edit, never changed in place, so an index built
-// for one stays right for as long as it's in use.
-function sectorById(map: GameMap, id: string) {
-  let index = sectorIndexes.get(map);
-  if (!index) {
-    index = new Map(map.sectors.map((sector) => [sector.id, sector]));
-    sectorIndexes.set(map, index);
-  }
-  return index.get(id);
-}
-
-function pointOf(state: MapEditorState, key: string): Point {
-  const base = state.positions[key] ?? { x: 0, y: 0 };
-  const { moving } = state;
-  return moving?.keys.includes(key)
-    ? { x: base.x + moving.dx, y: base.y + moving.dy }
-    : base;
-}
-
-function centroid(state: MapEditorState, corners: readonly string[]): Point {
-  const points = corners.map((corner) => pointOf(state, corner));
-  const count = points.length || 1;
-  return {
-    x: points.reduce((sum, point) => sum + point.x, 0) / count,
-    y: points.reduce((sum, point) => sum + point.y, 0) / count,
-  };
-}
-
-function portPoint(state: MapEditorState, key: string): Point {
-  if (key.startsWith(switchKeyPrefix)) {
-    const id = key.slice(switchKeyPrefix.length);
-    const item = state.map.switches.find((entry) => entry.id === id);
-    if (!item) return { x: 0, y: 0 };
-    const a = pointOf(state, item.from);
-    const b = pointOf(state, item.to);
-    return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-  }
-  const id = key.slice(doorKeyPrefix.length);
-  return centroid(state, sectorById(state.map, id)?.vertices ?? []);
-}
-
-// The parts of a horizontal line that fall inside a polygon, left to right.
-function spansAt(points: Point[], y: number) {
-  const crossings: number[] = [];
-  points.forEach((a, index) => {
-    const b = points[(index + 1) % points.length];
-    if (a.y <= y !== b.y <= y) {
-      crossings.push(a.x + ((y - a.y) * (b.x - a.x)) / (b.y - a.y));
-    }
-  });
-  crossings.sort((left, right) => left - right);
-  const spans: [number, number][] = [];
-  for (let index = 0; index + 1 < crossings.length; index += 2) {
-    spans.push([crossings[index], crossings[index + 1]]);
-  }
-  return spans;
-}
-
-// A label sits near the top of its room, on a part of that band the room
-// covers, so an L-shaped room doesn't label the room tucked into its corner.
-function labelPoint(state: MapEditorState, corners: readonly string[]): Point {
-  const center = centroid(state, corners);
-  const points = corners.map((key) => pointOf(state, key));
-  const y =
-    Math.min(...points.map((point) => point.y)) +
-    labelInset / state.viewport.zoom;
-  const spans = spansAt(points, y);
-  const span =
-    spans.find(([left, right]) => left <= center.x && center.x <= right) ??
-    spans.toSorted((a, b) => b[1] - b[0] - (a[1] - a[0]))[0];
-  return {
-    x:
-      !span || (span[0] <= center.x && center.x <= span[1])
-        ? center.x
-        : (span[0] + span[1]) / 2,
-    y,
-  };
-}
-
-function lineAttrs(a: Point, b: Point) {
-  return {
-    x1: String(a.x),
-    y1: String(a.y),
-    x2: String(b.x),
-    y2: String(b.y),
-  };
-}
-
-function connectingAttrs(state: MapEditorState) {
-  const { connecting } = state;
-  if (!connecting) return { "data-active": undefined, ...hiddenLine };
-  const end = connecting.to
-    ? portPoint(state, connecting.to)
-    : { x: connecting.x, y: connecting.y };
-  return {
-    "data-active": "",
-    ...lineAttrs(portPoint(state, connecting.from), end),
-  };
-}
-
-function sectorPath(
-  state: MapEditorState,
-  corners: readonly string[],
-  holes: readonly string[][] = [],
-) {
-  return loopsPath(
-    [corners, ...holes].map((loop) =>
-      loop.map((vertex) => pointOf(state, vertex)),
-    ),
-  );
+interface LiveApi {
+  viewport: ReturnType<typeof createViewport<MapEditorState>>;
+  move: ReturnType<typeof createMove<MapEditorState>>;
+  connect: ReturnType<typeof createConnect<MapEditorState>>;
 }
 
 interface KeyedProps {
@@ -333,57 +205,6 @@ const readsNothing = {
   cameraPosition: none,
   highlightedWall: none,
 } satisfies Record<keyof MapEditorState, readonly never[]>;
-
-function movedDraft(
-  before: MoveDraft | null,
-  after: MoveDraft | null,
-  notify: (key: string) => void,
-) {
-  for (const key of before?.keys ?? []) notify(key);
-  if (after && after.keys !== before?.keys) {
-    for (const key of after.keys) notify(key);
-  }
-}
-
-function sectorCorners({ corners, holes = [] }: SectorProps) {
-  return [...corners, ...holes.flat()];
-}
-
-function draftPoints(state: MapEditorState) {
-  const points = state.cursor
-    ? [...state.drawing, state.cursor]
-    : state.drawing;
-  return points.map((point) => `${point.x},${point.y}`).join(" ");
-}
-
-function cameraStyle(state: MapEditorState) {
-  const camera = state.cameraPosition;
-  return css({
-    position: "absolute",
-    left: `${camera?.x ?? 0}px`,
-    top: `${camera?.y ?? 0}px`,
-    "--camera-angle": `${-(camera?.angle ?? 0)}deg`,
-    visibility: camera ? undefined : "hidden",
-    "touch-action": "none",
-  });
-}
-
-function lookTarget(state: MapEditorState): Point | null {
-  const { map, activeSector, selection } = state;
-  if (selection.length > 0) {
-    const thing = map.things.find(
-      (item) => `${thingKeyPrefix}${item.id}` === selection[0],
-    );
-    const sector = thing ? sectorAt(map, thing) : null;
-    return thing && sector && !sector.door ? { x: thing.x, y: thing.y } : null;
-  }
-  const sector = map.sectors.find((item) => item.id === activeSector);
-  return sector && !sector.door ? roomCenter(map, sector) : null;
-}
-
-function wallAttrs(state: MapEditorState, from: string, to: string) {
-  return lineAttrs(pointOf(state, from), pointOf(state, to));
-}
 
 export const mapEditor = definePrimitive({
   name: "map-editor",
@@ -1264,7 +1085,7 @@ export const mapEditor = definePrimitive({
       attrs: () => ({
         style: css({ position: "absolute", left: "0", top: "0" }),
       }),
-      live: live<MapEditorState, any, {}>((state, { api }) => ({
+      live: live<MapEditorState, LiveApi, {}>((state, { api }) => ({
         style: api.viewport.style(state),
       })),
     }),
@@ -1275,7 +1096,7 @@ export const mapEditor = definePrimitive({
         holes: "value",
         door: "boolean",
       },
-      selects: selects<MapEditorState, any, SectorProps>({
+      selects: selects<MapEditorState, unknown, SectorProps>({
         ...readsNothing,
         positions: ({ props }) => sectorCorners(props),
         moving: whole,
@@ -1286,13 +1107,13 @@ export const mapEditor = definePrimitive({
         "data-active": state.activeSector === key ? "" : undefined,
         "data-door": props.door ? "" : undefined,
       }),
-      live: live<MapEditorState, any, SectorProps>((state, { props }) => ({
+      live: live<MapEditorState, unknown, SectorProps>((state, { props }) => ({
         d: sectorPath(state, props.corners, props.holes),
       })),
     }),
     wall: slot<WallProps>({
       props: { value: "string", from: "string", to: "string" },
-      selects: selects<MapEditorState, any, WallProps>({
+      selects: selects<MapEditorState, unknown, WallProps>({
         ...readsNothing,
         positions: ({ props }) => [props.from, props.to],
         moving: {
@@ -1305,19 +1126,19 @@ export const mapEditor = definePrimitive({
         ...wallAttrs(state, props.from, props.to),
         "data-selected": state.highlightedWall === key ? "" : undefined,
       }),
-      live: live<MapEditorState, any, WallProps>((state, { props }) =>
+      live: live<MapEditorState, unknown, WallProps>((state, { props }) =>
         wallAttrs(state, props.from, props.to),
       ),
     }),
     draft: slot({
       attrs: (state) => ({ points: draftPoints(state) }),
-      live: live<MapEditorState, any, {}>((state) => ({
+      live: live<MapEditorState, unknown, {}>((state) => ({
         points: draftPoints(state),
       })),
     }),
     handle: slot<KeyedProps>({
       props: { value: "string" },
-      selects: selects<MapEditorState, any, KeyedProps>({
+      selects: selects<MapEditorState, unknown, KeyedProps>({
         ...readsNothing,
         positions: ({ key }) => [key],
         moving: { values: ({ key }) => [key], moved: movedDraft },
@@ -1337,7 +1158,7 @@ export const mapEditor = definePrimitive({
           }),
         };
       },
-      live: live<MapEditorState, any, { value: string }>(
+      live: live<MapEditorState, LiveApi, { value: string }>(
         (state, { api, key }) => ({
           style: api.move.style(state, key),
           "data-dragging": api.move.dragging(state, key) ? "" : undefined,
@@ -1346,12 +1167,12 @@ export const mapEditor = definePrimitive({
       on: {
         keydown: (event, { api, key }) => api.move.keydown(event, key),
         pointerdown: (event, { api, el, key }) =>
-          api.pressHandle(event, key, el!),
+          api.pressHandle(event, key, defined(el)),
       },
     }),
     port: slot<KeyedProps>({
       props: { value: "string" },
-      selects: selects<MapEditorState, any, KeyedProps>({
+      selects: selects<MapEditorState, unknown, KeyedProps>({
         ...readsNothing,
         map: whole,
         positions: whole,
@@ -1373,7 +1194,7 @@ export const mapEditor = definePrimitive({
           }),
         };
       },
-      live: live<MapEditorState, any, { value: string }>(
+      live: live<MapEditorState, LiveApi, { value: string }>(
         (state, { api, key }) => {
           const at = portPoint(state, key);
           return {
@@ -1385,12 +1206,12 @@ export const mapEditor = definePrimitive({
       on: {
         keydown: (event, { api, key }) => api.portKeydown(event, key),
         pointerdown: (event, { api, el, key }) =>
-          api.pressPort(event, key, el!),
+          api.pressPort(event, key, defined(el)),
       },
     }),
     wire: slot<WallProps>({
       props: { value: "string", from: "string", to: "string" },
-      selects: selects<MapEditorState, any, WallProps>({
+      selects: selects<MapEditorState, unknown, WallProps>({
         ...readsNothing,
         map: whole,
         positions: whole,
@@ -1398,17 +1219,19 @@ export const mapEditor = definePrimitive({
       }),
       attrs: (state, { props }) =>
         lineAttrs(portPoint(state, props.from), portPoint(state, props.to)),
-      live: live<MapEditorState, any, WallProps>((state, { props }) =>
+      live: live<MapEditorState, unknown, WallProps>((state, { props }) =>
         lineAttrs(portPoint(state, props.from), portPoint(state, props.to)),
       ),
     }),
     connecting: slot({
       attrs: (state) => connectingAttrs(state),
-      live: live<MapEditorState, any, {}>((state) => connectingAttrs(state)),
+      live: live<MapEditorState, unknown, {}>((state) =>
+        connectingAttrs(state),
+      ),
     }),
     label: slot<LabelProps>({
       props: { value: "string", corners: "list" },
-      selects: selects<MapEditorState, any, LabelProps>({
+      selects: selects<MapEditorState, unknown, LabelProps>({
         ...readsNothing,
         positions: ({ props }) => props.corners,
         moving: whole,
@@ -1424,7 +1247,7 @@ export const mapEditor = definePrimitive({
           }),
         };
       },
-      live: live<MapEditorState, any, LabelProps>((state, { props }) => {
+      live: live<MapEditorState, unknown, LabelProps>((state, { props }) => {
         const at = labelPoint(state, props.corners);
         return { style: `left:${at.x}px;top:${at.y}px` };
       }),
@@ -1445,12 +1268,13 @@ export const mapEditor = definePrimitive({
         "data-map-key": "camera",
         style: cameraStyle(state),
       }),
-      live: live<MapEditorState, any, {}>((state) => ({
+      live: live<MapEditorState, unknown, {}>((state) => ({
         style: cameraStyle(state),
       })),
       on: {
         keydown: (event, { api }) => api.cameraKeydown(event),
-        pointerdown: (event, { api, el }) => api.pressCamera(event, el!),
+        pointerdown: (event, { api, el }) =>
+          api.pressCamera(event, defined(el)),
       },
     }),
     findCamera: slot({
@@ -1481,6 +1305,198 @@ export const mapEditor = definePrimitive({
     items: (api) => api.rooms(),
   },
 });
+
+function lookTarget(state: MapEditorState): Point | null {
+  const { map, activeSector, selection } = state;
+  if (selection.length > 0) {
+    const thing = map.things.find(
+      (item) => `${thingKeyPrefix}${item.id}` === selection[0],
+    );
+    const sector = thing ? sectorAt(map, thing) : null;
+    return thing && sector && !sector.door ? { x: thing.x, y: thing.y } : null;
+  }
+  const sector = map.sectors.find((item) => item.id === activeSector);
+  return sector && !sector.door ? roomCenter(map, sector) : null;
+}
+
+const agentHeightLimit = 2048;
+
+function agentHeights(floor: number, ceiling: number) {
+  const heights = {
+    floor: agentNumber(floor, -agentHeightLimit, agentHeightLimit, "Floor"),
+    ceiling: agentNumber(
+      ceiling,
+      -agentHeightLimit,
+      agentHeightLimit,
+      "Ceiling",
+    ),
+  };
+  if (heights.ceiling <= heights.floor) {
+    throw new Error("The ceiling must be above the floor.");
+  }
+  return heights;
+}
+
+function agentNumber(value: number, min: number, max: number, label: string) {
+  if (!Number.isFinite(value)) throw new Error(`${label} must be a number.`);
+  return Math.max(min, Math.min(max, Math.round(value)));
+}
+
+function sectorCorners({ corners, holes = [] }: SectorProps) {
+  return [...corners, ...holes.flat()];
+}
+
+function sectorPath(
+  state: MapEditorState,
+  corners: readonly string[],
+  holes: readonly string[][] = [],
+) {
+  return loopsPath(
+    [corners, ...holes].map((loop) =>
+      loop.map((vertex) => pointOf(state, vertex)),
+    ),
+  );
+}
+
+function movedDraft(
+  before: MoveDraft | null,
+  after: MoveDraft | null,
+  notify: (key: string) => void,
+) {
+  for (const key of before?.keys ?? []) notify(key);
+  if (after && after.keys !== before?.keys) {
+    for (const key of after.keys) notify(key);
+  }
+}
+
+function wallAttrs(state: MapEditorState, from: string, to: string) {
+  return lineAttrs(pointOf(state, from), pointOf(state, to));
+}
+
+function draftPoints(state: MapEditorState) {
+  const points = state.cursor
+    ? [...state.drawing, state.cursor]
+    : state.drawing;
+  return points.map((point) => `${point.x},${point.y}`).join(" ");
+}
+
+const hiddenLine = { x1: "0", y1: "0", x2: "0", y2: "0" };
+
+function connectingAttrs(state: MapEditorState) {
+  const { connecting } = state;
+  if (!connecting) return { "data-active": undefined, ...hiddenLine };
+  const end = connecting.to
+    ? portPoint(state, connecting.to)
+    : { x: connecting.x, y: connecting.y };
+  return {
+    "data-active": "",
+    ...lineAttrs(portPoint(state, connecting.from), end),
+  };
+}
+
+function portPoint(state: MapEditorState, key: string): Point {
+  if (key.startsWith(switchKeyPrefix)) {
+    const id = key.slice(switchKeyPrefix.length);
+    const item = state.map.switches.find((entry) => entry.id === id);
+    if (!item) return { x: 0, y: 0 };
+    const a = pointOf(state, item.from);
+    const b = pointOf(state, item.to);
+    return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  }
+  const id = key.slice(doorKeyPrefix.length);
+  return centroid(state, sectorById(state.map, id)?.vertices ?? []);
+}
+
+function centroid(state: MapEditorState, corners: readonly string[]): Point {
+  const points = corners.map((corner) => pointOf(state, corner));
+  const count = points.length || 1;
+  return {
+    x: points.reduce((sum, point) => sum + point.x, 0) / count,
+    y: points.reduce((sum, point) => sum + point.y, 0) / count,
+  };
+}
+
+function pointOf(state: MapEditorState, key: string): Point {
+  const base = state.positions[key] ?? { x: 0, y: 0 };
+  const { moving } = state;
+  return moving?.keys.includes(key)
+    ? { x: base.x + moving.dx, y: base.y + moving.dy }
+    : base;
+}
+
+const sectorIndexes = new WeakMap<GameMap, Map<string, Sector>>();
+
+// Maps are replaced on every edit, never changed in place, so an index built
+// for one stays right for as long as it's in use.
+function sectorById(map: GameMap, id: string) {
+  let index = sectorIndexes.get(map);
+  if (!index) {
+    index = new Map(map.sectors.map((sector) => [sector.id, sector]));
+    sectorIndexes.set(map, index);
+  }
+  return index.get(id);
+}
+
+function lineAttrs(a: Point, b: Point) {
+  return {
+    x1: String(a.x),
+    y1: String(a.y),
+    x2: String(b.x),
+    y2: String(b.y),
+  };
+}
+
+const labelInset = 24;
+
+// A label sits near the top of its room, on a part of that band the room
+// covers, so an L-shaped room doesn't label the room tucked into its corner.
+function labelPoint(state: MapEditorState, corners: readonly string[]): Point {
+  const center = centroid(state, corners);
+  const points = corners.map((key) => pointOf(state, key));
+  const y =
+    Math.min(...points.map((point) => point.y)) +
+    labelInset / state.viewport.zoom;
+  const spans = spansAt(points, y);
+  const span =
+    spans.find(([left, right]) => left <= center.x && center.x <= right) ??
+    spans.toSorted((a, b) => b[1] - b[0] - (a[1] - a[0]))[0];
+  return {
+    x:
+      !span || (span[0] <= center.x && center.x <= span[1])
+        ? center.x
+        : (span[0] + span[1]) / 2,
+    y,
+  };
+}
+
+// The parts of a horizontal line that fall inside a polygon, left to right.
+function spansAt(points: Point[], y: number) {
+  const crossings: number[] = [];
+  points.forEach((a, index) => {
+    const b = points[(index + 1) % points.length];
+    if (a.y <= y !== b.y <= y) {
+      crossings.push(a.x + ((y - a.y) * (b.x - a.x)) / (b.y - a.y));
+    }
+  });
+  crossings.sort((left, right) => left - right);
+  const spans: [number, number][] = [];
+  for (let index = 0; index + 1 < crossings.length; index += 2) {
+    spans.push([crossings[index], crossings[index + 1]]);
+  }
+  return spans;
+}
+
+function cameraStyle(state: MapEditorState) {
+  const camera = state.cameraPosition;
+  return css({
+    position: "absolute",
+    left: `${camera?.x ?? 0}px`,
+    top: `${camera?.y ?? 0}px`,
+    "--camera-angle": `${-(camera?.angle ?? 0)}deg`,
+    visibility: camera ? undefined : "hidden",
+    "touch-action": "none",
+  });
+}
 
 const parts = createParts(mapEditor, {
   root: "div",

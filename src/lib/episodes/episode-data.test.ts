@@ -6,31 +6,25 @@ import { starterMap } from "@/lib/map/starter-map";
 import { serializeMap } from "@/lib/map/storage";
 import { validateMap } from "@/lib/map/validate";
 import { compileEpisode } from "@/lib/wad/compile";
+
 import {
   buildProblem,
+  createEpisode,
   createMapEntry,
   createMapSaver,
-  createEpisode,
   episodeMaps,
   freeSlots,
   isSlotConflict,
   lastMapKey,
   mapFromTemplate,
   mapStatus,
-  parsePar,
   parseEpisodeBackup,
+  parsePar,
   prepareEpisodes,
   serializeEpisode,
   slotMoves,
 } from "./episode-data";
 import { createMemoryStore } from "./episode-store";
-
-function stubLegacy(saved: string | null) {
-  vi.stubGlobal("localStorage", {
-    getItem: () => saved,
-    setItem: () => {},
-  });
-}
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -194,6 +188,13 @@ describe("first episode", () => {
     expect((await prepareEpisodes(store)).episodes[0].name).toBe("Ashfall");
   });
 });
+
+function stubLegacy(saved: string | null) {
+  vi.stubGlobal("localStorage", {
+    getItem: () => saved,
+    setItem: () => {},
+  });
+}
 
 describe("episode order", () => {
   it("moves maps into the slots the episode already uses", () => {

@@ -1,47 +1,49 @@
 import { createLocalStorage } from "@ui-sdk/core";
 import * as React from "react";
 
+import type { NetworkState } from "@/lib/engine/doom-worker";
 import type { GameMap, Point } from "@/lib/map/types";
-import { compileEpisode, compileMap, type Lump } from "@/lib/wad/compile";
-import { inspectWads } from "@/lib/wad/inspect";
+
+import { Alert } from "@/components/ui/alert";
 import {
   defaultGame,
   endsGame,
   engineSlot,
+  type GameInfo,
   indexSlot,
   slotCount,
   statusIndex,
   statusSlot,
-  type GameInfo,
 } from "@/lib/engine/game";
-import type { NetworkState } from "@/lib/engine/doom-worker";
-import { startGameClient, type GameClient } from "@/lib/engine/game-client";
-import { EndGameConfirm, GameHud, GameTopBar, type ScoreRow } from "./game-hud";
-import { loadIwad } from "@/lib/engine/iwad";
+import { type GameClient, startGameClient } from "@/lib/engine/game-client";
 import { HeldKeys } from "@/lib/engine/held-keys";
+import { loadIwad } from "@/lib/engine/iwad";
 import {
-  MouseFire,
   clickFires,
   holdsGame,
   initialMouseCapture,
+  MouseFire,
   msSincePointerRelease,
   nextMouseCapture,
   notePointerReleased,
   relockWait,
 } from "@/lib/engine/mouse-capture";
+import { hostPeer, type RoomPlayer } from "@/lib/engine/room";
 import {
   doomKeys,
-  keysByCode,
-  maxVolume,
-  screenSize,
   type GameFiles,
   type GameStatus,
+  keysByCode,
+  maxVolume,
   type NetworkMode,
   type Screen,
+  screenSize,
   type Skill,
 } from "@/lib/engine/runtime";
-import { hostPeer, type RoomPlayer } from "@/lib/engine/room";
-import { Alert } from "@/components/ui/alert";
+import { compileEpisode, compileMap, type Lump } from "@/lib/wad/compile";
+import { inspectWads } from "@/lib/wad/inspect";
+
+import { EndGameConfirm, GameHud, GameTopBar, type ScoreRow } from "./game-hud";
 
 interface SoundSettings {
   volume: number;
@@ -51,51 +53,8 @@ interface SoundSettings {
 const savedSound = createLocalStorage("wadsmith:sound");
 const savedResolution = createLocalStorage("wadsmith:resolution");
 const savedWidescreen = createLocalStorage("wadsmith:widescreen");
-const defaultSound: SoundSettings = { volume: 8, muted: false };
-const noteMessageMs = 2000;
-// Escape can reach the page just after it released the pointer.
-const escapeGraceMs = 300;
-const mouseFireSource = "mouse";
-const advanceTapMs = 250;
-// Doom's netcode holds the level while it waits for a player's moves. A short
-// hold is normal; one this long is worth naming.
-const stallMs = 1000;
-
-function loadSound(): SoundSettings {
-  try {
-    const saved = JSON.parse(savedSound.get() ?? "null");
-    return Number.isInteger(saved?.volume) &&
-      saved.volume >= 0 &&
-      saved.volume <= maxVolume &&
-      typeof saved.muted === "boolean"
-      ? { volume: saved.volume, muted: saved.muted }
-      : defaultSound;
-  } catch {
-    return defaultSound;
-  }
-}
-
-function saveSound(sound: SoundSettings) {
-  savedSound.set(JSON.stringify(sound));
-}
-
-function loadScreen(): Screen {
-  return {
-    resolution: savedResolution.get() === "classic" ? "classic" : "high",
-    widescreen: savedWidescreen.get() !== "off",
-  };
-}
-
-function saveScreen(screen: Screen) {
-  savedResolution.set(screen.resolution);
-  savedWidescreen.set(screen.widescreen ? "on" : "off");
-}
 
 export type PlayerSpot = Point & { angle: number };
-
-function spotOf({ x, y }: GameStatus): Point {
-  return { x, y: 0 - y };
-}
 
 /** How a playtest takes part in a co-op game through its room. */
 export interface CoopSession {
@@ -114,6 +73,145 @@ export interface CoopSession {
 }
 
 export type GameExit = "editor" | "maps" | "episode" | "leave";
+
+export interface Level {
+  map: GameMap;
+  title: string;
+  slot: string;
+  par: number | null;
+  music?: string;
+  sky?: string;
+  intertext?: string;
+  lumps?: Lump[] | null;
+}
+
+interface GameViewProps {
+  map: GameMap | null;
+  files?: GameFiles | null;
+  title: string;
+  slot: string;
+  par: number | null;
+  music?: string;
+  sky?: string;
+  intertext?: string;
+  onExit: () => void;
+  onAddNote?: (point: Point, text: string) => void;
+  onEditSpot?: (spot: PlayerSpot) => void;
+  coop?: CoopSession | null;
+  episode?: Level[] | null;
+  exit?: GameExit;
+  skill?: Skill;
+}
+
+export function GameView({
+  map,
+  files = null,
+  title,
+  slot,
+  par,
+  music,
+  sky,
+  intertext,
+  onExit,
+  onAddNote,
+  onEditSpot,
+  coop = null,
+  episode = null,
+  exit = "editor",
+  skill = "medium",
+}: GameViewProps) {
+  const stageRef = React.useRef<HTMLElement>(null);
+  const [run, setRun] = React.useState(0);
+  const [fullscreen, setFullscreen] = React.useState(false);
+  const [sound, setSound] = React.useState(loadSound);
+  const [screen, setScreen] = React.useState(loadScreen);
+
+  React.useEffect(() => {
+    const update = () => setFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener("fullscreenchange", update);
+    return () => {
+      document.removeEventListener("fullscreenchange", update);
+      if (document.fullscreenElement) void document.exitFullscreen();
+    };
+  }, []);
+
+  const toggleFullscreen = () => {
+    const request = document.fullscreenElement
+      ? document.exitFullscreen()
+      : stageRef.current?.requestFullscreen();
+    request
+      ?.catch(() => {})
+      .finally(() => stageRef.current?.querySelector("canvas")?.focus());
+  };
+
+  return (
+    <section ref={stageRef} className="game-stage" aria-label="Game">
+      <GameSession
+        key={`${run}-${screen.resolution}-${screen.widescreen}`}
+        map={map}
+        files={files}
+        title={title}
+        slot={slot}
+        par={par}
+        music={music}
+        sky={sky}
+        intertext={intertext}
+        episode={episode}
+        sound={sound}
+        onSoundChange={(next) => {
+          setSound(next);
+          saveSound(next);
+        }}
+        screen={screen}
+        onScreenChange={(next) => {
+          setScreen(next);
+          saveScreen(next);
+        }}
+        fullscreen={fullscreen}
+        onRestart={() => setRun((value) => value + 1)}
+        onToggleFullscreen={toggleFullscreen}
+        onExit={onExit}
+        onAddNote={onAddNote}
+        onEditSpot={onEditSpot}
+        coop={coop}
+        exit={exit}
+        skill={skill}
+      />
+    </section>
+  );
+}
+
+const defaultSound: SoundSettings = { volume: 8, muted: false };
+
+function loadSound(): SoundSettings {
+  try {
+    const saved = JSON.parse(savedSound.get() ?? "null");
+    return Number.isInteger(saved?.volume) &&
+      saved.volume >= 0 &&
+      saved.volume <= maxVolume &&
+      typeof saved.muted === "boolean"
+      ? { volume: saved.volume, muted: saved.muted }
+      : defaultSound;
+  } catch {
+    return defaultSound;
+  }
+}
+
+function loadScreen(): Screen {
+  return {
+    resolution: savedResolution.get() === "classic" ? "classic" : "high",
+    widescreen: savedWidescreen.get() !== "off",
+  };
+}
+
+const noteMessageMs = 2000;
+// Escape can reach the page just after it released the pointer.
+const escapeGraceMs = 300;
+const mouseFireSource = "mouse";
+const advanceTapMs = 250;
+// Doom's netcode holds the level while it waits for a player's moves. A short
+// hold is normal; one this long is worth naming.
+const stallMs = 1000;
 
 const gameExits: Record<
   GameExit,
@@ -144,17 +242,6 @@ const gameExits: Record<
     action: "leaves the game",
   },
 };
-
-export interface Level {
-  map: GameMap;
-  title: string;
-  slot: string;
-  par: number | null;
-  music?: string;
-  sky?: string;
-  intertext?: string;
-  lumps?: Lump[] | null;
-}
 
 type GameSessionProps = Omit<Level, "map"> & {
   map: GameMap | null;
@@ -433,10 +520,10 @@ function GameSession({
         client.setHeld(gameHeldRef.current);
         for (const key of heldKeys.current.keys()) client.key(true, key);
       })
-      .catch((cause: Error) => {
+      .catch((loadError: Error) => {
         if (!stopped) {
           setError(
-            `The engine could not load: ${cause.message} Run pnpm setup:engine if it hasn't been built.`,
+            `The engine could not load: ${loadError.message} Run pnpm setup:engine if it hasn't been built.`,
           );
         }
       });
@@ -879,11 +966,8 @@ function GameSession({
   );
 }
 
-function nameOf(coop: CoopSession, peer: number) {
-  return (
-    coop.roster().find((player) => player.peer === peer)?.name ??
-    `Player ${peer}`
-  );
+function spotOf({ x, y }: GameStatus): Point {
+  return { x, y: 0 - y };
 }
 
 function scoreRows(coop: CoopSession, network: NetworkState): ScoreRow[] {
@@ -900,6 +984,13 @@ function scoreRows(coop: CoopSession, network: NetworkState): ScoreRow[] {
   });
 }
 
+function nameOf(coop: CoopSession, peer: number) {
+  return (
+    coop.roster().find((player) => player.peer === peer)?.name ??
+    `Player ${peer}`
+  );
+}
+
 function coopWaiting(coop: CoopSession, network: NetworkState | null) {
   if (coop.role === "guest") {
     return network
@@ -910,98 +1001,11 @@ function coopWaiting(coop: CoopSession, network: NetworkState | null) {
   return `Waiting for players · ${network.waitingPlayers} of ${coop.players()} connected`;
 }
 
-interface GameViewProps {
-  map: GameMap | null;
-  files?: GameFiles | null;
-  title: string;
-  slot: string;
-  par: number | null;
-  music?: string;
-  sky?: string;
-  intertext?: string;
-  onExit: () => void;
-  onAddNote?: (point: Point, text: string) => void;
-  onEditSpot?: (spot: PlayerSpot) => void;
-  coop?: CoopSession | null;
-  episode?: Level[] | null;
-  exit?: GameExit;
-  skill?: Skill;
+function saveSound(sound: SoundSettings) {
+  savedSound.set(JSON.stringify(sound));
 }
 
-export function GameView({
-  map,
-  files = null,
-  title,
-  slot,
-  par,
-  music,
-  sky,
-  intertext,
-  onExit,
-  onAddNote,
-  onEditSpot,
-  coop = null,
-  episode = null,
-  exit = "editor",
-  skill = "medium",
-}: GameViewProps) {
-  const stageRef = React.useRef<HTMLElement>(null);
-  const [run, setRun] = React.useState(0);
-  const [fullscreen, setFullscreen] = React.useState(false);
-  const [sound, setSound] = React.useState(loadSound);
-  const [screen, setScreen] = React.useState(loadScreen);
-
-  React.useEffect(() => {
-    const update = () => setFullscreen(Boolean(document.fullscreenElement));
-    document.addEventListener("fullscreenchange", update);
-    return () => {
-      document.removeEventListener("fullscreenchange", update);
-      if (document.fullscreenElement) void document.exitFullscreen();
-    };
-  }, []);
-
-  const toggleFullscreen = () => {
-    const request = document.fullscreenElement
-      ? document.exitFullscreen()
-      : stageRef.current?.requestFullscreen();
-    request
-      ?.catch(() => {})
-      .finally(() => stageRef.current?.querySelector("canvas")?.focus());
-  };
-
-  return (
-    <section ref={stageRef} className="game-stage" aria-label="Game">
-      <GameSession
-        key={`${run}-${screen.resolution}-${screen.widescreen}`}
-        map={map}
-        files={files}
-        title={title}
-        slot={slot}
-        par={par}
-        music={music}
-        sky={sky}
-        intertext={intertext}
-        episode={episode}
-        sound={sound}
-        onSoundChange={(next) => {
-          setSound(next);
-          saveSound(next);
-        }}
-        screen={screen}
-        onScreenChange={(next) => {
-          setScreen(next);
-          saveScreen(next);
-        }}
-        fullscreen={fullscreen}
-        onRestart={() => setRun((value) => value + 1)}
-        onToggleFullscreen={toggleFullscreen}
-        onExit={onExit}
-        onAddNote={onAddNote}
-        onEditSpot={onEditSpot}
-        coop={coop}
-        exit={exit}
-        skill={skill}
-      />
-    </section>
-  );
+function saveScreen(screen: Screen) {
+  savedResolution.set(screen.resolution);
+  savedWidescreen.set(screen.widescreen ? "on" : "off");
 }

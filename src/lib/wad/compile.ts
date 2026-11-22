@@ -1,12 +1,25 @@
+import type {
+  Complevel,
+  GameMap,
+  LineSettings,
+  LineSide,
+  Point,
+  Sector,
+  Thing,
+  ThingSkill,
+} from "@/lib/map/types";
+
+import { defined } from "@/lib/defined";
 import {
   defaultGame,
   engineSlot,
+  type GameInfo,
   indexSlot,
   slotCount,
-  type GameInfo,
 } from "@/lib/engine/game";
 import { sectorSpecialOf } from "@/lib/map/boom";
 import { doorTrackTexture, thingCatalog } from "@/lib/map/catalog";
+import { higherLevel } from "@/lib/map/complevel";
 import {
   engineOrder,
   loopEdges,
@@ -19,43 +32,19 @@ import {
   wallTextureOf,
 } from "@/lib/map/geometry";
 import { doorSpecial, lineSpecial, switchDoorSpecial } from "@/lib/map/lines";
-import { higherLevel } from "@/lib/map/complevel";
-import type {
-  Complevel,
-  GameMap,
-  LineSettings,
-  LineSide,
-  Point,
-  Sector,
-  Thing,
-  ThingSkill,
-} from "@/lib/map/types";
+
 import { buildBlockmap } from "./blockmap";
-import { buildNodes, type Box, type NodeLine } from "./nodes";
+import { type Box, buildNodes, type NodeLine } from "./nodes";
 
 export const mapLumpName = "MAP01";
 const lineBlocksPlayer = 0x0001;
-const lineBlocksEnemies = 0x0002;
+
 const lineTwoSided = 0x0004;
-const lineUpperUnpegged = 0x0008;
+
 const lineLowerUnpegged = 0x0010;
-const lineSecret = 0x0020;
-const lineSoundBlock = 0x0040;
-const lineHidden = 0x0080;
-const lineMapped = 0x0100;
-const linePassUse = 0x0200;
+
 const specialScrollLeft = 48;
-const thingSkillFlags: Record<ThingSkill, number> = {
-  easy: 0x0001,
-  medium: 0x0002,
-  hard: 0x0004,
-};
-const thingOnAllSkills = 0x0007;
-const thingAmbush = 0x0008;
-const thingMultiplayer = 0x0010;
-const thingNotDeathmatch = 0x0020;
-const thingNotCoop = 0x0040;
-const thingFriendly = 0x0080;
+
 const noSidedef = 0xffff;
 
 export interface Lump {
@@ -86,10 +75,6 @@ class LumpWriter {
 
 export function toDoom(point: Point): Point {
   return { x: Math.round(point.x), y: -Math.round(point.y) };
-}
-
-function writeBox(writer: LumpWriter, box: Box) {
-  writer.int16(box.top).int16(box.bottom).int16(box.left).int16(box.right);
 }
 
 type LevelLine = NodeLine & { wall: string };
@@ -147,8 +132,8 @@ export function buildLevel(map: GameMap) {
         );
       }
       lines.push({
-        start: vertexIndex.get(side.from)!,
-        end: vertexIndex.get(side.to)!,
+        start: defined(vertexIndex.get(side.from)),
+        end: defined(vertexIndex.get(side.to)),
         frontSector: side.sector,
         backSector: side.sector,
         wall,
@@ -178,8 +163,8 @@ export function buildLevel(map: GameMap) {
         `${sectors[side.sector].name} overlaps another room's wall.`,
       );
     }
-    const start = vertexIndex.get(side.from)!;
-    const end = vertexIndex.get(side.to)!;
+    const start = defined(vertexIndex.get(side.from));
+    const end = defined(vertexIndex.get(side.to));
     // A room drawn inside another opens onto it wherever no other room
     // shares the wall.
     const container =
@@ -187,7 +172,7 @@ export function buildLevel(map: GameMap) {
         ? null
         : containers.get(sectors[side.sector].id);
     const behind =
-      other?.sector ?? (container ? indexOf.get(container.id)! : null);
+      other?.sector ?? (container ? defined(indexOf.get(container.id)) : null);
     if (behind === null) {
       lines.push({
         start,
@@ -223,46 +208,6 @@ export function buildLevel(map: GameMap) {
   return { vertices, sectors, lines };
 }
 
-function thingFlags(thing: Thing) {
-  const skills = thing.skills
-    ? thing.skills.reduce((flags, skill) => flags | thingSkillFlags[skill], 0)
-    : thingOnAllSkills;
-  const enemy = thingCatalog[thing.kind].category === "enemy";
-  return (
-    skills |
-    (enemy && thing.ambush ? thingAmbush : 0) |
-    (thing.multiplayer ? thingMultiplayer : 0) |
-    (thing.notDeathmatch ? thingNotDeathmatch : 0) |
-    (thing.notCoop ? thingNotCoop : 0) |
-    (enemy && thing.friendly ? thingFriendly : 0)
-  );
-}
-
-function lineFlags(line: LineSettings | undefined) {
-  return (
-    (line?.blocksEnemies ? lineBlocksEnemies : 0) |
-    (line?.upperFixed ? lineUpperUnpegged : 0) |
-    (line?.lowerFixed ? lineLowerUnpegged : 0) |
-    (line?.hidden ? lineHidden : 0) |
-    (line?.secret ? lineSecret : 0) |
-    (line?.soundBlock ? lineSoundBlock : 0) |
-    (line?.mapped ? lineMapped : 0) |
-    (line?.passUse ? linePassUse : 0)
-  );
-}
-
-// Woof reads the compatibility level from this lump when no flag names one.
-function complevelLump(maps: GameMap[]): Lump {
-  const level = maps.reduce<Complevel>(
-    (highest, map) => higherLevel(highest, map.complevel ?? "vanilla"),
-    "vanilla",
-  );
-  return {
-    name: "COMPLVL",
-    data: Uint8Array.from(level, (c) => c.charCodeAt(0)),
-  };
-}
-
 export interface EpisodeLevel {
   slot: string;
   map: GameMap;
@@ -274,98 +219,6 @@ export interface EpisodeLevel {
 }
 
 const episodeSlot = /^E(\d)M(\d)$/;
-const mostEpisodeSlots = 36;
-
-function slotAfter(slot: string) {
-  const [, episode, map] = episodeSlot.exec(slot)!.map(Number);
-  return map < 9 ? `E${episode}M${map + 1}` : `E${episode + 1}M1`;
-}
-
-// UMAPINFO strings can't hold their own quote, and the engine's font and the
-// reader take one byte per character.
-function quoted(text: string) {
-  return `"${text.replaceAll('"', "'").replaceAll("\\", "/")}"`;
-}
-
-const latin1 = (text: string) =>
-  Uint8Array.from(text, (c) => (c.charCodeAt(0) < 256 ? c.charCodeAt(0) : 63));
-
-// A map named after its slot has no title of its own.
-const slotNamed = /^(MAP\d\d|E\dM\d)$/i;
-
-// A Doom 1 game ends an episode after its eighth map and sends the ninth back
-// into it, so there every slot from the first map to the last names the slot
-// after it, gaps included; a gap then plays the game's own level, as on Doom II.
-function umapinfoLump(levels: EpisodeLevel[], game: GameInfo): Lump[] {
-  const bySlot = new Map(levels.map((level) => [level.slot, level]));
-  // An entry makes the engine look for the map after it, which the game's
-  // last slot doesn't have, so that one ends the game instead.
-  const lastInGame = engineSlot(indexSlot(slotCount(game)), game);
-  const chained = levels
-    .map((level) => level.slot)
-    .filter((slot) => episodeSlot.test(slot));
-  const slots: string[] = [];
-  if (chained.length >= 2) {
-    const last = chained.at(-1)!;
-    let slot = chained[0];
-    while (slot !== last && slots.length < mostEpisodeSlots) {
-      slots.push(slot);
-      slot = slotAfter(slot);
-    }
-    slots.push(last);
-  } else {
-    slots.push(...levels.map((level) => level.slot));
-  }
-  const entries = slots.flatMap((slot) => {
-    const level = bySlot.get(slot);
-    // The engine's own next map after a ninth doesn't exist, so a ninth names
-    // the next episode's first.
-    const follows =
-      slot !== lastInGame &&
-      (slot.endsWith("M9") || (chained.length >= 2 && slot !== chained.at(-1)));
-    const lines = [
-      ...(slot === lastInGame && level ? ["endgame = true"] : []),
-      ...(follows ? [`next = "${slotAfter(slot)}"`] : []),
-      ...(level?.map.name && !slotNamed.test(level.map.name)
-        ? [`levelname = ${quoted(level.map.name)}`]
-        : []),
-      ...(level?.par ? [`partime = ${level.par}`] : []),
-      ...(level?.music ? [`music = "${level.music}"`] : []),
-      ...(level?.sky ? [`skytexture = "${level.sky}"`] : []),
-      ...(level?.intertext
-        ? [
-            `intertext = ${level.intertext
-              .split(/\r?\n/)
-              .map(quoted)
-              .join(", ")}`,
-          ]
-        : []),
-    ];
-    return lines.length > 0
-      ? [`MAP ${slot}\n{\n${lines.map((line) => `  ${line}`).join("\n")}\n}\n`]
-      : [];
-  });
-  if (entries.length === 0) return [];
-  return [{ name: "UMAPINFO", data: latin1(entries.join("\n")) }];
-}
-
-// A switch's door gets a tag no line or sector in the map has chosen.
-function sectorTags(map: GameMap, sectors: Sector[]) {
-  const used = new Set([
-    ...sectors.map((sector) => sector.tag ?? 0),
-    ...Object.values(map.lines ?? {}).map(
-      (line) => line.action?.tag ?? line.raw?.tag ?? 0,
-    ),
-  ]);
-  return sectors.map((sector, index) => {
-    if (sector.tag) return sector.tag;
-    if (!map.switches.some((item) => item.door === sector.id)) return 0;
-    let tag = index + 1;
-    while (used.has(tag)) tag += 1;
-    used.add(tag);
-    return tag;
-  });
-}
 
 export function compileLumps(map: GameMap, slot = mapLumpName): Lump[] {
   const { vertices, sectors, lines } = buildLevel(map);
@@ -566,30 +419,6 @@ export function compileLumps(map: GameMap, slot = mapLumpName): Lump[] {
   ];
 }
 
-function packWad(lumps: Lump[]) {
-  const headerSize = 12;
-  const dataSize = lumps.reduce((total, lump) => total + lump.data.length, 0);
-  const output = new Uint8Array(headerSize + dataSize + lumps.length * 16);
-  const view = new DataView(output.buffer);
-  output.set([0x50, 0x57, 0x41, 0x44]);
-  view.setInt32(4, lumps.length, true);
-  view.setInt32(8, headerSize + dataSize, true);
-
-  let offset = headerSize;
-  let entry = headerSize + dataSize;
-  for (const lump of lumps) {
-    output.set(lump.data, offset);
-    view.setInt32(entry, offset, true);
-    view.setInt32(entry + 4, lump.data.length, true);
-    for (let index = 0; index < 8; index += 1) {
-      output[entry + 8 + index] = lump.name.charCodeAt(index) || 0;
-    }
-    offset += lump.data.length;
-    entry += 16;
-  }
-  return output;
-}
-
 export function compileMap(
   map: GameMap,
   slot = mapLumpName,
@@ -617,4 +446,187 @@ export function compileEpisode(
     ...umapinfoLump(maps, game),
     complevelLump(maps.map(({ map }) => map)),
   ]);
+}
+
+const thingSkillFlags: Record<ThingSkill, number> = {
+  easy: 0x0001,
+  medium: 0x0002,
+  hard: 0x0004,
+};
+const thingOnAllSkills = 0x0007;
+const thingAmbush = 0x0008;
+const thingMultiplayer = 0x0010;
+const thingNotDeathmatch = 0x0020;
+const thingNotCoop = 0x0040;
+const thingFriendly = 0x0080;
+
+function thingFlags(thing: Thing) {
+  const skills = thing.skills
+    ? thing.skills.reduce((flags, skill) => flags | thingSkillFlags[skill], 0)
+    : thingOnAllSkills;
+  const enemy = thingCatalog[thing.kind].category === "enemy";
+  return (
+    skills |
+    (enemy && thing.ambush ? thingAmbush : 0) |
+    (thing.multiplayer ? thingMultiplayer : 0) |
+    (thing.notDeathmatch ? thingNotDeathmatch : 0) |
+    (thing.notCoop ? thingNotCoop : 0) |
+    (enemy && thing.friendly ? thingFriendly : 0)
+  );
+}
+
+// A switch's door gets a tag no line or sector in the map has chosen.
+function sectorTags(map: GameMap, sectors: Sector[]) {
+  const used = new Set([
+    ...sectors.map((sector) => sector.tag ?? 0),
+    ...Object.values(map.lines ?? {}).map(
+      (line) => line.action?.tag ?? line.raw?.tag ?? 0,
+    ),
+  ]);
+  return sectors.map((sector, index) => {
+    if (sector.tag) return sector.tag;
+    if (!map.switches.some((item) => item.door === sector.id)) return 0;
+    let tag = index + 1;
+    while (used.has(tag)) tag += 1;
+    used.add(tag);
+    return tag;
+  });
+}
+
+const lineBlocksEnemies = 0x0002;
+
+const lineUpperUnpegged = 0x0008;
+
+const lineSecret = 0x0020;
+const lineSoundBlock = 0x0040;
+const lineHidden = 0x0080;
+const lineMapped = 0x0100;
+const linePassUse = 0x0200;
+
+function lineFlags(line: LineSettings | undefined) {
+  return (
+    (line?.blocksEnemies ? lineBlocksEnemies : 0) |
+    (line?.upperFixed ? lineUpperUnpegged : 0) |
+    (line?.lowerFixed ? lineLowerUnpegged : 0) |
+    (line?.hidden ? lineHidden : 0) |
+    (line?.secret ? lineSecret : 0) |
+    (line?.soundBlock ? lineSoundBlock : 0) |
+    (line?.mapped ? lineMapped : 0) |
+    (line?.passUse ? linePassUse : 0)
+  );
+}
+
+function writeBox(writer: LumpWriter, box: Box) {
+  writer.int16(box.top).int16(box.bottom).int16(box.left).int16(box.right);
+}
+
+function packWad(lumps: Lump[]) {
+  const headerSize = 12;
+  const dataSize = lumps.reduce((total, lump) => total + lump.data.length, 0);
+  const output = new Uint8Array(headerSize + dataSize + lumps.length * 16);
+  const view = new DataView(output.buffer);
+  output.set([0x50, 0x57, 0x41, 0x44]);
+  view.setInt32(4, lumps.length, true);
+  view.setInt32(8, headerSize + dataSize, true);
+
+  let offset = headerSize;
+  let entry = headerSize + dataSize;
+  for (const lump of lumps) {
+    output.set(lump.data, offset);
+    view.setInt32(entry, offset, true);
+    view.setInt32(entry + 4, lump.data.length, true);
+    for (let index = 0; index < 8; index += 1) {
+      output[entry + 8 + index] = lump.name.charCodeAt(index) || 0;
+    }
+    offset += lump.data.length;
+    entry += 16;
+  }
+  return output;
+}
+
+const mostEpisodeSlots = 36;
+
+const latin1 = (text: string) =>
+  Uint8Array.from(text, (c) => (c.charCodeAt(0) < 256 ? c.charCodeAt(0) : 63));
+
+// A map named after its slot has no title of its own.
+const slotNamed = /^(MAP\d\d|E\dM\d)$/i;
+
+// A Doom 1 game ends an episode after its eighth map and sends the ninth back
+// into it, so there every slot from the first map to the last names the slot
+// after it, gaps included; a gap then plays the game's own level, as on Doom II.
+function umapinfoLump(levels: EpisodeLevel[], game: GameInfo): Lump[] {
+  const bySlot = new Map(levels.map((level) => [level.slot, level]));
+  // An entry makes the engine look for the map after it, which the game's
+  // last slot doesn't have, so that one ends the game instead.
+  const lastInGame = engineSlot(indexSlot(slotCount(game)), game);
+  const chained = levels
+    .map((level) => level.slot)
+    .filter((slot) => episodeSlot.test(slot));
+  const slots: string[] = [];
+  if (chained.length >= 2) {
+    const last = defined(chained.at(-1));
+    let slot = chained[0];
+    while (slot !== last && slots.length < mostEpisodeSlots) {
+      slots.push(slot);
+      slot = slotAfter(slot);
+    }
+    slots.push(last);
+  } else {
+    slots.push(...levels.map((level) => level.slot));
+  }
+  const entries = slots.flatMap((slot) => {
+    const level = bySlot.get(slot);
+    // The engine's own next map after a ninth doesn't exist, so a ninth names
+    // the next episode's first.
+    const follows =
+      slot !== lastInGame &&
+      (slot.endsWith("M9") || (chained.length >= 2 && slot !== chained.at(-1)));
+    const lines = [
+      ...(slot === lastInGame && level ? ["endgame = true"] : []),
+      ...(follows ? [`next = "${slotAfter(slot)}"`] : []),
+      ...(level?.map.name && !slotNamed.test(level.map.name)
+        ? [`levelname = ${quoted(level.map.name)}`]
+        : []),
+      ...(level?.par ? [`partime = ${level.par}`] : []),
+      ...(level?.music ? [`music = "${level.music}"`] : []),
+      ...(level?.sky ? [`skytexture = "${level.sky}"`] : []),
+      ...(level?.intertext
+        ? [
+            `intertext = ${level.intertext
+              .split(/\r?\n/)
+              .map(quoted)
+              .join(", ")}`,
+          ]
+        : []),
+    ];
+    return lines.length > 0
+      ? [`MAP ${slot}\n{\n${lines.map((line) => `  ${line}`).join("\n")}\n}\n`]
+      : [];
+  });
+  if (entries.length === 0) return [];
+  return [{ name: "UMAPINFO", data: latin1(entries.join("\n")) }];
+}
+
+function slotAfter(slot: string) {
+  const [, episode, map] = defined(episodeSlot.exec(slot)).map(Number);
+  return map < 9 ? `E${episode}M${map + 1}` : `E${episode + 1}M1`;
+}
+
+// UMAPINFO strings can't hold their own quote, and the engine's font and the
+// reader take one byte per character.
+function quoted(text: string) {
+  return `"${text.replaceAll('"', "'").replaceAll("\\", "/")}"`;
+}
+
+// Woof reads the compatibility level from this lump when no flag names one.
+function complevelLump(maps: GameMap[]): Lump {
+  const level = maps.reduce<Complevel>(
+    (highest, map) => higherLevel(highest, map.complevel ?? "vanilla"),
+    "vanilla",
+  );
+  return {
+    name: "COMPLVL",
+    data: Uint8Array.from(level, (c) => c.charCodeAt(0)),
+  };
 }

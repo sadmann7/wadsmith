@@ -1,5 +1,6 @@
 import type { GameMap } from "@/lib/map/types";
 import type { Lump } from "@/lib/wad/compile";
+
 import { buildMap } from "./episode-data";
 
 interface BuildCheckRequest {

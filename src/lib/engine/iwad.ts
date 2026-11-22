@@ -1,6 +1,7 @@
 import { readStoredFile, writeStoredFile } from "@/lib/episodes/episode-store";
-import { WadFileError, readLumps } from "@/lib/wad/inspect";
-import { defaultGame, games, type GameInfo } from "./game";
+import { readLumps, WadFileError } from "@/lib/wad/inspect";
+
+import { defaultGame, type GameInfo, games } from "./game";
 
 export interface Iwad {
   game: GameInfo;
@@ -10,8 +11,7 @@ export interface Iwad {
 }
 
 export const engineBase = "/engine/";
-// Hosts don't compress WAD files, so setup:engine writes this one gzipped.
-const iwadFile = "freedoom-0.13.0.wad.gz";
+
 const storedKey = "iwad";
 
 let iwad: Promise<Iwad> | null = null;
@@ -54,17 +54,30 @@ export function identifyIwad(name: string, data: Uint8Array): GameInfo {
   };
 }
 
-async function fetchFreedoom(): Promise<Iwad> {
-  const response = await fetch(`${engineBase}${iwadFile}`);
-  if (!response.ok || !response.body) {
-    throw new Error(`${iwadFile} is missing.`);
-  }
-  const data = response.body.pipeThrough(new DecompressionStream("gzip"));
-  return {
-    game: defaultGame,
-    data: new Uint8Array(await new Response(data).arrayBuffer()),
-    own: false,
-  };
+export function loadIwad() {
+  iwad ??= readIwad().catch((error: unknown) => {
+    iwad = null;
+    throw error;
+  });
+  return iwad;
+}
+
+// The file stays in this browser; nothing uploads it.
+export async function adoptOwnIwad(name: string, data: Uint8Array) {
+  const game = identifyIwad(name, data);
+  await writeStoredFile(storedKey, { key: storedKey, name, data });
+  announce();
+  return game;
+}
+
+export async function restoreBundledIwad() {
+  await writeStoredFile(storedKey, null);
+  announce();
+}
+
+export function onIwadChange(listener: () => void) {
+  changes.addEventListener("change", listener);
+  return () => changes.removeEventListener("change", listener);
 }
 
 // A stored IWAD the browser can no longer read falls back to Freedoom.
@@ -84,33 +97,23 @@ async function readIwad(): Promise<Iwad> {
   return fetchFreedoom();
 }
 
-export function loadIwad() {
-  iwad ??= readIwad().catch((error: unknown) => {
-    iwad = null;
-    throw error;
-  });
-  return iwad;
+// Hosts don't compress WAD files, so setup:engine writes this one gzipped.
+const iwadFile = "freedoom-0.13.0.wad.gz";
+
+async function fetchFreedoom(): Promise<Iwad> {
+  const response = await fetch(`${engineBase}${iwadFile}`);
+  if (!response.ok || !response.body) {
+    throw new Error(`${iwadFile} is missing.`);
+  }
+  const data = response.body.pipeThrough(new DecompressionStream("gzip"));
+  return {
+    game: defaultGame,
+    data: new Uint8Array(await new Response(data).arrayBuffer()),
+    own: false,
+  };
 }
 
 function announce() {
   iwad = null;
   changes.dispatchEvent(new Event("change"));
-}
-
-// The file stays in this browser; nothing uploads it.
-export async function adoptOwnIwad(name: string, data: Uint8Array) {
-  const game = identifyIwad(name, data);
-  await writeStoredFile(storedKey, { key: storedKey, name, data });
-  announce();
-  return game;
-}
-
-export async function restoreBundledIwad() {
-  await writeStoredFile(storedKey, null);
-  announce();
-}
-
-export function onIwadChange(listener: () => void) {
-  changes.addEventListener("change", listener);
-  return () => changes.removeEventListener("change", listener);
 }

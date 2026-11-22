@@ -1,8 +1,11 @@
 import { createLocalStorage } from "@ui-sdk/core";
 
-import { deathmatchStarts } from "@/lib/map/catalog";
 import type { GameMap } from "@/lib/map/types";
+
+import { deathmatchStarts } from "@/lib/map/catalog";
+
 import type { LinkState } from "./peer-link";
+
 import { formatRoomCode, tabTransport } from "./room";
 import { socketTransport } from "./room-socket";
 import { fragLimit, type NetworkMode, type Skill } from "./runtime";

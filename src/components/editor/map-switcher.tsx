@@ -1,4 +1,5 @@
 import { ChevronDown, LayoutList, Plus } from "lucide-react";
+
 import {
   Menu,
   MenuContent,
@@ -69,7 +70,7 @@ export function MapSwitcher({
       </span>
       <Menu
         onAction={(action) => {
-          const value = action as string;
+          const value = action;
           if (value === "add") onAddMap();
           else if (value === "home") onEpisodeHome();
           else if (value !== currentId) onOpenMap(value);

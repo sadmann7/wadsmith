@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
 
+import { defined } from "@/lib/defined";
 import { addThing, setRoomDoor } from "@/lib/map/edit";
 import { testMap } from "@/lib/map/test-map";
+
 import { keysByCode } from "./runtime";
 import {
   doorIndex,
@@ -16,11 +18,6 @@ import {
 } from "./test-engine";
 
 afterEach(stopGames);
-
-// Fixed-point rounding can nudge the other axis by a map unit.
-function moveDirection(moved: number) {
-  return Math.abs(moved) < 8 ? 0 : Math.sign(moved);
-}
 
 describe.skipIf(!ready)("controls in the engine", () => {
   it("turns the player with the mouse", async () => {
@@ -110,7 +107,7 @@ describe.skipIf(!ready)("controls in the engine", () => {
   );
 
   it("uses a door with KeyE", async () => {
-    const door = testMap.sectors[doorIndex].door!;
+    const door = defined(testMap.sectors[doorIndex].door);
     const map = playerAt(
       setRoomDoor(testMap, "sector-4", { ...door, opensBy: "use" }),
       450,
@@ -166,3 +163,8 @@ describe.skipIf(!ready)("controls in the engine", () => {
     await select("Digit4", 0);
   }, 30_000);
 });
+
+// Fixed-point rounding can nudge the other axis by a map unit.
+function moveDirection(moved: number) {
+  return Math.abs(moved) < 8 ? 0 : Math.sign(moved);
+}

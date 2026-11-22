@@ -2,27 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import { FramePacer } from "./frame-pacer";
 
-function randomSource(seed: number) {
-  let value = seed;
-  return () => {
-    value = (value * 1664525 + 1013904223) % 4294967296;
-    return value / 4294967296;
-  };
-}
-
-function framesOnDisplay(hertz: number, jitterMs: number, seconds = 60) {
-  const random = randomSource(hertz);
-  const pacer = new FramePacer();
-  pacer.start(0);
-  const times: number[] = [];
-  const refreshes = Math.floor(seconds * hertz);
-  for (let index = 1; index <= refreshes; index += 1) {
-    const now = (index * 1000) / hertz + (random() - 0.5) * 2 * jitterMs;
-    if (pacer.onDisplay(now)) times.push(now);
-  }
-  return times;
-}
-
 describe("frame pacer", () => {
   it.each([60, 75, 90, 120, 144, 165, 240, 360])(
     "holds about 60 frames a second at %i Hz",
@@ -60,3 +39,24 @@ describe("frame pacer", () => {
     expect(pacer.onTimer(200)).toBe(true);
   });
 });
+
+function framesOnDisplay(hertz: number, jitterMs: number, seconds = 60) {
+  const random = randomSource(hertz);
+  const pacer = new FramePacer();
+  pacer.start(0);
+  const times: number[] = [];
+  const refreshes = Math.floor(seconds * hertz);
+  for (let index = 1; index <= refreshes; index += 1) {
+    const now = (index * 1000) / hertz + (random() - 0.5) * 2 * jitterMs;
+    if (pacer.onDisplay(now)) times.push(now);
+  }
+  return times;
+}
+
+function randomSource(seed: number) {
+  let value = seed;
+  return () => {
+    value = (value * 1664525 + 1013904223) % 4294967296;
+    return value / 4294967296;
+  };
+}

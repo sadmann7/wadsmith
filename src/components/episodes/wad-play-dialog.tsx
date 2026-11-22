@@ -1,23 +1,11 @@
 import { Play } from "lucide-react";
 import * as React from "react";
 
-import { skillNames } from "@/lib/engine/coop";
-import { Choice } from "@/components/play/coop-ui";
-import { slotName, type GameInfo } from "@/lib/engine/game";
 import type { Complevel, GameFiles, Skill } from "@/lib/engine/runtime";
-import { complevelLabels } from "@/lib/map/complevel";
 import type { WadSummary } from "@/lib/wad/inspect";
+
+import { Choice } from "@/components/play/coop-ui";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectCheck,
-  SelectContent,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { FieldItem, Label } from "@/components/ui/field";
 import {
   Dialog,
   DialogBackdrop,
@@ -28,6 +16,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { FieldItem, Label } from "@/components/ui/field";
+import {
+  Select,
+  SelectCheck,
+  SelectContent,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { skillNames } from "@/lib/engine/coop";
+import { type GameInfo, slotName } from "@/lib/engine/game";
+import { complevelLabels } from "@/lib/map/complevel";
 
 const complevelHelp: Record<Complevel, string> = {
   vanilla: "Plays like doom2.exe, with its limits and bugs.",

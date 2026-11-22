@@ -1,6 +1,8 @@
-import { sectorAt } from "@/lib/map/geometry";
 import type { GameMap, Point } from "@/lib/map/types";
-import { startCamera, type Camera } from "./render";
+
+import { sectorAt } from "@/lib/map/geometry";
+
+import { type Camera, startCamera } from "./render";
 
 export class SceneCamera {
   walked = false;

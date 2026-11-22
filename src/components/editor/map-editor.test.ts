@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { testMap } from "@/lib/map/test-map";
 import type { GameMap } from "@/lib/map/types";
+
+import { defined } from "@/lib/defined";
+import { testMap } from "@/lib/map/test-map";
+
 import { mapEditor } from "./map-editor";
 
 type Instance = ReturnType<typeof mapEditor>;
@@ -15,39 +18,6 @@ interface Slot {
 }
 
 const { slots } = mapEditor as unknown as { slots: Record<string, Slot> };
-
-// Wires parts the way a renderer does, so a change reaches a part only when
-// its slot's `selects` lets it through.
-function listen(instance: Instance) {
-  const heard: string[] = [];
-  const hear = (slot: string, props: Record<string, unknown>) => {
-    const part = instance.part(slot as never, props as never);
-    slots[slot].selects.subscribe(
-      part,
-      () => heard.push(`${slot} ${part.key}`),
-      props,
-    );
-  };
-  const [start, corridor, arena] = testMap.sectors;
-  hear("sector", { value: start.id, corners: start.vertices, door: false });
-  hear("sector", { value: arena.id, corners: arena.vertices, door: false });
-  hear("wall", { value: "v1|v15", from: "v1", to: "v15" });
-  hear("wall", { value: "v9|v10", from: "v9", to: "v10" });
-  hear("handle", { value: "v1" });
-  hear("handle", { value: "v10" });
-  hear("handle", { value: "thing:imp-1" });
-  hear("port", { value: "door:sector-4" });
-  hear("label", { value: corridor.id, corners: corridor.vertices });
-  return { heard: () => heard.splice(0).toSorted() };
-}
-
-function moved(map: GameMap, corner: string, dx: number): GameMap {
-  const point = map.vertices[corner];
-  return {
-    ...map,
-    vertices: { ...map.vertices, [corner]: { x: point.x + dx, y: point.y } },
-  };
-}
 
 describe("map editor parts", () => {
   it("leave every shape alone on a pan or zoom", () => {
@@ -115,7 +85,7 @@ describe("map editor parts", () => {
   });
 
   it("drop the pressed corner on the grid and carry the rest along", () => {
-    let result: GameMap | null = null;
+    let result = null as GameMap | null;
     const map = moved(testMap, "v15", 3);
     const instance = mapEditor({
       id,
@@ -129,12 +99,12 @@ describe("map editor parts", () => {
     store.set({ moving: { keys, dx: 5, dy: 0 } });
     store.set({ moving: null });
     instance.api.move.moveBy(keys, 5, 0, { reason: "drag" });
-    expect(result!.vertices.v1).toEqual({ x: 8, y: 0 });
-    expect(result!.vertices.v15).toEqual({ x: 171, y: 0 });
+    expect(defined(result).vertices.v1).toEqual({ x: 8, y: 0 });
+    expect(defined(result).vertices.v15).toEqual({ x: 171, y: 0 });
   });
 
   it("join a corner dropped onto another corner", () => {
-    let result: GameMap | null = null;
+    let result = null as GameMap | null;
     const instance = mapEditor({
       id,
       map: testMap,
@@ -146,9 +116,9 @@ describe("map editor parts", () => {
     store.set({ moving: { keys: ["v15"], dx: 64, dy: 0 } });
     store.set({ moving: null });
     instance.api.move.moveBy(["v15"], 64, 0, { reason: "drag" });
-    expect(result!.vertices.v15).toBeUndefined();
-    expect(result!.sectors[0].vertices).not.toContain("v15");
-    expect(result!.sectors[0].vertices).toContain("v16");
+    expect(defined(result).vertices.v15).toBeUndefined();
+    expect(defined(result).sectors[0].vertices).not.toContain("v15");
+    expect(defined(result).sectors[0].vertices).toContain("v16");
   });
 
   it("commit nothing for a drop that lands where it started", () => {
@@ -178,3 +148,36 @@ describe("map editor parts", () => {
     expect(parts.heard()).toEqual(["port door:sector-4", "port door:sector-4"]);
   });
 });
+
+// Wires parts the way a renderer does, so a change reaches a part only when
+// its slot's `selects` lets it through.
+function listen(instance: Instance) {
+  const heard: string[] = [];
+  const hear = (slot: string, props: Record<string, unknown>) => {
+    const part = instance.part(slot as never, props as never);
+    slots[slot].selects.subscribe(
+      part,
+      () => heard.push(`${slot} ${part.key}`),
+      props,
+    );
+  };
+  const [start, corridor, arena] = testMap.sectors;
+  hear("sector", { value: start.id, corners: start.vertices, door: false });
+  hear("sector", { value: arena.id, corners: arena.vertices, door: false });
+  hear("wall", { value: "v1|v15", from: "v1", to: "v15" });
+  hear("wall", { value: "v9|v10", from: "v9", to: "v10" });
+  hear("handle", { value: "v1" });
+  hear("handle", { value: "v10" });
+  hear("handle", { value: "thing:imp-1" });
+  hear("port", { value: "door:sector-4" });
+  hear("label", { value: corridor.id, corners: corridor.vertices });
+  return { heard: () => heard.splice(0).toSorted() };
+}
+
+function moved(map: GameMap, corner: string, dx: number): GameMap {
+  const point = map.vertices[corner];
+  return {
+    ...map,
+    vertices: { ...map.vertices, [corner]: { x: point.x + dx, y: point.y } },
+  };
+}

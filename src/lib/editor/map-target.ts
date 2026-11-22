@@ -1,6 +1,8 @@
 import * as React from "react";
 
-import { roomCenter, thingKeyPrefix, switchKeyPrefix } from "@/lib/map/edit";
+import type { GameMap, Point, Sector } from "@/lib/map/types";
+
+import { roomCenter, switchKeyPrefix, thingKeyPrefix } from "@/lib/map/edit";
 import {
   interiorPoint,
   sectorAt,
@@ -9,7 +11,6 @@ import {
   wallOwners,
 } from "@/lib/map/geometry";
 import { parseSurface, surfaceKey } from "@/lib/map/surfaces";
-import type { GameMap, Point, Sector } from "@/lib/map/types";
 
 export type MapTarget = {
   point: Point | null;
@@ -24,9 +25,6 @@ export type MapTarget = {
   | { kind: "switch"; id: string }
   | { kind: "empty" }
 );
-
-const nearThing = 48;
-const standOff = 96;
 
 export function isKeyboardMenu(event: MouseEvent) {
   const { pointerType } = event as PointerEvent;
@@ -168,30 +166,9 @@ export function wallTarget(sector: string, wall: string, point: Point | null) {
   };
 }
 
-function holeMiddle(map: GameMap, sector: string, index: number) {
-  const hole = map.sectors.find((item) => item.id === sector)?.holes?.[index];
-  return hole ? interiorPoint(hole.map((id) => map.vertices[id])) : null;
-}
-
 export function wallMiddle(map: GameMap, wall: string): Point {
   const [from, to] = wall.split("|").map((id) => map.vertices[id]);
   return { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
-}
-
-function standingRoom(owners: Sector[] | undefined) {
-  return owners?.find((sector) => !sector.door) ?? null;
-}
-
-function viewFrom(map: GameMap, room: Sector, at: Point) {
-  const center = roomCenter(map, room);
-  if (Math.hypot(center.x - at.x, center.y - at.y) >= nearThing) return center;
-  const spots = [
-    { x: at.x - standOff, y: at.y },
-    { x: at.x + standOff, y: at.y },
-    { x: at.x, y: at.y - standOff },
-    { x: at.x, y: at.y + standOff },
-  ];
-  return spots.find((spot) => sectorAt(map, spot) === room) ?? center;
 }
 
 export function targetForIssue(map: GameMap, id: string): MapTarget | null {
@@ -261,4 +238,28 @@ export function viewOfTarget(map: GameMap, target: MapTarget) {
   if (!wall || !room) return null;
   const at = wallMiddle(map, wall);
   return { from: viewFrom(map, room, at), at };
+}
+
+function holeMiddle(map: GameMap, sector: string, index: number) {
+  const hole = map.sectors.find((item) => item.id === sector)?.holes?.[index];
+  return hole ? interiorPoint(hole.map((id) => map.vertices[id])) : null;
+}
+
+const nearThing = 48;
+const standOff = 96;
+
+function viewFrom(map: GameMap, room: Sector, at: Point) {
+  const center = roomCenter(map, room);
+  if (Math.hypot(center.x - at.x, center.y - at.y) >= nearThing) return center;
+  const spots = [
+    { x: at.x - standOff, y: at.y },
+    { x: at.x + standOff, y: at.y },
+    { x: at.x, y: at.y - standOff },
+    { x: at.x, y: at.y + standOff },
+  ];
+  return spots.find((spot) => sectorAt(map, spot) === room) ?? center;
+}
+
+function standingRoom(owners: Sector[] | undefined) {
+  return owners?.find((sector) => !sector.door) ?? null;
 }

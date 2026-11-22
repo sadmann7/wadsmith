@@ -1,3 +1,17 @@
+import { defined } from "@/lib/defined";
+
+import type {
+  DoorSettings,
+  GameMap,
+  LineSettings,
+  LineSide,
+  MapSwitch,
+  Point,
+  Sector,
+  Thing,
+  ThingKind,
+} from "./types";
+
 import { isPlayerStart } from "./catalog";
 import {
   containerOf,
@@ -13,17 +27,6 @@ import {
   wallOwners,
   wallStart,
 } from "./geometry";
-import type {
-  DoorSettings,
-  GameMap,
-  LineSettings,
-  LineSide,
-  MapSwitch,
-  Point,
-  Sector,
-  Thing,
-  ThingKind,
-} from "./types";
 
 export const gridSize = 8;
 export const gridSizes = [1, 2, 4, 8, 16, 32, 64] as const;
@@ -44,16 +47,6 @@ export function snap(value: number, grid = gridSize) {
 
 export function snapPoint(point: Point, grid = gridSize): Point {
   return { x: snap(point.x, grid), y: snap(point.y, grid) };
-}
-
-function nextId(prefix: string, used: Iterable<string>) {
-  let highest = 0;
-  for (const id of used) {
-    if (id.startsWith(prefix)) {
-      highest = Math.max(highest, Number(id.slice(prefix.length)) || 0);
-    }
-  }
-  return `${prefix}${highest + 1}`;
 }
 
 const positionCache = new WeakMap<GameMap, Record<string, Point>>();
@@ -191,22 +184,6 @@ export function removeThing(map: GameMap, id: string): GameMap {
 
 type Defined<T> = { [K in keyof T]: Exclude<T[K], undefined> };
 
-function withoutUnset<T extends object>(value: T) {
-  const entries = Object.entries(value).filter(
-    ([, item]) => item !== undefined,
-  );
-  return entries.length > 0
-    ? (Object.fromEntries(entries) as Defined<T>)
-    : undefined;
-}
-
-function setLine(map: GameMap, wall: string, line: LineSettings | undefined) {
-  return {
-    ...map,
-    lines: withoutUnset({ ...map.lines, [wall]: line && withoutUnset(line) }),
-  };
-}
-
 export function updateLine(
   map: GameMap,
   wall: string,
@@ -229,18 +206,6 @@ export function updateLineSide(
   });
 }
 
-function unusedTag(map: GameMap) {
-  const used = new Set([
-    ...map.sectors.map((sector) => sector.tag),
-    ...Object.values(map.lines ?? {}).map(
-      (line) => line.action?.tag ?? line.raw?.tag,
-    ),
-  ]);
-  let tag = 1;
-  while (used.has(tag)) tag += 1;
-  return tag;
-}
-
 export function setLineTarget(
   map: GameMap,
   wall: string,
@@ -254,7 +219,7 @@ export function setLineTarget(
   return updateLine(
     tagged,
     wall,
-    action ? { action: { ...action, tag } } : { raw: { ...raw!, tag } },
+    action ? { action: { ...action, tag } } : { raw: { ...defined(raw), tag } },
   );
 }
 
@@ -304,24 +269,6 @@ export function setRoomWalls(
   );
 }
 
-function pruneLines(map: GameMap, removed?: string): GameMap {
-  const owners = wallOwners(map);
-  const lines: Record<string, LineSettings | undefined> = {};
-  for (const [wall, line] of Object.entries(map.lines ?? {})) {
-    if (!owners.has(wall)) continue;
-    const sides = {
-      ...line.sides,
-      ...(removed ? { [removed]: undefined } : {}),
-    };
-    lines[wall] = withoutUnset({
-      ...line,
-      sides: withoutUnset(sides),
-      front: line.front === removed ? undefined : line.front,
-    });
-  }
-  return { ...map, lines: withoutUnset(lines) };
-}
-
 export function addNote(map: GameMap, point: Point, text: string): GameMap {
   const notes = map.notes ?? [];
   const id = nextId(
@@ -363,27 +310,6 @@ export function updateThings(
 
 export function faceThings(map: GameMap, ids: string[], angle: number) {
   return ids.reduce((next, id) => updateThing(next, id, { angle }), map);
-}
-
-const copyOffsets = [
-  { x: 1, y: 1 },
-  { x: -1, y: 1 },
-  { x: 1, y: -1 },
-  { x: -1, y: -1 },
-  { x: 1, y: 0 },
-  { x: -1, y: 0 },
-  { x: 0, y: 1 },
-  { x: 0, y: -1 },
-  { x: 0, y: 0 },
-];
-
-function copySpot(map: GameMap, thing: Thing) {
-  const room = sectorAt(map, thing);
-  const spots = copyOffsets.map(({ x, y }) => ({
-    x: thing.x + x * gridSize * 2,
-    y: thing.y + y * gridSize * 2,
-  }));
-  return spots.find((spot) => sectorAt(map, spot) === room) ?? spots[0];
 }
 
 // A second player start would replace the first, so it is never copied.
@@ -491,49 +417,10 @@ interface FreeWall {
   to: string;
 }
 
-function freeWalls(map: GameMap): FreeWall[] {
-  const owners = wallOwners(map);
-  const taken = new Set(
-    map.switches.map((item) => wallKey(item.from, item.to)),
-  );
-  return map.sectors
-    .filter((sector) => !sector.door)
-    .flatMap((sector) =>
-      sectorEdges(sector)
-        .filter(({ from, to }) => {
-          const key = wallKey(from, to);
-          const owning = owners.get(key);
-          return (
-            owning?.length === 1 && owning[0] === sector && !taken.has(key)
-          );
-        })
-        .map(({ from, to }) => ({ sector: sector.id, from, to })),
-    );
-}
-
 export function freeWallAt(map: GameMap, wall: string) {
   return (
     freeWalls(map).find((item) => wallKey(item.from, item.to) === wall) ?? null
   );
-}
-
-function distanceToWall(
-  map: GameMap,
-  wall: { from: string; to: string },
-  point: Point,
-) {
-  const a = map.vertices[wall.from];
-  const b = map.vertices[wall.to];
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  const t = Math.max(
-    0,
-    Math.min(
-      1,
-      ((point.x - a.x) * dx + (point.y - a.y) * dy) / (dx * dx + dy * dy || 1),
-    ),
-  );
-  return Math.hypot(point.x - (a.x + dx * t), point.y - (a.y + dy * t));
 }
 
 export function freeWallNear(map: GameMap, point: Point, reach: number) {
@@ -752,6 +639,85 @@ export function addRoom(
 
 export type RoomSide = "north" | "east" | "south" | "west";
 
+function setLine(map: GameMap, wall: string, line: LineSettings | undefined) {
+  return {
+    ...map,
+    lines: withoutUnset({ ...map.lines, [wall]: line && withoutUnset(line) }),
+  };
+}
+
+function unusedTag(map: GameMap) {
+  const used = new Set([
+    ...map.sectors.map((sector) => sector.tag),
+    ...Object.values(map.lines ?? {}).map(
+      (line) => line.action?.tag ?? line.raw?.tag,
+    ),
+  ]);
+  let tag = 1;
+  while (used.has(tag)) tag += 1;
+  return tag;
+}
+
+const copyOffsets = [
+  { x: 1, y: 1 },
+  { x: -1, y: 1 },
+  { x: 1, y: -1 },
+  { x: -1, y: -1 },
+  { x: 1, y: 0 },
+  { x: -1, y: 0 },
+  { x: 0, y: 1 },
+  { x: 0, y: -1 },
+  { x: 0, y: 0 },
+];
+
+function copySpot(map: GameMap, thing: Thing) {
+  const room = sectorAt(map, thing);
+  const spots = copyOffsets.map(({ x, y }) => ({
+    x: thing.x + x * gridSize * 2,
+    y: thing.y + y * gridSize * 2,
+  }));
+  return spots.find((spot) => sectorAt(map, spot) === room) ?? spots[0];
+}
+
+function freeWalls(map: GameMap): FreeWall[] {
+  const owners = wallOwners(map);
+  const taken = new Set(
+    map.switches.map((item) => wallKey(item.from, item.to)),
+  );
+  return map.sectors
+    .filter((sector) => !sector.door)
+    .flatMap((sector) =>
+      sectorEdges(sector)
+        .filter(({ from, to }) => {
+          const key = wallKey(from, to);
+          const owning = owners.get(key);
+          return (
+            owning?.length === 1 && owning[0] === sector && !taken.has(key)
+          );
+        })
+        .map(({ from, to }) => ({ sector: sector.id, from, to })),
+    );
+}
+
+function distanceToWall(
+  map: GameMap,
+  wall: { from: string; to: string },
+  point: Point,
+) {
+  const a = map.vertices[wall.from];
+  const b = map.vertices[wall.to];
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const t = Math.max(
+    0,
+    Math.min(
+      1,
+      ((point.x - a.x) * dx + (point.y - a.y) * dy) / (dx * dx + dy * dy || 1),
+    ),
+  );
+  return Math.hypot(point.x - (a.x + dx * t), point.y - (a.y + dy * t));
+}
+
 const sideNormals: Record<RoomSide, Point> = {
   north: { x: 0, y: -1 },
   east: { x: 1, y: 0 },
@@ -959,86 +925,6 @@ export function splitWall(
   };
 }
 
-function closedChain(chain: string[]) {
-  return chain.filter((id, index) => id !== chain[(index + 1) % chain.length]);
-}
-
-function openChain(chain: string[]) {
-  return chain.filter((id, index) => index === 0 || id !== chain[index - 1]);
-}
-
-// Every use of one corner moves to another, so walls join up and a wall that
-// ran between the two goes away.
-function replaceCorner(map: GameMap, from: string, to: string): GameMap {
-  const rename = (id: string) => (id === from ? to : id);
-  const holds = (key: string) => key.split("|").includes(from);
-  const rekey = <T>(record: Record<string, T> | undefined) => {
-    if (!record) return undefined;
-    const out: Record<string, T> = {};
-    const entries = Object.entries(record).toSorted(
-      ([a], [b]) => Number(holds(a)) - Number(holds(b)),
-    );
-    for (const [key, value] of entries) {
-      const [first, second] = key.split("|").map(rename);
-      const renamed = wallKey(first, second);
-      if (first !== second && !(renamed in out)) out[renamed] = value;
-    }
-    return withoutUnset(out);
-  };
-  const vertices = { ...map.vertices };
-  delete vertices[from];
-  return pruneUnused({
-    ...map,
-    vertices,
-    sectors: map.sectors.map((sector) => {
-      const next: Sector = {
-        ...sector,
-        vertices: closedChain(sector.vertices.map(rename)),
-      };
-      if (sector.holes) {
-        next.holes = sector.holes.map((hole) => closedChain(hole.map(rename)));
-      }
-      if (sector.details) {
-        const details = sector.details
-          .map((chain) => openChain(chain.map(rename)))
-          .filter((chain) => chain.length >= 2);
-        if (details.length > 0) next.details = details;
-        else delete next.details;
-      }
-      const overrides = rekey(sector.wallOverrides);
-      if (overrides) next.wallOverrides = overrides;
-      else delete next.wallOverrides;
-      return next;
-    }),
-    lines: rekey(map.lines),
-    switches: map.switches
-      .map((item) => ({
-        ...item,
-        from: rename(item.from),
-        to: rename(item.to),
-      }))
-      .filter((item) => item.from !== item.to),
-  });
-}
-
-// A corner dropped onto another becomes that corner.
-// Two corners of one outline can only join when they sit side by side, or
-// the outline would run through a corner twice.
-function canJoin(map: GameMap, from: string, to: string) {
-  return map.sectors.every((sector) =>
-    [
-      ...sectorLoops(sector).map((loop) => ({ loop, closed: true })),
-      ...(sector.details ?? []).map((loop) => ({ loop, closed: false })),
-    ].every(({ loop, closed }) => {
-      const a = loop.indexOf(from);
-      const b = loop.indexOf(to);
-      if (a < 0 || b < 0) return true;
-      const apart = Math.abs(a - b);
-      return apart === 1 || (closed && apart === loop.length - 1);
-    }),
-  );
-}
-
 export function mergeCorners(map: GameMap, ids: string[]): GameMap {
   let next = map;
   for (const id of ids) {
@@ -1056,31 +942,6 @@ export function mergeCorners(map: GameMap, ids: string[]): GameMap {
     }
   }
   return next;
-}
-
-function withHoles(sector: Sector, holes: string[][]): Sector {
-  const next: Sector = { ...sector, holes };
-  if (holes.length === 0) delete next.holes;
-  return next;
-}
-
-// Corners no outline uses any more go, and so do the switches and settings
-// on the walls that went with them.
-function pruneUnused(map: GameMap): GameMap {
-  const used = new Set(map.sectors.flatMap(sectorVertices));
-  const pruned = {
-    ...map,
-    vertices: Object.fromEntries(
-      Object.entries(map.vertices).filter(([vertex]) => used.has(vertex)),
-    ),
-  };
-  const owners = wallOwners(pruned);
-  return pruneLines({
-    ...pruned,
-    switches: map.switches.filter((item) =>
-      owners.has(wallKey(item.from, item.to)),
-    ),
-  });
 }
 
 // Takes a room out of the one around it and leaves its shape as solid wall.
@@ -1132,7 +993,7 @@ export function fillHole(
           item.id === id
             ? withHoles(
                 item,
-                sector.holes!.filter((_, at) => at !== index),
+                defined(sector.holes).filter((_, at) => at !== index),
               )
             : item,
         ),
@@ -1150,16 +1011,6 @@ export function fillHole(
       ],
     },
   };
-}
-
-function withDetails(sector: Sector, details: string[][]): Sector {
-  const next: Sector = { ...sector, details };
-  if (details.length === 0) delete next.details;
-  return next;
-}
-
-function middle(a: Point, b: Point) {
-  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
 }
 
 // A line drawn inside a room, with the room on both of its sides, for a
@@ -1284,4 +1135,156 @@ export function removeHole(map: GameMap, id: string, index: number): GameMap {
         : sector,
     ),
   });
+}
+
+function nextId(prefix: string, used: Iterable<string>) {
+  let highest = 0;
+  for (const id of used) {
+    if (id.startsWith(prefix)) {
+      highest = Math.max(highest, Number(id.slice(prefix.length)) || 0);
+    }
+  }
+  return `${prefix}${highest + 1}`;
+}
+
+function withoutUnset<T extends object>(value: T) {
+  const entries = Object.entries(value).filter(
+    ([, item]) => item !== undefined,
+  );
+  return entries.length > 0
+    ? (Object.fromEntries(entries) as Defined<T>)
+    : undefined;
+}
+
+function pruneLines(map: GameMap, removed?: string): GameMap {
+  const owners = wallOwners(map);
+  const lines: Record<string, LineSettings | undefined> = {};
+  for (const [wall, line] of Object.entries(map.lines ?? {})) {
+    if (!owners.has(wall)) continue;
+    const sides = {
+      ...line.sides,
+      ...(removed ? { [removed]: undefined } : {}),
+    };
+    lines[wall] = withoutUnset({
+      ...line,
+      sides: withoutUnset(sides),
+      front: line.front === removed ? undefined : line.front,
+    });
+  }
+  return { ...map, lines: withoutUnset(lines) };
+}
+
+function middle(a: Point, b: Point) {
+  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+}
+
+// Corners no outline uses any more go, and so do the switches and settings
+// on the walls that went with them.
+function pruneUnused(map: GameMap): GameMap {
+  const used = new Set(map.sectors.flatMap(sectorVertices));
+  const pruned = {
+    ...map,
+    vertices: Object.fromEntries(
+      Object.entries(map.vertices).filter(([vertex]) => used.has(vertex)),
+    ),
+  };
+  const owners = wallOwners(pruned);
+  return pruneLines({
+    ...pruned,
+    switches: map.switches.filter((item) =>
+      owners.has(wallKey(item.from, item.to)),
+    ),
+  });
+}
+
+// A corner dropped onto another becomes that corner.
+// Two corners of one outline can only join when they sit side by side, or
+// the outline would run through a corner twice.
+function canJoin(map: GameMap, from: string, to: string) {
+  return map.sectors.every((sector) =>
+    [
+      ...sectorLoops(sector).map((loop) => ({ loop, closed: true })),
+      ...(sector.details ?? []).map((loop) => ({ loop, closed: false })),
+    ].every(({ loop, closed }) => {
+      const a = loop.indexOf(from);
+      const b = loop.indexOf(to);
+      if (a < 0 || b < 0) return true;
+      const apart = Math.abs(a - b);
+      return apart === 1 || (closed && apart === loop.length - 1);
+    }),
+  );
+}
+
+// Every use of one corner moves to another, so walls join up and a wall that
+// ran between the two goes away.
+function replaceCorner(map: GameMap, from: string, to: string): GameMap {
+  const rename = (id: string) => (id === from ? to : id);
+  const holds = (key: string) => key.split("|").includes(from);
+  const rekey = <T>(record: Record<string, T> | undefined) => {
+    if (!record) return undefined;
+    const out: Record<string, T> = {};
+    const entries = Object.entries(record).toSorted(
+      ([a], [b]) => Number(holds(a)) - Number(holds(b)),
+    );
+    for (const [key, value] of entries) {
+      const [first, second] = key.split("|").map(rename);
+      const renamed = wallKey(first, second);
+      if (first !== second && !(renamed in out)) out[renamed] = value;
+    }
+    return withoutUnset(out);
+  };
+  const vertices = { ...map.vertices };
+  delete vertices[from];
+  return pruneUnused({
+    ...map,
+    vertices,
+    sectors: map.sectors.map((sector) => {
+      const next: Sector = {
+        ...sector,
+        vertices: closedChain(sector.vertices.map(rename)),
+      };
+      if (sector.holes) {
+        next.holes = sector.holes.map((hole) => closedChain(hole.map(rename)));
+      }
+      if (sector.details) {
+        const details = sector.details
+          .map((chain) => openChain(chain.map(rename)))
+          .filter((chain) => chain.length >= 2);
+        if (details.length > 0) next.details = details;
+        else delete next.details;
+      }
+      const overrides = rekey(sector.wallOverrides);
+      if (overrides) next.wallOverrides = overrides;
+      else delete next.wallOverrides;
+      return next;
+    }),
+    lines: rekey(map.lines),
+    switches: map.switches
+      .map((item) => ({
+        ...item,
+        from: rename(item.from),
+        to: rename(item.to),
+      }))
+      .filter((item) => item.from !== item.to),
+  });
+}
+
+function closedChain(chain: string[]) {
+  return chain.filter((id, index) => id !== chain[(index + 1) % chain.length]);
+}
+
+function openChain(chain: string[]) {
+  return chain.filter((id, index) => index === 0 || id !== chain[index - 1]);
+}
+
+function withHoles(sector: Sector, holes: string[][]): Sector {
+  const next: Sector = { ...sector, holes };
+  if (holes.length === 0) delete next.holes;
+  return next;
+}
+
+function withDetails(sector: Sector, details: string[][]): Sector {
+  const next: Sector = { ...sector, details };
+  if (details.length === 0) delete next.details;
+  return next;
 }

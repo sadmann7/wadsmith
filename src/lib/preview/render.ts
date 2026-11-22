@@ -1,3 +1,15 @@
+import type { WallPart } from "@/lib/map/surfaces";
+import type {
+  GameMap,
+  LineSettings,
+  LineSide,
+  Point,
+  Sector,
+  Thing,
+  ThingKind,
+} from "@/lib/map/types";
+
+import { defined } from "@/lib/defined";
 import { doorTrackTexture, thingCatalog } from "@/lib/map/catalog";
 import {
   loopEdges,
@@ -11,17 +23,7 @@ import {
   wallOwners,
   wallPartTexture,
 } from "@/lib/map/geometry";
-import type { WallPart } from "@/lib/map/surfaces";
 import { surfaceKey } from "@/lib/map/surfaces";
-import type {
-  GameMap,
-  LineSettings,
-  LineSide,
-  Point,
-  Sector,
-  Thing,
-  ThingKind,
-} from "@/lib/map/types";
 import {
   gameFlatShade,
   gameWallShade,
@@ -59,7 +61,6 @@ interface Wall {
   side: LineSide | undefined;
 }
 
-const eyeHeight = 41;
 const fieldOfView = Math.PI / 2;
 const maxPortals = 32;
 const skyColor = 0xff000000;
@@ -85,127 +86,10 @@ export function createRenderTarget(
   };
 }
 
-// A frame shows the same map as the one before until an edit, so what a frame
-// works out from its map is kept with the map, which is never changed in place.
-const closedDoorMaps = new WeakMap<GameMap, GameMap>();
-const sectorWalls = new WeakMap<GameMap, Map<string, Wall[]>>();
-const thingOwners = new WeakMap<GameMap, Map<Thing, Sector | undefined>>();
-
-function wallsBySector(map: GameMap) {
-  const cached = sectorWalls.get(map);
-  if (cached) return cached;
-  const owners = wallOwners(map);
-  const switches = new Map(
-    map.switches.map((item) => [wallKey(item.from, item.to), item.texture]),
-  );
-  const drawn = new Set<string>();
-  for (const sector of map.sectors) {
-    for (const { from, to } of sectorEdges(sector)) {
-      drawn.add(`${sector.id}:${wallKey(from, to)}`);
-    }
-  }
-  const walls = new Map<string, Wall[]>(
-    map.sectors.map((sector) => [sector.id, []]),
-  );
-  const wallOf = (
-    sector: Sector,
-    a: Point,
-    b: Point,
-    key: string,
-    neighbor: Sector | null,
-  ): Wall => {
-    const line = map.lines?.[key];
-    return {
-      a,
-      b,
-      key,
-      neighbor,
-      switchTexture: switches.get(key) ?? null,
-      line,
-      side: line?.sides?.[sector.id],
-    };
-  };
-  for (const sector of map.sectors) {
-    sectorLoops(sector).forEach((loop, at) => {
-      // The engine runs textures left to right as seen from inside the room,
-      // and a pillar's walls face the other way round.
-      const clockwise = signedArea(loopPolygon(map, loop)) < 0;
-      const flipped = at > 0 ? !clockwise : clockwise;
-      for (const { from, to } of loopEdges(loop)) {
-        const key = wallKey(from, to);
-        const owning = owners.get(key) ?? [];
-        if (!owning.includes(sector)) continue;
-        const neighbor = owning.find((item) => item !== sector) ?? null;
-        const a = map.vertices[flipped ? to : from];
-        const b = map.vertices[flipped ? from : to];
-        walls.get(sector.id)!.push(wallOf(sector, a, b, key, neighbor));
-        // A wall that opens onto the room around it is that room's wall too.
-        if (neighbor && !drawn.has(`${neighbor.id}:${key}`)) {
-          walls.get(neighbor.id)!.push(wallOf(neighbor, b, a, key, sector));
-        }
-      }
-    });
-    // A line drawn inside a room is a portal back into the same room.
-    for (const { from, to } of sectorDetails(sector)) {
-      walls
-        .get(sector.id)!
-        .push(
-          wallOf(
-            sector,
-            map.vertices[from],
-            map.vertices[to],
-            wallKey(from, to),
-            sector,
-          ),
-        );
-    }
-  }
-  sectorWalls.set(map, walls);
-  return walls;
-}
-
-function withClosedDoors(map: GameMap): GameMap {
-  const cached = closedDoorMaps.get(map);
-  if (cached) return cached;
-  const closed = {
-    ...map,
-    sectors: map.sectors.map((sector) =>
-      sector.door ? { ...sector, ceiling: sector.floor } : sector,
-    ),
-  };
-  closedDoorMaps.set(map, closed);
-  return closed;
-}
-
-function thingOwner(map: GameMap, thing: Thing) {
-  let owners = thingOwners.get(map);
-  if (!owners) {
-    owners = new Map();
-    thingOwners.set(map, owners);
-  }
-  if (!owners.has(thing)) owners.set(thing, sectorAt(map, thing));
-  return owners.get(thing);
-}
-
-function wrap(value: number, size: number) {
-  const remainder = Math.floor(value) % size;
-  return remainder < 0 ? remainder + size : remainder;
-}
-
-function blend(under: number, over: number) {
-  const mix = (shift: number) =>
-    (((under >>> shift) & 255) + ((over >>> shift) & 255)) >> 1;
-  return ((255 << 24) | (mix(16) << 16) | (mix(8) << 8) | mix(0)) >>> 0;
-}
-
 export function cameraBasis(camera: Camera) {
   const radians = (camera.angle * Math.PI) / 180;
   const forward = { x: Math.cos(radians), y: -Math.sin(radians) };
   return { forward, right: { x: -forward.y, y: forward.x } };
-}
-
-function eyeOf(map: GameMap, camera: Camera) {
-  return camera.eye ?? (sectorAt(map, camera)?.floor ?? 0) + eyeHeight;
 }
 
 export function projectPoint(
@@ -551,4 +435,125 @@ export function startCamera(map: GameMap): Camera {
   if (player) return { x: player.x, y: player.y, angle: player.angle };
   const first = Object.values(map.vertices)[0] ?? { x: 0, y: 0 };
   return { ...first, angle: 0 };
+}
+
+const eyeHeight = 41;
+
+function eyeOf(map: GameMap, camera: Camera) {
+  return camera.eye ?? (sectorAt(map, camera)?.floor ?? 0) + eyeHeight;
+}
+
+// A frame shows the same map as the one before until an edit, so what a frame
+// works out from its map is kept with the map, which is never changed in place.
+const closedDoorMaps = new WeakMap<GameMap, GameMap>();
+
+function withClosedDoors(map: GameMap): GameMap {
+  const cached = closedDoorMaps.get(map);
+  if (cached) return cached;
+  const closed = {
+    ...map,
+    sectors: map.sectors.map((sector) =>
+      sector.door ? { ...sector, ceiling: sector.floor } : sector,
+    ),
+  };
+  closedDoorMaps.set(map, closed);
+  return closed;
+}
+
+const sectorWalls = new WeakMap<GameMap, Map<string, Wall[]>>();
+
+function wallsBySector(map: GameMap) {
+  const cached = sectorWalls.get(map);
+  if (cached) return cached;
+  const owners = wallOwners(map);
+  const switches = new Map(
+    map.switches.map((item) => [wallKey(item.from, item.to), item.texture]),
+  );
+  const drawn = new Set<string>();
+  for (const sector of map.sectors) {
+    for (const { from, to } of sectorEdges(sector)) {
+      drawn.add(`${sector.id}:${wallKey(from, to)}`);
+    }
+  }
+  const walls = new Map<string, Wall[]>(
+    map.sectors.map((sector) => [sector.id, []]),
+  );
+  const wallOf = (
+    sector: Sector,
+    a: Point,
+    b: Point,
+    key: string,
+    neighbor: Sector | null,
+  ): Wall => {
+    const line = map.lines?.[key];
+    return {
+      a,
+      b,
+      key,
+      neighbor,
+      switchTexture: switches.get(key) ?? null,
+      line,
+      side: line?.sides?.[sector.id],
+    };
+  };
+  for (const sector of map.sectors) {
+    sectorLoops(sector).forEach((loop, at) => {
+      // The engine runs textures left to right as seen from inside the room,
+      // and a pillar's walls face the other way round.
+      const clockwise = signedArea(loopPolygon(map, loop)) < 0;
+      const flipped = at > 0 ? !clockwise : clockwise;
+      for (const { from, to } of loopEdges(loop)) {
+        const key = wallKey(from, to);
+        const owning = owners.get(key) ?? [];
+        if (!owning.includes(sector)) continue;
+        const neighbor = owning.find((item) => item !== sector) ?? null;
+        const a = map.vertices[flipped ? to : from];
+        const b = map.vertices[flipped ? from : to];
+        defined(walls.get(sector.id)).push(wallOf(sector, a, b, key, neighbor));
+        // A wall that opens onto the room around it is that room's wall too.
+        if (neighbor && !drawn.has(`${neighbor.id}:${key}`)) {
+          defined(walls.get(neighbor.id)).push(
+            wallOf(neighbor, b, a, key, sector),
+          );
+        }
+      }
+    });
+    // A line drawn inside a room is a portal back into the same room.
+    for (const { from, to } of sectorDetails(sector)) {
+      defined(walls.get(sector.id)).push(
+        wallOf(
+          sector,
+          map.vertices[from],
+          map.vertices[to],
+          wallKey(from, to),
+          sector,
+        ),
+      );
+    }
+  }
+  sectorWalls.set(map, walls);
+  return walls;
+}
+
+function wrap(value: number, size: number) {
+  const remainder = Math.floor(value) % size;
+  return remainder < 0 ? remainder + size : remainder;
+}
+
+const thingOwners = new WeakMap<GameMap, Map<Thing, Sector | undefined>>();
+
+function thingOwner(map: GameMap, thing: Thing) {
+  let owners = thingOwners.get(map);
+  if (!owners) {
+    owners = new Map();
+    thingOwners.set(map, owners);
+  }
+  if (!owners.has(thing)) owners.set(thing, sectorAt(map, thing));
+  return owners.get(thing);
+}
+
+function blend(under: number, over: number) {
+  const mix = (shift: number) =>
+    (((under >>> shift) & 255) + ((over >>> shift) & 255)) >> 1;
+  return ((255 << 24) | (mix(16) << 16) | (mix(8) << 8) | mix(0)) >>> 0;
 }

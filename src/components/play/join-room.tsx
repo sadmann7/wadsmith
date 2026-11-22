@@ -1,7 +1,10 @@
-import Link from "next/link";
 import { LogOut, RefreshCw, Timer, Users, WifiOff } from "lucide-react";
+import Link from "next/link";
 import * as React from "react";
 
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { useIwad } from "@/hooks/use-iwad";
 import {
   appVersion,
   loadName,
@@ -14,6 +17,20 @@ import {
   skillNames,
   stallRelay,
 } from "@/lib/engine/coop";
+import { defaultGame, type GameId, games } from "@/lib/engine/game";
+import { peerLinks, type PeerLinks } from "@/lib/engine/peer-link";
+import {
+  type CoopGame,
+  type Ending,
+  formatRoomCode,
+  type GuestRoom,
+  hostPeer,
+  joinRoom,
+  type Refusal,
+  type RoomInfo,
+  type RoomPlayer,
+} from "@/lib/engine/room";
+
 import {
   CardHeading,
   CoopCard,
@@ -23,23 +40,7 @@ import {
   SectionLabel,
   StatusCard,
 } from "./coop-ui";
-import { defaultGame, games, type GameId } from "@/lib/engine/game";
-import { peerLinks, type PeerLinks } from "@/lib/engine/peer-link";
-import { GameView, type CoopSession } from "./play-panel";
-import {
-  formatRoomCode,
-  hostPeer,
-  joinRoom,
-  type CoopGame,
-  type Ending,
-  type GuestRoom,
-  type Refusal,
-  type RoomInfo,
-  type RoomPlayer,
-} from "@/lib/engine/room";
-import { useIwad } from "@/hooks/use-iwad";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { type CoopSession, GameView } from "./play-panel";
 
 const slowFindMs = 4000;
 
@@ -51,318 +52,6 @@ type JoinState =
   | { step: "waiting"; peer: number; game: CoopGame }
   | { step: "playing"; peer: number; game: CoopGame }
   | { step: "ended"; reason: Refusal | Ending | "left" | "quit" | "game" };
-
-function backHome() {
-  location.assign("/");
-}
-
-interface GuestShellProps {
-  children: React.ReactNode;
-}
-
-function GuestShell({ children }: GuestShellProps) {
-  return (
-    <div className="grid min-h-dvh grid-rows-[auto_1fr_auto] bg-background text-foreground">
-      <header className="flex h-[48px] items-center px-5">
-        <Link
-          href="/"
-          className="text-[17px] font-bold tracking-[0.12em] text-primary no-underline"
-        >
-          WADSMITH
-        </Link>
-      </header>
-      <main className="grid place-items-center p-4">
-        <div className="grid w-[min(420px,100%)] gap-4">{children}</div>
-      </main>
-      <footer className="flex flex-wrap justify-center gap-x-4 gap-y-1 px-5 py-4 text-sm text-muted-foreground">
-        <span>Doom maps, built and played in your browser.</span>
-        <Link
-          href="/source"
-          className="text-muted-foreground underline underline-offset-4"
-        >
-          Source and licences
-        </Link>
-      </footer>
-    </div>
-  );
-}
-
-interface EndedProps {
-  reason: Refusal | Ending | "left" | "quit" | "game";
-  info: RoomInfo | null;
-  hostGame: GameId | null;
-}
-
-function Ended({ reason, info, hostGame }: EndedProps) {
-  const host = info?.host ?? "The host";
-  const back = (
-    <Button variant="primary" onClick={backHome}>
-      Make your own map
-    </Button>
-  );
-  if (reason === "game") {
-    return (
-      <StatusCard
-        icon={LogOut}
-        tone="info"
-        title="A different game"
-        actions={
-          <>
-            <Button onClick={() => location.reload()}>Join again</Button>
-            {back}
-          </>
-        }
-      >
-        <p className="m-0">
-          {host} plays on {hostGame ? games[hostGame].label : "another game"}.
-          Everyone needs the same game, so bring its IWAD first.
-        </p>
-      </StatusCard>
-    );
-  }
-  if (reason === "full") {
-    return (
-      <StatusCard
-        icon={Users}
-        tone="warning"
-        title="This room is full"
-        actions={back}
-      >
-        <p className="m-0">
-          All {info?.maxPlayers ?? ""} spots are taken. Ask {host} to open a new
-          room.
-        </p>
-      </StatusCard>
-    );
-  }
-  if (reason === "started") {
-    return (
-      <StatusCard
-        icon={Timer}
-        tone="warning"
-        title="This game has started"
-        actions={back}
-      >
-        <p className="m-0">
-          Players can&apos;t join once a game is running. Ask {host} to open a
-          new room when it ends.
-        </p>
-      </StatusCard>
-    );
-  }
-  if (reason === "version") {
-    return (
-      <StatusCard
-        icon={RefreshCw}
-        tone="warning"
-        title="Update to join"
-        actions={
-          <Button
-            variant="primary"
-
-            onClick={() => location.reload()}
-          >
-            <RefreshCw size={14} aria-hidden="true" />
-            Reload
-          </Button>
-        }
-      >
-        <p className="m-0">
-          {host} is on a different version of Wadsmith. Reload to get the same
-          version, then join again.
-        </p>
-      </StatusCard>
-    );
-  }
-  if (reason === "host-left") {
-    return (
-      <StatusCard
-        icon={LogOut}
-        tone="warning"
-        title={`${host} left the game`}
-        actions={back}
-      >
-        <p className="m-0">
-          The host&apos;s computer runs the game, so it ended when they left.
-        </p>
-      </StatusCard>
-    );
-  }
-  if (reason === "lost") {
-    return (
-      <StatusCard
-        icon={WifiOff}
-        tone="danger"
-        title="Connection lost"
-        actions={back}
-      >
-        <p className="m-0">
-          A running game can&apos;t be rejoined. Ask {host} to open a new room.
-        </p>
-      </StatusCard>
-    );
-  }
-  if (reason === "removed") {
-    return (
-      <StatusCard
-        icon={LogOut}
-        tone="warning"
-        title="You were removed"
-        actions={back}
-      >
-        <p className="m-0">{host} removed you from the room.</p>
-      </StatusCard>
-    );
-  }
-  if (reason === "quit") {
-    return (
-      <StatusCard
-        icon={LogOut}
-        tone="info"
-        title="You left the game"
-        actions={back}
-      >
-        <p className="m-0">
-          A running game can&apos;t be rejoined. Ask {host} to open a new room.
-        </p>
-      </StatusCard>
-    );
-  }
-  return (
-    <StatusCard
-      icon={LogOut}
-      tone="info"
-      title="You left the room"
-      actions={
-        <>
-          <Button onClick={() => location.reload()}>Join again</Button>
-          {back}
-        </>
-      }
-    >
-      <p className="m-0">You can join again while the room is open.</p>
-    </StatusCard>
-  );
-}
-
-interface InviteProps {
-  code: string;
-  info: RoomInfo;
-  joining: boolean;
-  onJoin: (name: string) => void;
-}
-
-function Invite({ code, info, joining, onJoin }: InviteProps) {
-  const [name, setName] = React.useState(loadName);
-  const submit = (event: React.FormEvent) => {
-    event.preventDefault();
-    if (name.trim()) onJoin(name.trim());
-  };
-  return (
-    <CoopCard label={`Join ${info.title}`} map={info.map}>
-      <CardHeading
-        eyebrow={`Room ${formatRoomCode(code)} · ${modeNames[info.mode]} · ${skillNames[info.skill]}`}
-        title={
-          <h1 className="m-0 text-2xl font-bold">
-            Join {info.host}&apos;s game
-          </h1>
-        }
-        detail={`${info.title} · ${info.players.length} of ${info.maxPlayers} players here`}
-      />
-      <form className="grid gap-3.5" onSubmit={submit}>
-        <label className="grid">
-          <FieldLabel>Your name</FieldLabel>
-          <Input
-            maxLength={maxNameLength}
-            autoFocus
-            value={name}
-            onValueChange={setName}
-          />
-        </label>
-        <Button
-          variant="primary"
-          type="submit"
-          className="h-9 justify-center"
-          disabled={!name.trim() || joining}
-        >
-          {joining ? "Joining…" : "Join"}
-        </Button>
-      </form>
-    </CoopCard>
-  );
-}
-
-interface WaitingProps {
-  info: RoomInfo;
-  players: RoomPlayer[];
-  peer: number;
-  onLeave: () => void;
-}
-
-function Waiting({ info, players, peer, onLeave }: WaitingProps) {
-  return (
-    <CoopCard
-      label="You're in"
-      map={info.map}
-      footer={
-        <>
-          <span className="text-sm text-muted-foreground" role="status">
-            The game starts for everyone at once.
-          </span>
-          <Button onClick={onLeave}>Leave room</Button>
-        </>
-      }
-    >
-      <CardHeading
-        eyebrow={`${modeNames[info.mode]} · ${skillNames[info.skill]} · ${info.title}`}
-        title={<h1 className="m-0 text-2xl font-bold">You&apos;re in</h1>}
-        detail={`Waiting for ${info.host} to start the game.`}
-      />
-      <section aria-label="Players">
-        <SectionLabel
-          aside={
-            <span>
-              {players.length} of {info.maxPlayers}
-            </span>
-          }
-        >
-          Players
-        </SectionLabel>
-        <ul className="m-0 list-none p-0">
-          {players.map((player) => (
-            <li
-              key={player.peer}
-              className="flex h-[44px] items-center gap-3 border-b border-border"
-            >
-              <PlayerBadge peer={player.peer} />
-              <span className="min-w-0 flex-1 truncate text-sm font-semibold">
-                {player.name}
-                {player.peer === peer || player.peer === hostPeer ? (
-                  <span className="ml-2 font-mono text-xs font-normal tracking-[0.06em] text-muted-foreground">
-                    {player.peer === peer ? "YOU" : "HOST"}
-                  </span>
-                ) : null}
-              </span>
-              {player.ready ? (
-                <span className="flex items-center gap-1.5 text-sm text-foreground">
-                  <span
-                    aria-hidden="true"
-                    className="size-1.5 rounded-full bg-success"
-                  />
-                  Ready
-                </span>
-              ) : (
-                <span className="font-mono text-xs text-muted-foreground">
-                  {Math.round(player.progress * 100)}%
-                </span>
-              )}
-            </li>
-          ))}
-        </ul>
-      </section>
-    </CoopCard>
-  );
-}
 
 interface CoopJoinProps {
   code: string;
@@ -583,4 +272,316 @@ export function CoopJoin({ code }: CoopJoinProps) {
       ) : null}
     </GuestShell>
   );
+}
+
+interface GuestShellProps {
+  children: React.ReactNode;
+}
+
+function GuestShell({ children }: GuestShellProps) {
+  return (
+    <div className="grid min-h-dvh grid-rows-[auto_1fr_auto] bg-background text-foreground">
+      <header className="flex h-[48px] items-center px-5">
+        <Link
+          href="/"
+          className="text-[17px] font-bold tracking-[0.12em] text-primary no-underline"
+        >
+          WADSMITH
+        </Link>
+      </header>
+      <main className="grid place-items-center p-4">
+        <div className="grid w-[min(420px,100%)] gap-4">{children}</div>
+      </main>
+      <footer className="flex flex-wrap justify-center gap-x-4 gap-y-1 px-5 py-4 text-sm text-muted-foreground">
+        <span>Doom maps, built and played in your browser.</span>
+        <Link
+          href="/source"
+          className="text-muted-foreground underline underline-offset-4"
+        >
+          Source and licences
+        </Link>
+      </footer>
+    </div>
+  );
+}
+
+interface InviteProps {
+  code: string;
+  info: RoomInfo;
+  joining: boolean;
+  onJoin: (name: string) => void;
+}
+
+function Invite({ code, info, joining, onJoin }: InviteProps) {
+  const [name, setName] = React.useState(loadName);
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (name.trim()) onJoin(name.trim());
+  };
+  return (
+    <CoopCard label={`Join ${info.title}`} map={info.map}>
+      <CardHeading
+        eyebrow={`Room ${formatRoomCode(code)} · ${modeNames[info.mode]} · ${skillNames[info.skill]}`}
+        title={
+          <h1 className="m-0 text-2xl font-bold">
+            Join {info.host}&apos;s game
+          </h1>
+        }
+        detail={`${info.title} · ${info.players.length} of ${info.maxPlayers} players here`}
+      />
+      <form className="grid gap-3.5" onSubmit={submit}>
+        <label className="grid">
+          <FieldLabel>Your name</FieldLabel>
+          <Input
+            maxLength={maxNameLength}
+            autoFocus
+            value={name}
+            onValueChange={setName}
+          />
+        </label>
+        <Button
+          variant="primary"
+          type="submit"
+          className="h-9 justify-center"
+          disabled={!name.trim() || joining}
+        >
+          {joining ? "Joining…" : "Join"}
+        </Button>
+      </form>
+    </CoopCard>
+  );
+}
+
+interface WaitingProps {
+  info: RoomInfo;
+  players: RoomPlayer[];
+  peer: number;
+  onLeave: () => void;
+}
+
+function Waiting({ info, players, peer, onLeave }: WaitingProps) {
+  return (
+    <CoopCard
+      label="You're in"
+      map={info.map}
+      footer={
+        <>
+          <span className="text-sm text-muted-foreground" role="status">
+            The game starts for everyone at once.
+          </span>
+          <Button onClick={onLeave}>Leave room</Button>
+        </>
+      }
+    >
+      <CardHeading
+        eyebrow={`${modeNames[info.mode]} · ${skillNames[info.skill]} · ${info.title}`}
+        title={<h1 className="m-0 text-2xl font-bold">You&apos;re in</h1>}
+        detail={`Waiting for ${info.host} to start the game.`}
+      />
+      <section aria-label="Players">
+        <SectionLabel
+          aside={
+            <span>
+              {players.length} of {info.maxPlayers}
+            </span>
+          }
+        >
+          Players
+        </SectionLabel>
+        <ul className="m-0 list-none p-0">
+          {players.map((player) => (
+            <li
+              key={player.peer}
+              className="flex h-[44px] items-center gap-3 border-b border-border"
+            >
+              <PlayerBadge peer={player.peer} />
+              <span className="min-w-0 flex-1 truncate text-sm font-semibold">
+                {player.name}
+                {player.peer === peer || player.peer === hostPeer ? (
+                  <span className="ml-2 font-mono text-xs font-normal tracking-[0.06em] text-muted-foreground">
+                    {player.peer === peer ? "YOU" : "HOST"}
+                  </span>
+                ) : null}
+              </span>
+              {player.ready ? (
+                <span className="flex items-center gap-1.5 text-sm text-foreground">
+                  <span
+                    aria-hidden="true"
+                    className="size-1.5 rounded-full bg-success"
+                  />
+                  Ready
+                </span>
+              ) : (
+                <span className="font-mono text-xs text-muted-foreground">
+                  {Math.round(player.progress * 100)}%
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      </section>
+    </CoopCard>
+  );
+}
+
+interface EndedProps {
+  reason: Refusal | Ending | "left" | "quit" | "game";
+  info: RoomInfo | null;
+  hostGame: GameId | null;
+}
+
+function Ended({ reason, info, hostGame }: EndedProps) {
+  const host = info?.host ?? "The host";
+  const back = (
+    <Button variant="primary" onClick={backHome}>
+      Make your own map
+    </Button>
+  );
+  if (reason === "game") {
+    return (
+      <StatusCard
+        icon={LogOut}
+        tone="info"
+        title="A different game"
+        actions={
+          <>
+            <Button onClick={() => location.reload()}>Join again</Button>
+            {back}
+          </>
+        }
+      >
+        <p className="m-0">
+          {host} plays on {hostGame ? games[hostGame].label : "another game"}.
+          Everyone needs the same game, so bring its IWAD first.
+        </p>
+      </StatusCard>
+    );
+  }
+  if (reason === "full") {
+    return (
+      <StatusCard
+        icon={Users}
+        tone="warning"
+        title="This room is full"
+        actions={back}
+      >
+        <p className="m-0">
+          All {info?.maxPlayers ?? ""} spots are taken. Ask {host} to open a new
+          room.
+        </p>
+      </StatusCard>
+    );
+  }
+  if (reason === "started") {
+    return (
+      <StatusCard
+        icon={Timer}
+        tone="warning"
+        title="This game has started"
+        actions={back}
+      >
+        <p className="m-0">
+          Players can&apos;t join once a game is running. Ask {host} to open a
+          new room when it ends.
+        </p>
+      </StatusCard>
+    );
+  }
+  if (reason === "version") {
+    return (
+      <StatusCard
+        icon={RefreshCw}
+        tone="warning"
+        title="Update to join"
+        actions={
+          <Button
+            variant="primary"
+
+            onClick={() => location.reload()}
+          >
+            <RefreshCw size={14} aria-hidden="true" />
+            Reload
+          </Button>
+        }
+      >
+        <p className="m-0">
+          {host} is on a different version of Wadsmith. Reload to get the same
+          version, then join again.
+        </p>
+      </StatusCard>
+    );
+  }
+  if (reason === "host-left") {
+    return (
+      <StatusCard
+        icon={LogOut}
+        tone="warning"
+        title={`${host} left the game`}
+        actions={back}
+      >
+        <p className="m-0">
+          The host&apos;s computer runs the game, so it ended when they left.
+        </p>
+      </StatusCard>
+    );
+  }
+  if (reason === "lost") {
+    return (
+      <StatusCard
+        icon={WifiOff}
+        tone="danger"
+        title="Connection lost"
+        actions={back}
+      >
+        <p className="m-0">
+          A running game can&apos;t be rejoined. Ask {host} to open a new room.
+        </p>
+      </StatusCard>
+    );
+  }
+  if (reason === "removed") {
+    return (
+      <StatusCard
+        icon={LogOut}
+        tone="warning"
+        title="You were removed"
+        actions={back}
+      >
+        <p className="m-0">{host} removed you from the room.</p>
+      </StatusCard>
+    );
+  }
+  if (reason === "quit") {
+    return (
+      <StatusCard
+        icon={LogOut}
+        tone="info"
+        title="You left the game"
+        actions={back}
+      >
+        <p className="m-0">
+          A running game can&apos;t be rejoined. Ask {host} to open a new room.
+        </p>
+      </StatusCard>
+    );
+  }
+  return (
+    <StatusCard
+      icon={LogOut}
+      tone="info"
+      title="You left the room"
+      actions={
+        <>
+          <Button onClick={() => location.reload()}>Join again</Button>
+          {back}
+        </>
+      }
+    >
+      <p className="m-0">You can join again while the room is open.</p>
+    </StatusCard>
+  );
+}
+
+function backHome() {
+  location.assign("/");
 }

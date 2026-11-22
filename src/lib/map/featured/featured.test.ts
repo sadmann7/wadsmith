@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-import { compileMap } from "@/lib/wad/compile";
 import { maxDescriptionLength } from "@/lib/episodes/episode-data";
 import {
   deathmatchStarts,
@@ -10,6 +9,8 @@ import {
 import { checkMap } from "@/lib/map/checks";
 import { freedoomFlats, freedoomWalls } from "@/lib/map/freedoom-textures";
 import { validateMap } from "@/lib/map/validate";
+import { compileMap } from "@/lib/wad/compile";
+
 import { buildMap, rect } from "./build-map";
 import { featuredMaps } from "./index";
 

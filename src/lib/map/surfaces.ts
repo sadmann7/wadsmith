@@ -1,3 +1,5 @@
+import type { GameMap, MapSwitch, Sector, Thing } from "./types";
+
 import {
   ceilingTextures,
   doorTextures,
@@ -14,7 +16,6 @@ import {
   updateSwitch,
 } from "./edit";
 import { wallKey, wallOwners, wallPartTexture } from "./geometry";
-import type { GameMap, MapSwitch, Sector, Thing } from "./types";
 
 export type WallPart = "middle" | "upper" | "lower";
 

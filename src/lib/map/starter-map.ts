@@ -1,5 +1,6 @@
-import { wallKey } from "./geometry";
 import type { GameMap } from "./types";
+
+import { wallKey } from "./geometry";
 
 const exitRoom = "sector-8";
 

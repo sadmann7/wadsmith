@@ -27,18 +27,6 @@ const maxSockets = 8;
 const seenEveryMs = 60_000;
 const roomPath = /^\/rooms\/([a-z0-9]{6,32})$/;
 
-function identifiedPeer(message: string) {
-  if (!message.startsWith('{"type":"identify"')) return null;
-  try {
-    const { peer } = JSON.parse(message) as { peer: unknown };
-    return Number.isInteger(peer) && (peer as number) > 0
-      ? (peer as number)
-      : null;
-  } catch {
-    return null;
-  }
-}
-
 class Room extends DurableObject<Env> {
   private readonly limits = new WeakMap<WebSocket, ConnectionLimits>();
 
@@ -179,5 +167,17 @@ export default {
     return env.ROOMS.get(env.ROOMS.idFromName(match[1])).fetch(request);
   },
 } satisfies ExportedHandler<Env>;
+
+function identifiedPeer(message: string) {
+  if (!message.startsWith('{"type":"identify"')) return null;
+  try {
+    const { peer } = JSON.parse(message) as { peer: unknown };
+    return Number.isInteger(peer) && (peer as number) > 0
+      ? (peer as number)
+      : null;
+  } catch {
+    return null;
+  }
+}
 
 export { Room };

@@ -4,18 +4,6 @@ import type { RoomMessage, RoomTransport } from "./room";
 // most of the traffic. Everything else is JSON with its bytes in base64.
 const bytesKey = "$bytes";
 
-function toBase64(bytes: Uint8Array) {
-  let text = "";
-  for (let index = 0; index < bytes.length; index += 0x8000) {
-    text += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
-  }
-  return btoa(text);
-}
-
-function fromBase64(text: string) {
-  return Uint8Array.from(atob(text), (char) => char.charCodeAt(0));
-}
-
 export function encodeMessage(
   message: RoomMessage,
 ): string | Uint8Array<ArrayBuffer> {
@@ -89,4 +77,16 @@ export function socketTransport(url: string): RoomTransport {
       else socket.addEventListener("open", () => socket.close());
     },
   };
+}
+
+function toBase64(bytes: Uint8Array) {
+  let text = "";
+  for (let index = 0; index < bytes.length; index += 0x8000) {
+    text += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+  }
+  return btoa(text);
+}
+
+function fromBase64(text: string) {
+  return Uint8Array.from(atob(text), (char) => char.charCodeAt(0));
 }

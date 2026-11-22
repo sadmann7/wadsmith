@@ -1,4 +1,5 @@
 import type { GameMap } from "@/lib/map/types";
+
 import { firstLight } from "./first-light";
 import { fourCorners } from "./four-corners";
 import { furnaceRing } from "./furnace-ring";

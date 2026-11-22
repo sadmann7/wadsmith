@@ -4,7 +4,8 @@ import { thingKinds } from "@/lib/map/catalog";
 import { addThing, updateSector } from "@/lib/map/edit";
 import { starterMap } from "@/lib/map/starter-map";
 import { compileMap } from "@/lib/wad/compile";
-import { doomKeys, screenSize, type Screen } from "./runtime";
+
+import { doomKeys, type Screen, screenSize } from "./runtime";
 import {
   engineWarnings,
   launch,

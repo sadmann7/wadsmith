@@ -1,4 +1,5 @@
-import { wallKey, wallOwners } from "./geometry";
+import { defined } from "@/lib/defined";
+
 import type {
   DoorSettings,
   GameMap,
@@ -8,6 +9,8 @@ import type {
   LineTrigger,
   Sector,
 } from "./types";
+
+import { wallKey, wallOwners } from "./geometry";
 
 interface Specials {
   once?: number;
@@ -379,11 +382,6 @@ export function isLineActionKind(value: unknown): value is LineActionKind {
   return typeof value === "string" && Object.hasOwn(lineActions, value);
 }
 
-function specialsOf({ kind, trigger, key }: LineAction) {
-  const action = lineActions[kind];
-  return key ? action.keys?.[trigger]?.[key] : action.triggers[trigger];
-}
-
 export function lineSpecial(action: LineAction) {
   const specials = specialsOf(action);
   return (action.repeat ? specials?.repeat : specials?.once) ?? null;
@@ -476,33 +474,37 @@ export function fitLineAction(
 // The specials a door's own lines and its switch get, from how the door is set
 // to open.
 export function doorSpecial(door: DoorSettings) {
-  return lineSpecial({
-    kind: door.fast
-      ? door.closes
-        ? "door-raise-fast"
-        : "door-open-fast"
-      : door.closes
-        ? "door-raise"
-        : "door-open",
-    trigger: "door",
-    repeat: door.closes,
-    tag: 0,
-  })!;
+  return defined(
+    lineSpecial({
+      kind: door.fast
+        ? door.closes
+          ? "door-raise-fast"
+          : "door-open-fast"
+        : door.closes
+          ? "door-raise"
+          : "door-open",
+      trigger: "door",
+      repeat: door.closes,
+      tag: 0,
+    }),
+  );
 }
 
 export function switchDoorSpecial(door: DoorSettings) {
-  return lineSpecial({
-    kind: door.fast
-      ? door.closes
-        ? "door-raise-fast"
-        : "door-open-fast"
-      : door.closes
-        ? "door-raise"
-        : "door-open",
-    trigger: "switch",
-    repeat: true,
-    tag: 0,
-  })!;
+  return defined(
+    lineSpecial({
+      kind: door.fast
+        ? door.closes
+          ? "door-raise-fast"
+          : "door-open-fast"
+        : door.closes
+          ? "door-raise"
+          : "door-open",
+      trigger: "switch",
+      repeat: true,
+      tag: 0,
+    }),
+  );
 }
 
 export function newLineAction(
@@ -512,15 +514,6 @@ export function newLineAction(
   return fitLineAction(
     { kind, trigger: "door", repeat: true, tag: 0 },
     twoSided,
-  );
-}
-
-// The engine only uses a switch or a teleporter from the line's front side.
-function frontOwner(owners: Sector[], front?: string) {
-  return (
-    owners.find((sector) => sector.id === front && !sector.door) ??
-    owners.find((sector) => !sector.door) ??
-    owners[0]
   );
 }
 
@@ -554,4 +547,18 @@ export function describeLine(
       map.sectors.find((sector) => sector.id === mapSwitch.door)?.door,
     ),
   };
+}
+
+function specialsOf({ kind, trigger, key }: LineAction) {
+  const action = lineActions[kind];
+  return key ? action.keys?.[trigger]?.[key] : action.triggers[trigger];
+}
+
+// The engine only uses a switch or a teleporter from the line's front side.
+function frontOwner(owners: Sector[], front?: string) {
+  return (
+    owners.find((sector) => sector.id === front && !sector.door) ??
+    owners.find((sector) => !sector.door) ??
+    owners[0]
+  );
 }

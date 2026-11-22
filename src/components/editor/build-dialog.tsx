@@ -6,13 +6,10 @@ import {
 } from "lucide-react";
 import * as React from "react";
 
-import { engineSlot, type GameInfo } from "@/lib/engine/game";
-import { buildChecks, issueText, type CheckedIssue } from "@/lib/map/checks";
 import type { GameMap } from "@/lib/map/types";
 import type { CheckContext } from "@/lib/map/validate";
+
 import { Button } from "@/components/ui/button";
-import { Field, FieldItem, FieldLabel, Label } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogBackdrop,
@@ -23,6 +20,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Field, FieldItem, FieldLabel, Label } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { engineSlot, type GameInfo } from "@/lib/engine/game";
+import { buildChecks, type CheckedIssue, issueText } from "@/lib/map/checks";
 
 const maxNameLength = 64;
 
@@ -44,10 +45,6 @@ export function wadFileName(name: string) {
     .replace(/^[-.]+|[-.]+$/g, "")
     .slice(0, maxNameLength);
   return `${safe || "wadsmith-map01"}.wad`;
-}
-
-function defaultFileName(name: string) {
-  return wadFileName(name.toLowerCase());
 }
 
 interface BuildDialogProps {
@@ -199,4 +196,8 @@ export function BuildDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+function defaultFileName(name: string) {
+  return wadFileName(name.toLowerCase());
 }

@@ -1,28 +1,8 @@
-import Link from "next/link";
-import {
-  Drawer,
-  DrawerBackdrop,
-  DrawerContent,
-  DrawerTitle,
-  DrawerTrigger,
-} from "@/components/ui/drawer";
 import { PanelLeft, Plus, Star } from "lucide-react";
+import Link from "next/link";
 import * as React from "react";
 
-import { MapOutline } from "./map-outline";
-import { MapPlan } from "./map-plan";
-import { slotCount, type GameInfo } from "@/lib/engine/game";
-import { featuredMaps } from "@/lib/map/featured";
-import { blankMap } from "@/lib/map/starter-map";
-import {
-  maxNameLength,
-  type EpisodeStart,
-  type Episode,
-} from "@/lib/episodes/episode-data";
-import { pathOf, type Route } from "@/lib/episodes/routes";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Field, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogBackdrop,
@@ -32,166 +12,27 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Drawer,
+  DrawerBackdrop,
+  DrawerContent,
+  DrawerTitle,
+  DrawerTrigger,
+} from "@/components/ui/drawer";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { type GameInfo, slotCount } from "@/lib/engine/game";
+import {
+  type Episode,
+  type EpisodeStart,
+  maxNameLength,
+} from "@/lib/episodes/episode-data";
+import { pathOf, type Route } from "@/lib/episodes/routes";
+import { featuredMaps } from "@/lib/map/featured";
+import { blankMap } from "@/lib/map/starter-map";
 
-function startsFor(
-  game: GameInfo,
-): { value: EpisodeStart; label: string; detail: string }[] {
-  return [
-    { value: "empty", label: "Empty", detail: "No maps yet" },
-    {
-      value: "one",
-      label: "One map",
-      detail: "A starter room in the first slot",
-    },
-    {
-      value: "featured",
-      label: "Featured maps",
-      detail: `All ${featuredMaps.length}, in the first ${featuredMaps.length} slots`,
-    },
-    {
-      value: "freedoom",
-      label: game.label,
-      detail: `All ${slotCount(game)} levels of ${game.label}`,
-    },
-  ];
-}
-
-interface StartPreviewProps {
-  start: EpisodeStart;
-  game: GameInfo;
-}
-
-function StartPreview({ start, game }: StartPreviewProps) {
-  if (start === "empty") {
-    return (
-      <div className="grid h-[92px] place-items-center bg-background text-muted-foreground">
-        <Plus size={18} aria-hidden="true" />
-      </div>
-    );
-  }
-  if (start === "one") {
-    return (
-      <MapOutline
-        map={blankMap}
-        className="h-[92px] w-full bg-background p-5"
-        solidColor="var(--color-muted-foreground)"
-      />
-    );
-  }
-  if (start === "freedoom") {
-    return (
-      <div className="grid h-[92px] grid-cols-8 content-center gap-1 bg-background p-3">
-        {Array.from({ length: slotCount(game) }, (_, index) => (
-          <span key={index} className="h-3 rounded-[1px] bg-input" />
-        ))}
-      </div>
-    );
-  }
-  return (
-    <div className="grid h-[92px] grid-cols-3 gap-1 bg-background p-2">
-      {featuredMaps.map((item) => (
-        <MapPlan key={item.id} map={item.map} className="size-full" />
-      ))}
-    </div>
-  );
-}
-
-interface NewEpisodeDialogProps {
-  durable: boolean;
-  game: GameInfo;
-  onSubmit: (name: string, start: EpisodeStart) => void;
-  onClose: () => void;
-}
-
-function NewEpisodeDialog({
-  durable,
-  game,
-  onSubmit,
-  onClose,
-}: NewEpisodeDialogProps) {
-  const [name, setName] = React.useState("");
-  const [start, setStart] = React.useState<EpisodeStart>("one");
-  const starts = startsFor(game);
-  const submit = (event: React.FormEvent) => {
-    event.preventDefault();
-    if (name.trim()) onSubmit(name.trim(), start);
-  };
-  return (
-    <Dialog
-      open
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
-    >
-      <DialogBackdrop />
-      <DialogContent className="w-[600px]">
-        <form onSubmit={submit} className="flex min-h-0 flex-col">
-          <DialogHeader>
-            <DialogTitle>New episode</DialogTitle>
-            <DialogCloseButton />
-          </DialogHeader>
-          <div className="relative grid min-h-0 gap-5 overflow-y-auto p-5">
-            <Field>
-              <FieldLabel>Name</FieldLabel>
-              <Input
-                maxLength={maxNameLength}
-                value={name}
-                onValueChange={setName}
-              />
-            </Field>
-            <fieldset className="m-0 grid gap-2 border-0 p-0">
-              <legend className="mb-2 p-0 text-sm text-muted-foreground">
-                Start with
-              </legend>
-              <div className="grid grid-cols-2 gap-2.5">
-                {starts.map((item) => (
-                  <button
-                    key={item.value}
-                    type="button"
-                    aria-pressed={start === item.value}
-                    className="grid gap-2 rounded-[3px] border border-input bg-transparent p-2 text-left text-foreground aria-pressed:border-primary aria-pressed:bg-primary/10 aria-pressed:text-foreground"
-                    onClick={() => {
-                      setStart(item.value);
-                      if (item.value === "freedoom" && !name.trim()) {
-                        setName(game.label);
-                      }
-                    }}
-                  >
-                    <StartPreview start={item.value} game={game} />
-                    <span className="grid gap-0.5 px-1 pb-1">
-                      <span className="text-sm font-semibold">
-                        {item.label}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {item.detail}
-                      </span>
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </fieldset>
-          </div>
-          <DialogFooter className="justify-end">
-            <p className="m-0 mr-auto text-sm text-muted-foreground">
-              {durable
-                ? "Saved in this browser."
-                : "Kept until this tab closes."}
-            </p>
-            <Button onClick={onClose}>Cancel</Button>
-            <Button
-              variant="primary"
-              type="submit"
-
-              disabled={!name.trim()}
-            >
-              Create episode
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
+import { MapOutline } from "./map-outline";
+import { MapPlan } from "./map-plan";
 
 export interface SidebarProps {
   episodes: Episode[];
@@ -201,41 +42,6 @@ export interface SidebarProps {
   game: GameInfo;
   onNavigate?: (route: Route) => void;
   onCreateEpisode?: (name: string, start: EpisodeStart) => void;
-}
-
-const rowClass =
-  "relative flex items-center gap-2.5 rounded-[3px] px-2 py-1.5 text-sm text-foreground no-underline hover:bg-muted hover:text-foreground aria-[current=page]:bg-muted aria-[current=page]:font-semibold aria-[current=page]:text-foreground";
-
-interface SidebarLinkProps {
-  route: Route;
-  current: boolean;
-  onNavigate?: (route: Route) => void;
-  children: React.ReactNode;
-}
-
-function SidebarLink({
-  route,
-  current,
-  onNavigate,
-  children,
-}: SidebarLinkProps) {
-  const follow = (event: React.MouseEvent<HTMLAnchorElement>) => {
-    if (!onNavigate || event.metaKey || event.ctrlKey || event.shiftKey) {
-      return;
-    }
-    event.preventDefault();
-    onNavigate(route);
-  };
-  return (
-    <a
-      href={pathOf(route)}
-      aria-current={current ? "page" : undefined}
-      className={rowClass}
-      onClick={follow}
-    >
-      {children}
-    </a>
-  );
 }
 
 export function AppSidebar({
@@ -449,4 +255,199 @@ interface CrumbProps {
 
 export function Crumb({ children }: CrumbProps) {
   return <span className="truncate text-foreground">{children}</span>;
+}
+
+const rowClass =
+  "relative flex items-center gap-2.5 rounded-[3px] px-2 py-1.5 text-sm text-foreground no-underline hover:bg-muted hover:text-foreground aria-[current=page]:bg-muted aria-[current=page]:font-semibold aria-[current=page]:text-foreground";
+
+interface SidebarLinkProps {
+  route: Route;
+  current: boolean;
+  onNavigate?: (route: Route) => void;
+  children: React.ReactNode;
+}
+
+function SidebarLink({
+  route,
+  current,
+  onNavigate,
+  children,
+}: SidebarLinkProps) {
+  const follow = (event: React.MouseEvent<HTMLAnchorElement>) => {
+    if (!onNavigate || event.metaKey || event.ctrlKey || event.shiftKey) {
+      return;
+    }
+    event.preventDefault();
+    onNavigate(route);
+  };
+  return (
+    <a
+      href={pathOf(route)}
+      aria-current={current ? "page" : undefined}
+      className={rowClass}
+      onClick={follow}
+    >
+      {children}
+    </a>
+  );
+}
+
+interface NewEpisodeDialogProps {
+  durable: boolean;
+  game: GameInfo;
+  onSubmit: (name: string, start: EpisodeStart) => void;
+  onClose: () => void;
+}
+
+function NewEpisodeDialog({
+  durable,
+  game,
+  onSubmit,
+  onClose,
+}: NewEpisodeDialogProps) {
+  const [name, setName] = React.useState("");
+  const [start, setStart] = React.useState<EpisodeStart>("one");
+  const starts = startsFor(game);
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (name.trim()) onSubmit(name.trim(), start);
+  };
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogBackdrop />
+      <DialogContent className="w-[600px]">
+        <form onSubmit={submit} className="flex min-h-0 flex-col">
+          <DialogHeader>
+            <DialogTitle>New episode</DialogTitle>
+            <DialogCloseButton />
+          </DialogHeader>
+          <div className="relative grid min-h-0 gap-5 overflow-y-auto p-5">
+            <Field>
+              <FieldLabel>Name</FieldLabel>
+              <Input
+                maxLength={maxNameLength}
+                value={name}
+                onValueChange={setName}
+              />
+            </Field>
+            <fieldset className="m-0 grid gap-2 border-0 p-0">
+              <legend className="mb-2 p-0 text-sm text-muted-foreground">
+                Start with
+              </legend>
+              <div className="grid grid-cols-2 gap-2.5">
+                {starts.map((item) => (
+                  <button
+                    key={item.value}
+                    type="button"
+                    aria-pressed={start === item.value}
+                    className="grid gap-2 rounded-[3px] border border-input bg-transparent p-2 text-left text-foreground aria-pressed:border-primary aria-pressed:bg-primary/10 aria-pressed:text-foreground"
+                    onClick={() => {
+                      setStart(item.value);
+                      if (item.value === "freedoom" && !name.trim()) {
+                        setName(game.label);
+                      }
+                    }}
+                  >
+                    <StartPreview start={item.value} game={game} />
+                    <span className="grid gap-0.5 px-1 pb-1">
+                      <span className="text-sm font-semibold">
+                        {item.label}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {item.detail}
+                      </span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+          </div>
+          <DialogFooter className="justify-end">
+            <p className="m-0 mr-auto text-sm text-muted-foreground">
+              {durable
+                ? "Saved in this browser."
+                : "Kept until this tab closes."}
+            </p>
+            <Button onClick={onClose}>Cancel</Button>
+            <Button
+              variant="primary"
+              type="submit"
+
+              disabled={!name.trim()}
+            >
+              Create episode
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function startsFor(
+  game: GameInfo,
+): { value: EpisodeStart; label: string; detail: string }[] {
+  return [
+    { value: "empty", label: "Empty", detail: "No maps yet" },
+    {
+      value: "one",
+      label: "One map",
+      detail: "A starter room in the first slot",
+    },
+    {
+      value: "featured",
+      label: "Featured maps",
+      detail: `All ${featuredMaps.length}, in the first ${featuredMaps.length} slots`,
+    },
+    {
+      value: "freedoom",
+      label: game.label,
+      detail: `All ${slotCount(game)} levels of ${game.label}`,
+    },
+  ];
+}
+
+interface StartPreviewProps {
+  start: EpisodeStart;
+  game: GameInfo;
+}
+
+function StartPreview({ start, game }: StartPreviewProps) {
+  if (start === "empty") {
+    return (
+      <div className="grid h-[92px] place-items-center bg-background text-muted-foreground">
+        <Plus size={18} aria-hidden="true" />
+      </div>
+    );
+  }
+  if (start === "one") {
+    return (
+      <MapOutline
+        map={blankMap}
+        className="h-[92px] w-full bg-background p-5"
+        solidColor="var(--color-muted-foreground)"
+      />
+    );
+  }
+  if (start === "freedoom") {
+    return (
+      <div className="grid h-[92px] grid-cols-8 content-center gap-1 bg-background p-3">
+        {Array.from({ length: slotCount(game) }, (_, index) => (
+          <span key={index} className="h-3 rounded-[1px] bg-input" />
+        ))}
+      </div>
+    );
+  }
+  return (
+    <div className="grid h-[92px] grid-cols-3 gap-1 bg-background p-2">
+      {featuredMaps.map((item) => (
+        <MapPlan key={item.id} map={item.map} className="size-full" />
+      ))}
+    </div>
+  );
 }

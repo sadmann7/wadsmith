@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
 
+import type { GameMap, LineAction } from "@/lib/map/types";
+
+import { defined } from "@/lib/defined";
 import { thingCatalog } from "@/lib/map/catalog";
 import {
   addThing,
@@ -11,8 +14,8 @@ import {
 } from "@/lib/map/edit";
 import { starterMap } from "@/lib/map/starter-map";
 import { testMap } from "@/lib/map/test-map";
-import type { GameMap, LineAction } from "@/lib/map/types";
-import { doomKeys, keysByCode, type DoomGame } from "./runtime";
+
+import { type DoomGame, doomKeys, keysByCode } from "./runtime";
 import {
   doorFloor,
   doorIndex,
@@ -26,16 +29,6 @@ import {
 } from "./test-engine";
 
 afterEach(stopGames);
-
-function withDoorAction(wall: string, trigger: LineAction["trigger"]) {
-  return setLineTarget(
-    updateLine(testMap, wall, {
-      action: { kind: "door-open", trigger, repeat: false, tag: 0 },
-    }),
-    wall,
-    "sector-4",
-  );
-}
 
 describe.skipIf(!ready)("doors and line actions in the engine", () => {
   it("opens a door from a connected switch", async () => {
@@ -56,7 +49,7 @@ describe.skipIf(!ready)("doors and line actions in the engine", () => {
   }, 30_000);
 
   it("opens a use door and closes it again", async () => {
-    const door = testMap.sectors[doorIndex].door!;
+    const door = defined(testMap.sectors[doorIndex].door);
     const map = playerAt(
       setRoomDoor(testMap, "sector-4", {
         ...door,
@@ -82,7 +75,7 @@ describe.skipIf(!ready)("doors and line actions in the engine", () => {
   }, 30_000);
 
   it("lets the player shoot a monster through an opened door", async () => {
-    const door = testMap.sectors[doorIndex].door!;
+    const door = defined(testMap.sectors[doorIndex].door);
     const map = playerAt(
       setRoomDoor(testMap, "sector-4", { ...door, opensBy: "use" }),
       450,
@@ -204,6 +197,16 @@ describe.skipIf(!ready)("doors and line actions in the engine", () => {
     expect(game.sectorCeiling(doorIndex)).toBe(92);
   }, 40_000);
 });
+
+function withDoorAction(wall: string, trigger: LineAction["trigger"]) {
+  return setLineTarget(
+    updateLine(testMap, wall, {
+      action: { kind: "door-open", trigger, repeat: false, tag: 0 },
+    }),
+    wall,
+    "sector-4",
+  );
+}
 
 describe.skipIf(!ready)("starter map in the engine", () => {
   const quiet: GameMap = {

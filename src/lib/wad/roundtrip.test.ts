@@ -1,13 +1,14 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-
 import { beforeAll, describe, expect, it } from "vitest";
 
+import { defined } from "@/lib/defined";
 import { thingCatalog, thingKinds } from "@/lib/map/catalog";
 import { freedoomFlats, freedoomWalls } from "@/lib/map/freedoom-textures";
+
 import { compileMap } from "./compile";
 import { decompileMap } from "./decompile";
-import { readMaps, type DoomMap } from "./read-map";
+import { type DoomMap, readMaps } from "./read-map";
 
 const freedoom = resolve(
   import.meta.dirname,
@@ -18,45 +19,13 @@ const lineTwoSided = 0x0004;
 const lineBlocksAll = 0x0001;
 const lineReserved = 0x0800;
 const vanillaLineFlags = 0x01ff;
-const thingAmbush = 0x0008;
-const thingFriendly = 0x0080;
+
 const doomTypes = new Set(
   thingKinds.map((kind) => thingCatalog[kind].doomType),
 );
-const enemyTypes = new Set(
-  thingKinds
-    .filter((kind) => thingCatalog[kind].category === "enemy")
-    .map((kind) => thingCatalog[kind].doomType),
-);
+
 const walls = new Set<string>(freedoomWalls);
 const flats = new Set<string>(freedoomFlats);
-
-function thingKey(thing: DoomMap["things"][number]) {
-  const enemy = enemyTypes.has(thing.type);
-  const flags = enemy
-    ? thing.flags
-    : thing.flags & ~(thingAmbush | thingFriendly);
-  const angle = ((thing.angle % 360) + 360) % 360;
-  return `${thing.x},${thing.y} ${angle} ${thing.type} ${flags}`;
-}
-
-function endpoints(doom: DoomMap, line: DoomMap["lines"][number]) {
-  const a = doom.vertices[line.start];
-  const b = doom.vertices[line.end];
-  const first = `${a.x},${a.y}`;
-  const second = `${b.x},${b.y}`;
-  return first < second ? `${first}|${second}` : `${second}|${first}`;
-}
-
-function rebuild(doom: DoomMap) {
-  const { map, report } = decompileMap(doom);
-  const [again] = readMaps([
-    { name: "again.wad", data: compileMap(map, doom.slot) },
-  ]);
-  const sourceIndex = (built: number) =>
-    Number(/^s(\d+)/.exec(map.sectors[built].id)![1]);
-  return { map, report, again, sourceIndex };
-}
 
 // What the editor keeps of a map must come back out of the WAD it builds,
 // except where it chose otherwise: textures it has no name for, doors it
@@ -89,7 +58,7 @@ describe.skipIf(!existsSync(freedoom))("Freedoom round trip", () => {
       for (const thing of again.things) {
         const key = thingKey(thing);
         expect(pool.get(key) ?? 0, `${doom.slot} ${key}`).toBeGreaterThan(0);
-        pool.set(key, pool.get(key)! - 1);
+        pool.set(key, defined(pool.get(key)) - 1);
       }
       // The only things left out are the ones outside every room.
       expect(known.length - again.things.length, doom.slot).toBe(
@@ -226,3 +195,39 @@ describe.skipIf(!existsSync(freedoom))("Freedoom round trip", () => {
     expect(misses.slice(0, 80)).toEqual([]);
   }, 120_000);
 });
+
+function rebuild(doom: DoomMap) {
+  const { map, report } = decompileMap(doom);
+  const [again] = readMaps([
+    { name: "again.wad", data: compileMap(map, doom.slot) },
+  ]);
+  const sourceIndex = (built: number) =>
+    Number(defined(/^s(\d+)/.exec(map.sectors[built].id))[1]);
+  return { map, report, again, sourceIndex };
+}
+
+const thingAmbush = 0x0008;
+const thingFriendly = 0x0080;
+
+const enemyTypes = new Set(
+  thingKinds
+    .filter((kind) => thingCatalog[kind].category === "enemy")
+    .map((kind) => thingCatalog[kind].doomType),
+);
+
+function thingKey(thing: DoomMap["things"][number]) {
+  const enemy = enemyTypes.has(thing.type);
+  const flags = enemy
+    ? thing.flags
+    : thing.flags & ~(thingAmbush | thingFriendly);
+  const angle = ((thing.angle % 360) + 360) % 360;
+  return `${thing.x},${thing.y} ${angle} ${thing.type} ${flags}`;
+}
+
+function endpoints(doom: DoomMap, line: DoomMap["lines"][number]) {
+  const a = doom.vertices[line.start];
+  const b = doom.vertices[line.end];
+  const first = `${a.x},${a.y}`;
+  const second = `${b.x},${b.y}`;
+  return first < second ? `${first}|${second}` : `${second}|${first}`;
+}

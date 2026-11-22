@@ -1,45 +1,12 @@
+import { ImageResponse } from "next/og";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-
-import { ImageResponse } from "next/og";
 
 import { starterMap } from "@/lib/map/starter-map";
 
 export const alt = "Wadsmith, a Doom map editor for the browser";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
-
-function fontFile(weight: number) {
-  return readFile(
-    join(
-      process.cwd(),
-      `node_modules/@fontsource/ibm-plex-sans-condensed/files/ibm-plex-sans-condensed-latin-${weight}-normal.woff`,
-    ),
-  );
-}
-
-function mapPolygons() {
-  const points = Object.values(starterMap.vertices);
-  const left = Math.min(...points.map((point) => point.x));
-  const top = Math.min(...points.map((point) => point.y));
-  const width = Math.max(...points.map((point) => point.x)) - left;
-  const height = Math.max(...points.map((point) => point.y)) - top;
-  const scale = Math.min(500 / width, 400 / height);
-  return {
-    width: width * scale,
-    height: height * scale,
-    sectors: starterMap.sectors.map((sector) => ({
-      id: sector.id,
-      door: Boolean(sector.door),
-      points: sector.vertices
-        .map((id) => {
-          const point = starterMap.vertices[id];
-          return `${(point.x - left) * scale},${(point.y - top) * scale}`;
-        })
-        .join(" "),
-    })),
-  };
-}
 
 export default async function OpenGraphImage() {
   const [regular, bold] = await Promise.all([fontFile(400), fontFile(700)]);
@@ -114,4 +81,36 @@ export default async function OpenGraphImage() {
       ],
     },
   );
+}
+
+function fontFile(weight: number) {
+  return readFile(
+    join(
+      process.cwd(),
+      `node_modules/@fontsource/ibm-plex-sans-condensed/files/ibm-plex-sans-condensed-latin-${weight}-normal.woff`,
+    ),
+  );
+}
+
+function mapPolygons() {
+  const points = Object.values(starterMap.vertices);
+  const left = Math.min(...points.map((point) => point.x));
+  const top = Math.min(...points.map((point) => point.y));
+  const width = Math.max(...points.map((point) => point.x)) - left;
+  const height = Math.max(...points.map((point) => point.y)) - top;
+  const scale = Math.min(500 / width, 400 / height);
+  return {
+    width: width * scale,
+    height: height * scale,
+    sectors: starterMap.sectors.map((sector) => ({
+      id: sector.id,
+      door: Boolean(sector.door),
+      points: sector.vertices
+        .map((id) => {
+          const point = starterMap.vertices[id];
+          return `${(point.x - left) * scale},${(point.y - top) * scale}`;
+        })
+        .join(" "),
+    })),
+  };
 }

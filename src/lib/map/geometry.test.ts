@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import type { GameMap, Point, Sector } from "./types";
+
 import {
   pointInPolygon,
   sectorAt,
@@ -7,27 +9,6 @@ import {
   wallOwners,
 } from "./geometry";
 import { testMap } from "./test-map";
-import type { GameMap, Point, Sector } from "./types";
-
-function room(id: string, corners: string[]): Sector {
-  return {
-    id,
-    name: id,
-    vertices: corners,
-    floor: 0,
-    ceiling: 128,
-    light: 160,
-    floorTexture: "FLOOR4_8",
-    ceilingTexture: "CEIL3_5",
-    wallTexture: "STARTAN3",
-  };
-}
-
-function everyRoomHolding(map: GameMap, point: Point) {
-  return map.sectors.find((sector) =>
-    pointInPolygon(point, sectorPolygon(map, sector)),
-  );
-}
 
 describe("sectorAt", () => {
   it("finds what a scan of every room would", () => {
@@ -121,6 +102,26 @@ describe("sectorAt", () => {
     expect(sectorAt(map, { x: 300, y: 10 })?.id).toBe("sector-1");
   });
 });
+
+function everyRoomHolding(map: GameMap, point: Point) {
+  return map.sectors.find((sector) =>
+    pointInPolygon(point, sectorPolygon(map, sector)),
+  );
+}
+
+function room(id: string, corners: string[]): Sector {
+  return {
+    id,
+    name: id,
+    vertices: corners,
+    floor: 0,
+    ceiling: 128,
+    light: 160,
+    floorTexture: "FLOOR4_8",
+    ceilingTexture: "CEIL3_5",
+    wallTexture: "STARTAN3",
+  };
+}
 
 describe("wallOwners", () => {
   it("keeps a map's owners and works a new map's out again", () => {

@@ -1,12 +1,13 @@
+import type { GameMap, KeyColor } from "./types";
+
 import { mapBalance } from "./balance";
 import { deathmatchStarts, thingCatalog } from "./catalog";
 import { removeSwitch, removeThings, updateLine, updateSector } from "./edit";
 import { endsLevel, fitLineAction, triggersFor } from "./lines";
-import type { GameMap, KeyColor } from "./types";
 import {
   activeLineActions,
-  inspectMap,
   type CheckContext,
+  inspectMap,
   type MapIssue,
 } from "./validate";
 
@@ -102,6 +103,13 @@ export function mapWarnings(map: GameMap): CheckedIssue[] {
   return warnings;
 }
 
+export function hasExit(map: GameMap) {
+  return (
+    activeLineActions(map).some(({ action }) => endsLevel(action.kind)) ||
+    map.sectors.some((sector) => sector.effect === "damage-20-exit")
+  );
+}
+
 // Player N only gets a start in co-op if every lower player has one too, so a
 // Player 3 start with no Player 2 start is never used.
 function coopGaps(map: GameMap) {
@@ -129,13 +137,6 @@ function isArena(map: GameMap) {
     map.things.filter((thing) => thing.kind === "deathmatch-start").length >=
       deathmatchStarts &&
     !map.things.some((thing) => thingCatalog[thing.kind].category === "enemy")
-  );
-}
-
-export function hasExit(map: GameMap) {
-  return (
-    activeLineActions(map).some(({ action }) => endsLevel(action.kind)) ||
-    map.sectors.some((sector) => sector.effect === "damage-20-exit")
   );
 }
 

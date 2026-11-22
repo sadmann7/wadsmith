@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { loadIwad, onIwadChange, type Iwad } from "@/lib/engine/iwad";
+import { type Iwad, loadIwad, onIwadChange } from "@/lib/engine/iwad";
 
 // The IWAD in use, or null until it has loaded. Changing it reloads here.
 export function useIwad() {

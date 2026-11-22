@@ -1,5 +1,6 @@
 import type { LineSettings } from "@/lib/map/types";
-import { buildMap, rect, type Corner } from "./build-map";
+
+import { buildMap, type Corner, rect } from "./build-map";
 
 const stone = {
   floor: 0,

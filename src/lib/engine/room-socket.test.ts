@@ -1,15 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import { testMap } from "@/lib/map/test-map";
-import type { RoomMessage } from "./room";
-import { decodeMessage, encodeMessage } from "./room-socket";
 
-function roundTrip(message: RoomMessage) {
-  const encoded = encodeMessage(message);
-  return decodeMessage(
-    typeof encoded === "string" ? encoded : encoded.slice().buffer,
-  );
-}
+import type { RoomMessage } from "./room";
+
+import { decodeMessage, encodeMessage } from "./room-socket";
 
 describe("room messages on the wire", () => {
   it("sends game packets as small binary frames", () => {
@@ -54,3 +49,10 @@ describe("room messages on the wire", () => {
     expect(decodeMessage(new Uint8Array([1, 2]).buffer)).toBeNull();
   });
 });
+
+function roundTrip(message: RoomMessage) {
+  const encoded = encodeMessage(message);
+  return decodeMessage(
+    typeof encoded === "string" ? encoded : encoded.slice().buffer,
+  );
+}

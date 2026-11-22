@@ -1,3 +1,5 @@
+import { defined } from "@/lib/defined";
+
 import type { GameMap, Point, Sector } from "./types";
 
 export interface Edge {
@@ -31,7 +33,6 @@ const cellRow = 4096;
 // out for one stays right for as long as it's in use.
 const containerCache = new WeakMap<GameMap, Map<string, Sector | null>>();
 const ownerCache = new WeakMap<GameMap, Map<string, Sector[]>>();
-const indexCache = new WeakMap<GameMap, SectorIndex>();
 
 export function loopEdges(loop: string[]): Edge[] {
   return loop.map((from, index) => ({
@@ -110,15 +111,6 @@ export function boxOf(points: Point[]): Box {
   };
 }
 
-function boxContains(outer: Box, inner: Box) {
-  return (
-    outer.left <= inner.left &&
-    outer.right >= inner.right &&
-    outer.top <= inner.top &&
-    outer.bottom >= inner.bottom
-  );
-}
-
 export function pointInPolygon(point: Point, polygon: Point[]) {
   let inside = false;
   for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
@@ -164,15 +156,6 @@ export function segmentsIntersect(a: Point, b: Point, c: Point, d: Point) {
   );
 }
 
-function inTriangle(a: Point, b: Point, c: Point, point: Point) {
-  const first = cross(a, b, point);
-  const second = cross(b, c, point);
-  const third = cross(c, a, point);
-  const negative = first < 0 || second < 0 || third < 0;
-  const positive = first > 0 || second > 0 || third > 0;
-  return !(negative && positive);
-}
-
 // A point strictly inside a simple polygon: the corner furthest left is
 // convex, so the middle of its ear is inside unless another corner pokes into
 // the ear, and then the way to the corner poking in deepest is.
@@ -216,71 +199,6 @@ export function pointInSector(map: GameMap, sector: Sector, point: Point) {
     pointInPolygon(point, sectorPolygon(map, sector)) &&
     !sectorHoles(map, sector).some((hole) => pointInPolygon(point, hole))
   );
-}
-
-function inBox(box: Box, point: Point) {
-  return (
-    point.x >= box.left &&
-    point.x <= box.right &&
-    point.y >= box.top &&
-    point.y <= box.bottom
-  );
-}
-
-function cellOf(x: number, y: number) {
-  return (
-    (Math.floor(x / cellSize) + cellOffset) * cellRow +
-    Math.floor(y / cellSize) +
-    cellOffset
-  );
-}
-
-// Each sector is filed under the grid cells its bounds cover, in map order, so
-// a point is tested against the few sectors around it, not every one on the
-// map. A sector with a missing corner has no outline and is never found.
-function sectorIndex(map: GameMap): SectorIndex {
-  const cached = indexCache.get(map);
-  if (cached) return cached;
-  const outlines = new Map<Sector, Outline>();
-  const cells = new Map<number, Sector[]>();
-  for (const sector of map.sectors) {
-    const polygon = sectorPolygon(map, sector);
-    if (polygon.length === 0 || polygon.some((point) => !point)) continue;
-    const box = boxOf(polygon);
-    outlines.set(sector, { polygon, box, area: Math.abs(signedArea(polygon)) });
-    const left = Math.floor(box.left / cellSize);
-    const right = Math.floor(box.right / cellSize);
-    const top = Math.floor(box.top / cellSize);
-    const bottom = Math.floor(box.bottom / cellSize);
-    for (let x = left; x <= right; x += 1) {
-      for (let y = top; y <= bottom; y += 1) {
-        const key = (x + cellOffset) * cellRow + y + cellOffset;
-        const filed = cells.get(key);
-        if (filed) filed.push(sector);
-        else cells.set(key, [sector]);
-      }
-    }
-  }
-  const index = { outlines, cells };
-  indexCache.set(map, index);
-  return index;
-}
-
-// The smallest room whose outline holds the point is the one drawn deepest
-// inside the others, and a pillar there is empty space.
-function innermostAt(map: GameMap, point: Point) {
-  const { outlines, cells } = sectorIndex(map);
-  let best: Sector | undefined;
-  let bestArea = Infinity;
-  for (const sector of cells.get(cellOf(point.x, point.y)) ?? []) {
-    const { polygon, box, area } = outlines.get(sector)!;
-    if (!inBox(box, point) || !pointInPolygon(point, polygon)) continue;
-    if (area < bestArea) {
-      best = sector;
-      bestArea = area;
-    }
-  }
-  return best;
 }
 
 export function sectorAt(map: GameMap, point: Point) {
@@ -431,4 +349,89 @@ export function loopsPath(loops: Point[][]) {
       (loop) => `M${loop.map((point) => `${point.x} ${point.y}`).join("L")}Z`,
     )
     .join("");
+}
+
+function inTriangle(a: Point, b: Point, c: Point, point: Point) {
+  const first = cross(a, b, point);
+  const second = cross(b, c, point);
+  const third = cross(c, a, point);
+  const negative = first < 0 || second < 0 || third < 0;
+  const positive = first > 0 || second > 0 || third > 0;
+  return !(negative && positive);
+}
+
+// The smallest room whose outline holds the point is the one drawn deepest
+// inside the others, and a pillar there is empty space.
+function innermostAt(map: GameMap, point: Point) {
+  const { outlines, cells } = sectorIndex(map);
+  let best: Sector | undefined;
+  let bestArea = Infinity;
+  for (const sector of cells.get(cellOf(point.x, point.y)) ?? []) {
+    const { polygon, box, area } = defined(outlines.get(sector));
+    if (!inBox(box, point) || !pointInPolygon(point, polygon)) continue;
+    if (area < bestArea) {
+      best = sector;
+      bestArea = area;
+    }
+  }
+  return best;
+}
+
+const indexCache = new WeakMap<GameMap, SectorIndex>();
+
+// Each sector is filed under the grid cells its bounds cover, in map order, so
+// a point is tested against the few sectors around it, not every one on the
+// map. A sector with a missing corner has no outline and is never found.
+function sectorIndex(map: GameMap): SectorIndex {
+  const cached = indexCache.get(map);
+  if (cached) return cached;
+  const outlines = new Map<Sector, Outline>();
+  const cells = new Map<number, Sector[]>();
+  for (const sector of map.sectors) {
+    const polygon = sectorPolygon(map, sector);
+    if (polygon.length === 0 || polygon.some((point) => !point)) continue;
+    const box = boxOf(polygon);
+    outlines.set(sector, { polygon, box, area: Math.abs(signedArea(polygon)) });
+    const left = Math.floor(box.left / cellSize);
+    const right = Math.floor(box.right / cellSize);
+    const top = Math.floor(box.top / cellSize);
+    const bottom = Math.floor(box.bottom / cellSize);
+    for (let x = left; x <= right; x += 1) {
+      for (let y = top; y <= bottom; y += 1) {
+        const key = (x + cellOffset) * cellRow + y + cellOffset;
+        const filed = cells.get(key);
+        if (filed) filed.push(sector);
+        else cells.set(key, [sector]);
+      }
+    }
+  }
+  const index = { outlines, cells };
+  indexCache.set(map, index);
+  return index;
+}
+
+function cellOf(x: number, y: number) {
+  return (
+    (Math.floor(x / cellSize) + cellOffset) * cellRow +
+    Math.floor(y / cellSize) +
+    cellOffset
+  );
+}
+
+function inBox(box: Box, point: Point) {
+  return (
+    point.x >= box.left &&
+    point.x <= box.right &&
+    point.y >= box.top &&
+    point.y <= box.bottom
+  );
+}
+
+function boxContains(outer: Box, inner: Box) {
+  return (
+    outer.left <= inner.left &&
+    outer.right >= inner.right &&
+    outer.top <= inner.top &&
+    outer.bottom >= inner.bottom
+  );
 }

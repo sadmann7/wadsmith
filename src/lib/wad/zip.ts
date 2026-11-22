@@ -1,4 +1,4 @@
-import { WadFileError, type GameFile } from "./inspect";
+import { type GameFile, WadFileError } from "./inspect";
 
 const endSignature = 0x06054b50;
 const entrySignature = 0x02014b50;
@@ -6,13 +6,6 @@ const localSignature = 0x04034b50;
 const stored = 0;
 const deflated = 8;
 const wanted = /\.(wad|deh|bex)$/i;
-
-async function inflate(data: Uint8Array) {
-  const stream = new Blob([data as Uint8Array<ArrayBuffer>])
-    .stream()
-    .pipeThrough(new DecompressionStream("deflate-raw"));
-  return new Uint8Array(await new Response(stream).arrayBuffer());
-}
 
 export function isZip(data: Uint8Array) {
   return (
@@ -74,4 +67,11 @@ export async function unzip(file: GameFile): Promise<GameFile[]> {
     }
   }
   return files;
+}
+
+async function inflate(data: Uint8Array) {
+  const stream = new Blob([data as Uint8Array<ArrayBuffer>])
+    .stream()
+    .pipeThrough(new DecompressionStream("deflate-raw"));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
 }

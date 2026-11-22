@@ -1,4 +1,7 @@
 import type { GameMap } from "@/lib/map/types";
+
+import { defined } from "@/lib/defined";
+
 import type { GameId } from "./game";
 import type { NetworkMode, Skill } from "./runtime";
 
@@ -117,7 +120,7 @@ export function formatRoomCode(code: string) {
 export function parseRoomCode(text: string) {
   const code = text.toUpperCase().replace(/[^0-9A-Z]/g, "");
   return code.length === 6 &&
-    [...code].every((char) => codeAlphabet.includes(char))
+    code.split("").every((char) => codeAlphabet.includes(char))
     ? code
     : null;
 }
@@ -365,7 +368,7 @@ export function joinRoom(
     );
     let offset = 0;
     for (let at = 0; at < count; at += 1) {
-      const chunk = chunks.get(at)!;
+      const chunk = defined(chunks.get(at));
       packed.set(chunk, offset);
       offset += chunk.length;
     }

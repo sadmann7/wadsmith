@@ -1,19 +1,19 @@
 import { Copy, FolderOpen, HardDrive, Play, Undo2, Users } from "lucide-react";
 import * as React from "react";
 
+import { AppShell, type SidebarProps } from "@/components/app-sidebar";
 import { MapPlan } from "@/components/map-plan";
-import { slotCount, type GameInfo } from "@/lib/engine/game";
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { type GameInfo, slotCount } from "@/lib/engine/game";
 import { fragLimit } from "@/lib/engine/runtime";
+import { formatPar } from "@/lib/episodes/episode-data";
 import { thingCatalog } from "@/lib/map/catalog";
 import {
-  featuredMaps,
   type FeaturedMap,
+  featuredMaps,
   type FeaturedMode,
 } from "@/lib/map/featured";
-import { AppShell, type SidebarProps } from "@/components/app-sidebar";
-import { formatPar } from "@/lib/episodes/episode-data";
-import { Button } from "@/components/ui/button";
-import { Alert } from "@/components/ui/alert";
 
 const modes: Record<FeaturedMode, { label: string; dot: string }> = {
   single: { label: "Single player", dot: "bg-info" },
@@ -33,47 +33,6 @@ const countWords = [
   "Six",
   "Seven",
 ];
-
-function playersLabel({ min, max }: FeaturedMap["players"]) {
-  const count = min === max ? `${min}` : `${min}–${max}`;
-  return `${count} ${max === 1 ? "player" : "players"}`;
-}
-
-function enemiesOf(entry: FeaturedMap) {
-  return entry.map.things.filter(
-    (thing) => thingCatalog[thing.kind].category === "enemy",
-  ).length;
-}
-
-interface ModeLineProps {
-  entry: FeaturedMap;
-}
-
-function ModeLine({ entry }: ModeLineProps) {
-  const mode = modes[entry.mode];
-  return (
-    <div className="flex items-center gap-1.5 font-mono text-xs tracking-wide text-foreground uppercase">
-      <span
-        className={`size-1.5 rounded-full ${mode.dot}`}
-        aria-hidden="true"
-      />
-      {mode.label} · {playersLabel(entry.players)}
-    </div>
-  );
-}
-
-function detailsOf(entry: FeaturedMap) {
-  return entry.mode === "deathmatch"
-    ? `First to ${fragLimit} frags · ${entry.skill}`
-    : `Par ${formatPar(entry.par)} · ${enemiesOf(entry)} enemies · ${entry.skill}`;
-}
-
-function cardLine(entry: FeaturedMap) {
-  const mode = entry.mode === "single" ? "Solo" : modes[entry.mode].label;
-  return entry.mode === "deathmatch"
-    ? `${mode} · ${fragLimit} frags`
-    : `${mode} · Par ${formatPar(entry.par)}`;
-}
 
 const defaultId =
   featuredMaps.find((entry) => entry.mode === "coop")?.id ?? featuredMaps[0].id;
@@ -303,4 +262,45 @@ export function FeaturedMaps({
       </main>
     </AppShell>
   );
+}
+
+interface ModeLineProps {
+  entry: FeaturedMap;
+}
+
+function ModeLine({ entry }: ModeLineProps) {
+  const mode = modes[entry.mode];
+  return (
+    <div className="flex items-center gap-1.5 font-mono text-xs tracking-wide text-foreground uppercase">
+      <span
+        className={`size-1.5 rounded-full ${mode.dot}`}
+        aria-hidden="true"
+      />
+      {mode.label} · {playersLabel(entry.players)}
+    </div>
+  );
+}
+
+function playersLabel({ min, max }: FeaturedMap["players"]) {
+  const count = min === max ? `${min}` : `${min}–${max}`;
+  return `${count} ${max === 1 ? "player" : "players"}`;
+}
+
+function detailsOf(entry: FeaturedMap) {
+  return entry.mode === "deathmatch"
+    ? `First to ${fragLimit} frags · ${entry.skill}`
+    : `Par ${formatPar(entry.par)} · ${enemiesOf(entry)} enemies · ${entry.skill}`;
+}
+
+function enemiesOf(entry: FeaturedMap) {
+  return entry.map.things.filter(
+    (thing) => thingCatalog[thing.kind].category === "enemy",
+  ).length;
+}
+
+function cardLine(entry: FeaturedMap) {
+  const mode = entry.mode === "single" ? "Solo" : modes[entry.mode].label;
+  return entry.mode === "deathmatch"
+    ? `${mode} · ${fragLimit} frags`
+    : `${mode} · Par ${formatPar(entry.par)}`;
 }

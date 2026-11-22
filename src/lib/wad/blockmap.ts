@@ -7,32 +7,6 @@ interface BlockLine {
   end: Point;
 }
 
-function lineTouchesBox(
-  { start, end }: BlockLine,
-  left: number,
-  bottom: number,
-  right: number,
-  top: number,
-) {
-  if (
-    Math.max(start.x, end.x) < left ||
-    Math.min(start.x, end.x) > right ||
-    Math.max(start.y, end.y) < bottom ||
-    Math.min(start.y, end.y) > top
-  ) {
-    return false;
-  }
-  const dx = end.x - start.x;
-  const dy = end.y - start.y;
-  const sides = [
-    [left, bottom],
-    [left, top],
-    [right, bottom],
-    [right, top],
-  ].map(([x, y]) => Math.sign(dx * (y - start.y) - dy * (x - start.x)));
-  return sides.some((side) => side >= 0) && sides.some((side) => side <= 0);
-}
-
 export function buildBlockmap(lines: BlockLine[]): Int16Array {
   const points = lines.flatMap((line) => [line.start, line.end]);
   const originX = Math.min(...points.map((point) => point.x)) - 8;
@@ -87,4 +61,30 @@ export function buildBlockmap(lines: BlockLine[]): Int16Array {
     throw new Error("The map is too large for the engine's collision data.");
   }
   return Int16Array.from(words);
+}
+
+function lineTouchesBox(
+  { start, end }: BlockLine,
+  left: number,
+  bottom: number,
+  right: number,
+  top: number,
+) {
+  if (
+    Math.max(start.x, end.x) < left ||
+    Math.min(start.x, end.x) > right ||
+    Math.max(start.y, end.y) < bottom ||
+    Math.min(start.y, end.y) > top
+  ) {
+    return false;
+  }
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const sides = [
+    [left, bottom],
+    [left, top],
+    [right, bottom],
+    [right, top],
+  ].map(([x, y]) => Math.sign(dx * (y - start.y) - dy * (x - start.x)));
+  return sides.some((side) => side >= 0) && sides.some((side) => side <= 0);
 }
