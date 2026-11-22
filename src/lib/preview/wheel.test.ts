@@ -43,6 +43,16 @@ describe("wheel notches", () => {
     expect(turnAll(swipe)).toBe(3);
   });
 
+  it("adds up slow turns that are smaller than a wheel's click", () => {
+    // A finger moving slowly sends a pixel at a time, far apart.
+    const slow = Array.from({ length: 10 }, (_, index): [number, number] => [
+      1,
+      1000 + index * 100,
+    ]);
+    expect(turnAll(slow)).toBe(0);
+    expect(turnAll([...slow, [95, 2100]])).toBe(1);
+  });
+
   it("reads lines and pages as pixels", () => {
     expect(turnAll([[3, 1000]], 1)).toBe(1);
     expect(
@@ -56,6 +66,8 @@ describe("wheel notches", () => {
       ),
     ).toBe(3);
     expect(turnAll([[1, 1000]], 2)).toBe(1);
+    // A slow click reported as a fraction of a line still counts.
+    expect(turnAll([[0.1, 1000]], 1)).toBe(1);
     expect(turnAll([[0, 1000]])).toBe(0);
   });
 });

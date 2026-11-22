@@ -1,7 +1,9 @@
 // What one notch of a mouse wheel turns by, in pixels. A slow click of a
-// wheel is only a few pixels on macOS, so the first turn after a pause this
-// long counts as a notch whatever its size.
+// wheel is only a few pixels on macOS, so a turn of at least a click that
+// comes after a pause counts as a notch. A trackpad's slow turns are smaller,
+// and only a wheel turns in lines or pages.
 const wheelNotch = 100;
+const wheelClick = 4;
 const wheelPause = 80;
 // How many pixels a wheel's turn is worth in each of its delta modes: pixels,
 // lines and pages.
@@ -25,7 +27,10 @@ export function countNotches(
   if (turn === 0) return { ...turns, notches: 0 };
   const sum = turns.sum + turn;
   const notches = Math.trunc(sum / wheelNotch);
-  if (notches === 0 && time - turns.at > wheelPause) {
+  const isClick =
+    (mode !== 0 || Math.abs(turn) >= wheelClick) &&
+    time - turns.at > wheelPause;
+  if (notches === 0 && isClick) {
     return { sum: 0, at: time, notches: Math.sign(turn) };
   }
   return { sum: sum - notches * wheelNotch, at: time, notches };

@@ -28,6 +28,11 @@ export function holdFragment(fragment: GameMap, mapId: string) {
   return serializeFragment(fragment, origin);
 }
 
+// Something copied after the piece, like a surface's look, takes its place.
+export function dropFragment() {
+  held = null;
+}
+
 // Clipboard text that holds a piece is at least as new as the one this tab
 // remembers, so it takes its place.
 export function heldFragment(text = "") {

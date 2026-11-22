@@ -57,7 +57,12 @@ import {
 } from "@/components/ui/segmented-control";
 import { useIwad } from "@/hooks/use-iwad";
 import { agent } from "@/lib/editor/agent";
-import { heldFragment, holdFragment, originOf } from "@/lib/editor/clipboard";
+import {
+  dropFragment,
+  heldFragment,
+  holdFragment,
+  originOf,
+} from "@/lib/editor/clipboard";
 import {
   type MapTarget,
   normalizeControlClick,
@@ -217,6 +222,9 @@ const thingCategoryLabels: Record<ThingCategory, string> = {
 };
 
 const savedLayout = createLocalStorage("wadsmith:layout");
+// How long after the 3D view copies a look the page's copy event still
+// belongs to it.
+const lookCopyMs = 250;
 const savedWelcome = createLocalStorage("wadsmith:welcomed");
 // Below this width, two panes can't hold the map controls and a usable 3D view.
 const narrowQuery = "(max-width: 1100px)";
@@ -361,6 +369,7 @@ export function EditorScreen({
   // The look last picked up, from a wall's menu on the map or by copying a
   // surface in the 3D view.
   const [look, setLook] = React.useState<SurfaceLook | null>(null);
+  const lookCopy = React.useRef({ texture: "", at: -Infinity });
   const [scenePicked, setScenePicked] = React.useState<string[]>([]);
   const [drawShape, setDrawShape] = React.useState<DrawShape>("outline");
   const [drawSides, setDrawSides] = React.useState(8);
@@ -619,6 +628,7 @@ export function EditorScreen({
     if (!fragment) return;
     const text = holdFragment(fragment, episode.currentId);
     void navigator.clipboard?.writeText(text).catch(() => undefined);
+    setLook(null);
     if (cut) cutFragment(fragment);
   };
 
@@ -672,6 +682,18 @@ export function EditorScreen({
     ) {
       return;
     }
+    // A look copied in the 3D view a moment ago takes the clipboard, so a
+    // piece copied before it can no longer be pasted over it.
+    if (
+      event.type === "copy" &&
+      performance.now() - lookCopy.current.at < lookCopyMs &&
+      document.activeElement?.closest(".scene")
+    ) {
+      event.preventDefault();
+      event.clipboardData?.setData("text/plain", lookCopy.current.texture);
+      dropFragment();
+      return;
+    }
     if (event.type === "paste") {
       const fragment = heldFragment(event.clipboardData?.getData("text/plain"));
       if (!fragment) return;
@@ -694,6 +716,8 @@ export function EditorScreen({
       "text/plain",
       holdFragment(fragment, episode.currentId),
     );
+    // The piece is now the last thing copied, so the look goes.
+    setLook(null);
     if (event.type === "cut") cutFragment(fragment);
   });
 
@@ -1060,6 +1084,7 @@ export function EditorScreen({
         look={look}
         onLookChange={(next) => {
           setLook(next);
+          lookCopy.current = { texture: next.texture, at: performance.now() };
           setNotice(
             `Copied ${next.texture}. Paste it with the paste key, paint it with Alt and a click${next.kind === "wall" ? ", or flood it along joined walls with F" : ""}.`,
           );

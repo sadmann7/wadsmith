@@ -32,7 +32,6 @@ import { sectorAt } from "@/lib/map/geometry";
 import {
   applyLook,
   floodWalls,
-  getCanTakeLook,
   lookOf,
   type SurfaceLook,
 } from "@/lib/map/look";
@@ -505,18 +504,13 @@ const sceneEditor = definePrimitive({
       distance: number,
       onTap?: () => void,
     ) => {
-      const { map, assets } = store.get();
+      const { map } = store.get();
       const info = map ? describeSurface(map, key) : null;
       if (!canvas || !target || !map || !info?.sector) return false;
       if (info.paints !== "wall" || info.surface.kind !== "wall") return false;
       const { wall } = info.surface;
       const sector = info.sector.id;
       const side = map.lines?.[wall]?.sides?.[sector];
-      // An offset wraps where the picture repeats, so it stays the same
-      // picture whatever the texture's size.
-      const picture = info.texture ? assets?.texture(info.texture) : null;
-      const spanX = picture?.width || offsetSpan;
-      const spanY = picture?.height || offsetSpan;
       const unitsPerPixel =
         ((distance / target.focal) * target.width) /
         canvas.getBoundingClientRect().width;
@@ -532,18 +526,18 @@ const sceneEditor = definePrimitive({
         },
         onMove: ({ x, y, event: move }) => {
           shiftHeld = move.shiftKey;
-          const offsetX = Math.round(
+          const offsetX = clampOffset(
             (side?.offsetX ?? 0) - (x - start.x) * unitsPerPixel,
           );
-          const offsetY = Math.round(
+          const offsetY = clampOffset(
             (side?.offsetY ?? 0) - (y - start.y) * unitsPerPixel,
           );
           moved =
             offsetX !== (side?.offsetX ?? 0) ||
             offsetY !== (side?.offsetY ?? 0);
           const shifted = updateLineSide(map, wall, sector, {
-            offsetX: wrapOffset(offsetX, spanX) || undefined,
-            offsetY: wrapOffset(offsetY, spanY) || undefined,
+            offsetX: offsetX || undefined,
+            offsetY: offsetY || undefined,
           });
           // With Shift held the walls beside this one follow, so the texture
           // stays unbroken along the room as it moves.
@@ -828,18 +822,19 @@ const sceneEditor = definePrimitive({
         if (command && map && event.code === "KeyC" && !thing) {
           const copied = lookOf(map, aimed());
           if (copied) {
-            event.preventDefault();
-            if (!event.repeat) context.options().onLookChange?.(copied);
+            // The page's copy runs next and puts the look on the clipboard,
+            // once and not for every repeat of the key.
+            if (event.repeat) event.preventDefault();
+            else context.options().onLookChange?.(copied);
             return;
           }
         }
-        if (command && map && look && event.code === "KeyV") {
-          const key = aimed();
-          if (getCanTakeLook(map, key, look)) {
-            event.preventDefault();
-            if (!event.repeat) paste(key, event);
-            return;
-          }
+        // A look that is held is the last thing copied, so the page's paste
+        // of an older piece is kept out even where the look doesn't fit.
+        if (command && look && event.code === "KeyV") {
+          event.preventDefault();
+          if (!event.repeat) paste(aimed(), event);
+          return;
         }
         if (!command && event.code === "KeyF" && map && look?.kind === "wall") {
           const flooded = floodWalls(map, aimed(), look.texture);
@@ -936,11 +931,12 @@ const sceneEditor = definePrimitive({
   agent: { shown: () => false },
 });
 
-// Where an offset wraps when the texture's size isn't known. No texture is
-// wider or taller than this.
-const offsetSpan = 1024;
-function wrapOffset(value: number, span: number) {
-  return ((value % span) + span) % span;
+// A side's offsets serve its upper, lower and middle parts at once, each with
+// a picture of its own size, so an offset is kept as dragged and not wrapped.
+const offsetLimit = 32767;
+
+function clampOffset(value: number) {
+  return Math.max(-offsetLimit, Math.min(offsetLimit, Math.round(value)));
 }
 
 function standable(map: GameMap, point: Point) {
