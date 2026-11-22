@@ -275,6 +275,95 @@ describe("game lighting", () => {
   });
 });
 
+describe("the sky, open lines and movers", () => {
+  // Each column of the sky is one color, so a pixel says which column it is.
+  const skyPicture = {
+    width: 256,
+    height: 128,
+    leftOffset: 0,
+    topOffset: 0,
+    pixels: Uint8Array.from({ length: 256 * 128 }, (_, index) => index >> 7),
+    opaque: new Uint8Array(256 * 128).fill(1),
+  };
+  const grate = (opaque: number) => ({
+    width: 64,
+    height: 128,
+    leftOffset: 0,
+    topOffset: 0,
+    pixels: new Uint8Array(64 * 128).fill(7),
+    opaque: new Uint8Array(64 * 128).fill(opaque),
+  });
+  const withTextures = (
+    extra: Record<string, ReturnType<typeof grate>>,
+  ): SceneAssets => ({
+    ...assets,
+    texture: (name) => extra[name] ?? assets.texture(name),
+  });
+  const open = wallKey("v3", "v4");
+  const outdoors: GameMap = {
+    ...testMap,
+    sectors: testMap.sectors.map((sector) =>
+      sector.id === "sector-1" || sector.id === "sector-2"
+        ? { ...sector, ceilingTexture: "F_SKY1" }
+        : sector,
+    ),
+  };
+  const colorAt = (map: GameMap, angle: number, x: number, y: number) => {
+    const target = createRenderTarget(320, 200);
+    renderScene(
+      target,
+      map,
+      { ...startCamera(map), angle },
+      { assets: withTextures({ SKY1: skyPicture }), sky: "SKY1" },
+    );
+    return {
+      color: target.colors[y * 320 + x],
+      surface: target.surfaces[target.pick[y * 320 + x]],
+    };
+  };
+
+  it("draws the sky where a ceiling wears the sky flat, by the way you look", () => {
+    const east = colorAt(outdoors, 0, 160, 5);
+    expect(east.surface).toBe("ceiling:sector-1");
+    expect(east.color).toBe(assets.shades[255]);
+    // An eighth of a turn is an eighth of the sky's four wraps on.
+    expect(colorAt(outdoors, 45, 160, 5).color).toBe(assets.shades[127]);
+    expect(colorAt(testMap, 0, 160, 5).color).not.toBe(east.color);
+  });
+
+  it("draws sky and no wall between two rooms open to it", () => {
+    expect(renderStarter()(160, 60)).toBe(`wall:sector-1:${open}:upper`);
+    const between = colorAt(outdoors, 0, 160, 60);
+    expect(between.surface).toBe("ceiling:sector-1");
+    expect(between.color).toBe(assets.shades[255]);
+  });
+
+  it("draws a middle texture on an open line and sees through its holes", () => {
+    const fenced = updateLineSide(testMap, open, "sector-1", {
+      middle: "GRATE",
+    });
+    const pick = (opaque: number) => {
+      const target = createRenderTarget(320, 200);
+      renderScene(target, fenced, startCamera(fenced), {
+        assets: withTextures({ GRATE: grate(opaque) }),
+      });
+      return target.surfaces[target.pick[96 * 320 + 160]];
+    };
+    expect(pick(1)).toBe(`wall:sector-1:${open}:middle`);
+    expect(pick(0)).toBe(renderStarter()(160, 96));
+  });
+
+  it("shows a door open when asked, to look through it", () => {
+    const target = createRenderTarget(320, 200);
+    renderScene(target, testMap, startCamera(testMap), {
+      assets,
+      opened: ["sector-4"],
+    });
+    expect(target.surfaces[target.pick[96 * 320 + 160]]).not.toMatch(/upper$/);
+    expect(renderStarter()(160, 96)).toMatch(/upper$/);
+  });
+});
+
 describe.skipIf(!existsSync(wadPath))("readWadAssets", () => {
   it("composes textures, flats and sprites from Freedoom", () => {
     const wad = readWadAssets(readFileSync(wadPath));

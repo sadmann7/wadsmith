@@ -32,6 +32,7 @@ import {
   moveSurfaceHeight,
   parseSurface,
 } from "@/lib/map/surfaces";
+import { moverAt } from "@/lib/preview/movers";
 import {
   cameraBasis,
   createRenderTarget,
@@ -67,6 +68,7 @@ interface SceneOptions {
   ) => void;
   contextMenuOpen?: boolean;
   placing?: ThingKind | null;
+  sky?: string | null;
   renderWidth?: number;
   renderHeight?: number;
   grid?: number;
@@ -90,6 +92,9 @@ interface SceneState {
   frozenEye: number | null;
   placing: ThingKind | null;
   ghost: Point | null;
+  sky: string | null;
+  // The doors and lifts shown open, to check what they leave room for.
+  opened: string[];
   width: number;
   height: number;
 }
@@ -112,6 +117,7 @@ const sceneEditor = definePrimitive({
     onContextSurface: "callback",
     contextMenuOpen: "boolean",
     placing: "value",
+    sky: "value",
     renderWidth: "number",
     renderHeight: "number",
     grid: "number",
@@ -129,6 +135,8 @@ const sceneEditor = definePrimitive({
     frozenEye: null,
     placing: options.placing ?? null,
     ghost: null,
+    sky: options.sky ?? null,
+    opened: [],
     width: options.renderWidth ?? 320,
     height: options.renderHeight ?? 200,
   }),
@@ -138,6 +146,7 @@ const sceneEditor = definePrimitive({
     ...(options.selected !== undefined ? { selected: options.selected } : {}),
     linked: options.linked ?? null,
     placing: options.placing ?? null,
+    sky: options.sky ?? null,
     ...(options.placing ? {} : { ghost: null }),
   }),
   live: ["hovered"],
@@ -174,6 +183,8 @@ const sceneEditor = definePrimitive({
         frozenEye,
         placing,
         ghost,
+        sky,
+        opened,
       } = store.get();
       const view = cameraState();
       const output = canvas?.getContext("2d");
@@ -191,6 +202,8 @@ const sceneEditor = definePrimitive({
           hovered: placing ? null : hovered,
           selected: selected ?? linked,
           ghost: placing && ghost ? { ...ghost, kind: placing } : null,
+          sky,
+          opened,
         },
       );
       output.putImageData(image, 0, 0);
@@ -603,6 +616,18 @@ const sceneEditor = definePrimitive({
           event.preventDefault();
           held.add(event.code);
           if (!walkFrame) walk(performance.now());
+        } else if (event.code === "KeyO" && map) {
+          // The door or lift under the pointer, or else the selected one,
+          // stands open until the key is pressed on it again.
+          const { hovered, selected, opened } = store.get();
+          const mover = moverAt(map, hovered) ?? moverAt(map, selected);
+          if (!mover) return;
+          event.preventDefault();
+          store.set({
+            opened: opened.includes(mover)
+              ? opened.filter((id) => id !== mover)
+              : [...opened, mover],
+          });
         } else if (event.code === "KeyN" || event.code === "KeyP") {
           event.preventDefault();
           cycle(event.code === "KeyN" ? 1 : -1);

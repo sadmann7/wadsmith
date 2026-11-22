@@ -144,6 +144,10 @@ function groups(): { title: string; items: Shortcut[] }[] {
           keys: [key("Page Up"), key("Page Down")],
           does: "Raise or lower the selected surface, with Shift for 3 steps",
         },
+        {
+          keys: [key("O")],
+          does: "Open or shut the door or lift under the pointer",
+        },
         { keys: [key("Alt-arrows")], does: "Nudge the selected thing" },
         { keys: [backspace], does: "Delete the selected thing" },
         {

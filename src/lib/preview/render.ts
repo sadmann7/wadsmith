@@ -31,6 +31,8 @@ import {
   type SceneAssets,
 } from "@/lib/wad/assets";
 
+import { withMovers } from "./movers";
+
 export type Camera = Point & { angle: number; eye?: number };
 
 export interface RenderTarget {
@@ -49,6 +51,23 @@ interface SceneOptions {
   hovered?: string | null;
   selected?: string | null;
   ghost?: (Point & { kind: ThingKind }) | null;
+  // The texture drawn where a ceiling or floor wears the sky flat.
+  sky?: string | null;
+  // The doors and lifts shown as they stand once worked.
+  opened?: readonly string[];
+}
+
+// A see-through texture on an open line, kept until what lies behind it in
+// its column is drawn.
+interface MaskedColumn {
+  from: number;
+  to: number;
+  distance: number;
+  column: number;
+  picture: Picture;
+  peak: number;
+  level: number;
+  id: number;
 }
 
 interface Wall {
@@ -64,8 +83,15 @@ interface Wall {
 const fieldOfView = Math.PI / 2;
 const maxPortals = 32;
 const skyColor = 0xff000000;
+const skyFlat = "F_SKY1";
+// The engine wraps the sky four times round the player, puts its row 100 on
+// the horizon and draws it as if the view were 320 wide.
+const skyTurn = 1024;
+const skyHorizon = 100;
+const skyView = 320;
 const maxFloorDistance = 4096;
 const selectedOutline = 0xff2b6aff;
+const noMovers: readonly string[] = [];
 const hoveredOutline = 0xffffffff;
 const outlineWidth = 2;
 
@@ -136,11 +162,13 @@ export function renderScene(
   target: RenderTarget,
   sourceMap: GameMap,
   camera: Camera,
-  { assets, hovered, selected, ghost }: SceneOptions,
+  { assets, hovered, selected, ghost, sky, opened = noMovers }: SceneOptions,
 ) {
   const { width, height, colors, depth: depths, pick, focal } = target;
   const { shades } = assets;
-  const map = withClosedDoors(sourceMap);
+  const map = withMovers(sourceMap, opened);
+  const skyPicture = sky ? assets.texture(sky) : null;
+  const heavens = skyPicture && skyPicture.width > 1 ? skyPicture : null;
   colors.fill(skyColor);
   depths.fill(Infinity);
   pick.fill(0);
@@ -176,6 +204,35 @@ export function renderScene(
     let top = 0;
     let bottom = height - 1;
     let entered = "";
+    const masked: MaskedColumn[] = [];
+    // The engine reads the sky by the way the column looks, and so mirrored.
+    const skyColumn = heavens
+      ? wrap(
+          (Math.atan2(-ray.y, ray.x) / (2 * Math.PI) + 1) * skyTurn,
+          heavens.width,
+        )
+      : 0;
+    // The sky is as bright at any distance, and takes the depth of whatever
+    // it stands in for, so things in front of it still show.
+    const drawSky = (
+      from: number,
+      to: number,
+      id: number,
+      depthAt: (y: number) => number,
+    ) => {
+      if (!heavens) return;
+      for (let y = Math.max(from, top); y <= Math.min(to, bottom); y += 1) {
+        const row = wrap(
+          skyHorizon + ((y + 0.5 - horizon) * skyView) / width,
+          heavens.height,
+        );
+        const index = y * width + x;
+        colors[index] =
+          shades[heavens.pixels[skyColumn * heavens.height + row]];
+        depths[index] = depthAt(y);
+        pick[index] = id;
+      }
+    };
     // A room's walls include those of the rooms drawn inside it, so a wall
     // the ray has already passed can't be the next one it meets.
     let reached = 0.01;
@@ -228,22 +285,36 @@ export function renderScene(
         Math.round(horizon - ((plane - eye) * focal) / distance);
       const ceilingRow = rowOf(current.ceiling);
       const floorRow = rowOf(current.floor);
-      drawFlat(
-        top,
-        ceilingRow - 1,
-        current.ceiling,
-        assets.flat(current.ceilingTexture),
-        idOf(surfaceKey({ kind: "ceiling", sector: current.id })),
-        current.light,
+      const ceilingId = idOf(
+        surfaceKey({ kind: "ceiling", sector: current.id }),
       );
-      drawFlat(
-        floorRow + 1,
-        bottom,
-        current.floor,
-        assets.flat(current.floorTexture),
-        idOf(surfaceKey({ kind: "floor", sector: current.id })),
-        current.light,
-      );
+      const floorId = idOf(surfaceKey({ kind: "floor", sector: current.id }));
+      const planeDepth = (plane: number) => (y: number) =>
+        (Math.abs(plane - eye) * focal) / (Math.abs(y + 0.5 - horizon) || 0.5);
+      if (heavens && current.ceilingTexture === skyFlat) {
+        drawSky(top, ceilingRow - 1, ceilingId, planeDepth(current.ceiling));
+      } else {
+        drawFlat(
+          top,
+          ceilingRow - 1,
+          current.ceiling,
+          assets.flat(current.ceilingTexture),
+          ceilingId,
+          current.light,
+        );
+      }
+      if (heavens && current.floorTexture === skyFlat) {
+        drawSky(floorRow + 1, bottom, floorId, planeDepth(current.floor));
+      } else {
+        drawFlat(
+          floorRow + 1,
+          bottom,
+          current.floor,
+          assets.flat(current.floorTexture),
+          floorId,
+          current.light,
+        );
+      }
 
       const contrast =
         wall.a.x === wall.b.x ? 1 : wall.a.y === wall.b.y ? -1 : 0;
@@ -299,7 +370,16 @@ export function renderScene(
       const lowerPlane = Math.max(current.floor, next.floor);
       const upperRow = rowOf(upperPlane);
       const lowerRow = rowOf(lowerPlane);
-      if (next.ceiling < current.ceiling) {
+      if (
+        next.ceiling < current.ceiling &&
+        heavens &&
+        current.ceilingTexture === skyFlat &&
+        next.ceilingTexture === skyFlat
+      ) {
+        // Between two rooms open to the sky the engine draws no wall, only
+        // more sky.
+        drawSky(ceilingRow, upperRow - 1, ceilingId, () => distance);
+      } else if (next.ceiling < current.ceiling) {
         const picture = next.door
           ? assets.texture(wall.side?.upper ?? next.door.texture)
           : partPicture("upper");
@@ -321,12 +401,54 @@ export function renderScene(
               : lowerPlane - plane,
         );
       }
+      const middle = wall.side?.middle;
+      const picture =
+        middle && !next.door && !current.door ? assets.texture(middle) : null;
+      if (picture && picture.width > 1) {
+        // The texture hangs from the top of the opening, or stands on its
+        // bottom when the line is pegged there, and isn't repeated.
+        const peak =
+          (wall.line?.lowerFixed ? lowerPlane + picture.height : upperPlane) +
+          (wall.side?.offsetY ?? 0);
+        masked.push({
+          from: Math.max(top, ceilingRow, upperRow),
+          to: Math.min(bottom, floorRow, lowerRow),
+          distance,
+          column: wrap(along + (wall.side?.offsetX ?? 0), picture.width),
+          picture,
+          peak,
+          level,
+          id: idOf(
+            surfaceKey({
+              kind: "wall",
+              sector: current.id,
+              wall: wall.key,
+              part: "middle",
+            }),
+          ),
+        });
+      }
       top = Math.max(top, Math.max(ceilingRow, upperRow));
       bottom = Math.min(bottom, Math.min(floorRow, lowerRow));
       if (top > bottom) break;
       entered = wall.key;
       reached = distance;
       sector = next;
+    }
+
+    for (const item of masked.toReversed()) {
+      const { picture } = item;
+      for (let y = item.from; y <= item.to; y += 1) {
+        const plane = eye + ((horizon - y - 0.5) * item.distance) / focal;
+        const row = Math.floor(item.peak - plane);
+        if (row < 0 || row >= picture.height) continue;
+        const source = item.column * picture.height + row;
+        if (!picture.opaque[source]) continue;
+        const index = y * width + x;
+        colors[index] = shades[item.level * 256 + picture.pixels[source]];
+        depths[index] = item.distance;
+        pick[index] = item.id;
+      }
     }
   }
 
@@ -441,23 +563,6 @@ const eyeHeight = 41;
 
 function eyeOf(map: GameMap, camera: Camera) {
   return camera.eye ?? (sectorAt(map, camera)?.floor ?? 0) + eyeHeight;
-}
-
-// A frame shows the same map as the one before until an edit, so what a frame
-// works out from its map is kept with the map, which is never changed in place.
-const closedDoorMaps = new WeakMap<GameMap, GameMap>();
-
-function withClosedDoors(map: GameMap): GameMap {
-  const cached = closedDoorMaps.get(map);
-  if (cached) return cached;
-  const closed = {
-    ...map,
-    sectors: map.sectors.map((sector) =>
-      sector.door ? { ...sector, ceiling: sector.floor } : sector,
-    ),
-  };
-  closedDoorMaps.set(map, closed);
-  return closed;
 }
 
 const sectorWalls = new WeakMap<GameMap, Map<string, Wall[]>>();
