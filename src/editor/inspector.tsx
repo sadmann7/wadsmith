@@ -1257,7 +1257,6 @@ function ThingFields({
               return (
                 <label key={flag} className="flex items-center gap-2">
                   <Checkbox
-                    className="flex size-4 items-center justify-center rounded-[2px] border border-input bg-transparent p-0 text-primary-foreground aria-checked:border-primary aria-checked:bg-primary"
                     checked={applies.every((thing) => thing[flag])}
                     onCheckedChange={(checked) =>
                       onChange((thing) =>
@@ -1266,11 +1265,7 @@ function ThingFields({
                           : {},
                       )
                     }
-                  >
-                    <CheckboxIndicator>
-                      <Check size={12} aria-hidden="true" />
-                    </CheckboxIndicator>
-                  </Checkbox>
+                  />
                   {label}
                 </label>
               );
