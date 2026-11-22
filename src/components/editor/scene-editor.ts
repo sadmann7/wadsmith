@@ -84,6 +84,9 @@ interface SceneOptions {
   sky?: string | null;
   // The look last copied from a surface, to paste, paint and flood with.
   look?: SurfaceLook | null;
+  // False once something else was copied after the look, which the paste key
+  // then leaves to the page.
+  pasteLook?: boolean;
   onLookChange?: (look: SurfaceLook) => void;
   // The surfaces picked together with Shift, in the order they were picked.
   picked?: string[];
@@ -143,6 +146,7 @@ const sceneEditor = definePrimitive({
     placing: "value",
     sky: "value",
     look: "value",
+    pasteLook: "boolean",
     onLookChange: "callback",
     picked: "value",
     onPickedChange: "callback",
@@ -816,10 +820,11 @@ const sceneEditor = definePrimitive({
         const thing = selectedThing();
         if (event.altKey && nudgeThing(event)) return;
         const command = event.metaKey || event.ctrlKey;
-        const { look } = context.options();
+        const { look, pasteLook = true } = context.options();
+        const letter = letterOf(event);
         // A surface's look is copied and pasted here. Anything else, like a
         // selected thing, is left to the page's own copy and paste.
-        if (command && map && event.code === "KeyC" && !thing) {
+        if (command && map && letter === "c" && !thing) {
           const copied = lookOf(map, aimed());
           if (copied) {
             // The page's copy runs next and puts the look on the clipboard,
@@ -829,9 +834,9 @@ const sceneEditor = definePrimitive({
             return;
           }
         }
-        // A look that is held is the last thing copied, so the page's paste
-        // of an older piece is kept out even where the look doesn't fit.
-        if (command && look && event.code === "KeyV") {
+        // While the look is the last thing copied, the page's paste of an
+        // older piece is kept out even where the look doesn't fit.
+        if (command && look && pasteLook && letter === "v") {
           event.preventDefault();
           if (!event.repeat) paste(aimed(), event);
           return;
@@ -930,6 +935,14 @@ const sceneEditor = definePrimitive({
   }),
   agent: { shown: () => false },
 });
+
+// The letter a key types, or the one printed on it where the layout types no
+// Latin letter, which is how the browser's own copy and paste keys go.
+function letterOf(event: KeyboardEvent) {
+  return /^[a-z]$/i.test(event.key)
+    ? event.key.toLowerCase()
+    : event.code.slice(3).toLowerCase();
+}
 
 // A side's offsets serve its upper, lower and middle parts at once, each with
 // a picture of its own size, so an offset is kept as dragged and not wrapped.

@@ -370,6 +370,9 @@ export function EditorScreen({
   // surface in the 3D view.
   const [look, setLook] = React.useState<SurfaceLook | null>(null);
   const lookCopy = React.useRef({ texture: "", at: -Infinity });
+  // Whether a piece was copied after the look, so the 3D view's paste key
+  // pastes the piece and not the look.
+  const [pieceNewer, setPieceNewer] = React.useState(false);
   const [scenePicked, setScenePicked] = React.useState<string[]>([]);
   const [drawShape, setDrawShape] = React.useState<DrawShape>("outline");
   const [drawSides, setDrawSides] = React.useState(8);
@@ -628,7 +631,7 @@ export function EditorScreen({
     if (!fragment) return;
     const text = holdFragment(fragment, episode.currentId);
     void navigator.clipboard?.writeText(text).catch(() => undefined);
-    setLook(null);
+    setPieceNewer(true);
     if (cut) cutFragment(fragment);
   };
 
@@ -716,8 +719,7 @@ export function EditorScreen({
       "text/plain",
       holdFragment(fragment, episode.currentId),
     );
-    // The piece is now the last thing copied, so the look goes.
-    setLook(null);
+    setPieceNewer(true);
     if (event.type === "cut") cutFragment(fragment);
   });
 
@@ -1082,8 +1084,10 @@ export function EditorScreen({
         renderWidth={640}
         renderHeight={400}
         look={look}
+        pasteLook={!pieceNewer}
         onLookChange={(next) => {
           setLook(next);
+          setPieceNewer(false);
           lookCopy.current = { texture: next.texture, at: performance.now() };
           setNotice(
             `Copied ${next.texture}. Paste it with the paste key, paint it with Alt and a click${next.kind === "wall" ? ", or flood it along joined walls with F" : ""}.`,
@@ -2264,6 +2268,7 @@ export function EditorScreen({
           widthOf: (name) => assets.texture(name).width,
           onPick: (name) => {
             setLook({ kind: "wall", texture: name });
+            setPieceNewer(false);
             setNotice(`Picked up ${name}. Right-click a wall to apply it.`);
           },
           onReplace: (kind, from) => setReplacing({ kind, from }),
