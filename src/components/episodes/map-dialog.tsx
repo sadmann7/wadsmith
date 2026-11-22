@@ -97,11 +97,9 @@ export function MapDialog({
         : [],
     [iwad],
   );
-  const musicNames = React.useMemo(
-    () =>
-      [...new Set(lumps.filter((name) => name.startsWith("D_")))].toSorted(),
-    [lumps],
-  );
+  const musicNames = [
+    ...new Set(lumps.filter((name) => name.startsWith("D_"))),
+  ].toSorted();
   const skyNames = React.useMemo(
     () =>
       iwad
