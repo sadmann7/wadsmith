@@ -14,12 +14,12 @@ function SegmentedControl({
   return (
     <SegmentedControlPrimitive.SegmentedControl
       className={cn(
-        "relative isolate inline-flex rounded-[3px] bg-muted p-0.5",
+        "relative isolate inline-flex rounded-[3px] bg-muted p-[3px]",
         className,
       )}
       {...props}
     >
-      <SegmentedControlPrimitive.SegmentedControlIndicator className="absolute top-(--segmented-control-indicator-top) left-(--segmented-control-indicator-left) -z-10 h-(--segmented-control-indicator-height) w-(--segmented-control-indicator-width) rounded-[2px] bg-input/30 shadow-[inset_0_0_0_1px_var(--color-input)]" />
+      <SegmentedControlPrimitive.SegmentedControlIndicator className="absolute top-(--segmented-control-indicator-top) left-(--segmented-control-indicator-left) -z-10 h-(--segmented-control-indicator-height) w-(--segmented-control-indicator-width) rounded-[2px] bg-input/30 shadow-sm ring-1 ring-input ring-inset" />
       {children}
     </SegmentedControlPrimitive.SegmentedControl>
   );
@@ -34,7 +34,7 @@ function SegmentedControlItem({
   return (
     <SegmentedControlPrimitive.SegmentedControlItem
       className={cn(
-        "min-h-6 border-0 bg-transparent px-2.5 py-0.5 text-muted-foreground disabled:opacity-40 aria-checked:text-foreground",
+        "min-h-6 border-0 bg-transparent px-2.5 py-0.5 text-muted-foreground hover:text-foreground disabled:opacity-50 aria-checked:text-foreground",
         className,
       )}
       {...props}
