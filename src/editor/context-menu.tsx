@@ -68,6 +68,7 @@ import {
   roomCenter,
   setRoomDoor,
   snapCorners,
+  splitWall,
   switchKeyPrefix,
   thingKeyPrefix,
   updateLine,
@@ -577,6 +578,12 @@ function WallMenu({
   const detail =
     (wallOwners(map).get(wall) ?? []).filter((item) => item.id === sector)
       .length > 1;
+  const corner = splitWall(
+    map,
+    wall,
+    target.point ?? wallMiddle(map, wall),
+    grid,
+  );
   const chooseAction = (kind: string) => {
     if (!isLineActionKind(kind)) {
       onCommit(updateLine(map, wall, { action: undefined }));
@@ -616,6 +623,15 @@ function WallMenu({
         }}
       >
         Add switch
+      </Item>
+      <Item
+        icon={Plus}
+        disabled={!corner}
+        onSelect={() =>
+          corner && onCommit(corner.map, { keys: [corner.id], sector: null })
+        }
+      >
+        Add corner here
       </Item>
       <SubMenu icon={Zap} label="Action" disabled={line.wiredSwitch}>
         <Choices

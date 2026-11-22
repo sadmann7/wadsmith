@@ -22,6 +22,7 @@ import {
   addDetail,
   addRoom,
   addRoomOnSide,
+  mergeCorners,
   addSwitch,
   addSwitchInRoom,
   addThing,
@@ -494,7 +495,18 @@ const mapEditor = definePrimitive({
             if (from) next[key] = { x: from.x + dx, y: from.y + dy };
           }
         }
-        return change("map", applyPositions(store.get().map, next), details);
+        const moved = applyPositions(store.get().map, next);
+        // A corner dropped onto another joins it.
+        const corners = (keys ?? []).filter(
+          (key) => !key.startsWith(thingKeyPrefix),
+        );
+        const joined =
+          details.reason === "drag" && corners.length > 0
+            ? mergeCorners(moved, corners)
+            : moved;
+        const done = change("map", joined, details);
+        if (done && joined !== moved) select([]);
+        return done;
       },
     });
 
@@ -1052,9 +1064,21 @@ const mapEditor = definePrimitive({
         if (isSecondaryPress(event)) return;
         const target = event.target as Element;
         if (target.closest("[data-map-control], [data-map-key]")) return;
-        if (store.get().tool === "select") {
-          viewport.pointerdown(event);
+        const { tool, editMode, map, viewport: view } = store.get();
+        if (tool !== "select") return;
+        // In line mode a wall drags by its two corners together.
+        if (editMode === "lines" && event.button === 0) {
+          const at = viewport.toCanvas(event.clientX, event.clientY);
+          const wall = wallNear(map, at, wallReach / view.zoom);
+          const surface = root();
+          if (wall && surface) {
+            const [from, to] = wall.wall.split("|");
+            select([from, to]);
+            move.pointerdown(event, from, surface);
+            return;
+          }
         }
+        viewport.pointerdown(event);
       },
       pointerleave() {
         reportPointer?.(null);

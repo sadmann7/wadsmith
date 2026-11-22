@@ -83,8 +83,8 @@ function losses(reports: ImportReport[]) {
   const multiplayer = sum(reports, (report) => report.multiplayerThings);
   if (multiplayer > 0) {
     rows.push({
-      label: plural(multiplayer, "multiplayer thing"),
-      detail: "Things that only appear in network games.",
+      label: plural(multiplayer, "thing on no difficulty"),
+      detail: "Things set to appear on no difficulty never spawn.",
     });
   }
   const outside = sum(reports, (report) => report.outsideThings);

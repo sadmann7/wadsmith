@@ -79,7 +79,7 @@ type NetworkMode = "coop" | "deathmatch";
 
 type Skill = "easy" | "medium" | "hard";
 
-type Complevel = "vanilla" | "boom" | "mbf" | "mbf21";
+import type { Complevel } from "@/map/types";
 
 type GameFiles = {
   wads: Uint8Array[];

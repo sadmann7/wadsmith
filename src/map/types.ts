@@ -1,5 +1,7 @@
 type Point = { x: number; y: number };
 
+type Complevel = "vanilla" | "boom" | "mbf" | "mbf21";
+
 type DoorSettings = {
   opensBy: "use" | "switch";
   closes: boolean;
@@ -39,6 +41,7 @@ type Sector = {
   wallOverrides?: Record<string, string>;
   door?: DoorSettings;
   effect?: SectorEffect;
+  rawEffect?: number;
   tag?: number;
 };
 
@@ -108,14 +111,22 @@ type LineSide = {
   middle?: string;
 };
 
+type RawSpecial = { special: number; tag: number };
+
 type LineSettings = {
   blocksAll?: boolean;
   blocksEnemies?: boolean;
   upperFixed?: boolean;
   lowerFixed?: boolean;
   hidden?: boolean;
+  secret?: boolean;
+  soundBlock?: boolean;
+  mapped?: boolean;
+  passUse?: boolean;
+  solid?: boolean;
   scrolls?: boolean;
   action?: LineAction;
+  raw?: RawSpecial;
   sides?: Record<string, LineSide>;
   front?: string;
 };
@@ -255,6 +266,10 @@ type Thing = Point & {
   angle: number;
   skills?: ThingSkill[];
   ambush?: boolean;
+  multiplayer?: boolean;
+  notDeathmatch?: boolean;
+  notCoop?: boolean;
+  friendly?: boolean;
 };
 
 type MapSwitch = {
@@ -270,6 +285,7 @@ type MapNote = Point & { id: string; text: string };
 
 type GameMap = {
   name?: string;
+  complevel?: Complevel;
   vertices: Record<string, Point>;
   sectors: Sector[];
   things: Thing[];
@@ -279,6 +295,7 @@ type GameMap = {
 };
 
 export type {
+  Complevel,
   DoorSettings,
   GameMap,
   KeyColor,
@@ -290,6 +307,7 @@ export type {
   MapNote,
   MapSwitch,
   Point,
+  RawSpecial,
   Sector,
   SectorEffect,
   Thing,

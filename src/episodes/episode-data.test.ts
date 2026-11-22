@@ -333,9 +333,10 @@ describe("episode maps", () => {
       { slot: "MAP01", map: starterMap },
       { slot: "MAP03", map: starterMap },
     ]);
-    const text = String.fromCharCode(...wad.slice(-22 * 16));
+    const text = String.fromCharCode(...wad.slice(-23 * 16));
     expect(text).toContain("MAP01");
     expect(text).toContain("MAP03");
-    expect(new DataView(wad.buffer).getInt32(4, true)).toBe(22);
+    expect(text).toContain("COMPLVL");
+    expect(new DataView(wad.buffer).getInt32(4, true)).toBe(23);
   });
 });

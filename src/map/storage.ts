@@ -15,7 +15,9 @@ import {
   lineSpecial,
   lineTriggers,
 } from "./lines";
+import { complevels } from "./complevel";
 import type {
+  Complevel,
   DoorSettings,
   GameMap,
   KeyColor,
@@ -26,6 +28,7 @@ import type {
   MapNote,
   MapSwitch,
   Point,
+  RawSpecial,
   Sector,
   SectorEffect,
   Thing,
@@ -199,6 +202,9 @@ function parseSector(value: unknown, vertices: Record<string, Point>): Sector {
     ...(sector.effect === undefined
       ? {}
       : { effect: sector.effect as SectorEffect }),
+    ...(sector.rawEffect === undefined
+      ? {}
+      : { rawEffect: integer(sector.rawEffect, wordLimit, label) }),
     ...(sector.tag === undefined ? {} : { tag: tagNumber(sector.tag, label) }),
   };
 }
@@ -247,6 +253,13 @@ function parseLineSide(value: unknown, label: string): LineSide {
   };
 }
 
+function parseRawSpecial(value: unknown, label: string): RawSpecial {
+  const raw = record(value, label);
+  const special = integer(raw.special, wordLimit, label);
+  if (special <= 0) fail(`${label} has an invalid special.`);
+  return { special, tag: tagNumber(raw.tag, label) };
+}
+
 function parseLine(value: unknown, rooms: Set<string>): LineSettings {
   const label = "A line";
   const line = record(value, label);
@@ -257,6 +270,11 @@ function parseLine(value: unknown, rooms: Set<string>): LineSettings {
       "upperFixed",
       "lowerFixed",
       "hidden",
+      "secret",
+      "soundBlock",
+      "mapped",
+      "passUse",
+      "solid",
       "scrolls",
     ] as const
   ).flatMap((flag) => {
@@ -269,6 +287,9 @@ function parseLine(value: unknown, rooms: Set<string>): LineSettings {
     ...(line.action === undefined
       ? {}
       : { action: parseLineAction(line.action, label) }),
+    ...(line.raw === undefined
+      ? {}
+      : { raw: parseRawSpecial(line.raw, label) }),
     ...(line.sides === undefined
       ? {}
       : {
@@ -312,16 +333,21 @@ function parseThing(value: unknown): Thing {
           }
           return skill as ThingSkill;
         });
-  if (thing.ambush !== undefined && typeof thing.ambush !== "boolean") {
-    fail(`Thing ${thingId} is not valid.`);
-  }
+  const thingFlags = (
+    ["ambush", "multiplayer", "notDeathmatch", "notCoop", "friendly"] as const
+  ).flatMap((flag) => {
+    if (thing[flag] === undefined) return [];
+    if (typeof thing[flag] !== "boolean")
+      fail(`Thing ${thingId} is not valid.`);
+    return [[flag, thing[flag]]];
+  });
   return {
     id: thingId,
     kind: thing.kind as ThingKind,
     angle,
     ...parsePoint(thing, `Thing ${thingId}`),
     ...(skills ? { skills } : {}),
-    ...(thing.ambush === undefined ? {} : { ambush: thing.ambush }),
+    ...Object.fromEntries(thingFlags),
   };
 }
 
@@ -407,7 +433,16 @@ function parseMap(value: unknown): GameMap {
   uniqueIds(sectors, "Room");
   uniqueIds(things, "Thing");
   uniqueIds(switches, "Switch");
+  if (
+    map.complevel !== undefined &&
+    !complevels.includes(map.complevel as Complevel)
+  ) {
+    fail("The map names an unknown compatibility level.");
+  }
   return {
+    ...(map.complevel === undefined
+      ? {}
+      : { complevel: map.complevel as Complevel }),
     ...(typeof map.name === "string"
       ? { name: map.name.slice(0, maxNameLength) }
       : {}),

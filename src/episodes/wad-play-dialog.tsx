@@ -4,6 +4,7 @@ import * as React from "react";
 import { skillNames } from "@/engine/coop";
 import { Choice } from "@/engine/coop-ui";
 import type { Complevel, GameFiles, Skill } from "@/engine/runtime";
+import { complevelLabels } from "@/map/complevel";
 import type { WadSummary } from "@/wad/inspect";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,13 +27,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-
-const complevelNames: Record<Complevel, string> = {
-  vanilla: "Vanilla",
-  boom: "Boom",
-  mbf: "MBF",
-  mbf21: "MBF21",
-};
 
 const complevelHelp: Record<Complevel, string> = {
   vanilla: "Plays like doom2.exe, with its limits and bugs.",
@@ -87,8 +81,8 @@ function WadPlayDialog({
             <Choice
               label="Compatibility"
               value={complevel}
-              options={(Object.keys(complevelNames) as Complevel[]).map(
-                (value) => ({ value, label: complevelNames[value] }),
+              options={(Object.keys(complevelLabels) as Complevel[]).map(
+                (value) => ({ value, label: complevelLabels[value] }),
               )}
               onChange={setComplevel}
             />
@@ -98,7 +92,7 @@ function WadPlayDialog({
                 ? summary.declared
                   ? "The WAD asks for this."
                   : "Detected from its maps and patches."
-                : `The WAD looks like ${complevelNames[summary.complevel]}.`}
+                : `The WAD looks like ${complevelLabels[summary.complevel]}.`}
             </p>
           </FieldItem>
           <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)] gap-3">
