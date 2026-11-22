@@ -1270,11 +1270,7 @@ function ThingFields({
                           : {},
                       )
                     }
-                  >
-                    <CheckboxIndicator>
-                      <Check size={12} aria-hidden="true" />
-                    </CheckboxIndicator>
-                  </Checkbox>
+                  />
                   {label}
                 </label>
               );
