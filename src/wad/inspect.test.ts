@@ -91,7 +91,7 @@ describe("inspectWads", () => {
     expect(summary).toMatchObject({
       maps: [1, 2],
       complevel: "vanilla",
-      declared: false,
+      declared: true,
     });
     expect(readLumps({ name: "a.wad", data: summary.wads[0] })[0].name).toBe(
       "MAP01",
@@ -114,7 +114,7 @@ describe("inspectWads", () => {
   });
 
   it("reads the level from patches and lumps", () => {
-    const map = { name: "map.wad", data: compileMap(starterMap) };
+    const map = { name: "map.wad", data: pack(compileLumps(starterMap)) };
     const patch = (text: string) =>
       inspectWads([map, { name: "map.deh", data: encode(text) }]).complevel;
     expect(patch("Doom version = 21\nPatch format = 6\n")).toBe("vanilla");

@@ -21,8 +21,15 @@ import {
 } from "./geometry";
 import { appearsOn } from "./balance";
 import { isPlayerStart, keyThings, thingCatalog, thingKinds } from "./catalog";
+import {
+  atLeast,
+  complevelLabels,
+  lineLevel,
+  linePassUse,
+  sectorLevel,
+} from "./complevel";
 import { describeLine, lineUsesTag, movesSector, opensDoor } from "./lines";
-import type { GameMap, Point, Sector, ThingSkill } from "./types";
+import type { Complevel, GameMap, Point, Sector, ThingSkill } from "./types";
 
 interface MapIssue {
   id: string;
@@ -592,6 +599,59 @@ function validateLines(map: GameMap, issues: MapIssue[], actions: LineActions) {
   }
 }
 
+// A map set to one engine's compatibility can't use what a later one added.
+// Lines are numbered only once every room is whole, since numbering reads
+// the walls.
+function validateLevels(map: GameMap, issues: MapIssue[], whole: boolean) {
+  const level = map.complevel ?? "vanilla";
+  const needs = (
+    id: string,
+    name: string,
+    target: string,
+    needed: Complevel,
+  ) => {
+    if (atLeast(level, needed)) return;
+    issues.push({
+      id,
+      message: `${name}: needs ${complevelLabels[needed]} compatibility, but the map is set to ${complevelLabels[level]}.`,
+      target,
+    });
+  };
+  const owners = whole ? wallOwners(map) : null;
+  const entries = owners ? [...owners] : [];
+  for (const [wall, line] of Object.entries(map.lines ?? {})) {
+    const special = line.raw?.special ?? 0;
+    const flags = line.passUse ? linePassUse : 0;
+    const owner = owners?.get(wall)?.[0];
+    const number = owner
+      ? describeLine(map, wall, owner.id, entries).number
+      : wall;
+    needs(
+      `line-level:${wall}`,
+      `Line ${number}`,
+      wall,
+      lineLevel(special, flags),
+    );
+  }
+  for (const sector of map.sectors) {
+    if (sector.rawEffect === undefined) continue;
+    needs(
+      `sector-level:${sector.id}`,
+      sector.name,
+      sector.id,
+      sectorLevel(sector.rawEffect),
+    );
+  }
+  for (const thing of map.things) {
+    const needed: Complevel = thing.friendly
+      ? "mbf"
+      : thing.notDeathmatch || thing.notCoop
+        ? "boom"
+        : "vanilla";
+    needs(`thing-level:${thing.id}`, thing.id, thing.id, needed);
+  }
+}
+
 // Warnings are legal in Doom but likely mistakes, so they don't block a build.
 function inspectMap(map: GameMap) {
   const issues: MapIssue[] = [];
@@ -602,12 +662,16 @@ function inspectMap(map: GameMap) {
   let actions: LineActions | undefined;
   const lineActions = () => (actions ??= activeLineActions(map));
   let opened: Set<number> | undefined;
+  // A raw special with a tag may move its sector too, so it counts as opening.
   const openedTags = () =>
-    (opened ??= new Set(
-      lineActions()
+    (opened ??= new Set([
+      ...lineActions()
         .filter(({ action }) => movesSector(action.kind) && action.tag > 0)
         .map(({ action }) => action.tag),
-    ));
+      ...Object.values(map.lines ?? {}).flatMap((line) =>
+        line.raw && line.raw.tag > 0 && !line.action ? [line.raw.tag] : [],
+      ),
+    ]));
   for (const sector of map.sectors) {
     validateSector(map, sector, issues, openedTags);
   }
@@ -616,6 +680,7 @@ function inspectMap(map: GameMap) {
     validateDoors(map, issues, warnings, lineActions());
     validateLines(map, issues, lineActions());
   }
+  validateLevels(map, issues, issues.length === 0);
   for (const [id, point] of Object.entries(map.vertices)) {
     if (
       Math.abs(point.x) > coordinateLimit ||

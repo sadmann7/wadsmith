@@ -2,7 +2,7 @@ import { addRoomOnSide, type RoomSide } from "@/map/edit";
 import { checkMap } from "@/map/checks";
 import { blankMap, starterMap } from "@/map/starter-map";
 import { loadSavedMap, MapFileError, parseMap } from "@/map/storage";
-import type { GameMap } from "@/map/types";
+import type { Complevel, GameMap } from "@/map/types";
 import { compileLumps } from "@/wad/compile";
 import { featuredMaps } from "@/map/featured";
 
@@ -178,6 +178,13 @@ function newEpisodeId() {
 
 function createEpisode(name: string): Episode {
   return { id: newEpisodeId(), name, createdAt: Date.now() };
+}
+
+// Vanilla is the default, so a map set to it carries no level at all.
+function withComplevel(map: GameMap, complevel: Complevel): GameMap {
+  const next: GameMap = { ...map, complevel };
+  if (complevel === "vanilla") delete next.complevel;
+  return next;
 }
 
 function createMapEntry(
@@ -478,6 +485,7 @@ export {
   serializeEpisode,
   slotMoves,
   templates,
+  withComplevel,
   type EpisodeStart,
   type MapTemplate,
   type Episode,

@@ -1,4 +1,11 @@
-import type { Complevel } from "@/engine/runtime";
+import {
+  complevels,
+  higherLevel,
+  lineLevel,
+  sectorLevel,
+  thingLevel,
+} from "@/map/complevel";
+import type { Complevel } from "@/map/types";
 
 interface GameFile {
   name: string;
@@ -20,7 +27,6 @@ interface WadSummary {
 
 class WadFileError extends Error {}
 
-const complevels: Complevel[] = ["vanilla", "boom", "mbf", "mbf21"];
 const mapLump = /^MAP(\d\d)$/;
 const doomOneLump = /^E\dM\d$/;
 const mapParts = new Set([
@@ -37,18 +43,9 @@ const mapParts = new Set([
   "BEHAVIOR",
   "TEXTMAP",
 ]);
-const lastVanillaLine = 141;
-const lastVanillaSector = 17;
-const linePassUse = 0x0200;
 // Old editors left junk in the high bits and set this one. MBF21 clears the
 // extended flags on such lines, and they're no sign of a Boom map.
 const lineReserved = 0x0800;
-const lineMbf21Flags = 0x3000;
-const sectorMbf21Flags = 0x3000;
-const mbfSkyLines = new Set([271, 272]);
-const mbf21Lines = new Set([1024, 1025, 1026]);
-const boomThings = new Set([5001, 5002]);
-const mbfHelperDog = 888;
 const lineSize = 14;
 const sectorSize = 26;
 const thingSize = 10;
@@ -118,26 +115,19 @@ function records(lump: Lump | undefined, size: number) {
 function mapLevel(lumps: Lump[]): Complevel {
   let level: Complevel = "vanilla";
   const raise = (next: Complevel) => {
-    if (complevels.indexOf(next) > complevels.indexOf(level)) level = next;
+    level = higherLevel(level, next);
   };
   const find = (name: string) => lumps.find((lump) => lump.name === name);
   for (const { view, at } of records(find("LINEDEFS"), lineSize)) {
     const rawFlags = view.getUint16(at + 4, true);
     const flags = rawFlags & lineReserved ? 0 : rawFlags;
-    const special = view.getUint16(at + 6, true);
-    if (flags & lineMbf21Flags || mbf21Lines.has(special)) raise("mbf21");
-    else if (mbfSkyLines.has(special)) raise("mbf");
-    else if (special > lastVanillaLine || flags & linePassUse) raise("boom");
+    raise(lineLevel(view.getUint16(at + 6, true), flags));
   }
   for (const { view, at } of records(find("SECTORS"), sectorSize)) {
-    const special = view.getUint16(at + 22, true);
-    if (special & sectorMbf21Flags) raise("mbf21");
-    else if (special > lastVanillaSector) raise("boom");
+    raise(sectorLevel(view.getUint16(at + 22, true)));
   }
   for (const { view, at } of records(find("THINGS"), thingSize)) {
-    const type = view.getInt16(at + 6, true);
-    if (type === mbfHelperDog) raise("mbf");
-    else if (boomThings.has(type)) raise("boom");
+    raise(thingLevel(view.getInt16(at + 6, true)));
   }
   return level;
 }

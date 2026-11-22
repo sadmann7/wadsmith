@@ -306,7 +306,10 @@ function sectorContainers(map: GameMap) {
   const cached = containerCache.get(map);
   if (cached) return cached;
   const containers = new Map<string, Sector | null>();
+  // A room with a missing corner has no outline, so it is neither inside
+  // anything nor around anything.
   const outlines = map.sectors
+    .filter((sector) => sectorVertices(sector).every((id) => map.vertices[id]))
     .map((sector) => {
       const polygon = sectorPolygon(map, sector);
       return {
@@ -344,8 +347,8 @@ function containerOf(map: GameMap, sector: Sector) {
 }
 
 // The rooms on each side of a wall. A room drawn inside another opens onto
-// it through every wall no other room shares, and covers the side of any
-// pillar it is drawn against.
+// it through every wall no other room shares, unless the wall is kept solid,
+// and covers the side of any pillar it is drawn against.
 function wallOwners(map: GameMap) {
   const cached = ownerCache.get(map);
   if (cached) return cached;
@@ -372,7 +375,7 @@ function wallOwners(map: GameMap) {
       const key = wallKey(from, to);
       const list = owners.get(key) ?? [];
       if (list.length === 1) {
-        owners.set(key, [...list, container]);
+        if (!map.lines?.[key]?.solid) owners.set(key, [...list, container]);
       } else if (
         list.includes(container) &&
         pillarSides.has(`${container.id}:${key}`)
@@ -386,6 +389,28 @@ function wallOwners(map: GameMap) {
   }
   ownerCache.set(map, owners);
   return owners;
+}
+
+// The order the engine reads an outline in, with its room on the right: a
+// room's outline runs one way round and a pillar's the other.
+function engineOrder(map: GameMap, loop: string[], pillar: boolean) {
+  const area = signedArea(loopPolygon(map, loop));
+  return (pillar ? area > 0 : area < 0) ? loop.toReversed() : loop;
+}
+
+// The corner a room's wall starts at as the engine reads it, where its
+// texture begins.
+function wallStart(map: GameMap, sector: Sector, wall: string) {
+  for (const [at, loop] of sectorLoops(sector).entries()) {
+    const edge = loopEdges(engineOrder(map, loop, at > 0)).find(
+      (item) => wallKey(item.from, item.to) === wall,
+    );
+    if (edge) return edge.from;
+  }
+  return (
+    sectorDetails(sector).find((item) => wallKey(item.from, item.to) === wall)
+      ?.from ?? null
+  );
 }
 
 // Bigger rooms first, so a room drawn inside another paints over it.
@@ -412,6 +437,7 @@ export {
   boxOf,
   containerOf,
   cross,
+  engineOrder,
   holeAt,
   interiorPoint,
   loopEdges,
@@ -434,6 +460,7 @@ export {
   wallKey,
   wallOwners,
   wallPartTexture,
+  wallStart,
   wallTextureOf,
   type Box,
   type Edge,

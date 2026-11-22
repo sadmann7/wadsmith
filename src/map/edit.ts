@@ -5,11 +5,13 @@ import {
   pointInSector,
   sectorAt,
   sectorEdges,
+  sectorLoops,
   sectorPolygon,
   sectorVertices,
   signedArea,
   wallKey,
   wallOwners,
+  wallStart,
 } from "./geometry";
 import type {
   DoorSettings,
@@ -365,6 +367,10 @@ function duplicateThings(map: GameMap, ids: string[]) {
     next = updateThing(added.map, added.id, {
       skills: thing.skills,
       ambush: thing.ambush,
+      multiplayer: thing.multiplayer,
+      notDeathmatch: thing.notDeathmatch,
+      notCoop: thing.notCoop,
+      friendly: thing.friendly,
     });
     copies.push(added.id);
   }
@@ -787,6 +793,227 @@ function roomCenter(map: GameMap, sector: Sector): Point {
   return snapPoint(polygon[0]);
 }
 
+// A new corner on a wall splits it in every outline along it, and both halves
+// keep the wall's settings and textures. Snapping can take the corner off a
+// slanted wall's line, which bends the wall slightly where it lands.
+function splitWall(
+  map: GameMap,
+  wall: string,
+  point: Point,
+  grid = gridSize,
+): { map: GameMap; id: string } | null {
+  const [from, to] = wall.split("|");
+  const a = map.vertices[from];
+  const b = map.vertices[to];
+  if (!a || !b) return null;
+  if (map.switches.some((item) => wallKey(item.from, item.to) === wall)) {
+    return null;
+  }
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const length = dx * dx + dy * dy;
+  if (length === 0) return null;
+  const along = Math.max(
+    0,
+    Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / length),
+  );
+  const at = snapPoint({ x: a.x + dx * along, y: a.y + dy * along }, grid);
+  if ((at.x === a.x && at.y === a.y) || (at.x === b.x && at.y === b.y)) {
+    return null;
+  }
+  const vertices = { ...map.vertices };
+  const id = findVertexAt(map, at) ?? nextId("v", Object.keys(vertices));
+  vertices[id] = at;
+  const split = (chain: string[], closed: boolean) =>
+    chain.flatMap((vertex, index) => {
+      if (!closed && index === chain.length - 1) return [vertex];
+      const next = chain[(index + 1) % chain.length];
+      return (vertex === from && next === to) ||
+        (vertex === to && next === from)
+        ? [vertex, id]
+        : [vertex];
+    });
+  const halves = [wallKey(from, id), wallKey(id, to)];
+  const line = map.lines?.[wall];
+  // A texture runs on along a room's second half from where its first half
+  // ends, so the picture stays whole across the new corner.
+  const firstLength = (start: string) =>
+    Math.round(
+      Math.hypot(at.x - map.vertices[start].x, at.y - map.vertices[start].y),
+    );
+  // The room around a nested room has no edge of its own on their shared
+  // wall, and reads it from the other end.
+  const owners = wallOwners(map).get(wall) ?? [];
+  const startFor = (sectorId: string) => {
+    const sector = owners.find((item) => item.id === sectorId);
+    const own = sector && wallStart(map, sector, wall);
+    if (own) return own;
+    const other = owners.find((item) => item.id !== sectorId);
+    const theirs = other && wallStart(map, other, wall);
+    return theirs ? (theirs === from ? to : from) : from;
+  };
+  const sidesFor = (half: number) =>
+    line?.sides &&
+    Object.fromEntries(
+      Object.entries(line.sides).map(([sectorId, side]) => {
+        const start = startFor(sectorId);
+        const first = start === from ? 0 : 1;
+        return [
+          sectorId,
+          half === first
+            ? side
+            : { ...side, offsetX: (side.offsetX ?? 0) + firstLength(start) },
+        ];
+      }),
+    );
+  const halfLine = (half: number) =>
+    line && withoutUnset({ ...line, sides: sidesFor(half) });
+  return {
+    id,
+    map: {
+      ...map,
+      vertices,
+      sectors: map.sectors.map((sector) => {
+        if (
+          !sectorEdges(sector).some(
+            (edge) => wallKey(edge.from, edge.to) === wall,
+          )
+        ) {
+          return sector;
+        }
+        const painted = sector.wallOverrides?.[wall];
+        return {
+          ...sector,
+          vertices: split(sector.vertices, true),
+          ...(sector.holes
+            ? { holes: sector.holes.map((hole) => split(hole, true)) }
+            : {}),
+          ...(sector.details
+            ? { details: sector.details.map((chain) => split(chain, false)) }
+            : {}),
+          ...(painted
+            ? {
+                wallOverrides: withoutUnset({
+                  ...sector.wallOverrides,
+                  [wall]: undefined,
+                  [halves[0]]: painted,
+                  [halves[1]]: painted,
+                }),
+              }
+            : {}),
+        };
+      }),
+      lines: line
+        ? withoutUnset({
+            ...map.lines,
+            [wall]: undefined,
+            [halves[0]]: halfLine(0),
+            [halves[1]]: halfLine(1),
+          })
+        : map.lines,
+    },
+  };
+}
+
+function closedChain(chain: string[]) {
+  return chain.filter((id, index) => id !== chain[(index + 1) % chain.length]);
+}
+
+function openChain(chain: string[]) {
+  return chain.filter((id, index) => index === 0 || id !== chain[index - 1]);
+}
+
+// Every use of one corner moves to another, so walls join up and a wall that
+// ran between the two goes away.
+function replaceCorner(map: GameMap, from: string, to: string): GameMap {
+  const rename = (id: string) => (id === from ? to : id);
+  const rekey = <T>(record: Record<string, T> | undefined) => {
+    if (!record) return undefined;
+    const out: Record<string, T> = {};
+    const holds = (key: string) => key.split("|").includes(from);
+    const entries = Object.entries(record).toSorted(
+      ([a], [b]) => Number(holds(a)) - Number(holds(b)),
+    );
+    for (const [key, value] of entries) {
+      const [first, second] = key.split("|").map(rename);
+      const renamed = wallKey(first, second);
+      if (first !== second && !(renamed in out)) out[renamed] = value;
+    }
+    return withoutUnset(out);
+  };
+  const vertices = { ...map.vertices };
+  delete vertices[from];
+  return pruneUnused({
+    ...map,
+    vertices,
+    sectors: map.sectors.map((sector) => {
+      const next: Sector = {
+        ...sector,
+        vertices: closedChain(sector.vertices.map(rename)),
+      };
+      if (sector.holes) {
+        next.holes = sector.holes.map((hole) => closedChain(hole.map(rename)));
+      }
+      if (sector.details) {
+        const details = sector.details
+          .map((chain) => openChain(chain.map(rename)))
+          .filter((chain) => chain.length >= 2);
+        if (details.length > 0) next.details = details;
+        else delete next.details;
+      }
+      const overrides = rekey(sector.wallOverrides);
+      if (overrides) next.wallOverrides = overrides;
+      else delete next.wallOverrides;
+      return next;
+    }),
+    lines: rekey(map.lines),
+    switches: map.switches
+      .map((item) => ({
+        ...item,
+        from: rename(item.from),
+        to: rename(item.to),
+      }))
+      .filter((item) => item.from !== item.to),
+  });
+}
+
+// A corner dropped onto another becomes that corner.
+// Two corners of one outline can only join when they sit side by side, or
+// the outline would run through a corner twice.
+function canJoin(map: GameMap, from: string, to: string) {
+  return map.sectors.every((sector) =>
+    [
+      ...sectorLoops(sector).map((loop) => ({ loop, closed: true })),
+      ...(sector.details ?? []).map((loop) => ({ loop, closed: false })),
+    ].every(({ loop, closed }) => {
+      const a = loop.indexOf(from);
+      const b = loop.indexOf(to);
+      if (a < 0 || b < 0) return true;
+      const apart = Math.abs(a - b);
+      return apart === 1 || (closed && apart === loop.length - 1);
+    }),
+  );
+}
+
+function mergeCorners(map: GameMap, ids: string[]): GameMap {
+  let next = map;
+  for (const id of ids) {
+    const point = next.vertices[id];
+    if (!point) continue;
+    const target = Object.keys(next.vertices).find(
+      (other) =>
+        other !== id &&
+        !ids.includes(other) &&
+        next.vertices[other].x === point.x &&
+        next.vertices[other].y === point.y,
+    );
+    if (target && canJoin(next, id, target)) {
+      next = replaceCorner(next, id, target);
+    }
+  }
+  return next;
+}
+
 function withHoles(sector: Sector, holes: string[][]): Sector {
   const next: Sector = { ...sector, holes };
   if (holes.length === 0) delete next.holes;
@@ -1031,6 +1258,7 @@ export {
   gridSize,
   gridSizes,
   makePillar,
+  mergeCorners,
   positionsOf,
   removeDetailLine,
   removeHole,
@@ -1047,6 +1275,7 @@ export {
   snap,
   snapCorners,
   snapPoint,
+  splitWall,
   switchKeyPrefix,
   thingKeyPrefix,
   updateLine,

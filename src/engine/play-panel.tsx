@@ -3,6 +3,7 @@ import * as React from "react";
 
 import type { GameMap, Point } from "@/map/types";
 import { compileEpisode, compileMap, type Lump } from "@/wad/compile";
+import { inspectWads } from "@/wad/inspect";
 import type { NetworkState } from "./doom-worker";
 import { startGameClient, type GameClient } from "./game-client";
 import { EndGameConfirm, GameHud, GameTopBar, type ScoreRow } from "./game-hud";
@@ -287,7 +288,9 @@ function GameSession({
           files: files ?? {
             wads: built ? [built] : [],
             dehacked: [],
-            complevel: "vanilla",
+            complevel: built
+              ? inspectWads([{ name: "map.wad", data: built }]).complevel
+              : "vanilla",
             warp: 1,
           },
           sound: soundRef.current,

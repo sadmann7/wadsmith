@@ -50,6 +50,7 @@ import {
   type Episode,
   type EpisodeMap,
   type EpisodeStore,
+  withComplevel,
 } from "./episode-data";
 import { SidebarDrawer, type SidebarProps } from "./app-sidebar";
 import {
@@ -793,9 +794,12 @@ function EpisodeApp() {
     const entry = createMapEntry(
       episode.id,
       form.slot,
-      form.featured
-        ? { ...structuredClone(form.featured.map), name: form.name }
-        : mapFromTemplate(form.template, form.name),
+      withComplevel(
+        form.featured
+          ? { ...structuredClone(form.featured.map), name: form.name }
+          : mapFromTemplate(form.template, form.name),
+        form.complevel,
+      ),
       { description: form.description, par: form.par },
     );
     try {
@@ -817,7 +821,7 @@ function EpisodeApp() {
         slot: form.slot,
         description: form.description,
         par: form.par,
-        map: { ...entry.map, name: form.name },
+        map: withComplevel({ ...entry.map, name: form.name }, form.complevel),
         editedAt: Date.now(),
       }));
       if (!saved) return "This map no longer exists.";

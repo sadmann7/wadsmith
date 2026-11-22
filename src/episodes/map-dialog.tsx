@@ -1,6 +1,9 @@
 import * as React from "react";
 
+import { Choice } from "@/engine/coop-ui";
 import { MapOutline } from "@/components/map-outline";
+import { complevelLabels, complevels } from "@/map/complevel";
+import type { Complevel } from "@/map/types";
 import { MapPlan } from "@/components/map-plan";
 import { featuredMaps, type FeaturedMap } from "@/map/featured";
 import {
@@ -41,6 +44,7 @@ interface MapDetails {
   slot: string;
   description: string;
   par: number | null;
+  complevel: Complevel;
   template: MapTemplate;
   featured: FeaturedMap | null;
 }
@@ -63,6 +67,9 @@ function MapDialog({
     entry?.description ?? "",
   );
   const [par, setPar] = React.useState(formatPar(entry?.par ?? null));
+  const [complevel, setComplevel] = React.useState<Complevel>(
+    entry?.map.complevel ?? "vanilla",
+  );
   const [template, setTemplate] = React.useState<MapTemplate>("room");
   const [source, setSource] = React.useState<"template" | "featured">(
     "template",
@@ -85,6 +92,7 @@ function MapDialog({
       slot,
       description: description.trim(),
       par: parValue,
+      complevel,
       template,
       featured: source === "featured" ? featured : null,
     });
@@ -162,6 +170,22 @@ function MapDialog({
                     onValueChange={setPar}
                   />
                 </Field>
+                <FieldItem className="col-span-2">
+                  <Label>Compatibility</Label>
+                  <Choice
+                    label="Compatibility"
+                    value={complevel}
+                    options={complevels.map((value) => ({
+                      value,
+                      label: complevelLabels[value],
+                    }))}
+                    onChange={setComplevel}
+                  />
+                  <p className="m-0 text-xs text-muted-foreground">
+                    The engine the map is made for. Raw specials and flags past
+                    this level fail the map's checks.
+                  </p>
+                </FieldItem>
               </div>
             ) : (
               <fieldset className="m-0 grid gap-1.5 border-0 p-0">
