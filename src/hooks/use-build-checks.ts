@@ -1,5 +1,7 @@
 import * as React from "react";
 
+import type { EpisodeMap } from "@/lib/episodes/episode-data";
+
 import {
   buildCheckResult,
   buildChecksSnapshot,
@@ -7,13 +9,6 @@ import {
   noBuildChecks,
   subscribeBuildChecks,
 } from "@/lib/episodes/build-checks";
-import type { EpisodeMap } from "@/lib/episodes/episode-data";
-
-function useStartChecks(entries: EpisodeMap[]) {
-  React.useEffect(() => {
-    for (const entry of entries) if (!entry.broken) void checkBuild(entry);
-  });
-}
 
 export function useBuildChecks(entries: EpisodeMap[]) {
   useStartChecks(entries);
@@ -31,4 +26,10 @@ export function useBuildProblem(entry: EpisodeMap) {
   return result?.revision === entry.mapRevision
     ? result.build.problem
     : undefined;
+}
+
+function useStartChecks(entries: EpisodeMap[]) {
+  React.useEffect(() => {
+    for (const entry of entries) if (!entry.broken) void checkBuild(entry);
+  });
 }

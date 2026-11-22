@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { defined } from "@/lib/defined";
+
 import {
   decodeSectorSpecial,
   encodeSectorSpecial,
@@ -9,10 +11,10 @@ import {
   generalizedKinds,
   generalizedTrigger,
   isGeneralized,
+  type SectorBits,
   sectorSpecialOf,
   sectorSpecialPatch,
   withField,
-  type SectorBits,
 } from "./boom";
 import { lineLevel, sectorLevel } from "./complevel";
 
@@ -80,7 +82,7 @@ describe("Boom generalized line specials", () => {
       crush: 1,
     });
     // With nothing to copy, the model bit lets monsters trigger the line.
-    const change = fields.find((field) => field.id === "change")!;
+    const change = defined(fields.find((field) => field.id === "change"));
     const plain = withField(special, change, 0);
     const ids = generalizedFields(plain).map((field) => field.id);
     expect(ids).toContain("monsters");

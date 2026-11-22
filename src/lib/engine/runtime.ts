@@ -1,6 +1,7 @@
-import { FramePacer } from "./frame-pacer";
-import { warpArgs, type GameInfo } from "./game";
 import type { NetInbox } from "./net-inbox";
+
+import { FramePacer } from "./frame-pacer";
+import { type GameInfo, warpArgs } from "./game";
 
 interface DoomModule {
   FS: {
@@ -476,12 +477,6 @@ export class DoomGame {
   }
 }
 
-function exitCode(error: unknown) {
-  return typeof error === "object" && error && "wadsmithExit" in error
-    ? (error.wadsmithExit as number)
-    : null;
-}
-
 export async function startDoom({
   createDoom,
   iwad,
@@ -596,6 +591,12 @@ export async function startDoom({
   const game = new DoomGame(doomModule, events, screen);
   game.run();
   return game;
+}
+
+function exitCode(error: unknown) {
+  return typeof error === "object" && error && "wadsmithExit" in error
+    ? (error.wadsmithExit as number)
+    : null;
 }
 
 export type { Complevel };

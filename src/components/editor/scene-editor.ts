@@ -1,13 +1,24 @@
 import {
   bindDrag,
+  type ChangeDetails,
   createChange,
   definePrimitive,
   dragThreshold,
   live,
-  type ChangeDetails,
 } from "@ui-sdk/core";
 import { createParts } from "@ui-sdk/react/primitive";
 
+import type { GameMap, Point, ThingKind } from "@/lib/map/types";
+import type { SceneCamera } from "@/lib/preview/scene-camera";
+import type { SceneAssets } from "@/lib/wad/assets";
+
+import {
+  isDragging,
+  isKeyboardMenu,
+  isSecondaryPress,
+  openMenuFromKey,
+} from "@/lib/editor/map-target";
+import { thingCatalog } from "@/lib/map/catalog";
 import {
   addThing,
   gridSize,
@@ -15,22 +26,12 @@ import {
   snapPoint,
   updateThing,
 } from "@/lib/map/edit";
-import { thingCatalog } from "@/lib/map/catalog";
 import { sectorAt } from "@/lib/map/geometry";
 import {
   describeSurface,
   moveSurfaceHeight,
   parseSurface,
 } from "@/lib/map/surfaces";
-import {
-  isDragging,
-  isKeyboardMenu,
-  isSecondaryPress,
-  openMenuFromKey,
-} from "@/lib/editor/map-target";
-import type { GameMap, Point, ThingKind } from "@/lib/map/types";
-import type { SceneAssets } from "@/lib/wad/assets";
-import type { SceneCamera } from "@/lib/preview/scene-camera";
 import {
   cameraBasis,
   createRenderTarget,
@@ -98,11 +99,6 @@ const moveSpeed = 260;
 const turnSpeed = 120;
 const placeDistances = [128, 96, 64, 32];
 const walkKeys = /^(Arrow(Up|Down|Left|Right)|Key[WASD])$/;
-
-function standable(map: GameMap, point: Point) {
-  const sector = sectorAt(map, point);
-  return !!sector && !sector.door;
-}
 
 const sceneEditor = definePrimitive({
   name: "scene-editor",
@@ -633,7 +629,7 @@ const sceneEditor = definePrimitive({
         tabindex: "0",
         "aria-roledescription": "3D map editor",
       }),
-      live: live<SceneState, any, {}>((state) => {
+      live: live<SceneState, unknown, {}>((state) => {
         const surface = state.hovered ? parseSurface(state.hovered) : null;
         let hover: string | undefined;
         if (state.ghost) hover = "place";
@@ -658,6 +654,11 @@ const sceneEditor = definePrimitive({
   }),
   agent: { shown: () => false },
 });
+
+function standable(map: GameMap, point: Point) {
+  const sector = sectorAt(map, point);
+  return !!sector && !sector.door;
+}
 
 export const { Root: SceneCanvas } = createParts(sceneEditor, {
   root: "canvas",

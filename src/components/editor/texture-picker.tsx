@@ -2,12 +2,9 @@ import { Search } from "lucide-react";
 import * as React from "react";
 
 import type { TextureNames, TextureUse } from "@/lib/map/textures";
-import { TextureSwatch } from "./surface-panel";
 import type { Picture, SceneAssets } from "@/lib/wad/assets";
-import { TextureGrid, TextureTile } from "./texture-grid";
+
 import { Button } from "@/components/ui/button";
-import { InputGroup, InputGroupInput } from "@/components/ui/input";
-import { Toggle, ToggleGroup } from "@/components/ui/toggle";
 import {
   Dialog,
   DialogBackdrop,
@@ -17,6 +14,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { InputGroup, InputGroupInput } from "@/components/ui/input";
+import { Toggle, ToggleGroup } from "@/components/ui/toggle";
+
+import { TextureSwatch } from "./surface-panel";
+import { TextureGrid, TextureTile } from "./texture-grid";
 
 export type TextureKind = "flat" | "wall";
 
@@ -27,45 +29,6 @@ interface Category {
 }
 
 const pageSize = 48;
-
-const flatGroups: [string, RegExp][] = [
-  ["Floors", /^(FLOOR|FLAT|MFLR|SFLR|STEP)/],
-  ["Ceilings", /^(CEIL|TLITE|GRNLITE)/],
-  ["Rock", /^(RROCK|GRNROCK|GRASS|DEM)/],
-  ["Liquid", /^(BLOOD|LAVA|NUKAGE|FWATER|SWATER|SLIME)\d/],
-];
-
-const wallGroups: [string, RegExp][] = [
-  ["Brick", /BRICK/],
-  ["Metal", /METAL|AQMET|SUPPORT|DOORSTOP|PIPE/],
-  ["Stone", /STONE|ROCK|ASHWALL|CEMENT|AQCON/],
-  ["Tech", /TEK|COMP|LITE|PANEL|SILVER/],
-  ["Wood", /WOOD/],
-];
-
-function categoriesFor(
-  kind: TextureKind,
-  common: readonly string[],
-  use: TextureUse,
-  available: TextureNames,
-): Category[] {
-  const names = kind === "flat" ? available.flats : available.walls;
-  const groups = kind === "flat" ? flatGroups : wallGroups;
-  return [
-    { id: "all", label: "All", names },
-    {
-      id: "used",
-      label: "Used in this map",
-      names: [...use.keys()].toSorted(),
-    },
-    { id: "common", label: "Common", names: common },
-    ...groups.map(([label, pattern]) => ({
-      id: label,
-      label,
-      names: names.filter((name) => pattern.test(name)),
-    })),
-  ];
-}
 
 interface TexturePickerProps {
   kind: TextureKind;
@@ -310,4 +273,43 @@ export function TexturePicker({
       </DialogContent>
     </Dialog>
   );
+}
+
+const flatGroups: [string, RegExp][] = [
+  ["Floors", /^(FLOOR|FLAT|MFLR|SFLR|STEP)/],
+  ["Ceilings", /^(CEIL|TLITE|GRNLITE)/],
+  ["Rock", /^(RROCK|GRNROCK|GRASS|DEM)/],
+  ["Liquid", /^(BLOOD|LAVA|NUKAGE|FWATER|SWATER|SLIME)\d/],
+];
+
+const wallGroups: [string, RegExp][] = [
+  ["Brick", /BRICK/],
+  ["Metal", /METAL|AQMET|SUPPORT|DOORSTOP|PIPE/],
+  ["Stone", /STONE|ROCK|ASHWALL|CEMENT|AQCON/],
+  ["Tech", /TEK|COMP|LITE|PANEL|SILVER/],
+  ["Wood", /WOOD/],
+];
+
+function categoriesFor(
+  kind: TextureKind,
+  common: readonly string[],
+  use: TextureUse,
+  available: TextureNames,
+): Category[] {
+  const names = kind === "flat" ? available.flats : available.walls;
+  const groups = kind === "flat" ? flatGroups : wallGroups;
+  return [
+    { id: "all", label: "All", names },
+    {
+      id: "used",
+      label: "Used in this map",
+      names: [...use.keys()].toSorted(),
+    },
+    { id: "common", label: "Common", names: common },
+    ...groups.map(([label, pattern]) => ({
+      id: label,
+      label,
+      names: names.filter((name) => pattern.test(name)),
+    })),
+  ];
 }

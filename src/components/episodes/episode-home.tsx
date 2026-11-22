@@ -16,26 +16,25 @@ import {
 } from "lucide-react";
 import * as React from "react";
 
-import { MapPlan } from "@/components/map-plan";
-import { engineSlot, slotCount, type GameInfo } from "@/lib/engine/game";
 import type { CheckContext } from "@/lib/map/validate";
-import { useBuildProblem } from "@/hooks/use-build-checks";
-import { useNow } from "@/hooks/use-now";
-import { MapDialog } from "./map-dialog";
-import { MapOrder, MapOrderHandle, MapOrderRow } from "./map-order";
-import type { MapDetails } from "./map-dialog";
-import {
-  bySlot,
-  formatPar,
-  freeSlots,
-  mapName,
-  mapStatus,
-  maxNameLength,
-  type Episode,
-  type EpisodeMap,
-} from "@/lib/episodes/episode-data";
+
 import { AppShell, Crumb, type SidebarProps } from "@/components/app-sidebar";
+import { MapPlan } from "@/components/map-plan";
+import { Alert } from "@/components/ui/alert";
+import {
+  AlertDialog,
+  AlertDialogBackdrop,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button, buttonVariants } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogBackdrop,
+  DialogContent,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
@@ -45,20 +44,24 @@ import {
   MenuSeparator,
   MenuTrigger,
 } from "@/components/ui/menu";
+import { useBuildProblem } from "@/hooks/use-build-checks";
+import { useNow } from "@/hooks/use-now";
+import { engineSlot, type GameInfo, slotCount } from "@/lib/engine/game";
 import {
-  Dialog,
-  DialogBackdrop,
-  DialogContent,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogBackdrop,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { Alert } from "@/components/ui/alert";
+  bySlot,
+  type Episode,
+  type EpisodeMap,
+  formatPar,
+  freeSlots,
+  mapName,
+  mapStatus,
+  maxNameLength,
+} from "@/lib/episodes/episode-data";
+
+import type { MapDetails } from "./map-dialog";
+
+import { MapDialog } from "./map-dialog";
+import { MapOrder, MapOrderHandle, MapOrderRow } from "./map-order";
 
 type MapAction = "open" | "settings" | "duplicate" | "delete" | "up" | "down";
 
@@ -74,104 +77,6 @@ const statusDots = {
   error: "bg-destructive",
   checking: "bg-muted-foreground",
 };
-
-function formatEdited(time: number, now: number) {
-  const minutes = Math.floor((now - time) / 60_000);
-  if (minutes < 1) return "Just now";
-  if (minutes < 60) return `${minutes} min ago`;
-  if (minutes < 24 * 60) return `${Math.floor(minutes / 60)} hr ago`;
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-  }).format(time);
-}
-
-function countLabel(count: number) {
-  return `${count} ${count === 1 ? "map" : "maps"}`;
-}
-
-interface NameDialogProps {
-  initial: string;
-  onSubmit: (name: string) => void;
-  onClose: () => void;
-}
-
-function NameDialog({ initial, onSubmit, onClose }: NameDialogProps) {
-  const [name, setName] = React.useState(initial);
-  const submit = (event: React.FormEvent) => {
-    event.preventDefault();
-    if (name.trim()) onSubmit(name.trim());
-  };
-  return (
-    <Dialog
-      open
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
-    >
-      <DialogBackdrop />
-      <DialogContent className="w-[420px]">
-        <form onSubmit={submit} className="grid gap-4 p-5">
-          <DialogTitle>Rename episode</DialogTitle>
-          <Field>
-            <FieldLabel>Name</FieldLabel>
-            <Input
-              maxLength={maxNameLength}
-              value={name}
-              onValueChange={setName}
-            />
-          </Field>
-          <div className="flex justify-end gap-2">
-            <Button onClick={onClose}>Cancel</Button>
-            <Button
-              variant="primary"
-              type="submit"
-
-              disabled={!name.trim()}
-            >
-              Save
-            </Button>
-          </div>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-interface ConfirmDialogProps {
-  confirmation: Confirmation;
-  onClose: () => void;
-}
-
-function ConfirmDialog({ confirmation, onClose }: ConfirmDialogProps) {
-  return (
-    <AlertDialog
-      open
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
-    >
-      <AlertDialogBackdrop />
-      <AlertDialogContent className="w-[420px]">
-        <AlertDialogTitle>{confirmation.title}</AlertDialogTitle>
-        <AlertDialogDescription>{confirmation.body}</AlertDialogDescription>
-        <div className="flex justify-end gap-2">
-          <Button onClick={onClose}>Cancel</Button>
-          <Button
-            variant="destructive"
-
-            onClick={() => {
-              confirmation.run();
-              onClose();
-            }}
-          >
-            Delete
-          </Button>
-        </div>
-      </AlertDialogContent>
-    </AlertDialog>
-  );
-}
 
 interface MapRowProps {
   entry: EpisodeMap;
@@ -394,7 +299,7 @@ export function EpisodeHome({
   const label = (slot: string) => engineSlot(slot, game);
   const range =
     sorted.length > 1
-      ? `${label(sorted[0].slot)} to ${label(sorted.at(-1)!.slot)}`
+      ? `${label(sorted[0].slot)} to ${label(sorted[sorted.length - 1].slot)}`
       : sorted[0] && label(sorted[0].slot);
 
   // Holds the dropped order until the save lands, so rows don't snap back meanwhile.
@@ -700,5 +605,103 @@ export function EpisodeHome({
         />
       ) : null}
     </AppShell>
+  );
+}
+
+function formatEdited(time: number, now: number) {
+  const minutes = Math.floor((now - time) / 60_000);
+  if (minutes < 1) return "Just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  if (minutes < 24 * 60) return `${Math.floor(minutes / 60)} hr ago`;
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+  }).format(time);
+}
+
+function countLabel(count: number) {
+  return `${count} ${count === 1 ? "map" : "maps"}`;
+}
+
+interface NameDialogProps {
+  initial: string;
+  onSubmit: (name: string) => void;
+  onClose: () => void;
+}
+
+function NameDialog({ initial, onSubmit, onClose }: NameDialogProps) {
+  const [name, setName] = React.useState(initial);
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (name.trim()) onSubmit(name.trim());
+  };
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogBackdrop />
+      <DialogContent className="w-[420px]">
+        <form onSubmit={submit} className="grid gap-4 p-5">
+          <DialogTitle>Rename episode</DialogTitle>
+          <Field>
+            <FieldLabel>Name</FieldLabel>
+            <Input
+              maxLength={maxNameLength}
+              value={name}
+              onValueChange={setName}
+            />
+          </Field>
+          <div className="flex justify-end gap-2">
+            <Button onClick={onClose}>Cancel</Button>
+            <Button
+              variant="primary"
+              type="submit"
+
+              disabled={!name.trim()}
+            >
+              Save
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface ConfirmDialogProps {
+  confirmation: Confirmation;
+  onClose: () => void;
+}
+
+function ConfirmDialog({ confirmation, onClose }: ConfirmDialogProps) {
+  return (
+    <AlertDialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <AlertDialogBackdrop />
+      <AlertDialogContent className="w-[420px]">
+        <AlertDialogTitle>{confirmation.title}</AlertDialogTitle>
+        <AlertDialogDescription>{confirmation.body}</AlertDialogDescription>
+        <div className="flex justify-end gap-2">
+          <Button onClick={onClose}>Cancel</Button>
+          <Button
+            variant="destructive"
+
+            onClick={() => {
+              confirmation.run();
+              onClose();
+            }}
+          >
+            Delete
+          </Button>
+        </div>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }

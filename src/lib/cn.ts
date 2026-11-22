@@ -1,4 +1,4 @@
-import { cn as merge, type ClassValue } from "cn";
+import { type ClassValue, cn as merge } from "cn";
 
 export function cn(...classes: ClassValue[]): string;
 export function cn<State>(

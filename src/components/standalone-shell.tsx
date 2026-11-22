@@ -2,11 +2,13 @@
 
 import * as React from "react";
 
-import { defaultGame } from "@/lib/engine/game";
-import { useIwad } from "@/hooks/use-iwad";
-import { AppShell } from "./app-sidebar";
 import type { Episode } from "@/lib/episodes/episode-data";
+
+import { useIwad } from "@/hooks/use-iwad";
+import { defaultGame } from "@/lib/engine/game";
 import { openEpisodeStore } from "@/lib/episodes/episode-store";
+
+import { AppShell } from "./app-sidebar";
 
 interface StandaloneShellProps {
   children: React.ReactNode;

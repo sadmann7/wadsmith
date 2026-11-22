@@ -1,3 +1,22 @@
+import type { TextureNames } from "@/lib/map/textures";
+import type {
+  Complevel,
+  DoorSettings,
+  GameMap,
+  LineAction,
+  LineSettings,
+  LineSide,
+  MapSwitch,
+  Point,
+  Sector,
+  SectorEffect,
+  Thing,
+  ThingKind,
+  ThingSkill,
+} from "@/lib/map/types";
+
+import { defined } from "@/lib/defined";
+import { generalizedTrigger, isGeneralized } from "@/lib/map/boom";
 import {
   doorTextures,
   sectorEffects,
@@ -6,18 +25,16 @@ import {
   thingKinds,
 } from "@/lib/map/catalog";
 import {
-  freedoomFlats,
-  freedoomWalls,
-  middleTextures,
-} from "@/lib/map/freedoom-textures";
-import type { TextureNames } from "@/lib/map/textures";
-import { generalizedTrigger, isGeneralized } from "@/lib/map/boom";
-import {
   higherLevel,
   lineLevel,
   sectorLevel,
   thingLevel,
 } from "@/lib/map/complevel";
+import {
+  freedoomFlats,
+  freedoomWalls,
+  middleTextures,
+} from "@/lib/map/freedoom-textures";
 import {
   pointInPolygon,
   sectorContainers,
@@ -35,21 +52,7 @@ import {
   opensDoor,
   usedFromFront,
 } from "@/lib/map/lines";
-import type {
-  Complevel,
-  DoorSettings,
-  GameMap,
-  LineAction,
-  LineSettings,
-  LineSide,
-  MapSwitch,
-  Point,
-  Sector,
-  SectorEffect,
-  Thing,
-  ThingKind,
-  ThingSkill,
-} from "@/lib/map/types";
+
 import type { DoomMap } from "./read-map";
 
 export interface ImportReport {
@@ -135,6 +138,8 @@ const fastManualDoors = new Set([117, 118]);
 
 const specialScrollLeft = 48;
 
+const actions = actionTable();
+
 function actionTable() {
   const table = new Map<number, Omit<LineAction, "tag">>();
   for (const kind of lineActionKinds) {
@@ -167,7 +172,6 @@ function actionTable() {
   return table;
 }
 
-const actions = actionTable();
 const effects = new Map(
   Object.entries(sectorEffects).map(([effect, { special }]) => [
     special,
@@ -184,123 +188,6 @@ const freedoomNames: TextureNames = {
   middles: middleTextures,
   textures: [...middleTextures, ...doorTextures, ...switchTextures],
 };
-
-// Keeping the sector on the right and turning as far right as possible walks
-// the smallest outline around it, so a sector that touches itself at a corner
-// comes back as two outlines.
-function traceLoops(edges: Edge[], points: Point[]) {
-  const outgoing = new Map<number, Edge[]>();
-  for (const edge of edges) {
-    outgoing.set(edge.from, [...(outgoing.get(edge.from) ?? []), edge]);
-  }
-  const used = new Set<Edge>();
-  const loops: number[][] = [];
-  let broken = false;
-  for (const first of edges) {
-    if (used.has(first)) continue;
-    const loop: number[] = [];
-    let edge = first;
-    let closed = false;
-    for (let step = 0; step <= edges.length; step += 1) {
-      used.add(edge);
-      loop.push(edge.from);
-      const from = points[edge.from];
-      const at = points[edge.to];
-      const inX = at.x - from.x;
-      const inY = at.y - from.y;
-      let next: Edge | null = null;
-      let best = Infinity;
-      for (const option of outgoing.get(edge.to) ?? []) {
-        if (used.has(option) && option !== first) continue;
-        const to = points[option.to];
-        const outX = to.x - at.x;
-        const outY = to.y - at.y;
-        const turn = Math.atan2(
-          inX * outY - inY * outX,
-          inX * outX + inY * outY,
-        );
-        if (turn < best) {
-          best = turn;
-          next = option;
-        }
-      }
-      if (!next) break;
-      if (next === first) {
-        closed = true;
-        break;
-      }
-      edge = next;
-    }
-    if (closed) loops.push(...splitRepeats(loop));
-    else broken = true;
-  }
-  return { loops, broken };
-}
-
-function splitRepeats(loop: number[]): number[][] {
-  const seen = new Map<number, number>();
-  for (const [index, vertex] of loop.entries()) {
-    const earlier = seen.get(vertex);
-    if (earlier !== undefined) {
-      return [
-        ...splitRepeats(loop.slice(earlier, index)),
-        ...splitRepeats([...loop.slice(0, earlier), ...loop.slice(index)]),
-      ];
-    }
-    seen.set(vertex, index);
-  }
-  return loop.length >= 3 ? [loop] : [];
-}
-
-function areaOf(loop: number[], points: Point[]) {
-  return signedArea(loop.map((index) => points[index]));
-}
-
-function holeInside(hole: number[], outer: number[], points: Point[]) {
-  const polygon = outer.map((index) => points[index]);
-  const shared = new Set(outer);
-  const free = hole.filter((index) => !shared.has(index));
-  if (free.length === 0) {
-    const center = {
-      x: hole.reduce((sum, index) => sum + points[index].x, 0) / hole.length,
-      y: hole.reduce((sum, index) => sum + points[index].y, 0) / hole.length,
-    };
-    return pointInPolygon(center, polygon);
-  }
-  return free.every((index) => pointInPolygon(points[index], polygon));
-}
-
-// One sector can hold two doors apart, but pieces cut from one door would
-// touch, and the engine can't open a door into another door.
-function piecesTouch(pieces: number[][]) {
-  const seen = new Set<string>();
-  for (const piece of pieces) {
-    const own = piece.map((from, index) =>
-      wallKey(String(from), String(piece[(index + 1) % piece.length])),
-    );
-    if (own.some((key) => seen.has(key))) return true;
-    own.forEach((key) => seen.add(key));
-  }
-  return false;
-}
-
-function isSwitch(name: string) {
-  return /^SW[12]/.test(name);
-}
-
-function mostCommon(names: string[]) {
-  const counts = new Map<string, number>();
-  for (const name of names) counts.set(name, (counts.get(name) ?? 0) + 1);
-  return [...counts].toSorted((a, b) => b[1] - a[1])[0]?.[0];
-}
-
-function vertexId(index: number) {
-  return `v${index}`;
-}
-
-function keyOf(a: number, b: number) {
-  return wallKey(vertexId(a), vertexId(b));
-}
 
 export function decompileMap(
   doom: DoomMap,
@@ -332,7 +219,7 @@ export function decompileMap(
   };
   const switchTexture = (name: string) => {
     if ((switchTextures as readonly string[]).includes(name)) {
-      return name as MapSwitch["texture"];
+      return name;
     }
     replaced.add(name);
     return switchTextures[0];
@@ -347,7 +234,7 @@ export function decompileMap(
   const canonical = doom.vertices.map((point, index) => {
     const key = `${point.x},${point.y}`;
     if (!sameSpot.has(key)) sameSpot.set(key, index);
-    return sameSpot.get(key)!;
+    return defined(sameSpot.get(key));
   });
   const points = doom.vertices;
   const sectorOf = (side: number | null) =>
@@ -599,7 +486,9 @@ export function decompileMap(
       (line) => line.frontSector === index || line.backSector === index,
     );
     const sideOf = (line: (typeof lines)[number]) =>
-      doom.sides[line.frontSector === index ? line.front! : line.back!];
+      doom.sides[
+        line.frontSector === index ? defined(line.front) : defined(line.back)
+      ];
     const middles = ownLines
       .filter((line) => line.backSector === null)
       .map((line) => sideOf(line).middle)
@@ -630,19 +519,19 @@ export function decompileMap(
         (line) =>
           doom.sides[
             line.frontSector === index
-              ? (line.back ?? line.front!)
-              : line.front!
+              ? (line.back ?? defined(line.front))
+              : defined(line.front)
           ].upper,
       );
       const upper = mostCommon(uppers.filter((name) => name !== noTexture));
       const texture = (doorTextures as readonly string[]).includes(upper ?? "")
-        ? (upper as DoorSettings["texture"])
+        ? upper
         : upper?.startsWith("BIGDOOR")
           ? "BIGDOOR2"
           : "DOOR3";
       if (upper && texture !== upper) replaced.add(upper);
       door = {
-        opensBy: doorCandidates.get(index)!,
+        opensBy: defined(doorCandidates.get(index)),
         closes: doorCloses.get(index) ?? true,
         ...(doorFast.has(index) ? { fast: true } : {}),
         texture,
@@ -816,7 +705,7 @@ export function decompileMap(
       }
     } else {
       const [{ id, side }] = kept;
-      const owner = sectorFor.get(id)!;
+      const owner = defined(sectorFor.get(id));
       const visible = [side.middle, side.upper, side.lower].find(
         (name) => name !== noTexture,
       );
@@ -831,7 +720,7 @@ export function decompileMap(
         entry.lowerFixed = false;
       }
       if (madeSwitch) {
-        const texture = switchTexture(visible!);
+        const texture = switchTexture(defined(visible));
         switches.push({
           id: `w${switches.length}`,
           sector: id,
@@ -950,7 +839,7 @@ export function decompileMap(
   const containers = sectorContainers(drawn);
   for (const sector of sectors) {
     if (!containers.get(sector.id)) continue;
-    const index = Number(/^s(\d+)/.exec(sector.id)![1]);
+    const index = Number(defined(/^s(\d+)/.exec(sector.id))[1]);
     sector.vertices.forEach((id, at) => {
       const next = sector.vertices[(at + 1) % sector.vertices.length];
       const line = lineAt.get(wallKey(id.slice(1), next.slice(1)));
@@ -987,4 +876,121 @@ export function decompileMap(
     },
     report,
   };
+}
+
+// Keeping the sector on the right and turning as far right as possible walks
+// the smallest outline around it, so a sector that touches itself at a corner
+// comes back as two outlines.
+function traceLoops(edges: Edge[], points: Point[]) {
+  const outgoing = new Map<number, Edge[]>();
+  for (const edge of edges) {
+    outgoing.set(edge.from, [...(outgoing.get(edge.from) ?? []), edge]);
+  }
+  const used = new Set<Edge>();
+  const loops: number[][] = [];
+  let broken = false;
+  for (const first of edges) {
+    if (used.has(first)) continue;
+    const loop: number[] = [];
+    let edge = first;
+    let closed = false;
+    for (let step = 0; step <= edges.length; step += 1) {
+      used.add(edge);
+      loop.push(edge.from);
+      const from = points[edge.from];
+      const at = points[edge.to];
+      const inX = at.x - from.x;
+      const inY = at.y - from.y;
+      let next: Edge | null = null;
+      let best = Infinity;
+      for (const option of outgoing.get(edge.to) ?? []) {
+        if (used.has(option) && option !== first) continue;
+        const to = points[option.to];
+        const outX = to.x - at.x;
+        const outY = to.y - at.y;
+        const turn = Math.atan2(
+          inX * outY - inY * outX,
+          inX * outX + inY * outY,
+        );
+        if (turn < best) {
+          best = turn;
+          next = option;
+        }
+      }
+      if (!next) break;
+      if (next === first) {
+        closed = true;
+        break;
+      }
+      edge = next;
+    }
+    if (closed) loops.push(...splitRepeats(loop));
+    else broken = true;
+  }
+  return { loops, broken };
+}
+
+function splitRepeats(loop: number[]): number[][] {
+  const seen = new Map<number, number>();
+  for (const [index, vertex] of loop.entries()) {
+    const earlier = seen.get(vertex);
+    if (earlier !== undefined) {
+      return [
+        ...splitRepeats(loop.slice(earlier, index)),
+        ...splitRepeats([...loop.slice(0, earlier), ...loop.slice(index)]),
+      ];
+    }
+    seen.set(vertex, index);
+  }
+  return loop.length >= 3 ? [loop] : [];
+}
+
+function areaOf(loop: number[], points: Point[]) {
+  return signedArea(loop.map((index) => points[index]));
+}
+
+function holeInside(hole: number[], outer: number[], points: Point[]) {
+  const polygon = outer.map((index) => points[index]);
+  const shared = new Set(outer);
+  const free = hole.filter((index) => !shared.has(index));
+  if (free.length === 0) {
+    const center = {
+      x: hole.reduce((sum, index) => sum + points[index].x, 0) / hole.length,
+      y: hole.reduce((sum, index) => sum + points[index].y, 0) / hole.length,
+    };
+    return pointInPolygon(center, polygon);
+  }
+  return free.every((index) => pointInPolygon(points[index], polygon));
+}
+
+function mostCommon(names: string[]) {
+  const counts = new Map<string, number>();
+  for (const name of names) counts.set(name, (counts.get(name) ?? 0) + 1);
+  return [...counts].toSorted((a, b) => b[1] - a[1])[0]?.[0];
+}
+
+// One sector can hold two doors apart, but pieces cut from one door would
+// touch, and the engine can't open a door into another door.
+function piecesTouch(pieces: number[][]) {
+  const seen = new Set<string>();
+  for (const piece of pieces) {
+    const own = piece.map((from, index) =>
+      wallKey(String(from), String(piece[(index + 1) % piece.length])),
+    );
+    if (own.some((key) => seen.has(key))) return true;
+    own.forEach((key) => seen.add(key));
+  }
+  return false;
+}
+
+function keyOf(a: number, b: number) {
+  return wallKey(vertexId(a), vertexId(b));
+}
+
+function vertexId(index: number) {
+  return `v${index}`;
+}
+
+function isSwitch(name: string) {
+  return /^SW[12]/.test(name);
 }

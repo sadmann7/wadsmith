@@ -1,11 +1,9 @@
 import { resolve } from "node:path";
-
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { unstable_dev, type Unstable_DevWorker } from "wrangler";
 
 import { allowedOrigin } from "./origin";
 
-const origin = "http://localhost:3000";
 let worker: Unstable_DevWorker;
 let base: string;
 
@@ -34,35 +32,6 @@ interface Client {
   socket: WebSocket;
   received: (string | ArrayBuffer)[];
   next: () => Promise<string | ArrayBuffer>;
-}
-
-function connect(room: string, from = origin) {
-  return new Promise<Client>((done, fail) => {
-    const socket = new WebSocket(`${base}/rooms/${room}`, {
-      headers: { Origin: from },
-    } as unknown as string[]);
-    socket.binaryType = "arraybuffer";
-    const received: (string | ArrayBuffer)[] = [];
-    const waiting: ((message: string | ArrayBuffer) => void)[] = [];
-    socket.addEventListener("message", (event) => {
-      const take = waiting.shift();
-      if (take) take(event.data);
-      else received.push(event.data);
-    });
-    socket.addEventListener("open", () =>
-      done({
-        socket,
-        received,
-        next: () =>
-          new Promise((take) => {
-            const message = received.shift();
-            if (message !== undefined) take(message);
-            else waiting.push(take);
-          }),
-      }),
-    );
-    socket.addEventListener("error", () => fail(new Error("Refused.")));
-  });
 }
 
 const settle = () => new Promise((done) => setTimeout(done, 200));
@@ -163,6 +132,37 @@ describe("room limits", () => {
     expect(result.reason).toBe("This room has expired.");
   }, 15_000);
 });
+
+const origin = "http://localhost:3000";
+
+function connect(room: string, from = origin) {
+  return new Promise<Client>((done, fail) => {
+    const socket = new WebSocket(`${base}/rooms/${room}`, {
+      headers: { Origin: from },
+    } as unknown as string[]);
+    socket.binaryType = "arraybuffer";
+    const received: (string | ArrayBuffer)[] = [];
+    const waiting: ((message: string | ArrayBuffer) => void)[] = [];
+    socket.addEventListener("message", (event) => {
+      const take = waiting.shift();
+      if (take) take(event.data);
+      else received.push(event.data);
+    });
+    socket.addEventListener("open", () =>
+      done({
+        socket,
+        received,
+        next: () =>
+          new Promise((take) => {
+            const message = received.shift();
+            if (message !== undefined) take(message);
+            else waiting.push(take);
+          }),
+      }),
+    );
+    socket.addEventListener("error", () => fail(new Error("Refused.")));
+  });
+}
 
 describe("allowed origins", () => {
   const allowed =

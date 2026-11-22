@@ -1,8 +1,9 @@
 import { usePathname } from "next/navigation";
 
+import { EpisodeScreen } from "@/components/episodes/episode-screen";
 import { CoopJoin } from "@/components/play/join-room";
 import { parseRoomCode } from "@/lib/engine/room";
-import { EpisodeScreen } from "@/components/episodes/episode-screen";
+
 import { DeviceNotice } from "./device-notice";
 
 export function AppRoot() {

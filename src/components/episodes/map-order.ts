@@ -1,14 +1,16 @@
 "use client";
 
 import {
+  type ChangeDetails,
   createChange,
   createReorder,
   definePrimitive,
-  type ChangeDetails,
   type ReorderDraft,
   type ReorderReason,
 } from "@ui-sdk/core";
 import { createParts } from "@ui-sdk/react/primitive";
+
+import { defined } from "@/lib/defined";
 
 interface MapOrderOptions {
   value?: string[];
@@ -22,58 +24,6 @@ interface MapOrderOptions {
 interface MapOrderState {
   value: string[];
   moving: ReorderDraft | null;
-}
-
-// Slides each row from where it was drawn to its new place when the order
-// changes, like a dnd-kit sortable. Adding or removing rows skips the slide.
-// The cells move rather than the row, since createReorder picks the drop
-// index from each row's rect and a moving rect makes the order flicker.
-function slideRows(body: HTMLElement) {
-  let tops = new Map<HTMLElement, number>();
-  const slides = new WeakMap<HTMLElement, Animation[]>();
-  const view = body.ownerDocument.defaultView;
-  const rows = () => [...body.children] as HTMLElement[];
-  const measure = () => {
-    tops = new Map(rows().map((row) => [row, row.offsetTop]));
-  };
-  const observer = new MutationObserver(() => {
-    const current = rows();
-    const moved =
-      current.length === tops.size && current.every((row) => tops.has(row));
-    if (
-      moved &&
-      !view?.matchMedia("(prefers-reduced-motion: reduce)").matches
-    ) {
-      const shifts = current.map(
-        (row) =>
-          tops.get(row)! +
-          (row.firstElementChild
-            ? new DOMMatrixReadOnly(
-                getComputedStyle(row.firstElementChild).transform,
-              ).m42
-            : 0) -
-          row.offsetTop,
-      );
-      current.forEach((row, index) => {
-        for (const slide of slides.get(row) ?? []) slide.cancel();
-        const shift = shifts[index];
-        if (Math.abs(shift) < 1) return;
-        slides.set(
-          row,
-          [...row.children].map((cell) =>
-            cell.animate(
-              [{ transform: `translateY(${shift}px)` }, { transform: "none" }],
-              { duration: 200, easing: "cubic-bezier(0.2, 0, 0, 1)" },
-            ),
-          ),
-        );
-      });
-    }
-    measure();
-  });
-  measure();
-  observer.observe(body, { childList: true });
-  return () => observer.disconnect();
 }
 
 const mapOrder = definePrimitive({
@@ -148,6 +98,58 @@ const mapOrder = definePrimitive({
     }),
   }),
 });
+
+// Slides each row from where it was drawn to its new place when the order
+// changes, like a dnd-kit sortable. Adding or removing rows skips the slide.
+// The cells move rather than the row, since createReorder picks the drop
+// index from each row's rect and a moving rect makes the order flicker.
+function slideRows(body: HTMLElement) {
+  let tops = new Map<HTMLElement, number>();
+  const slides = new WeakMap<HTMLElement, Animation[]>();
+  const view = body.ownerDocument.defaultView;
+  const rows = () => [...body.children] as HTMLElement[];
+  const measure = () => {
+    tops = new Map(rows().map((row) => [row, row.offsetTop]));
+  };
+  const observer = new MutationObserver(() => {
+    const current = rows();
+    const moved =
+      current.length === tops.size && current.every((row) => tops.has(row));
+    if (
+      moved &&
+      !view?.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      const shifts = current.map(
+        (row) =>
+          defined(tops.get(row)) +
+          (row.firstElementChild
+            ? new DOMMatrixReadOnly(
+                getComputedStyle(row.firstElementChild).transform,
+              ).m42
+            : 0) -
+          row.offsetTop,
+      );
+      current.forEach((row, index) => {
+        for (const slide of slides.get(row) ?? []) slide.cancel();
+        const shift = shifts[index];
+        if (Math.abs(shift) < 1) return;
+        slides.set(
+          row,
+          [...row.children].map((cell) =>
+            cell.animate(
+              [{ transform: `translateY(${shift}px)` }, { transform: "none" }],
+              { duration: 200, easing: "cubic-bezier(0.2, 0, 0, 1)" },
+            ),
+          ),
+        );
+      });
+    }
+    measure();
+  });
+  measure();
+  observer.observe(body, { childList: true });
+  return () => observer.disconnect();
+}
 
 const parts = createParts(mapOrder, {
   root: "tbody",

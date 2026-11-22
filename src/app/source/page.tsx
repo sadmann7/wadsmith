@@ -1,7 +1,7 @@
+import type { Metadata } from "next";
+
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-
-import type { Metadata } from "next";
 
 import { StandaloneShell } from "@/components/standalone-shell";
 import { Alert } from "@/components/ui/alert";
@@ -37,36 +37,9 @@ const licenseNames: Record<string, string> = {
   "yyjson.txt": "yyjson",
 };
 
-// setup:engine writes this file, so the page always names the engine that ships.
-function engineInfo(): EngineInfo | null {
-  try {
-    return JSON.parse(
-      readFileSync(join(process.cwd(), "public/engine/engine.json"), "utf8"),
-    ) as EngineInfo;
-  } catch {
-    return null;
-  }
-}
-
 const engineFiles = "/engine/";
 const linkClass =
   "text-foreground underline decoration-muted-foreground/60 underline-offset-4 hover:decoration-foreground";
-
-interface SectionProps {
-  title: string;
-  children: React.ReactNode;
-}
-
-function Section({ title, children }: SectionProps) {
-  return (
-    <section className="grid gap-3 border-t border-border pt-6">
-      <h2 className="m-0 font-mono text-xs font-medium tracking-wide text-muted-foreground uppercase">
-        {title}
-      </h2>
-      {children}
-    </section>
-  );
-}
 
 export default function SourcePage() {
   const engine = engineInfo();
@@ -166,5 +139,32 @@ export default function SourcePage() {
         )}
       </main>
     </StandaloneShell>
+  );
+}
+
+// setup:engine writes this file, so the page always names the engine that ships.
+function engineInfo(): EngineInfo | null {
+  try {
+    return JSON.parse(
+      readFileSync(join(process.cwd(), "public/engine/engine.json"), "utf8"),
+    ) as EngineInfo;
+  } catch {
+    return null;
+  }
+}
+
+interface SectionProps {
+  title: string;
+  children: React.ReactNode;
+}
+
+function Section({ title, children }: SectionProps) {
+  return (
+    <section className="grid gap-3 border-t border-border pt-6">
+      <h2 className="m-0 font-mono text-xs font-medium tracking-wide text-muted-foreground uppercase">
+        {title}
+      </h2>
+      {children}
+    </section>
   );
 }

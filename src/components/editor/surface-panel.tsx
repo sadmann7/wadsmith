@@ -2,12 +2,13 @@ import { Radio, RadioGroup } from "@ui-sdk/react/radio";
 import * as React from "react";
 
 import type { SurfaceInfo } from "@/lib/map/surfaces";
+
+import { Button } from "@/components/ui/button";
 import {
   gameWallShade,
   type Picture,
   type SceneAssets,
 } from "@/lib/wad/assets";
-import { Button } from "@/components/ui/button";
 
 const swatchSize = 48;
 const tileSize = 64;
@@ -75,6 +76,7 @@ interface SurfacePanelProps {
 
 export function SurfacePanel({ info, assets, onPaint }: SurfacePanelProps) {
   const usesFlats = info.paints === "floor" || info.paints === "ceiling";
+  const { texture } = info;
   return (
     <div className="flex flex-col gap-2.5">
       <p className="thing-name">{info.label}</p>
@@ -84,12 +86,12 @@ export function SurfacePanel({ info, assets, onPaint }: SurfacePanelProps) {
           Down.
         </p>
       ) : null}
-      {info.paints && info.texture ? (
+      {info.paints && texture ? (
         <>
           <RadioGroup
             aria-label="Texture"
             className="swatches"
-            value={info.texture}
+            value={texture}
             onValueChange={(texture) => onPaint(texture as string, false)}
           >
             {info.textures.map((name) => (
@@ -107,7 +109,7 @@ export function SurfacePanel({ info, assets, onPaint }: SurfacePanelProps) {
             ))}
           </RadioGroup>
           {info.paints === "wall" || info.paints === "door" ? (
-            <Button onClick={() => onPaint(info.texture!, true)}>
+            <Button onClick={() => onPaint(texture, true)}>
               {info.paints === "door"
                 ? "Use on the whole door"
                 : "Use on every wall in this room"}

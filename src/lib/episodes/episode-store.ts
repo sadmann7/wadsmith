@@ -1,12 +1,9 @@
 import {
-  parseStoredMap,
   type Episode,
   type EpisodeMap,
   type EpisodeStore,
+  parseStoredMap,
 } from "./episode-data";
-
-const databaseName = "wadsmith";
-const databaseVersion = 2;
 
 export interface StoredFile {
   key: string;
@@ -15,81 +12,6 @@ export interface StoredFile {
 }
 
 type SavedMap = Omit<EpisodeMap, "episodeId"> & { projectId: string };
-
-// Saved maps keep the field name from before episodes, so browsers that
-// already hold maps still find them.
-function saved({ episodeId, ...entry }: EpisodeMap): SavedMap {
-  return { ...entry, projectId: episodeId };
-}
-
-function loaded({ projectId, ...entry }: SavedMap): EpisodeMap {
-  return { ...entry, episodeId: projectId };
-}
-
-function requested<T>(request: IDBRequest<T>) {
-  return new Promise<T>((resolve, reject) => {
-    request.addEventListener("success", () => resolve(request.result));
-    request.addEventListener("error", () => reject(request.error));
-  });
-}
-
-function finished(transaction: IDBTransaction) {
-  return new Promise<void>((resolve, reject) => {
-    transaction.addEventListener("complete", () => resolve());
-    transaction.addEventListener("abort", () => reject(transaction.error));
-  });
-}
-
-// Version 2 added the files store, which holds the game IWAD a person brings.
-function openDatabase() {
-  return new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open(databaseName, databaseVersion);
-    request.addEventListener("upgradeneeded", () => {
-      const database = request.result;
-      if (!database.objectStoreNames.contains("projects")) {
-        database.createObjectStore("projects", { keyPath: "id" });
-        database
-          .createObjectStore("maps", { keyPath: "id" })
-          .createIndex("projectId", "projectId");
-        request.transaction
-          ?.objectStore("maps")
-          .createIndex("slot", ["projectId", "slot"], { unique: true });
-        database.createObjectStore("settings", { keyPath: "key" });
-      }
-      if (!database.objectStoreNames.contains("files")) {
-        database.createObjectStore("files", { keyPath: "key" });
-      }
-    });
-    request.addEventListener("success", () => {
-      const database = request.result;
-      database.addEventListener("versionchange", () => database.close());
-      resolve(database);
-    });
-    request.addEventListener("error", () => reject(request.error));
-    request.addEventListener("blocked", () =>
-      reject(new Error("The database is in use.")),
-    );
-  });
-}
-
-// Files open their own short connection, so the engine can read the IWAD
-// without the episode store.
-async function withFiles<T>(
-  mode: IDBTransactionMode,
-  run: (files: IDBObjectStore) => IDBRequest,
-) {
-  const database = await openDatabase();
-  try {
-    const transaction = database.transaction(["files"], mode);
-    const result = (await requested(
-      run(transaction.objectStore("files")),
-    )) as T;
-    await finished(transaction);
-    return result;
-  } finally {
-    database.close();
-  }
-}
 
 export async function readStoredFile(key: string): Promise<StoredFile | null> {
   if (typeof indexedDB === "undefined") return null;
@@ -324,4 +246,82 @@ export function createMemoryStore(): EpisodeStore {
       else settings.set(key, value);
     },
   };
+}
+
+// Files open their own short connection, so the engine can read the IWAD
+// without the episode store.
+async function withFiles<T>(
+  mode: IDBTransactionMode,
+  run: (files: IDBObjectStore) => IDBRequest,
+) {
+  const database = await openDatabase();
+  try {
+    const transaction = database.transaction(["files"], mode);
+    const result = (await requested(
+      run(transaction.objectStore("files")),
+    )) as T;
+    await finished(transaction);
+    return result;
+  } finally {
+    database.close();
+  }
+}
+
+const databaseName = "wadsmith";
+const databaseVersion = 2;
+
+// Version 2 added the files store, which holds the game IWAD a person brings.
+function openDatabase() {
+  return new Promise<IDBDatabase>((resolve, reject) => {
+    const request = indexedDB.open(databaseName, databaseVersion);
+    request.addEventListener("upgradeneeded", () => {
+      const database = request.result;
+      if (!database.objectStoreNames.contains("projects")) {
+        database.createObjectStore("projects", { keyPath: "id" });
+        database
+          .createObjectStore("maps", { keyPath: "id" })
+          .createIndex("projectId", "projectId");
+        request.transaction
+          ?.objectStore("maps")
+          .createIndex("slot", ["projectId", "slot"], { unique: true });
+        database.createObjectStore("settings", { keyPath: "key" });
+      }
+      if (!database.objectStoreNames.contains("files")) {
+        database.createObjectStore("files", { keyPath: "key" });
+      }
+    });
+    request.addEventListener("success", () => {
+      const database = request.result;
+      database.addEventListener("versionchange", () => database.close());
+      resolve(database);
+    });
+    request.addEventListener("error", () => reject(request.error));
+    request.addEventListener("blocked", () =>
+      reject(new Error("The database is in use.")),
+    );
+  });
+}
+
+function requested<T>(request: IDBRequest<T>) {
+  return new Promise<T>((resolve, reject) => {
+    request.addEventListener("success", () => resolve(request.result));
+    request.addEventListener("error", () => reject(request.error));
+  });
+}
+
+function finished(transaction: IDBTransaction) {
+  return new Promise<void>((resolve, reject) => {
+    transaction.addEventListener("complete", () => resolve());
+    transaction.addEventListener("abort", () => reject(transaction.error));
+  });
+}
+
+function loaded({ projectId, ...entry }: SavedMap): EpisodeMap {
+  return { ...entry, episodeId: projectId };
+}
+
+// Saved maps keep the field name from before episodes, so browsers that
+// already hold maps still find them.
+function saved({ episodeId, ...entry }: EpisodeMap): SavedMap {
+  return { ...entry, projectId: episodeId };
 }

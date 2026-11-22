@@ -1,13 +1,15 @@
 import {
+  type ChangeDetails,
   createChange,
   createRovingFocus,
   definePrimitive,
+  type RovingFocusMoveContext,
   selects,
   spatialMove,
-  type ChangeDetails,
-  type RovingFocusMoveContext,
 } from "@ui-sdk/core";
 import { createParts } from "@ui-sdk/react/primitive";
+
+import { defined } from "@/lib/defined";
 
 interface TextureGridOptions {
   value?: string;
@@ -25,16 +27,6 @@ interface TextureGridState {
 }
 
 const moveSpatially = spatialMove();
-
-function isTypedKey(event: KeyboardEvent) {
-  return (
-    event.key.length === 1 &&
-    event.key !== " " &&
-    !event.ctrlKey &&
-    !event.metaKey &&
-    !event.altKey
-  );
-}
 
 const textureGrid = definePrimitive({
   name: "texture-grid",
@@ -154,7 +146,8 @@ const textureGrid = definePrimitive({
         tabindex: part.api.roving.tabIndex(state, part),
       }),
       on: {
-        keydown: (event, { api, el, key }) => api.keydown(event, el!, key),
+        keydown: (event, { api, el, key }) =>
+          api.keydown(event, defined(el), key),
         click: (event, { api, key }) => api.press(key, event),
         dblclick: (_event, { api, key }) => api.apply(key),
         focus: (_event, { el }) => el?.scrollIntoView({ block: "nearest" }),
@@ -163,6 +156,16 @@ const textureGrid = definePrimitive({
     }),
   }),
 });
+
+function isTypedKey(event: KeyboardEvent) {
+  return (
+    event.key.length === 1 &&
+    event.key !== " " &&
+    !event.ctrlKey &&
+    !event.metaKey &&
+    !event.altKey
+  );
+}
 
 const parts = createParts(textureGrid, { root: "div", item: "button" });
 export const TextureGrid = parts.Root;

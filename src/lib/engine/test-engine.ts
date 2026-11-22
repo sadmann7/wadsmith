@@ -2,20 +2,22 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
+import type { GameMap } from "@/lib/map/types";
+
 import { setRoomDoor, updateThing } from "@/lib/map/edit";
 import { testMap } from "@/lib/map/test-map";
-import type { GameMap } from "@/lib/map/types";
 import { compileMap } from "@/lib/wad/compile";
+
 import { defaultGame } from "./game";
 import {
-  doomKeys,
-  keysByCode,
-  startDoom,
   type CreateDoom,
   type DoomGame,
+  doomKeys,
   type GameEvents,
   type GameFiles,
+  keysByCode,
   type Screen,
+  startDoom,
 } from "./runtime";
 
 const engineDirectory = resolve(import.meta.dirname, "../../../public/engine");

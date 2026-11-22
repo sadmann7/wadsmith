@@ -1,64 +1,15 @@
 import { describe, expect, it } from "vitest";
 
+import { defined } from "@/lib/defined";
 import { games } from "@/lib/engine/game";
 import { starterMap } from "@/lib/map/starter-map";
+
 import { compileLumps, compileMap } from "./compile";
-import { WadFileError, inspectWads, readLumps } from "./inspect";
+import { inspectWads, readLumps, WadFileError } from "./inspect";
 import { packTestWad as pack } from "./test-wad";
 import { isZip, unzip } from "./zip";
 
 const encode = (value: string) => new TextEncoder().encode(value);
-
-function withLine(special: number, flags = 0) {
-  const lumps = compileLumps(starterMap, "MAP03");
-  const lines = lumps.find((lump) => lump.name === "LINEDEFS")!;
-  const view = new DataView(lines.data.buffer, lines.data.byteOffset);
-  view.setUint16(4, view.getUint16(4, true) | flags, true);
-  view.setUint16(6, special, true);
-  return pack(lumps);
-}
-
-function zipOf(files: { name: string; data: Uint8Array }[]) {
-  const parts: Uint8Array[] = [];
-  const entries: Uint8Array[] = [];
-  let offset = 0;
-  for (const file of files) {
-    const name = encode(file.name);
-    const local = new Uint8Array(30 + name.length);
-    const localView = new DataView(local.buffer);
-    localView.setUint32(0, 0x04034b50, true);
-    localView.setUint32(18, file.data.length, true);
-    localView.setUint32(22, file.data.length, true);
-    localView.setUint16(26, name.length, true);
-    local.set(name, 30);
-    const entry = new Uint8Array(46 + name.length);
-    const entryView = new DataView(entry.buffer);
-    entryView.setUint32(0, 0x02014b50, true);
-    entryView.setUint32(20, file.data.length, true);
-    entryView.setUint32(24, file.data.length, true);
-    entryView.setUint16(28, name.length, true);
-    entryView.setUint32(42, offset, true);
-    entry.set(name, 46);
-    parts.push(local, file.data);
-    entries.push(entry);
-    offset += local.length + file.data.length;
-  }
-  const directory = entries.reduce((total, entry) => total + entry.length, 0);
-  const end = new Uint8Array(22);
-  const endView = new DataView(end.buffer);
-  endView.setUint32(0, 0x06054b50, true);
-  endView.setUint16(8, files.length, true);
-  endView.setUint16(10, files.length, true);
-  endView.setUint32(12, directory, true);
-  endView.setUint32(16, offset, true);
-  const zip = new Uint8Array(offset + directory + 22);
-  let at = 0;
-  for (const part of [...parts, ...entries, end]) {
-    zip.set(part, at);
-    at += part.length;
-  }
-  return zip;
-}
 
 describe("inspectWads", () => {
   it("finds the maps of a vanilla WAD", () => {
@@ -148,6 +99,15 @@ describe("inspectWads", () => {
   });
 });
 
+function withLine(special: number, flags = 0) {
+  const lumps = compileLumps(starterMap, "MAP03");
+  const lines = defined(lumps.find((lump) => lump.name === "LINEDEFS"));
+  const view = new DataView(lines.data.buffer, lines.data.byteOffset);
+  view.setUint16(4, view.getUint16(4, true) | flags, true);
+  view.setUint16(6, special, true);
+  return pack(lumps);
+}
+
 describe("inspectWads with a game", () => {
   it("numbers Doom 1 maps by episode and refuses the other kind of game", () => {
     const doomOne = pack([
@@ -190,3 +150,45 @@ describe("unzip", () => {
     expect(files[0].data).toEqual(wad);
   });
 });
+
+function zipOf(files: { name: string; data: Uint8Array }[]) {
+  const parts: Uint8Array[] = [];
+  const entries: Uint8Array[] = [];
+  let offset = 0;
+  for (const file of files) {
+    const name = encode(file.name);
+    const local = new Uint8Array(30 + name.length);
+    const localView = new DataView(local.buffer);
+    localView.setUint32(0, 0x04034b50, true);
+    localView.setUint32(18, file.data.length, true);
+    localView.setUint32(22, file.data.length, true);
+    localView.setUint16(26, name.length, true);
+    local.set(name, 30);
+    const entry = new Uint8Array(46 + name.length);
+    const entryView = new DataView(entry.buffer);
+    entryView.setUint32(0, 0x02014b50, true);
+    entryView.setUint32(20, file.data.length, true);
+    entryView.setUint32(24, file.data.length, true);
+    entryView.setUint16(28, name.length, true);
+    entryView.setUint32(42, offset, true);
+    entry.set(name, 46);
+    parts.push(local, file.data);
+    entries.push(entry);
+    offset += local.length + file.data.length;
+  }
+  const directory = entries.reduce((total, entry) => total + entry.length, 0);
+  const end = new Uint8Array(22);
+  const endView = new DataView(end.buffer);
+  endView.setUint32(0, 0x06054b50, true);
+  endView.setUint16(8, files.length, true);
+  endView.setUint16(10, files.length, true);
+  endView.setUint32(12, directory, true);
+  endView.setUint32(16, offset, true);
+  const zip = new Uint8Array(offset + directory + 22);
+  let at = 0;
+  for (const part of [...parts, ...entries, end]) {
+    zip.set(part, at);
+    at += part.length;
+  }
+  return zip;
+}

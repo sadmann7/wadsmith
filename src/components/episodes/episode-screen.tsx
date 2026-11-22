@@ -2,10 +2,25 @@
 
 import * as React from "react";
 
+import type { GameFiles, Skill } from "@/lib/engine/runtime";
+import type { GameMap } from "@/lib/map/types";
+
+import { SidebarDrawer, type SidebarProps } from "@/components/app-sidebar";
 import { wadFileName } from "@/components/editor/build-dialog";
 import { EditorScreen } from "@/components/editor/editor-screen";
-import { PlayTogether, type HostedGame } from "@/components/play/play-together";
 import { GameView, type Level } from "@/components/play/play-panel";
+import { type HostedGame, PlayTogether } from "@/components/play/play-together";
+import { Alert } from "@/components/ui/alert";
+import {
+  AlertDialog,
+  AlertDialogBackdrop,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import { useBuildChecks } from "@/hooks/use-build-checks";
+import { useIwad } from "@/hooks/use-iwad";
 import {
   defaultGame,
   engineSlot,
@@ -17,45 +32,29 @@ import {
 import {
   adoptOwnIwad,
   identifyIwad,
+  type Iwad,
   loadIwad,
   restoreBundledIwad,
-  type Iwad,
 } from "@/lib/engine/iwad";
-import type { GameFiles, Skill } from "@/lib/engine/runtime";
-import { useIwad } from "@/hooks/use-iwad";
-import { featuredMaps, type FeaturedMap } from "@/lib/map/featured";
 import {
-  MapFileError,
-  maxFileBytes,
-  parseMapFile,
-  serializeMap,
-} from "@/lib/map/storage";
-import type { GameMap } from "@/lib/map/types";
-import { validateMap, type CheckContext } from "@/lib/map/validate";
-import { readWadAssets } from "@/lib/wad/assets";
-import { compileEpisode, compileMap } from "@/lib/wad/compile";
-import { decompileMap } from "@/lib/wad/decompile";
-import {
-  WadFileError,
-  inspectWads,
-  isWad,
-  type GameFile,
-  type WadSummary,
-} from "@/lib/wad/inspect";
-import { readMaps } from "@/lib/wad/read-map";
-import { isZip, unzip } from "@/lib/wad/zip";
-import { MapDialog, type MapDetails } from "./map-dialog";
+  checkBuild,
+  knownBuildProblem,
+  knownLumps,
+} from "@/lib/episodes/build-checks";
 import {
   bySlot,
+  createEpisode,
   createMapEntry,
   createMapSaver,
-  createEpisode,
+  type Episode,
+  type EpisodeMap,
   episodeMaps,
+  type EpisodeStore,
   freeSlots,
   isSlotConflict,
-  levelDetails,
-  lastMapKey,
   lastEpisodeKey,
+  lastMapKey,
+  levelDetails,
   mapFromTemplate,
   mapName,
   mapSlots,
@@ -65,42 +64,45 @@ import {
   prepareEpisodes,
   serializeEpisode,
   slotMoves,
-  type Episode,
-  type EpisodeMap,
-  type EpisodeStore,
   withComplevel,
 } from "@/lib/episodes/episode-data";
-import { SidebarDrawer, type SidebarProps } from "@/components/app-sidebar";
-import { useBuildChecks } from "@/hooks/use-build-checks";
 import {
-  checkBuild,
-  knownBuildProblem,
-  knownLumps,
-} from "@/lib/episodes/build-checks";
-import { EpisodeBuildDialog } from "./episode-build-dialog";
-import { FeaturedMaps } from "./featured-maps";
-import { EpisodeHome } from "./episode-home";
-import { WadImportDialog, type ImportedMap } from "./wad-import-dialog";
-import { WadPlayDialog } from "./wad-play-dialog";
+  createMemoryStore,
+  openEpisodeStore,
+} from "@/lib/episodes/episode-store";
 import {
   findEpisode,
   parseRoute,
   pathOf,
   type Route,
 } from "@/lib/episodes/routes";
+import { type FeaturedMap, featuredMaps } from "@/lib/map/featured";
 import {
-  createMemoryStore,
-  openEpisodeStore,
-} from "@/lib/episodes/episode-store";
-import { Button } from "@/components/ui/button";
+  MapFileError,
+  maxFileBytes,
+  parseMapFile,
+  serializeMap,
+} from "@/lib/map/storage";
+import { type CheckContext, validateMap } from "@/lib/map/validate";
+import { readWadAssets } from "@/lib/wad/assets";
+import { compileEpisode, compileMap } from "@/lib/wad/compile";
+import { decompileMap } from "@/lib/wad/decompile";
 import {
-  AlertDialog,
-  AlertDialogBackdrop,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { Alert } from "@/components/ui/alert";
+  type GameFile,
+  inspectWads,
+  isWad,
+  WadFileError,
+  type WadSummary,
+} from "@/lib/wad/inspect";
+import { readMaps } from "@/lib/wad/read-map";
+import { isZip, unzip } from "@/lib/wad/zip";
+
+import { EpisodeBuildDialog } from "./episode-build-dialog";
+import { EpisodeHome } from "./episode-home";
+import { FeaturedMaps } from "./featured-maps";
+import { type MapDetails, MapDialog } from "./map-dialog";
+import { type ImportedMap, WadImportDialog } from "./wad-import-dialog";
+import { WadPlayDialog } from "./wad-play-dialog";
 
 interface Session {
   id: string;
@@ -124,133 +126,6 @@ const channelName = "wadsmith";
 const saveFailure = "Your browser couldn't save that change.";
 
 let preparing: ReturnType<typeof openPreparedStore> | null = null;
-
-function viewOfPath(): HomeView {
-  return parseRoute(location.pathname).kind === "featured"
-    ? "featured"
-    : "episodes";
-}
-
-async function prepared(store: EpisodeStore) {
-  return { store, ready: await prepareEpisodes(store) };
-}
-
-async function openPreparedStore() {
-  try {
-    return await prepared(await openEpisodeStore());
-  } catch {
-    return prepared(createMemoryStore());
-  }
-}
-
-function download(name: string, data: BlobPart, type: string) {
-  const url = URL.createObjectURL(new Blob([data], { type }));
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = name;
-  link.click();
-  URL.revokeObjectURL(url);
-}
-
-function blockedOf(
-  ordered: EpisodeMap[],
-  problems: (string | null | undefined)[],
-  context: CheckContext,
-) {
-  return ordered
-    .filter(
-      (entry, index) =>
-        mapStatus(entry, problems[index], context).kind === "error",
-    )
-    .map((entry) => entry.slot);
-}
-
-function levelsOf(ordered: EpisodeMap[]): Level[] {
-  return ordered.map((entry) => ({
-    map: entry.map,
-    title: mapName(entry),
-    slot: entry.slot,
-    par: entry.par,
-    music: entry.music,
-    sky: entry.sky,
-    intertext: entry.intertext,
-    lumps: knownLumps(entry),
-  }));
-}
-
-async function episodeGame(list: EpisodeMap[], context: CheckContext) {
-  const ordered = bySlot(list);
-  if (ordered.length === 0) return null;
-  const problems = await Promise.all(
-    ordered.map((entry) => (entry.broken ? null : checkBuild(entry))),
-  );
-  const blocked = blockedOf(ordered, problems, context);
-  return blocked.length > 0
-    ? { problem: `Fix ${blocked.join(", ")} before playing.`, levels: [] }
-    : { problem: null, levels: levelsOf(ordered) };
-}
-
-function playable(map: GameMap) {
-  if (validateMap(map).length > 0) return false;
-  try {
-    compileMap(map);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function knownFeatured(id: string | undefined) {
-  return featuredMaps.some((item) => item.id === id) ? id! : null;
-}
-
-function soloFeatured(id: string | undefined) {
-  const entry = featuredMaps.find((item) => item.id === id);
-  return entry && entry.mode !== "deathmatch" ? entry : null;
-}
-
-// A co-op game can't survive a reload, so its history entry is marked.
-function coopEntry() {
-  return Boolean((history.state as { coop?: boolean } | null)?.coop);
-}
-
-function detailsOf(entry: EpisodeMap): SessionDetails {
-  return {
-    name: mapName(entry),
-    slot: entry.slot,
-    par: entry.par,
-    music: entry.music,
-    sky: entry.sky,
-    intertext: entry.intertext,
-  };
-}
-
-function problemOf(error: unknown, slot: string) {
-  return isSlotConflict(error) ? `${slot} is already in use.` : saveFailure;
-}
-
-async function readGameFiles(picked: File[]) {
-  const files = await Promise.all(
-    picked.map(async (file): Promise<GameFile[]> => {
-      const data = new Uint8Array(await file.arrayBuffer());
-      return isZip(data)
-        ? unzip({ name: file.name, data })
-        : [{ name: file.name, data }];
-    }),
-  );
-  return files.flat();
-}
-
-// A game IWAD becomes the game rather than something to play or import.
-async function isIwad(file: File) {
-  if (!/\.wad$/i.test(file.name)) return false;
-  try {
-    identifyIwad(file.name, new Uint8Array(await file.arrayBuffer()));
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 export function EpisodeScreen() {
   const [store, setStore] = React.useState<EpisodeStore | null>(null);
@@ -1053,7 +928,7 @@ export function EpisodeScreen() {
       setMessage(
         picked.length === 1
           ? `${nameOf(picked[0].map)} was added as ${picked[0].slot}.`
-          : `${picked.length} maps were added as ${picked[0].slot} to ${picked.at(-1)!.slot}.`,
+          : `${picked.length} maps were added as ${picked[0].slot} to ${picked[picked.length - 1].slot}.`,
       );
     } catch (error) {
       setMessage(
@@ -1481,4 +1356,135 @@ export function EpisodeScreen() {
       />
     </>
   );
+}
+
+async function openPreparedStore() {
+  try {
+    return await prepared(await openEpisodeStore());
+  } catch {
+    return prepared(createMemoryStore());
+  }
+}
+
+async function prepared(store: EpisodeStore) {
+  return { store, ready: await prepareEpisodes(store) };
+}
+
+function viewOfPath(): HomeView {
+  return parseRoute(location.pathname).kind === "featured"
+    ? "featured"
+    : "episodes";
+}
+
+function knownFeatured(id: string | undefined) {
+  return id !== undefined && featuredMaps.some((item) => item.id === id)
+    ? id
+    : null;
+}
+
+function detailsOf(entry: EpisodeMap): SessionDetails {
+  return {
+    name: mapName(entry),
+    slot: entry.slot,
+    par: entry.par,
+    music: entry.music,
+    sky: entry.sky,
+    intertext: entry.intertext,
+  };
+}
+
+// A co-op game can't survive a reload, so its history entry is marked.
+function coopEntry() {
+  return Boolean((history.state as { coop?: boolean } | null)?.coop);
+}
+
+function playable(map: GameMap) {
+  if (validateMap(map).length > 0) return false;
+  try {
+    compileMap(map);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function episodeGame(list: EpisodeMap[], context: CheckContext) {
+  const ordered = bySlot(list);
+  if (ordered.length === 0) return null;
+  const problems = await Promise.all(
+    ordered.map((entry) =>
+      entry.broken ? Promise.resolve(null) : checkBuild(entry),
+    ),
+  );
+  const blocked = blockedOf(ordered, problems, context);
+  return blocked.length > 0
+    ? { problem: `Fix ${blocked.join(", ")} before playing.`, levels: [] }
+    : { problem: null, levels: levelsOf(ordered) };
+}
+
+function blockedOf(
+  ordered: EpisodeMap[],
+  problems: (string | null | undefined)[],
+  context: CheckContext,
+) {
+  return ordered
+    .filter(
+      (entry, index) =>
+        mapStatus(entry, problems[index], context).kind === "error",
+    )
+    .map((entry) => entry.slot);
+}
+
+function levelsOf(ordered: EpisodeMap[]): Level[] {
+  return ordered.map((entry) => ({
+    map: entry.map,
+    title: mapName(entry),
+    slot: entry.slot,
+    par: entry.par,
+    music: entry.music,
+    sky: entry.sky,
+    intertext: entry.intertext,
+    lumps: knownLumps(entry),
+  }));
+}
+
+function soloFeatured(id: string | undefined) {
+  const entry = featuredMaps.find((item) => item.id === id);
+  return entry && entry.mode !== "deathmatch" ? entry : null;
+}
+
+function problemOf(error: unknown, slot: string) {
+  return isSlotConflict(error) ? `${slot} is already in use.` : saveFailure;
+}
+
+// A game IWAD becomes the game rather than something to play or import.
+async function isIwad(file: File) {
+  if (!/\.wad$/i.test(file.name)) return false;
+  try {
+    identifyIwad(file.name, new Uint8Array(await file.arrayBuffer()));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function readGameFiles(picked: File[]) {
+  const files = await Promise.all(
+    picked.map(async (file): Promise<GameFile[]> => {
+      const data = new Uint8Array(await file.arrayBuffer());
+      return isZip(data)
+        ? unzip({ name: file.name, data })
+        : [{ name: file.name, data }];
+    }),
+  );
+  return files.flat();
+}
+
+function download(name: string, data: BlobPart, type: string) {
+  const url = URL.createObjectURL(new Blob([data], { type }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  link.click();
+  URL.revokeObjectURL(url);
 }

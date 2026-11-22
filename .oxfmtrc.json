@@ -8,17 +8,30 @@
   "trailingComma": "all",
   "endOfLine": "lf",
   "sortPackageJson": false,
+  "sortImports": {
+    "newlinesBetween": true,
+    "groups": [
+      "type-import",
+      ["value-builtin", "value-external"],
+      "type-internal",
+      "value-internal",
+      ["type-parent", "type-sibling", "type-index"],
+      ["value-parent", "value-sibling", "value-index"],
+      "unknown"
+    ]
+  },
   "sortTailwindcss": {
-    "stylesheet": "./src/app/globals.css",
-    "functions": ["cn"]
+    "stylesheet": "./src/styles/globals.css",
+    "functions": ["cn", "clsx", "cva", "tw"]
   },
   "ignorePatterns": [
-    ".next/**",
-    "next-env.d.ts",
-    "public/**",
-    ".cache/**",
+    "**/.next/**",
+    "**/.cache/**",
     "**/.wrangler/**",
+    "**/public/**",
+    "next-env.d.ts",
     "pnpm-lock.yaml",
-    "**/*.md"
+    "**/*.md",
+    "**/*.mdx"
   ]
 }

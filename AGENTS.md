@@ -31,7 +31,8 @@ Default to no comment. Write one only for a constraint, an external quirk, or an
 
 Wadsmith is a Doom map editor built with Next.js, Tailwind CSS and UI SDK. It compiles maps to real WAD files and plays them in Woof, built for WebAssembly and run in its vanilla Doom compatibility mode.
 
-- `src/app`: Next.js routes, metadata images and global styles. The color tokens in `globals.css` use shadcn/ui role names, and `colors.test.ts` checks their contrast.
+- `src/app`: Next.js routes and metadata images. `colors.test.ts` checks the contrast of the color tokens.
+- `src/styles`: global styles. The color tokens in `globals.css` use shadcn/ui role names.
 - `src/components/ui`: shared controls built on UI SDK with Tailwind, such as `Button`, `Input`, `Field`, `Select`, `Menu` and `Dialog`. New UI uses these instead of new classes in `globals.css`.
 - `src/components`: the app shell and pieces several areas share, like `MapPlan`. `editor` holds the editor screen, the `map-editor` primitive, the inspector and the editable 3D view; `episodes` holds the episode pages, featured maps and the dialogs around them; `play` holds the game view, its HUD and co-op screens.
 - `src/hooks`: shared hooks, like `useIwad` and `useBuildChecks`.

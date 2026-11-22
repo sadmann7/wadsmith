@@ -1,3 +1,7 @@
+import type { TextureNames } from "@/lib/map/textures";
+import type { ThingKind } from "@/lib/map/types";
+
+import { defined } from "@/lib/defined";
 import {
   doorTextures,
   switchTextures,
@@ -9,8 +13,6 @@ import {
   freedoomWalls,
   middleTextures,
 } from "@/lib/map/freedoom-textures";
-import type { TextureNames } from "@/lib/map/textures";
-import type { ThingKind } from "@/lib/map/types";
 
 export interface Picture {
   width: number;
@@ -164,15 +166,6 @@ const spriteFrames: Record<ThingKind, string | null> = {
   "teleport-destination": null,
 };
 
-function lightStart(light: number, contrast: number) {
-  const band = Math.max(0, Math.min(15, (light >> 4) + contrast));
-  return (15 - band) * 4;
-}
-
-function clampShade(level: number) {
-  return Math.max(0, Math.min(shadeLevels - 1, level));
-}
-
 // These follow the engine's scalelight and zlight tables for a 320-wide view.
 export function gameWallShade(light: number, distance = 160, contrast = 0) {
   const scale = Math.min(47, Math.floor((16 * 160) / distance));
@@ -182,53 +175,6 @@ export function gameWallShade(light: number, distance = 160, contrast = 0) {
 export function gameFlatShade(light: number, distance: number) {
   const band = Math.min(127, Math.floor(distance / 16));
   return clampShade(lightStart(light, 0) - (Math.floor(160 / (band + 1)) >> 1));
-}
-
-function createPicture(width: number, height: number): Picture {
-  return {
-    width,
-    height,
-    leftOffset: 0,
-    topOffset: 0,
-    pixels: new Uint8Array(width * height),
-    opaque: new Uint8Array(width * height),
-  };
-}
-
-function solidPicture(width: number, height: number, color: number) {
-  const picture = createPicture(width, height);
-  picture.pixels.fill(color);
-  picture.opaque.fill(1);
-  return picture;
-}
-
-function packColor(red: number, green: number, blue: number) {
-  return ((255 << 24) | (blue << 16) | (green << 8) | red) >>> 0;
-}
-
-function readName(bytes: Uint8Array, offset: number) {
-  let name = "";
-  for (let index = 0; index < 8 && bytes[offset + index]; index += 1) {
-    name += String.fromCharCode(bytes[offset + index]);
-  }
-  return name.toUpperCase();
-}
-
-// Monster lumps can hold two frames in one name, like BSPIA1D1.
-function spriteLump(lumps: Map<string, Lump>, frame: string) {
-  for (const [name, lump] of lumps) {
-    if (name.length < 6) continue;
-    if (name.startsWith(frame) && "01".includes(name[5])) return lump;
-    if (
-      name.length === 8 &&
-      name.startsWith(frame.slice(0, 4)) &&
-      name[6] === frame[4] &&
-      "01".includes(name[7])
-    ) {
-      return lump;
-    }
-  }
-  return undefined;
 }
 
 export function readWadAssets(bytes: Uint8Array): SceneAssets {
@@ -354,7 +300,7 @@ export function readWadAssets(bytes: Uint8Array): SceneAssets {
     const walls: string[] = [];
     const holed: string[] = [];
     for (const name of all) {
-      const holes = compose(definitions.get(name)!).opaque.includes(0);
+      const holes = compose(defined(definitions.get(name))).opaque.includes(0);
       (holes ? holed : walls).push(name);
     }
     sorted = { walls, middles: [...holed, ...walls] };
@@ -419,6 +365,40 @@ export function readWadAssets(bytes: Uint8Array): SceneAssets {
   return assets;
 }
 
+function clampShade(level: number) {
+  return Math.max(0, Math.min(shadeLevels - 1, level));
+}
+
+function lightStart(light: number, contrast: number) {
+  const band = Math.max(0, Math.min(15, (light >> 4) + contrast));
+  return (15 - band) * 4;
+}
+
+function readName(bytes: Uint8Array, offset: number) {
+  let name = "";
+  for (let index = 0; index < 8 && bytes[offset + index]; index += 1) {
+    name += String.fromCharCode(bytes[offset + index]);
+  }
+  return name.toUpperCase();
+}
+
+// Monster lumps can hold two frames in one name, like BSPIA1D1.
+function spriteLump(lumps: Map<string, Lump>, frame: string) {
+  for (const [name, lump] of lumps) {
+    if (name.length < 6) continue;
+    if (name.startsWith(frame) && "01".includes(name[5])) return lump;
+    if (
+      name.length === 8 &&
+      name.startsWith(frame.slice(0, 4)) &&
+      name[6] === frame[4] &&
+      "01".includes(name[7])
+    ) {
+      return lump;
+    }
+  }
+  return undefined;
+}
+
 const flatColors: Record<string, readonly [number, number, number]> = {
   STARTAN3: [130, 118, 102],
   BROWN1: [120, 88, 60],
@@ -471,7 +451,7 @@ export function createFlatAssets(): SceneAssets {
         Number.parseInt(hex.slice(5, 7), 16),
       ]);
     }
-    thingIndexes.set(kind, hexIndexes.get(hex)!);
+    thingIndexes.set(kind, defined(hexIndexes.get(hex)));
   }
 
   const shades = new Uint32Array(shadeLevels * 256);
@@ -510,5 +490,27 @@ export function createFlatAssets(): SceneAssets {
       picture.topOffset = picture.height;
       return picture;
     },
+  };
+}
+
+function packColor(red: number, green: number, blue: number) {
+  return ((255 << 24) | (blue << 16) | (green << 8) | red) >>> 0;
+}
+
+function solidPicture(width: number, height: number, color: number) {
+  const picture = createPicture(width, height);
+  picture.pixels.fill(color);
+  picture.opaque.fill(1);
+  return picture;
+}
+
+function createPicture(width: number, height: number): Picture {
+  return {
+    width,
+    height,
+    leftOffset: 0,
+    topOffset: 0,
+    pixels: new Uint8Array(width * height),
+    opaque: new Uint8Array(width * height),
   };
 }

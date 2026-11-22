@@ -4,8 +4,6 @@ import type {
   NetworkState,
   SoundLevel,
 } from "./doom-worker";
-import { engineBase } from "./iwad";
-import { NetInbox } from "./net-inbox";
 import type {
   EngineIwad,
   GameFiles,
@@ -14,6 +12,9 @@ import type {
   Screen,
   Skill,
 } from "./runtime";
+
+import { engineBase } from "./iwad";
+import { NetInbox } from "./net-inbox";
 
 interface GameClientOptions {
   iwad: EngineIwad;

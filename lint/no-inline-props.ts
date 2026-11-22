@@ -1,7 +1,13 @@
 interface Node {
   type: string;
   range: [number, number];
-  [key: string]: any;
+  id?: Node | null;
+  name?: string;
+  init?: Node | null;
+  params?: Node[];
+  left?: Node;
+  typeAnnotation?: Node;
+  types?: Node[];
 }
 
 interface Context {
@@ -9,22 +15,6 @@ interface Context {
 }
 
 const COMPONENT = /^[A-Z]/;
-
-function inlineProps(fn: Node | undefined) {
-  const param = fn?.params?.[0];
-  if (!param) return null;
-  const target = param.type === "AssignmentPattern" ? param.left : param;
-  const type = target.typeAnnotation?.typeAnnotation;
-  if (!type) return null;
-  if (type.type === "TSTypeLiteral") return type;
-  if (
-    type.type === "TSIntersectionType" &&
-    type.types.some((part: Node) => part.type === "TSTypeLiteral")
-  ) {
-    return type;
-  }
-  return null;
-}
 
 export const noInlineProps = {
   meta: {
@@ -62,3 +52,19 @@ export const noInlineProps = {
     };
   },
 };
+
+function inlineProps(fn: Node | undefined) {
+  const param = fn?.params?.[0];
+  if (!param) return null;
+  const target = param.type === "AssignmentPattern" ? param.left : param;
+  const type = target.typeAnnotation?.typeAnnotation;
+  if (!type) return null;
+  if (type.type === "TSTypeLiteral") return type;
+  if (
+    type.type === "TSIntersectionType" &&
+    type.types?.some((part) => part.type === "TSTypeLiteral")
+  ) {
+    return type;
+  }
+  return null;
+}

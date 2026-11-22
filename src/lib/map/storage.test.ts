@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { GameMap } from "./types";
+
 import {
   addNote,
   addRoomOnSide,
@@ -11,31 +13,9 @@ import {
   updateThing,
 } from "./edit";
 import { blankMap } from "./starter-map";
-import { testMap } from "./test-map";
 import { loadSavedMap, parseMapFile, saveMap, serializeMap } from "./storage";
-import type { GameMap } from "./types";
+import { testMap } from "./test-map";
 import { validateMap } from "./validate";
-
-function stubStorage(initial: Record<string, string> = {}) {
-  const items = new Map(Object.entries(initial));
-  vi.stubGlobal("localStorage", {
-    getItem: (key: string) => items.get(key) ?? null,
-    setItem: (key: string, value: string) => items.set(key, value),
-  });
-  return items;
-}
-
-function fileWith(change: (map: any) => void) {
-  const file = JSON.parse(serializeMap(testMap));
-  change(file.map);
-  return JSON.stringify(file);
-}
-
-function fileWithAction(action: object) {
-  return fileWith((map) => {
-    map.lines = { "v3|v4": { action } };
-  });
-}
 
 describe("map files", () => {
   it("round-trips a map", () => {
@@ -226,6 +206,12 @@ describe("map files", () => {
   });
 });
 
+function fileWithAction(action: object) {
+  return fileWith((map) => {
+    map.lines = { "v3|v4": { action } };
+  });
+}
+
 describe("browser storage", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -249,6 +235,15 @@ describe("browser storage", () => {
     expect(saveMap(testMap)).toBe(false);
   });
 });
+
+function stubStorage(initial: Record<string, string> = {}) {
+  const items = new Map(Object.entries(initial));
+  vi.stubGlobal("localStorage", {
+    getItem: (key: string) => items.get(key) ?? null,
+    setItem: (key: string, value: string) => items.set(key, value),
+  });
+  return items;
+}
 
 describe("blankMap", () => {
   it("is ready to play and extend", () => {
@@ -282,3 +277,10 @@ describe("texture names", () => {
     }
   });
 });
+
+// oxlint-disable-next-line typescript/no-explicit-any -- Tests write values a saved map can't hold.
+function fileWith(change: (map: any) => void) {
+  const file = JSON.parse(serializeMap(testMap));
+  change(file.map);
+  return JSON.stringify(file);
+}

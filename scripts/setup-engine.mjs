@@ -80,9 +80,19 @@ const emCache = process.env.EM_CACHE ?? join(homedir(), ".cache", "emscripten");
 const env = { ...process.env, EM_CACHE: emCache };
 const execFileAsync = promisify(execFile);
 
-function run(command, args, cwd = root) {
-  execFileSync(command, args, { cwd, env, stdio: "inherit" });
-}
+const crcTable = Array.from({ length: 256 }, (_, index) => {
+  let value = index;
+  for (let bit = 0; bit < 8; bit += 1) {
+    value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+  }
+  return value >>> 0;
+});
+
+mkdirSync(cache, { recursive: true });
+rmSync(staging, { recursive: true, force: true });
+mkdirSync(staging, { recursive: true });
+mkdirSync(dirname(output), { recursive: true });
+prepareSource();
 
 function prepareSource() {
   checkOutPinned({
@@ -92,6 +102,8 @@ function prepareSource() {
   });
   gitIn(source, ["apply", patch]);
 }
+
+fetchFreedoom();
 
 function fetchFreedoom() {
   const zip = join(cache, `freedoom-${freedoomVersion}.zip`);
@@ -123,60 +135,36 @@ function fetchFreedoom() {
   writeFileSync(join(staging, "FREEDOOM-LICENSE.txt"), extract("COPYING.txt"));
 }
 
-function cmakeList(file, start) {
-  const text = readFileSync(join(source, file), "utf8");
-  const from = text.indexOf(start);
-  return text.slice(from + start.length, text.indexOf(")", from));
+function run(command, args, cwd = root) {
+  execFileSync(command, args, { cwd, env, stdio: "inherit" });
 }
 
-function engineSources() {
-  const listed = cmakeList("src/CMakeLists.txt", "set(WOOF_SOURCES")
-    .match(/[\w-]+\.c\b/g)
-    .filter((name) => !skippedSources.has(name))
-    .map((name) => [`src/${name}`]);
-  return [
-    ...listed,
-    ...addedSources.map((name) => [name]),
-    ...oplSources.map((name) => [`opl/${name}`]),
-    ...thirdParty.map(([name, ...flags]) => [`third-party/${name}`, ...flags]),
-  ];
-}
+link(await compileAll());
 
-function writeConfig(directory) {
-  mkdirSync(directory, { recursive: true });
-  writeFileSync(
-    join(directory, "config.h"),
-    [
-      `#define PROJECT_NAME "Woof"`,
-      `#define PROJECT_VERSION "${woofVersion}"`,
-      `#define PROJECT_STRING "Woof ${woofVersion}"`,
-      `#define PROJECT_SHORTNAME "woof"`,
-      `#define PROJECT_APPID "io.github.fabiangreffrath.woof"`,
-      "#define HAVE_LIBM",
-      "#define HAVE_DECL_STRCASECMP 1",
-      "#define HAVE_DECL_STRNCASECMP 1",
-      "#define HAVE_EXT_VECTOR_TYPE",
-      "",
-    ].join("\n"),
-  );
-}
-
-function headerDigest() {
-  const hash = createHash("sha256");
-  const visit = (directory) => {
-    for (const entry of readdirSync(directory, {
-      withFileTypes: true,
-    }).toSorted((a, b) => a.name.localeCompare(b.name))) {
-      const path = join(directory, entry.name);
-      if (entry.isDirectory()) {
-        if (entry.name !== ".git") visit(path);
-      } else if (/\.(h|inc)$/.test(entry.name) || entry.name === "icon.c") {
-        hash.update(entry.name).update(readFileSync(path));
-      }
-    }
-  };
-  visit(source);
-  return hash.digest("hex");
+function link(built) {
+  const list = join(cache, "woof-objects.rsp");
+  writeFileSync(list, built.map((file) => `"${file}"`).join("\n"));
+  run("emcc", [
+    `@${list}`,
+    "-o",
+    join(staging, "woof.js"),
+    "-O3",
+    "-g0",
+    "-flto",
+    "-sUSE_SDL=3",
+    "-sEMULATE_FUNCTION_POINTER_CASTS=1",
+    "-sSTACK_SIZE=5MB",
+    "-sINITIAL_MEMORY=64MB",
+    "-sALLOW_MEMORY_GROWTH=1",
+    "-sMODULARIZE=1",
+    "-sEXPORT_ES6=1",
+    "-sENVIRONMENT=web,worker,node",
+    "-sINVOKE_RUN=0",
+    "-sFORCE_FILESYSTEM=1",
+    `-sEXPORTED_RUNTIME_METHODS=${exportedRuntime}`,
+    "-sEXPORTED_FUNCTIONS=_main",
+    `-Wl,-Map=${linkMap}`,
+  ]);
 }
 
 async function compileAll() {
@@ -248,46 +236,74 @@ async function compileAll() {
   return built;
 }
 
-function link(built) {
-  const list = join(cache, "woof-objects.rsp");
-  writeFileSync(list, built.map((file) => `"${file}"`).join("\n"));
-  run("emcc", [
-    `@${list}`,
-    "-o",
-    join(staging, "woof.js"),
-    "-O3",
-    "-g0",
-    "-flto",
-    "-sUSE_SDL=3",
-    "-sEMULATE_FUNCTION_POINTER_CASTS=1",
-    "-sSTACK_SIZE=5MB",
-    "-sINITIAL_MEMORY=64MB",
-    "-sALLOW_MEMORY_GROWTH=1",
-    "-sMODULARIZE=1",
-    "-sEXPORT_ES6=1",
-    "-sENVIRONMENT=web,worker,node",
-    "-sINVOKE_RUN=0",
-    "-sFORCE_FILESYSTEM=1",
-    `-sEXPORTED_RUNTIME_METHODS=${exportedRuntime}`,
-    "-sEXPORTED_FUNCTIONS=_main",
-    `-Wl,-Map=${linkMap}`,
-  ]);
+function writeConfig(directory) {
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(
+    join(directory, "config.h"),
+    [
+      `#define PROJECT_NAME "Woof"`,
+      `#define PROJECT_VERSION "${woofVersion}"`,
+      `#define PROJECT_STRING "Woof ${woofVersion}"`,
+      `#define PROJECT_SHORTNAME "woof"`,
+      `#define PROJECT_APPID "io.github.fabiangreffrath.woof"`,
+      "#define HAVE_LIBM",
+      "#define HAVE_DECL_STRCASECMP 1",
+      "#define HAVE_DECL_STRNCASECMP 1",
+      "#define HAVE_EXT_VECTOR_TYPE",
+      "",
+    ].join("\n"),
+  );
 }
 
-const crcTable = Array.from({ length: 256 }, (_, index) => {
-  let value = index;
-  for (let bit = 0; bit < 8; bit += 1) {
-    value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
-  }
-  return value >>> 0;
-});
+function headerDigest() {
+  const hash = createHash("sha256");
+  const visit = (directory) => {
+    for (const entry of readdirSync(directory, {
+      withFileTypes: true,
+    }).toSorted((a, b) => a.name.localeCompare(b.name))) {
+      const path = join(directory, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name !== ".git") visit(path);
+      } else if (/\.(h|inc)$/.test(entry.name) || entry.name === "icon.c") {
+        hash.update(entry.name).update(readFileSync(path));
+      }
+    }
+  };
+  visit(source);
+  return hash.digest("hex");
+}
 
-function crc32(data) {
-  let value = 0xffffffff;
-  for (const byte of data) {
-    value = crcTable[(value ^ byte) & 255] ^ (value >>> 8);
-  }
-  return (value ^ 0xffffffff) >>> 0;
+function engineSources() {
+  const listed = cmakeList("src/CMakeLists.txt", "set(WOOF_SOURCES")
+    .match(/[\w-]+\.c\b/g)
+    .filter((name) => !skippedSources.has(name))
+    .map((name) => [`src/${name}`]);
+  return [
+    ...listed,
+    ...addedSources.map((name) => [name]),
+    ...oplSources.map((name) => [`opl/${name}`]),
+    ...thirdParty.map(([name, ...flags]) => [`third-party/${name}`, ...flags]),
+  ];
+}
+
+function cmakeList(file, start) {
+  const text = readFileSync(join(source, file), "utf8");
+  const from = text.indexOf(start);
+  return text.slice(from + start.length, text.indexOf(")", from));
+}
+
+writeBaseFile();
+
+function writeBaseFile() {
+  const names = cmakeList("base/CMakeLists.txt", "set(BASE_SOURCES")
+    .split(/\s+/)
+    .filter(Boolean)
+    .toSorted();
+  const files = names.map((name) => [
+    name,
+    readFileSync(join(source, "base", name)),
+  ]);
+  writeFileSync(join(staging, "woof.pk3"), zipArchive(files));
 }
 
 function zipArchive(files) {
@@ -326,40 +342,16 @@ function zipArchive(files) {
   return Buffer.concat([...parts, central, end]);
 }
 
-function writeBaseFile() {
-  const names = cmakeList("base/CMakeLists.txt", "set(BASE_SOURCES")
-    .split(/\s+/)
-    .filter(Boolean)
-    .toSorted();
-  const files = names.map((name) => [
-    name,
-    readFileSync(join(source, "base", name)),
-  ]);
-  writeFileSync(join(staging, "woof.pk3"), zipArchive(files));
+function crc32(data) {
+  let value = 0xffffffff;
+  for (const byte of data) {
+    value = crcTable[(value ^ byte) & 255] ^ (value >>> 8);
+  }
+  return (value ^ 0xffffffff) >>> 0;
 }
 
-function emscriptenRoot() {
-  return execFileSync("em-config", ["EMSCRIPTEN_ROOT"], {
-    env,
-    encoding: "utf8",
-  }).trim();
-}
-
-function sdlSource() {
-  const ports = join(emCache, "ports", "sdl3");
-  const name = readdirSync(ports).find((entry) => entry.startsWith("SDL-"));
-  if (!name) throw new Error("The SDL3 port is missing.");
-  return join(ports, name);
-}
-
-// Homebrew keeps the license beside its copy of Emscripten, not inside it.
-function emscriptenLicense(emscripten) {
-  const file = [emscripten, dirname(emscripten)]
-    .map((directory) => join(directory, "LICENSE"))
-    .find((candidate) => existsSync(candidate));
-  if (!file) throw new Error("Emscripten's licence is missing.");
-  return file;
-}
+copyFileSync(join(source, "COPYING"), join(staging, "WOOF-LICENSE.txt"));
+writeLicenses();
 
 function writeLicenses() {
   const unknown = unlicensedArchives(readFileSync(linkMap, "utf8"));
@@ -414,6 +406,31 @@ function writeLicenses() {
   );
 }
 
+function emscriptenRoot() {
+  return execFileSync("em-config", ["EMSCRIPTEN_ROOT"], {
+    env,
+    encoding: "utf8",
+  }).trim();
+}
+
+function sdlSource() {
+  const ports = join(emCache, "ports", "sdl3");
+  const name = readdirSync(ports).find((entry) => entry.startsWith("SDL-"));
+  if (!name) throw new Error("The SDL3 port is missing.");
+  return join(ports, name);
+}
+
+// Homebrew keeps the license beside its copy of Emscripten, not inside it.
+function emscriptenLicense(emscripten) {
+  const file = [emscripten, dirname(emscripten)]
+    .map((directory) => join(directory, "LICENSE"))
+    .find((candidate) => existsSync(candidate));
+  if (!file) throw new Error("Emscripten's licence is missing.");
+  return file;
+}
+
+writeSourceArchive();
+
 // The GPL asks for the engine's source next to the engine, so the site serves
 // this archive: the pinned Woof commit, the patch, and the build scripts.
 function writeSourceArchive() {
@@ -461,6 +478,8 @@ function writeSourceArchive() {
   rmSync(extras, { recursive: true });
 }
 
+writeEngineInfo();
+
 function writeEngineInfo() {
   writeFileSync(
     join(staging, "engine.json"),
@@ -482,17 +501,5 @@ function writeEngineInfo() {
   );
 }
 
-mkdirSync(cache, { recursive: true });
-rmSync(staging, { recursive: true, force: true });
-mkdirSync(staging, { recursive: true });
-mkdirSync(dirname(output), { recursive: true });
-prepareSource();
-fetchFreedoom();
-link(await compileAll());
-writeBaseFile();
-copyFileSync(join(source, "COPYING"), join(staging, "WOOF-LICENSE.txt"));
-writeLicenses();
-writeSourceArchive();
-writeEngineInfo();
 replaceDirectory(staging, output);
 console.log(`Woof and Freedoom are ready in ${output}.`);

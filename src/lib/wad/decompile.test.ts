@@ -1,113 +1,26 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-
 import { beforeAll, describe, expect, it } from "vitest";
 
+import type { GameMap } from "@/lib/map/types";
+
+import { defined } from "@/lib/defined";
 import { thingCatalog } from "@/lib/map/catalog";
 import { sectorAt, wallKey } from "@/lib/map/geometry";
 import { starterMap } from "@/lib/map/starter-map";
 import { parseMapFile, serializeMap } from "@/lib/map/storage";
 import { testMap } from "@/lib/map/test-map";
-import type { GameMap } from "@/lib/map/types";
 import { validateMap } from "@/lib/map/validate";
+
 import { buildLevel, compileEpisode, compileMap } from "./compile";
 import { decompileMap } from "./decompile";
 import { WadFileError } from "./inspect";
-import { readMaps, type DoomMap, type DoomSector } from "./read-map";
+import { type DoomMap, type DoomSector, readMaps } from "./read-map";
 
 const freedoom = resolve(
   import.meta.dirname,
   "../../../public/engine/freedoom2.wad",
 );
-
-function doomMap() {
-  const map: DoomMap = {
-    slot: "MAP01",
-    vertices: [],
-    lines: [],
-    sides: [],
-    sectors: [],
-    things: [],
-  };
-  const side = (
-    sector: number,
-    textures: Partial<DoomMap["sides"][0]> = {},
-  ) => {
-    map.sides.push({
-      offsetX: 0,
-      offsetY: 0,
-      upper: "-",
-      lower: "-",
-      middle: "-",
-      sector,
-      ...textures,
-    });
-    return map.sides.length - 1;
-  };
-  return {
-    map,
-    vertex: (x: number, y: number) => map.vertices.push({ x, y }) - 1,
-    sector: (settings: Partial<DoomSector> = {}) =>
-      map.sectors.push({
-        floor: 0,
-        ceiling: 128,
-        floorTexture: "FLOOR4_8",
-        ceilingTexture: "CEIL3_5",
-        light: 160,
-        special: 0,
-        tag: 0,
-        ...settings,
-      }) - 1,
-    // The front sector sits on the right of start -> end, as in the engine.
-    line: (
-      start: number,
-      end: number,
-      front: number,
-      back: number | null = null,
-      extra: { special?: number; tag?: number; middle?: string } = {},
-    ) => {
-      map.lines.push({
-        start,
-        end,
-        flags: back === null ? 1 : 4,
-        special: extra.special ?? 0,
-        tag: extra.tag ?? 0,
-        front: side(
-          front,
-          back === null
-            ? { middle: extra.middle ?? "STARTAN3" }
-            : { upper: "STARTAN3", lower: "STARTAN3", middle: extra.middle },
-        ),
-        back:
-          back === null
-            ? null
-            : side(back, { upper: "STARTAN3", lower: "STARTAN3" }),
-      });
-    },
-  };
-}
-
-// Corners go clockwise, so the room is on the right of every wall.
-function box(
-  build: ReturnType<typeof doomMap>,
-  sector: number,
-  [left, bottom, right, top]: number[],
-) {
-  const corners = [
-    build.vertex(left, bottom),
-    build.vertex(left, top),
-    build.vertex(right, top),
-    build.vertex(right, bottom),
-  ];
-  corners.forEach((corner, index) =>
-    build.line(corner, corners[(index + 1) % 4], sector),
-  );
-  return corners;
-}
-
-function kinds(map: GameMap) {
-  return map.things.map((thing) => thing.kind).toSorted();
-}
 
 describe("decompileMap", () => {
   it("brings back the maps Wadsmith builds", () => {
@@ -362,7 +275,8 @@ describe("decompileMap", () => {
     build.line(b, c, lift);
     build.line(d, a, lift);
     build.line(d, c, hall, lift, { special: 62, tag: 4 });
-    build.map.sides[build.map.lines.at(-1)!.front!].lower = "SW1BRIK";
+    build.map.sides[defined(defined(build.map.lines.at(-1)).front)].lower =
+      "SW1BRIK";
     build.line(c, e, hall);
     build.line(e, f, hall);
     build.line(f, d, hall);
@@ -376,9 +290,9 @@ describe("decompileMap", () => {
       front: "s1",
     });
     const [doom] = readMaps([{ name: "map.wad", data: compileMap(map) }]);
-    const line = doom.lines.find((item) => item.special === 62)!;
-    expect(doom.sectors[doom.sides[line.front!].sector].tag).toBe(0);
-    expect(doom.sides[line.front!].lower).toMatch(/^SW1/);
+    const line = defined(doom.lines.find((item) => item.special === 62));
+    expect(doom.sectors[doom.sides[defined(line.front)].sector].tag).toBe(0);
+    expect(doom.sides[defined(line.front)].lower).toMatch(/^SW1/);
     expect(parseMapFile(serializeMap(map))).toEqual(map);
   });
 
@@ -409,7 +323,7 @@ describe("decompileMap", () => {
     expect(
       map.sectors.find((sector) => sector.id === "s1")?.door,
     ).toBeDefined();
-    const plain = map.sectors.find((sector) => sector.id === "s2")!;
+    const plain = defined(map.sectors.find((sector) => sector.id === "s2"));
     expect(plain.door).toBeUndefined();
     expect(plain.ceiling).toBeGreaterThan(plain.floor);
     expect(validateMap(map)).toEqual([]);
@@ -488,8 +402,10 @@ describe("decompileMap", () => {
     const [doom] = readMaps([{ name: "map.wad", data: compileMap(map) }]);
     const lines = doom.lines.filter((item) => item.special === 48);
     expect(lines).toHaveLength(2);
-    const open = lines.find((item) => item.back !== null)!;
-    expect(doom.sectors[doom.sides[open.front!].sector].light).toBe(200);
+    const open = defined(lines.find((item) => item.back !== null));
+    expect(doom.sectors[doom.sides[defined(open.front)].sector].light).toBe(
+      200,
+    );
     expect(parseMapFile(serializeMap(map))).toEqual(map);
   });
 
@@ -580,6 +496,28 @@ describe("decompileMap", () => {
   });
 });
 
+function kinds(map: GameMap) {
+  return map.things.map((thing) => thing.kind).toSorted();
+}
+
+// Corners go clockwise, so the room is on the right of every wall.
+function box(
+  build: ReturnType<typeof doomMap>,
+  sector: number,
+  [left, bottom, right, top]: number[],
+) {
+  const corners = [
+    build.vertex(left, bottom),
+    build.vertex(left, top),
+    build.vertex(right, top),
+    build.vertex(right, bottom),
+  ];
+  corners.forEach((corner, index) =>
+    build.line(corner, corners[(index + 1) % 4], sector),
+  );
+  return corners;
+}
+
 describe("doors line by line", () => {
   it("keeps each line's own way of opening a door, its face and its pegging", () => {
     const build = doomMap();
@@ -599,7 +537,7 @@ describe("doors line by line", () => {
     });
     // The door's top track is pegged to the floor and its bottom one is not.
     const [topTrack] = build.map.lines.filter(
-      (line) => build.map.sides[line.front!].sector === rooms[1],
+      (line) => build.map.sides[defined(line.front)].sector === rooms[1],
     );
     topTrack.flags |= 0x10;
     const side = (sector: number, upper: string) =>
@@ -635,17 +573,22 @@ describe("doors line by line", () => {
 
     const { map, report } = decompileMap(build.map);
     expect(report.plainDoors).toBe(0);
-    const door = map.sectors.find((sector) => sector.id === "s1")!;
+    const door = defined(map.sectors.find((sector) => sector.id === "s1"));
     expect(door.door).toEqual({
       opensBy: "use",
       closes: true,
       texture: "BIGDOOR2",
     });
     const wallBetween = (a: number, b: number) =>
-      Object.entries(map.lines ?? {}).find(([key]) => {
-        const [from, to] = key.split("|").map((id) => map.vertices[id]);
-        return [from.x, to.x].toSorted().join() === [a, b].toSorted().join();
-      })![1];
+      defined(
+        Object.entries(map.lines ?? {}).find(([key]) => {
+          const [from, to] = key.split("|").map((id) => map.vertices[id]);
+          return (
+            [from.x, to.x].toSorted((x, y) => x - y).join() ===
+            [a, b].toSorted((x, y) => x - y).join()
+          );
+        }),
+      )[1];
     expect(wallBetween(256, 256)).toEqual({
       action: { kind: "door-raise", trigger: "door", repeat: true, tag: 3 },
     });
@@ -674,17 +617,87 @@ describe("doors line by line", () => {
     expect(at(256)).toMatchObject([{ special: 1, tag: 3 }]);
     expect(at(288)).toMatchObject([{ special: 0, tag: 0 }]);
     const [shut] = at(288);
-    const faces = [shut.front, shut.back].map((index) => again.sides[index!]);
+    const faces = [shut.front, shut.back].map(
+      (index) => again.sides[defined(index)],
+    );
     expect(faces.find((face) => face.sector === 2)?.upper).toBe("BIGDOOR4");
     expect(faces.find((face) => face.sector === 1)?.upper).toBe("BIGDOOR2");
     const tracks = again.lines.filter(
-      (line) => line.back === null && again.sides[line.front!].sector === 1,
+      (line) =>
+        line.back === null && again.sides[defined(line.front)].sector === 1,
     );
-    expect(tracks.map((line) => line.flags & 0x10).toSorted()).toEqual([
-      0, 0x10,
-    ]);
+    expect(
+      tracks.map((line) => line.flags & 0x10).toSorted((a, b) => a - b),
+    ).toEqual([0, 0x10]);
   });
 });
+
+function doomMap() {
+  const map: DoomMap = {
+    slot: "MAP01",
+    vertices: [],
+    lines: [],
+    sides: [],
+    sectors: [],
+    things: [],
+  };
+  const side = (
+    sector: number,
+    textures: Partial<DoomMap["sides"][0]> = {},
+  ) => {
+    map.sides.push({
+      offsetX: 0,
+      offsetY: 0,
+      upper: "-",
+      lower: "-",
+      middle: "-",
+      sector,
+      ...textures,
+    });
+    return map.sides.length - 1;
+  };
+  return {
+    map,
+    vertex: (x: number, y: number) => map.vertices.push({ x, y }) - 1,
+    sector: (settings: Partial<DoomSector> = {}) =>
+      map.sectors.push({
+        floor: 0,
+        ceiling: 128,
+        floorTexture: "FLOOR4_8",
+        ceilingTexture: "CEIL3_5",
+        light: 160,
+        special: 0,
+        tag: 0,
+        ...settings,
+      }) - 1,
+    // The front sector sits on the right of start -> end, as in the engine.
+    line: (
+      start: number,
+      end: number,
+      front: number,
+      back: number | null = null,
+      extra: { special?: number; tag?: number; middle?: string } = {},
+    ) => {
+      map.lines.push({
+        start,
+        end,
+        flags: back === null ? 1 : 4,
+        special: extra.special ?? 0,
+        tag: extra.tag ?? 0,
+        front: side(
+          front,
+          back === null
+            ? { middle: extra.middle ?? "STARTAN3" }
+            : { upper: "STARTAN3", lower: "STARTAN3", middle: extra.middle },
+        ),
+        back:
+          back === null
+            ? null
+            : side(back, { upper: "STARTAN3", lower: "STARTAN3" }),
+      });
+    },
+  };
+}
 
 describe("readMaps", () => {
   it("lets a later WAD replace a map in the same slot", () => {
@@ -804,7 +817,9 @@ describe.skipIf(!existsSync(freedoom))("Freedoom's maps", () => {
 
   it("build into WADs again", () => {
     for (const slot of ["MAP01", "MAP13", "MAP27"]) {
-      const { map } = decompileMap(maps.find((doom) => doom.slot === slot)!);
+      const { map } = decompileMap(
+        defined(maps.find((doom) => doom.slot === slot)),
+      );
       expect(() => compileMap(map), slot).not.toThrow();
     }
   }, 60_000);

@@ -37,7 +37,8 @@ type Command =
   | { type: "key"; pressed: boolean; key: number };
 
 const setup = workerData as Setup;
-const port = parentPort!;
+if (!parentPort) throw new Error("The network game runs in a worker thread.");
+const port = parentPort;
 const { default: createDoom } = await import(
   pathToFileURL(resolve(setup.engineDirectory, "woof.js")).href
 );

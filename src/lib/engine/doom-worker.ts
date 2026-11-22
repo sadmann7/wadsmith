@@ -1,7 +1,5 @@
 import { NetInbox } from "./net-inbox";
 import {
-  startDoom,
-  screenSize,
   type CreateDoom,
   type DoomGame,
   type EngineIwad,
@@ -9,7 +7,9 @@ import {
   type GameStatus,
   type NetworkMode,
   type Screen,
+  screenSize,
   type Skill,
+  startDoom,
 } from "./runtime";
 
 interface SoundLevel {
@@ -61,11 +61,6 @@ type DoomWorkerResponse =
   | { type: "exit" }
   | { type: "error"; stage: "load" | "start" | "run"; message: string };
 
-const audioBlockFrames = 512;
-const audioBlocksAhead = 4;
-const audioPumpMs = 4;
-const statusEveryMs = 100;
-
 const scope = self as unknown as Worker;
 
 let game: DoomGame | null = null;
@@ -74,62 +69,34 @@ let sound: SoundLevel = { volume: 8, muted: false };
 let paused = false;
 let networked = false;
 const heldKeys = new Set<number>();
-let lastStatus = 0;
+
 const errors: string[] = [];
 const spareFrames: ArrayBuffer[] = [];
 
-function post(message: DoomWorkerResponse, transfer: Transferable[] = []) {
-  scope.postMessage(message, transfer);
-}
-
-function fail(fallback: string) {
-  const message = errors.findLast((line) => line.trim()) ?? fallback;
-  post({ type: "error", stage, message });
-}
-
-function pumpAudio(running: DoomGame, port: MessagePort) {
-  let sent = 0;
-  let played = 0;
-  port.addEventListener("message", (event: MessageEvent<number>) => {
-    played = event.data;
-  });
-  port.start();
-  setInterval(() => {
-    while (sent - played < audioBlockFrames * audioBlocksAhead) {
-      const data = running.audio(audioBlockFrames);
-      port.postMessage(
-        data,
-        data.map((channel) => channel.buffer as ArrayBuffer),
-      );
-      sent += audioBlockFrames;
-    }
-  }, audioPumpMs);
-}
-
-function sendFrame() {
-  if (!game) return;
-  const { width, height } = screenSize(game.screen);
-  const buffer = spareFrames.pop() ?? new ArrayBuffer(width * height * 4);
-  game.frame(new Uint8ClampedArray(buffer));
-  const now = performance.now();
-  const due = now - lastStatus >= statusEveryMs;
-  if (due) lastStatus = now;
-  post(
-    {
-      type: "frame",
-      buffer,
-      status: due ? game.status() : null,
-      network: due && networked ? game.network() : null,
-    },
-    [buffer],
-  );
-}
-
-async function fetchBytes(url: string) {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`${url} is missing.`);
-  return new Uint8Array(await response.arrayBuffer());
-}
+scope.addEventListener("message", (event) => {
+  const request = event.data as DoomWorkerRequest;
+  if (request.type === "start") {
+    start(request).catch((error: Error) => fail(error.message));
+  } else if (request.type === "key") {
+    if (request.pressed) heldKeys.add(request.key);
+    else heldKeys.delete(request.key);
+    game?.key(request.pressed, request.key);
+  } else if (request.type === "turn") {
+    game?.turn(request.amount);
+  } else if (request.type === "display") {
+    game?.syncToDisplay();
+  } else if (request.type === "sound") {
+    sound = request.sound;
+    game?.setSound(sound.volume, sound.muted);
+  } else if (request.type === "pause") {
+    paused = request.paused && !networked;
+    game?.setPaused(paused);
+  } else if (request.type === "launch") {
+    game?.launchNetGame();
+  } else {
+    spareFrames.push(request.buffer);
+  }
+});
 
 async function start(request: Extract<DoomWorkerRequest, { type: "start" }>) {
   sound = request.sound;
@@ -181,35 +148,71 @@ async function start(request: Extract<DoomWorkerRequest, { type: "start" }>) {
   }
 }
 
-scope.addEventListener("message", (event) => {
-  const request = event.data as DoomWorkerRequest;
-  if (request.type === "start") {
-    start(request).catch((error: Error) => fail(error.message));
-  } else if (request.type === "key") {
-    if (request.pressed) heldKeys.add(request.key);
-    else heldKeys.delete(request.key);
-    game?.key(request.pressed, request.key);
-  } else if (request.type === "turn") {
-    game?.turn(request.amount);
-  } else if (request.type === "display") {
-    game?.syncToDisplay();
-  } else if (request.type === "sound") {
-    sound = request.sound;
-    game?.setSound(sound.volume, sound.muted);
-  } else if (request.type === "pause") {
-    paused = request.paused && !networked;
-    game?.setPaused(paused);
-  } else if (request.type === "launch") {
-    game?.launchNetGame();
-  } else {
-    spareFrames.push(request.buffer);
-  }
-});
+async function fetchBytes(url: string) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`${url} is missing.`);
+  return new Uint8Array(await response.arrayBuffer());
+}
+
+const statusEveryMs = 100;
+
+let lastStatus = 0;
+
+function sendFrame() {
+  if (!game) return;
+  const { width, height } = screenSize(game.screen);
+  const buffer = spareFrames.pop() ?? new ArrayBuffer(width * height * 4);
+  game.frame(new Uint8ClampedArray(buffer));
+  const now = performance.now();
+  const due = now - lastStatus >= statusEveryMs;
+  if (due) lastStatus = now;
+  post(
+    {
+      type: "frame",
+      buffer,
+      status: due ? game.status() : null,
+      network: due && networked ? game.network() : null,
+    },
+    [buffer],
+  );
+}
+
+const audioBlockFrames = 512;
+const audioBlocksAhead = 4;
+const audioPumpMs = 4;
+
+function pumpAudio(running: DoomGame, port: MessagePort) {
+  let sent = 0;
+  let played = 0;
+  port.addEventListener("message", (event: MessageEvent<number>) => {
+    played = event.data;
+  });
+  port.start();
+  setInterval(() => {
+    while (sent - played < audioBlockFrames * audioBlocksAhead) {
+      const data = running.audio(audioBlockFrames);
+      port.postMessage(
+        data,
+        data.map((channel) => channel.buffer),
+      );
+      sent += audioBlockFrames;
+    }
+  }, audioPumpMs);
+}
 
 scope.addEventListener("error", (event) => {
   event.preventDefault();
   fail("The engine stopped.");
 });
+
+function post(message: DoomWorkerResponse, transfer: Transferable[] = []) {
+  scope.postMessage(message, transfer);
+}
+
+function fail(fallback: string) {
+  const message = errors.findLast((line) => line.trim()) ?? fallback;
+  post({ type: "error", stage, message });
+}
 
 export type {
   DoomWorkerRequest,

@@ -3,6 +3,7 @@ import * as React from "react";
 import type { GameInfo } from "@/lib/engine/game";
 import type { GameMap } from "@/lib/map/types";
 import type { ImportReport } from "@/lib/wad/decompile";
+
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -24,101 +25,6 @@ export interface ImportedMap {
 
 const plural = (count: number, one: string, many = `${one}s`) =>
   `${count} ${count === 1 ? one : many}`;
-
-function tally(entries: Record<string, number>[]) {
-  const total = new Map<string, number>();
-  for (const entry of entries) {
-    for (const [label, count] of Object.entries(entry)) {
-      total.set(label, (total.get(label) ?? 0) + count);
-    }
-  }
-  return [...total].toSorted((a, b) => b[1] - a[1]);
-}
-
-function sum(reports: ImportReport[], pick: (report: ImportReport) => number) {
-  return reports.reduce((total, report) => total + pick(report), 0);
-}
-
-function losses(reports: ImportReport[], gameLabel: string) {
-  const things = tally(reports.map((report) => report.droppedThings));
-  const actions = tally(reports.map((report) => report.droppedActions));
-  const textures = [
-    ...new Set(reports.flatMap((report) => report.replacedTextures)),
-  ];
-  const rows: { label: string; detail: string }[] = [];
-  if (things.length > 0) {
-    rows.push({
-      label: plural(
-        things.reduce((total, [, count]) => total + count, 0),
-        "thing",
-      ),
-      detail: things.map(([name, count]) => `${name} ×${count}`).join(", "),
-    });
-  }
-  if (actions.length > 0) {
-    rows.push({
-      label: plural(
-        actions.reduce((total, [, count]) => total + count, 0),
-        "line action",
-      ),
-      detail: actions.map(([name, count]) => `${name} ×${count}`).join(", "),
-    });
-  }
-  const seeThrough = sum(reports, (report) => report.seeThroughWalls);
-  if (seeThrough > 0) {
-    rows.push({
-      label: plural(seeThrough, "see-through wall"),
-      detail: "Grates, fences and windows lose their middle texture.",
-    });
-  }
-  if (textures.length > 0) {
-    rows.push({
-      label: plural(textures.length, "texture"),
-      detail: `Not in ${gameLabel}, so replaced: ${textures.join(", ")}.`,
-    });
-  }
-  const effects = sum(reports, (report) => report.droppedEffects);
-  if (effects > 0) {
-    rows.push({
-      label: plural(effects, "room effect"),
-      detail: "Lighting and damage effects the editor doesn't have yet.",
-    });
-  }
-  const multiplayer = sum(reports, (report) => report.multiplayerThings);
-  if (multiplayer > 0) {
-    rows.push({
-      label: plural(multiplayer, "thing on no difficulty"),
-      detail: "Things set to appear on no difficulty never spawn.",
-    });
-  }
-  const outside = sum(reports, (report) => report.outsideThings);
-  if (outside > 0) {
-    rows.push({
-      label: plural(
-        outside,
-        "thing outside the rooms",
-        "things outside the rooms",
-      ),
-      detail: "Usually kept out of sight for engine tricks.",
-    });
-  }
-  const skipped = sum(reports, (report) => report.skippedSectors);
-  if (skipped > 0) {
-    rows.push({
-      label: plural(skipped, "unclosed sector"),
-      detail: "Their walls don't form a closed outline.",
-    });
-  }
-  const plainDoors = sum(reports, (report) => report.plainDoors);
-  if (plainDoors > 0) {
-    rows.push({
-      label: plural(plainDoors, "door"),
-      detail:
-        "Doors that touch another door, or that were cut around a pillar, stay open as doorways.",
-    });
-  }
-  return rows;
-}
 
 interface WadImportDialogProps {
   fileName: string;
@@ -260,4 +166,99 @@ export function WadImportDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+function losses(reports: ImportReport[], gameLabel: string) {
+  const things = tally(reports.map((report) => report.droppedThings));
+  const actions = tally(reports.map((report) => report.droppedActions));
+  const textures = [
+    ...new Set(reports.flatMap((report) => report.replacedTextures)),
+  ];
+  const rows: { label: string; detail: string }[] = [];
+  if (things.length > 0) {
+    rows.push({
+      label: plural(
+        things.reduce((total, [, count]) => total + count, 0),
+        "thing",
+      ),
+      detail: things.map(([name, count]) => `${name} ×${count}`).join(", "),
+    });
+  }
+  if (actions.length > 0) {
+    rows.push({
+      label: plural(
+        actions.reduce((total, [, count]) => total + count, 0),
+        "line action",
+      ),
+      detail: actions.map(([name, count]) => `${name} ×${count}`).join(", "),
+    });
+  }
+  const seeThrough = sum(reports, (report) => report.seeThroughWalls);
+  if (seeThrough > 0) {
+    rows.push({
+      label: plural(seeThrough, "see-through wall"),
+      detail: "Grates, fences and windows lose their middle texture.",
+    });
+  }
+  if (textures.length > 0) {
+    rows.push({
+      label: plural(textures.length, "texture"),
+      detail: `Not in ${gameLabel}, so replaced: ${textures.join(", ")}.`,
+    });
+  }
+  const effects = sum(reports, (report) => report.droppedEffects);
+  if (effects > 0) {
+    rows.push({
+      label: plural(effects, "room effect"),
+      detail: "Lighting and damage effects the editor doesn't have yet.",
+    });
+  }
+  const multiplayer = sum(reports, (report) => report.multiplayerThings);
+  if (multiplayer > 0) {
+    rows.push({
+      label: plural(multiplayer, "thing on no difficulty"),
+      detail: "Things set to appear on no difficulty never spawn.",
+    });
+  }
+  const outside = sum(reports, (report) => report.outsideThings);
+  if (outside > 0) {
+    rows.push({
+      label: plural(
+        outside,
+        "thing outside the rooms",
+        "things outside the rooms",
+      ),
+      detail: "Usually kept out of sight for engine tricks.",
+    });
+  }
+  const skipped = sum(reports, (report) => report.skippedSectors);
+  if (skipped > 0) {
+    rows.push({
+      label: plural(skipped, "unclosed sector"),
+      detail: "Their walls don't form a closed outline.",
+    });
+  }
+  const plainDoors = sum(reports, (report) => report.plainDoors);
+  if (plainDoors > 0) {
+    rows.push({
+      label: plural(plainDoors, "door"),
+      detail:
+        "Doors that touch another door, or that were cut around a pillar, stay open as doorways.",
+    });
+  }
+  return rows;
+}
+
+function tally(entries: Record<string, number>[]) {
+  const total = new Map<string, number>();
+  for (const entry of entries) {
+    for (const [label, count] of Object.entries(entry)) {
+      total.set(label, (total.get(label) ?? 0) + count);
+    }
+  }
+  return [...total].toSorted((a, b) => b[1] - a[1]);
+}
+
+function sum(reports: ImportReport[], pick: (report: ImportReport) => number) {
+  return reports.reduce((total, report) => total + pick(report), 0);
 }

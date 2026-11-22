@@ -1,6 +1,5 @@
 import { ariaKeyshortcuts, formatShortcut } from "@ui-sdk/core";
 
-import { editorShortcuts } from "@/lib/editor/shortcuts";
 import {
   Dialog,
   DialogBackdrop,
@@ -9,6 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { editorShortcuts } from "@/lib/editor/shortcuts";
 
 interface Key {
   text: string;
@@ -23,22 +23,72 @@ function key(text: string, spoken?: string): Key {
   return { text, spoken };
 }
 
-function chord(shortcut: string): Key {
-  return {
-    text: formatShortcut(shortcut),
-    spoken: ariaKeyshortcuts(shortcut).replaceAll("+", " "),
-  };
+type TableEntry = (typeof editorShortcuts)[keyof typeof editorShortcuts];
+
+interface ShortcutSheetProps {
+  onClose: () => void;
+}
+
+export function ShortcutSheet({ onClose }: ShortcutSheetProps) {
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogBackdrop />
+      <DialogContent className="w-[680px]">
+        <DialogHeader>
+          <DialogTitle>Keyboard shortcuts</DialogTitle>
+          <DialogCloseButton />
+        </DialogHeader>
+        <div className="relative grid min-h-0 grid-cols-2 gap-x-8 gap-y-6 overflow-y-auto p-5 max-[640px]:grid-cols-1">
+          {groups().map((group) => (
+            <section key={group.title} className="grid content-start gap-2">
+              <h3 className="m-0 font-mono text-xs font-normal tracking-wide text-muted-foreground uppercase">
+                {group.title}
+              </h3>
+              <dl className="m-0 grid gap-1.5">
+                {group.items.map((item) => (
+                  <div
+                    key={item.does}
+                    className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-3"
+                  >
+                    <dt className="text-sm text-foreground">{item.does}</dt>
+                    <dd className="m-0 flex items-baseline gap-1">
+                      {item.keys.map((entry, index) => (
+                        <span key={entry.text} className="flex gap-1">
+                          {index > 0 ? (
+                            <span className="text-xs text-muted-foreground">
+                              <span aria-hidden="true">/</span>
+                              <span className="sr-only">or</span>
+                            </span>
+                          ) : null}
+                          <kbd
+                            aria-label={entry.spoken}
+                            className="rounded-[3px] border border-input px-1.5 font-mono text-xs text-foreground"
+                          >
+                            {entry.text}
+                          </kbd>
+                        </span>
+                      ))}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
+          ))}
+        </div>
+        <footer className="border-t border-border px-5 py-3 text-xs text-muted-foreground">
+          Walking and the N and P keys go by position, as on a US keyboard.
+        </footer>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 const backspace = key("⌫", "Backspace");
-
-type TableEntry = (typeof editorShortcuts)[keyof typeof editorShortcuts];
-
-function tableRows(include: (item: TableEntry) => boolean): Shortcut[] {
-  return Object.values(editorShortcuts)
-    .filter(include)
-    .map((item) => ({ keys: [chord(item.keys)], does: item.description }));
-}
 
 function groups(): { title: string; items: Shortcut[] }[] {
   return [
@@ -116,65 +166,15 @@ function groups(): { title: string; items: Shortcut[] }[] {
   ];
 }
 
-interface ShortcutSheetProps {
-  onClose: () => void;
+function tableRows(include: (item: TableEntry) => boolean): Shortcut[] {
+  return Object.values(editorShortcuts)
+    .filter(include)
+    .map((item) => ({ keys: [chord(item.keys)], does: item.description }));
 }
 
-export function ShortcutSheet({ onClose }: ShortcutSheetProps) {
-  return (
-    <Dialog
-      open
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
-    >
-      <DialogBackdrop />
-      <DialogContent className="w-[680px]">
-        <DialogHeader>
-          <DialogTitle>Keyboard shortcuts</DialogTitle>
-          <DialogCloseButton />
-        </DialogHeader>
-        <div className="relative grid min-h-0 grid-cols-2 gap-x-8 gap-y-6 overflow-y-auto p-5 max-[640px]:grid-cols-1">
-          {groups().map((group) => (
-            <section key={group.title} className="grid content-start gap-2">
-              <h3 className="m-0 font-mono text-xs font-normal tracking-wide text-muted-foreground uppercase">
-                {group.title}
-              </h3>
-              <dl className="m-0 grid gap-1.5">
-                {group.items.map((item) => (
-                  <div
-                    key={item.does}
-                    className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-3"
-                  >
-                    <dt className="text-sm text-foreground">{item.does}</dt>
-                    <dd className="m-0 flex items-baseline gap-1">
-                      {item.keys.map((entry, index) => (
-                        <span key={entry.text} className="flex gap-1">
-                          {index > 0 ? (
-                            <span className="text-xs text-muted-foreground">
-                              <span aria-hidden="true">/</span>
-                              <span className="sr-only">or</span>
-                            </span>
-                          ) : null}
-                          <kbd
-                            aria-label={entry.spoken}
-                            className="rounded-[3px] border border-input px-1.5 font-mono text-xs text-foreground"
-                          >
-                            {entry.text}
-                          </kbd>
-                        </span>
-                      ))}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-            </section>
-          ))}
-        </div>
-        <footer className="border-t border-border px-5 py-3 text-xs text-muted-foreground">
-          Walking and the N and P keys go by position, as on a US keyboard.
-        </footer>
-      </DialogContent>
-    </Dialog>
-  );
+function chord(shortcut: string): Key {
+  return {
+    text: formatShortcut(shortcut),
+    spoken: ariaKeyshortcuts(shortcut).replaceAll("+", " "),
+  };
 }

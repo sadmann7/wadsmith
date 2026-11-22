@@ -1,19 +1,10 @@
 import { CircleCheck, CircleX, Loader, TriangleAlert } from "lucide-react";
 import * as React from "react";
 
-import { wadFileName } from "@/components/editor/build-dialog";
-import { engineSlot, type GameInfo } from "@/lib/engine/game";
 import type { CheckContext } from "@/lib/map/validate";
-import { useBuildChecks } from "@/hooks/use-build-checks";
-import {
-  mapName,
-  mapSlots,
-  mapStatus,
-  type EpisodeMap,
-} from "@/lib/episodes/episode-data";
+
+import { wadFileName } from "@/components/editor/build-dialog";
 import { Button } from "@/components/ui/button";
-import { Field, FieldItem, FieldLabel, Label } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogBackdrop,
@@ -24,6 +15,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Field, FieldItem, FieldLabel, Label } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { useBuildChecks } from "@/hooks/use-build-checks";
+import { engineSlot, type GameInfo } from "@/lib/engine/game";
+import {
+  type EpisodeMap,
+  mapName,
+  mapSlots,
+  mapStatus,
+} from "@/lib/episodes/episode-data";
 
 const statusIcons = {
   ready: { icon: CircleCheck, className: "text-success" },

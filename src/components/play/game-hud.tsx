@@ -13,23 +13,25 @@ import {
 } from "lucide-react";
 import * as React from "react";
 
+import type { MouseMode } from "@/lib/engine/mouse-capture";
+import type { GameMap } from "@/lib/map/types";
+
 import { MapOutline } from "@/components/map-outline";
 import { MapPlan } from "@/components/map-plan";
-import { skillNames } from "@/lib/engine/coop";
-import { PlayerBadge } from "./coop-ui";
-import type { GameMap } from "@/lib/map/types";
-import type { MouseMode } from "@/lib/engine/mouse-capture";
-import {
-  fragLimit,
-  maxVolume,
-  screenSize,
-  type GameStatus,
-  type Screen,
-  type Skill,
-} from "@/lib/engine/runtime";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
+import { skillNames } from "@/lib/engine/coop";
+import {
+  fragLimit,
+  type GameStatus,
+  maxVolume,
+  type Screen,
+  screenSize,
+  type Skill,
+} from "@/lib/engine/runtime";
+
+import { PlayerBadge } from "./coop-ui";
 
 interface SoundSettings {
   volume: number;
@@ -71,7 +73,7 @@ const keyStyles = [
   { label: "Yellow skull key", icon: Skull, color: "var(--color-key-yellow)" },
   { label: "Red skull key", icon: Skull, color: "var(--color-key-red)" },
 ];
-const slowPingMs = 120;
+
 const panelClass = "pointer-events-auto rounded-[3px] bg-card/90";
 const buttonClass = `${panelClass} flex items-center gap-2 border-0 px-3 py-2 text-foreground hover:bg-muted`;
 const iconButtonClass =
@@ -80,336 +82,6 @@ const iconButtonClass =
 export function formatTime(tics: number) {
   const seconds = Math.floor(tics / ticsPerSecond);
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
-}
-
-interface MinimapProps {
-  map: GameMap;
-  status: GameStatus | null;
-  others: OtherPlayer[];
-}
-
-function Minimap({ map, status, others }: MinimapProps) {
-  const radians = ((status?.angle ?? 0) * Math.PI) / 180;
-  return (
-    <MapOutline
-      map={map}
-      label="Minimap"
-      className="block h-[162px] w-full bg-map-bg @max-2xl:hidden"
-    >
-      {(extent) =>
-        status ? (
-          <>
-            {others.map((other) => (
-              <circle
-                key={other.peer}
-                data-peer={other.peer}
-                cx={other.x}
-                cy={0 - other.y}
-                r={extent * 0.02}
-                fill="var(--color-foreground)"
-                stroke="var(--color-map-bg)"
-                strokeWidth={1.5}
-                vectorEffect="non-scaling-stroke"
-              />
-            ))}
-            <g transform={`translate(${status.x} ${0 - status.y})`}>
-              <line
-                x2={Math.cos(radians) * extent * 0.055}
-                y2={-Math.sin(radians) * extent * 0.055}
-                stroke="var(--color-thing-start)"
-                strokeWidth={1.5}
-                vectorEffect="non-scaling-stroke"
-              />
-              <circle r={extent * 0.025} fill="var(--color-thing-start)" />
-            </g>
-          </>
-        ) : null
-      }
-    </MapOutline>
-  );
-}
-
-interface StatProps {
-  label: string;
-  value: string;
-}
-
-function Stat({ label, value }: StatProps) {
-  return (
-    <div className="flex justify-between gap-3">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="m-0 font-mono text-xs">{value}</dd>
-    </div>
-  );
-}
-
-interface VitalProps {
-  label: string;
-  value: React.ReactNode;
-}
-
-function Vital({ label, value }: VitalProps) {
-  return (
-    <div>
-      <div className="font-mono text-xs text-foreground uppercase">{label}</div>
-      <div className="text-[44px] leading-none font-bold @max-2xl:text-2xl">
-        {value}
-      </div>
-    </div>
-  );
-}
-
-interface ScoreboardProps {
-  title: string;
-  par: number | null;
-  status: GameStatus | null;
-  rows: ScoreRow[];
-  deathmatch: boolean;
-}
-
-function Scoreboard({ title, par, status, rows, deathmatch }: ScoreboardProps) {
-  const columns = deathmatch
-    ? (["frags", "deaths"] as const)
-    : (["kills", "items", "secrets"] as const);
-  const sorted = deathmatch
-    ? rows.toSorted((a, b) => b.frags - a.frags || a.peer - b.peer)
-    : rows.toSorted((a, b) => a.peer - b.peer);
-  const teamKills = rows.reduce((total, row) => total + row.kills, 0);
-  const teamSecrets = rows.reduce((total, row) => total + row.secrets, 0);
-  return (
-    <section
-      aria-label="Scoreboard"
-      className={`${panelClass} absolute top-1/2 left-1/2 w-[min(600px,calc(100%-32px))] -translate-1/2 border border-input`}
-    >
-      <header className="flex items-end justify-between gap-4 border-b border-border px-5 py-3">
-        <div className="grid gap-0.5">
-          <h2 className="m-0 text-lg font-semibold">
-            {deathmatch ? "Deathmatch" : "Co-op"}
-          </h2>
-          <span className="font-mono text-xs text-muted-foreground uppercase">
-            {title}
-            {status ? ` · ${formatTime(status.tics)}` : ""}
-            {par ? ` / par ${formatTime(par * ticsPerSecond)}` : ""}
-          </span>
-        </div>
-        <span className="font-mono text-xs text-foreground">
-          {deathmatch
-            ? `First to ${fragLimit} frags`
-            : status
-              ? `Kills ${teamKills} / ${status.totalKills} · Secrets ${teamSecrets} / ${status.totalSecrets}`
-              : ""}
-        </span>
-      </header>
-      <table className="w-full border-collapse text-left">
-        <thead>
-          <tr className="font-mono text-xs text-muted-foreground uppercase">
-            <th className="py-2 pl-5 font-normal" colSpan={2}>
-              Player
-            </th>
-            {columns.map((column) => (
-              <th key={column} className="px-3 py-2 text-right font-normal">
-                {column}
-              </th>
-            ))}
-            <th className="py-2 pr-5 text-right font-normal">Ping</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((row) => (
-            <tr
-              key={row.peer}
-              className={`border-t border-border ${row.you ? "bg-primary/10" : ""}`}
-            >
-              <td className="w-6 py-2.5 pl-5">
-                <PlayerBadge peer={row.peer} />
-              </td>
-              <td className="py-2.5 pl-3">
-                <span className="text-base font-semibold">{row.name}</span>
-                {row.host ? (
-                  <span className="ml-2 font-mono text-xs text-muted-foreground uppercase">
-                    Host
-                  </span>
-                ) : null}
-                {row.you ? (
-                  <span className="ml-2 font-mono text-xs text-muted-foreground uppercase">
-                    You
-                  </span>
-                ) : null}
-              </td>
-              {columns.map((column) => (
-                <td key={column} className="px-3 py-2.5 text-right font-mono">
-                  {row[column]}
-                </td>
-              ))}
-              <td
-                className={`py-2.5 pr-5 text-right font-mono text-xs ${row.ping !== null && row.ping > slowPingMs ? "text-warning" : "text-muted-foreground"}`}
-              >
-                {row.ping === null ? "—" : `${row.ping} ms`}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <footer className="border-t border-border px-5 py-2 text-sm text-muted-foreground">
-        Release Tab to hide
-      </footer>
-    </section>
-  );
-}
-
-interface TallyProps {
-  label: string;
-  value: string;
-}
-
-function Tally({ label, value }: TallyProps) {
-  return (
-    <div className="grid gap-1">
-      <dt className="font-mono text-xs text-muted-foreground uppercase">
-        {label}
-      </dt>
-      <dd className="m-0 text-lg font-semibold">{value}</dd>
-    </div>
-  );
-}
-
-interface BetweenLevelsProps {
-  slot: string;
-  title: string;
-  status: GameStatus | null;
-  next: NextLevel;
-  exitLabel: string;
-  onExit: () => void;
-  onNext: () => void;
-}
-
-function BetweenLevels({
-  slot,
-  title,
-  status,
-  next,
-  exitLabel,
-  onExit,
-  onNext,
-}: BetweenLevelsProps) {
-  return (
-    <section
-      aria-label={`${slot} complete`}
-      className={`${panelClass} absolute top-1/2 left-1/2 grid w-[min(420px,calc(100%-32px))] -translate-1/2 gap-4 border border-input p-6`}
-    >
-      <div className="grid gap-1">
-        <span className="font-mono text-xs tracking-wide text-success uppercase">
-          {slot} complete
-        </span>
-        <h2 className="m-0 text-[26px] leading-tight font-bold">{title}</h2>
-      </div>
-      {status ? (
-        <dl className="m-0 grid grid-cols-4 gap-3 border-y border-border py-3">
-          <Tally
-            label="Kills"
-            value={`${status.kills} / ${status.totalKills}`}
-          />
-          <Tally
-            label="Items"
-            value={`${status.items} / ${status.totalItems}`}
-          />
-          <Tally
-            label="Secrets"
-            value={`${status.secrets} / ${status.totalSecrets}`}
-          />
-          <Tally label="Time" value={formatTime(status.tics)} />
-        </dl>
-      ) : null}
-      <div className="flex items-center gap-3">
-        <MapPlan
-          map={next.map}
-          className="h-[48px] w-[80px] shrink-0 rounded-[2px] bg-background"
-        />
-        <div className="grid min-w-0 gap-0.5">
-          <span className="font-mono text-xs text-muted-foreground uppercase">
-            Next · {next.slot}
-          </span>
-          <span className="truncate font-semibold">{next.title}</span>
-        </div>
-      </div>
-      <div className="flex justify-end gap-2">
-        <Button onClick={onExit}>{exitLabel}</Button>
-        <Button variant="primary" onClick={onNext}>
-          <ArrowRight size={14} aria-hidden="true" />
-          Next map
-        </Button>
-      </div>
-    </section>
-  );
-}
-
-interface StallBannerProps {
-  names: string[];
-  since: number;
-}
-
-function StallBanner({ names, since }: StallBannerProps) {
-  const [now, setNow] = React.useState(() => Date.now());
-  React.useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, []);
-  return (
-    <section
-      role="status"
-      aria-label="Waiting on a player"
-      className={`${panelClass} absolute top-20 left-1/2 flex w-[min(400px,calc(100%-32px))] -translate-x-1/2 items-center gap-3 border border-warning px-4 py-3`}
-    >
-      <Loader
-        size={18}
-        aria-hidden="true"
-        className="shrink-0 text-warning motion-safe:animate-spin"
-      />
-      <div className="grid min-w-0 flex-1 gap-0.5">
-        <span className="truncate text-base font-semibold">
-          Waiting for {new Intl.ListFormat("en").format(names)}
-        </span>
-        <span className="text-sm text-muted-foreground">
-          Everyone waits so the game stays in step.
-        </span>
-      </div>
-      <span className="font-mono text-xs text-warning">
-        {Math.max(0, Math.round((now - since) / 1000))} s
-      </span>
-    </section>
-  );
-}
-
-interface NoteFormProps {
-  onSave: (text: string) => void;
-}
-
-function NoteForm({ onSave }: NoteFormProps) {
-  const [text, setText] = React.useState("");
-  return (
-    <form
-      aria-label="Leave a note"
-      className={`${panelClass} absolute bottom-24 left-1/2 flex w-[min(460px,calc(100%-32px))] -translate-x-1/2 gap-2 border border-input p-2`}
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (text.trim()) onSave(text.trim());
-      }}
-    >
-      <Input
-        // oxlint-disable-next-line jsx-a11y/no-autofocus
-        autoFocus
-        aria-label="Note"
-        maxLength={280}
-        placeholder="What should change here?"
-        className="min-w-0 flex-1"
-        value={text}
-        onValueChange={setText}
-      />
-      <Button variant="primary" type="submit" disabled={!text.trim()}>
-        Save
-      </Button>
-    </form>
-  );
 }
 
 interface GameTopBarProps {
@@ -888,5 +560,337 @@ export function EndGameConfirm({
         </Button>
       </div>
     </section>
+  );
+}
+
+interface MinimapProps {
+  map: GameMap;
+  status: GameStatus | null;
+  others: OtherPlayer[];
+}
+
+function Minimap({ map, status, others }: MinimapProps) {
+  const radians = ((status?.angle ?? 0) * Math.PI) / 180;
+  return (
+    <MapOutline
+      map={map}
+      label="Minimap"
+      className="block h-[162px] w-full bg-map-bg @max-2xl:hidden"
+    >
+      {(extent) =>
+        status ? (
+          <>
+            {others.map((other) => (
+              <circle
+                key={other.peer}
+                data-peer={other.peer}
+                cx={other.x}
+                cy={0 - other.y}
+                r={extent * 0.02}
+                fill="var(--color-foreground)"
+                stroke="var(--color-map-bg)"
+                strokeWidth={1.5}
+                vectorEffect="non-scaling-stroke"
+              />
+            ))}
+            <g transform={`translate(${status.x} ${0 - status.y})`}>
+              <line
+                x2={Math.cos(radians) * extent * 0.055}
+                y2={-Math.sin(radians) * extent * 0.055}
+                stroke="var(--color-thing-start)"
+                strokeWidth={1.5}
+                vectorEffect="non-scaling-stroke"
+              />
+              <circle r={extent * 0.025} fill="var(--color-thing-start)" />
+            </g>
+          </>
+        ) : null
+      }
+    </MapOutline>
+  );
+}
+
+interface StatProps {
+  label: string;
+  value: string;
+}
+
+function Stat({ label, value }: StatProps) {
+  return (
+    <div className="flex justify-between gap-3">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="m-0 font-mono text-xs">{value}</dd>
+    </div>
+  );
+}
+
+interface BetweenLevelsProps {
+  slot: string;
+  title: string;
+  status: GameStatus | null;
+  next: NextLevel;
+  exitLabel: string;
+  onExit: () => void;
+  onNext: () => void;
+}
+
+function BetweenLevels({
+  slot,
+  title,
+  status,
+  next,
+  exitLabel,
+  onExit,
+  onNext,
+}: BetweenLevelsProps) {
+  return (
+    <section
+      aria-label={`${slot} complete`}
+      className={`${panelClass} absolute top-1/2 left-1/2 grid w-[min(420px,calc(100%-32px))] -translate-1/2 gap-4 border border-input p-6`}
+    >
+      <div className="grid gap-1">
+        <span className="font-mono text-xs tracking-wide text-success uppercase">
+          {slot} complete
+        </span>
+        <h2 className="m-0 text-[26px] leading-tight font-bold">{title}</h2>
+      </div>
+      {status ? (
+        <dl className="m-0 grid grid-cols-4 gap-3 border-y border-border py-3">
+          <Tally
+            label="Kills"
+            value={`${status.kills} / ${status.totalKills}`}
+          />
+          <Tally
+            label="Items"
+            value={`${status.items} / ${status.totalItems}`}
+          />
+          <Tally
+            label="Secrets"
+            value={`${status.secrets} / ${status.totalSecrets}`}
+          />
+          <Tally label="Time" value={formatTime(status.tics)} />
+        </dl>
+      ) : null}
+      <div className="flex items-center gap-3">
+        <MapPlan
+          map={next.map}
+          className="h-[48px] w-[80px] shrink-0 rounded-[2px] bg-background"
+        />
+        <div className="grid min-w-0 gap-0.5">
+          <span className="font-mono text-xs text-muted-foreground uppercase">
+            Next · {next.slot}
+          </span>
+          <span className="truncate font-semibold">{next.title}</span>
+        </div>
+      </div>
+      <div className="flex justify-end gap-2">
+        <Button onClick={onExit}>{exitLabel}</Button>
+        <Button variant="primary" onClick={onNext}>
+          <ArrowRight size={14} aria-hidden="true" />
+          Next map
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+interface TallyProps {
+  label: string;
+  value: string;
+}
+
+function Tally({ label, value }: TallyProps) {
+  return (
+    <div className="grid gap-1">
+      <dt className="font-mono text-xs text-muted-foreground uppercase">
+        {label}
+      </dt>
+      <dd className="m-0 text-lg font-semibold">{value}</dd>
+    </div>
+  );
+}
+
+interface StallBannerProps {
+  names: string[];
+  since: number;
+}
+
+function StallBanner({ names, since }: StallBannerProps) {
+  const [now, setNow] = React.useState(() => Date.now());
+  React.useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  return (
+    <section
+      role="status"
+      aria-label="Waiting on a player"
+      className={`${panelClass} absolute top-20 left-1/2 flex w-[min(400px,calc(100%-32px))] -translate-x-1/2 items-center gap-3 border border-warning px-4 py-3`}
+    >
+      <Loader
+        size={18}
+        aria-hidden="true"
+        className="shrink-0 text-warning motion-safe:animate-spin"
+      />
+      <div className="grid min-w-0 flex-1 gap-0.5">
+        <span className="truncate text-base font-semibold">
+          Waiting for {new Intl.ListFormat("en").format(names)}
+        </span>
+        <span className="text-sm text-muted-foreground">
+          Everyone waits so the game stays in step.
+        </span>
+      </div>
+      <span className="font-mono text-xs text-warning">
+        {Math.max(0, Math.round((now - since) / 1000))} s
+      </span>
+    </section>
+  );
+}
+
+const slowPingMs = 120;
+
+interface ScoreboardProps {
+  title: string;
+  par: number | null;
+  status: GameStatus | null;
+  rows: ScoreRow[];
+  deathmatch: boolean;
+}
+
+function Scoreboard({ title, par, status, rows, deathmatch }: ScoreboardProps) {
+  const columns = deathmatch
+    ? (["frags", "deaths"] as const)
+    : (["kills", "items", "secrets"] as const);
+  const sorted = deathmatch
+    ? rows.toSorted((a, b) => b.frags - a.frags || a.peer - b.peer)
+    : rows.toSorted((a, b) => a.peer - b.peer);
+  const teamKills = rows.reduce((total, row) => total + row.kills, 0);
+  const teamSecrets = rows.reduce((total, row) => total + row.secrets, 0);
+  return (
+    <section
+      aria-label="Scoreboard"
+      className={`${panelClass} absolute top-1/2 left-1/2 w-[min(600px,calc(100%-32px))] -translate-1/2 border border-input`}
+    >
+      <header className="flex items-end justify-between gap-4 border-b border-border px-5 py-3">
+        <div className="grid gap-0.5">
+          <h2 className="m-0 text-lg font-semibold">
+            {deathmatch ? "Deathmatch" : "Co-op"}
+          </h2>
+          <span className="font-mono text-xs text-muted-foreground uppercase">
+            {title}
+            {status ? ` · ${formatTime(status.tics)}` : ""}
+            {par ? ` / par ${formatTime(par * ticsPerSecond)}` : ""}
+          </span>
+        </div>
+        <span className="font-mono text-xs text-foreground">
+          {deathmatch
+            ? `First to ${fragLimit} frags`
+            : status
+              ? `Kills ${teamKills} / ${status.totalKills} · Secrets ${teamSecrets} / ${status.totalSecrets}`
+              : ""}
+        </span>
+      </header>
+      <table className="w-full border-collapse text-left">
+        <thead>
+          <tr className="font-mono text-xs text-muted-foreground uppercase">
+            <th className="py-2 pl-5 font-normal" colSpan={2}>
+              Player
+            </th>
+            {columns.map((column) => (
+              <th key={column} className="px-3 py-2 text-right font-normal">
+                {column}
+              </th>
+            ))}
+            <th className="py-2 pr-5 text-right font-normal">Ping</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((row) => (
+            <tr
+              key={row.peer}
+              className={`border-t border-border ${row.you ? "bg-primary/10" : ""}`}
+            >
+              <td className="w-6 py-2.5 pl-5">
+                <PlayerBadge peer={row.peer} />
+              </td>
+              <td className="py-2.5 pl-3">
+                <span className="text-base font-semibold">{row.name}</span>
+                {row.host ? (
+                  <span className="ml-2 font-mono text-xs text-muted-foreground uppercase">
+                    Host
+                  </span>
+                ) : null}
+                {row.you ? (
+                  <span className="ml-2 font-mono text-xs text-muted-foreground uppercase">
+                    You
+                  </span>
+                ) : null}
+              </td>
+              {columns.map((column) => (
+                <td key={column} className="px-3 py-2.5 text-right font-mono">
+                  {row[column]}
+                </td>
+              ))}
+              <td
+                className={`py-2.5 pr-5 text-right font-mono text-xs ${row.ping !== null && row.ping > slowPingMs ? "text-warning" : "text-muted-foreground"}`}
+              >
+                {row.ping === null ? "—" : `${row.ping} ms`}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <footer className="border-t border-border px-5 py-2 text-sm text-muted-foreground">
+        Release Tab to hide
+      </footer>
+    </section>
+  );
+}
+
+interface NoteFormProps {
+  onSave: (text: string) => void;
+}
+
+function NoteForm({ onSave }: NoteFormProps) {
+  const [text, setText] = React.useState("");
+  return (
+    <form
+      aria-label="Leave a note"
+      className={`${panelClass} absolute bottom-24 left-1/2 flex w-[min(460px,calc(100%-32px))] -translate-x-1/2 gap-2 border border-input p-2`}
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (text.trim()) onSave(text.trim());
+      }}
+    >
+      <Input
+        // oxlint-disable-next-line jsx-a11y/no-autofocus
+        autoFocus
+        aria-label="Note"
+        maxLength={280}
+        placeholder="What should change here?"
+        className="min-w-0 flex-1"
+        value={text}
+        onValueChange={setText}
+      />
+      <Button variant="primary" type="submit" disabled={!text.trim()}>
+        Save
+      </Button>
+    </form>
+  );
+}
+
+interface VitalProps {
+  label: string;
+  value: React.ReactNode;
+}
+
+function Vital({ label, value }: VitalProps) {
+  return (
+    <div>
+      <div className="font-mono text-xs text-foreground uppercase">{label}</div>
+      <div className="text-[44px] leading-none font-bold @max-2xl:text-2xl">
+        {value}
+      </div>
+    </div>
   );
 }

@@ -1,4 +1,22 @@
+import type { GameInfo } from "@/lib/engine/game";
+
+import { defined } from "@/lib/defined";
+
+import type { TextureNames } from "./textures";
+import type { Complevel, GameMap, Point, Sector, ThingSkill } from "./types";
+
+import { appearsOn } from "./balance";
+import { generalizedKind, generalizedTrigger, isGeneralized } from "./boom";
+import { isPlayerStart, keyThings, thingCatalog, thingKinds } from "./catalog";
 import {
+  atLeast,
+  complevelLabels,
+  lineLevel,
+  linePassUse,
+  sectorLevel,
+} from "./complevel";
+import {
+  type Box,
   boxOf,
   containerOf,
   loopEdges,
@@ -17,22 +35,8 @@ import {
   signedArea,
   wallKey,
   wallOwners,
-  type Box,
 } from "./geometry";
-import { appearsOn } from "./balance";
-import { isPlayerStart, keyThings, thingCatalog, thingKinds } from "./catalog";
-import {
-  atLeast,
-  complevelLabels,
-  lineLevel,
-  linePassUse,
-  sectorLevel,
-} from "./complevel";
-import type { GameInfo } from "@/lib/engine/game";
-import { generalizedKind, generalizedTrigger, isGeneralized } from "./boom";
 import { describeLine, lineUsesTag, movesSector, opensDoor } from "./lines";
-import type { TextureNames } from "./textures";
-import type { Complevel, GameMap, Point, Sector, ThingSkill } from "./types";
 
 // What the browser plays on, which a map can outgrow after it was saved.
 export interface CheckContext {
@@ -47,111 +51,112 @@ export interface MapIssue {
   target?: string;
 }
 
-const skills: ThingSkill[] = ["easy", "medium", "hard"];
 const coordinateLimit = 32000;
-const heightLimit = 32767;
-const doorClearance = 4;
-const playerHeight = 56;
-
-const gridSize = 256;
-const maxCells = 4096;
-
-function span(box: Box) {
-  return {
-    left: Math.floor(box.left / gridSize),
-    right: Math.floor(box.right / gridSize),
-    top: Math.floor(box.top / gridSize),
-    bottom: Math.floor(box.bottom / gridSize),
-  };
-}
-
-function meets(a: Box, b: Box) {
-  return (
-    a.left <= b.right &&
-    a.right >= b.left &&
-    a.top <= b.bottom &&
-    a.bottom >= b.top
-  );
-}
-
-// A box over too many cells, like a far-off corner's wall, meets every box.
-function wide(box: Box) {
-  const cells = span(box);
-  return (
-    (cells.right - cells.left + 1) * (cells.bottom - cells.top + 1) > maxCells
-  );
-}
-
-function cellsOf(box: Box) {
-  const cells = span(box);
-  const keys: string[] = [];
-  for (let x = cells.left; x <= cells.right; x += 1) {
-    for (let y = cells.top; y <= cells.bottom; y += 1) keys.push(`${x},${y}`);
-  }
-  return keys;
-}
-
-// Imported maps have thousands of walls, so each wall or room is only
-// compared with the ones whose bounds meet its own.
-function nearby(boxes: Box[]) {
-  const cells = new Map<string, number[]>();
-  const wideBoxes: number[] = [];
-  boxes.forEach((box, index) => {
-    if (wide(box)) {
-      wideBoxes.push(index);
-      return;
-    }
-    for (const key of cellsOf(box)) {
-      cells.set(key, [...(cells.get(key) ?? []), index]);
-    }
-  });
-  return (index: number) => {
-    const box = boxes[index];
-    const candidates = wide(box)
-      ? boxes.keys()
-      : [...cellsOf(box).flatMap((key) => cells.get(key) ?? []), ...wideBoxes];
-    const found = new Set<number>();
-    for (const other of candidates) {
-      if (other !== index && meets(boxes[other], box)) found.add(other);
-    }
-    return [...found].toSorted((a, b) => a - b);
-  };
-}
-
-function edgeKey(a: string, b: string) {
-  return a < b ? `${a}|${b}` : `${b}|${a}`;
-}
 
 interface Wall {
   from: string;
   to: string;
 }
 
-function sharesCorner(a: Wall, b: Wall) {
-  return (
-    a.from === b.from || a.from === b.to || a.to === b.from || a.to === b.to
-  );
+export function activeLineActions(map: GameMap) {
+  const owners = wallOwners(map);
+  const entries = [...owners];
+  return Object.entries(map.lines ?? {}).flatMap(([wall, { action }]) => {
+    const owner = owners.get(wall)?.[0];
+    if (!action || !owner) return [];
+    const line = describeLine(map, wall, owner.id, entries);
+    return line.wiredSwitch ? [] : [{ wall, action, line }];
+  });
 }
 
-// Two walls from one corner can still run along each other, which a crossing
-// test on their other corners misses.
-function wallsMeet(map: GameMap, a: Wall, b: Wall) {
-  if (!sharesCorner(a, b)) {
-    return segmentsIntersect(
-      map.vertices[a.from],
-      map.vertices[a.to],
-      map.vertices[b.from],
-      map.vertices[b.to],
-    );
+type LineActions = ReturnType<typeof activeLineActions>;
+
+// Warnings are legal in Doom but likely mistakes, so they don't block a build.
+export function inspectMap(map: GameMap, context: CheckContext = {}) {
+  const issues: MapIssue[] = [];
+  const warnings: MapIssue[] = [];
+  if (map.sectors.length === 0) {
+    issues.push({ id: "empty", message: "Draw at least one room." });
   }
-  const shared = a.from === b.from || a.from === b.to ? a.from : a.to;
-  const free = (wall: Wall) =>
-    map.vertices[wall.from === shared ? wall.to : wall.from];
-  return (
-    onSegment(map.vertices[b.from], map.vertices[b.to], free(a)) ||
-    onSegment(map.vertices[a.from], map.vertices[a.to], free(b))
-  );
+  let actions: LineActions | undefined;
+  const lineActions = () => (actions ??= activeLineActions(map));
+  let opened: Set<number> | undefined;
+  // A raw special with a tag may move its sector too, so it counts as opening.
+  const openedTags = () =>
+    (opened ??= new Set([
+      ...lineActions()
+        .filter(
+          ({ action }) =>
+            movesSector(action.kind) && lineUsesTag(action) && action.tag > 0,
+        )
+        .map(({ action }) => action.tag),
+      ...Object.values(map.lines ?? {}).flatMap((line) =>
+        line.raw && line.raw.tag > 0 && !line.action ? [line.raw.tag] : [],
+      ),
+    ]));
+  for (const sector of map.sectors) {
+    validateSector(map, sector, issues, openedTags);
+  }
+  if (issues.length === 0) {
+    validateNeighbors(map, issues);
+    validateDoors(map, issues, warnings, lineActions(), openedTags());
+    validateLines(map, issues, lineActions());
+  }
+  validateLevels(map, issues, issues.length === 0);
+  validateGame(map, issues, context);
+  for (const [id, point] of Object.entries(map.vertices)) {
+    if (
+      Math.abs(point.x) > coordinateLimit ||
+      Math.abs(point.y) > coordinateLimit
+    ) {
+      issues.push({
+        id: `range:${id}`,
+        message: "A corner is too far from the map center.",
+      });
+    }
+  }
+
+  const players = map.things.filter((thing) => thing.kind === "player");
+  if (players.length === 0) {
+    issues.push({ id: "no-player", message: "Place a player start." });
+  }
+  for (const kind of thingKinds) {
+    if (!isPlayerStart(kind)) continue;
+    const starts = map.things.filter((thing) => thing.kind === kind);
+    if (starts.length < 2) continue;
+    issues.push({
+      id: kind === "player" ? "many-players" : `many-players:${kind}`,
+      message: `Keep only one ${thingCatalog[kind].label.toLowerCase()}.`,
+      target: starts[1].id,
+    });
+  }
+  if (issues.length === 0) {
+    for (const thing of map.things) {
+      const room = sectorAt(map, thing);
+      if (room?.door) {
+        (isPlayerStart(thing.kind) ? issues : warnings).push({
+          id: `in-door:${thing.id}`,
+          message: `${thing.id} is inside a closed door.`,
+          target: thing.id,
+        });
+      }
+      if (!room) {
+        issues.push({
+          id: `outside:${thing.id}`,
+          message: `${thing.id} is outside every room.`,
+          target: thing.id,
+        });
+      }
+    }
+  }
+  return { errors: issues, warnings };
 }
+
+export function validateMap(map: GameMap, context?: CheckContext): MapIssue[] {
+  return inspectMap(map, context).errors;
+}
+
+const heightLimit = 32767;
 
 function validateSector(
   map: GameMap,
@@ -276,6 +281,36 @@ function validateSector(
   }
 }
 
+function edgeKey(a: string, b: string) {
+  return a < b ? `${a}|${b}` : `${b}|${a}`;
+}
+
+// Two walls from one corner can still run along each other, which a crossing
+// test on their other corners misses.
+function wallsMeet(map: GameMap, a: Wall, b: Wall) {
+  if (!sharesCorner(a, b)) {
+    return segmentsIntersect(
+      map.vertices[a.from],
+      map.vertices[a.to],
+      map.vertices[b.from],
+      map.vertices[b.to],
+    );
+  }
+  const shared = a.from === b.from || a.from === b.to ? a.from : a.to;
+  const free = (wall: Wall) =>
+    map.vertices[wall.from === shared ? wall.to : wall.from];
+  return (
+    onSegment(map.vertices[b.from], map.vertices[b.to], free(a)) ||
+    onSegment(map.vertices[a.from], map.vertices[a.to], free(b))
+  );
+}
+
+function sharesCorner(a: Wall, b: Wall) {
+  return (
+    a.from === b.from || a.from === b.to || a.to === b.from || a.to === b.to
+  );
+}
+
 function validateNeighbors(map: GameMap, issues: MapIssue[]) {
   const usage = new Map<string, Sector[]>();
   for (const sector of map.sectors) {
@@ -309,7 +344,7 @@ function validateNeighbors(map: GameMap, issues: MapIssue[]) {
       const a = walls[i];
       const b = walls[j];
       if (wallsMeet(map, a, b)) {
-        const sector = usage.get(a.key)![0];
+        const sector = defined(usage.get(a.key))[0];
         issues.push({
           id: `cross:${a.key}:${b.key}`,
           message: `${sector.name}: a wall touches, crosses or runs along another wall.`,
@@ -466,33 +501,74 @@ function validateNeighbors(map: GameMap, issues: MapIssue[]) {
   }
 }
 
-export function activeLineActions(map: GameMap) {
-  const owners = wallOwners(map);
-  const entries = [...owners];
-  return Object.entries(map.lines ?? {}).flatMap(([wall, { action }]) => {
-    const owner = owners.get(wall)?.[0];
-    if (!action || !owner) return [];
-    const line = describeLine(map, wall, owner.id, entries);
-    return line.wiredSwitch ? [] : [{ wall, action, line }];
+// Imported maps have thousands of walls, so each wall or room is only
+// compared with the ones whose bounds meet its own.
+function nearby(boxes: Box[]) {
+  const cells = new Map<string, number[]>();
+  const wideBoxes: number[] = [];
+  boxes.forEach((box, index) => {
+    if (wide(box)) {
+      wideBoxes.push(index);
+      return;
+    }
+    for (const key of cellsOf(box)) {
+      cells.set(key, [...(cells.get(key) ?? []), index]);
+    }
   });
+  return (index: number) => {
+    const box = boxes[index];
+    const candidates = wide(box)
+      ? boxes.keys()
+      : [...cellsOf(box).flatMap((key) => cells.get(key) ?? []), ...wideBoxes];
+    const found = new Set<number>();
+    for (const other of candidates) {
+      if (other !== index && meets(boxes[other], box)) found.add(other);
+    }
+    return [...found].toSorted((a, b) => a - b);
+  };
 }
 
-// A closed door can't be crossed, and its track walls are out of reach.
-function lineOpensDoor(
-  { action, line }: ReturnType<typeof activeLineActions>[number],
-  door: Sector,
-) {
-  if (!opensDoor(action.kind)) return false;
-  const behind = line.back?.id === door.id;
-  if (action.trigger === "door") return behind;
+const maxCells = 4096;
+
+// A box over too many cells, like a far-off corner's wall, meets every box.
+function wide(box: Box) {
+  const cells = span(box);
   return (
-    action.tag === door.tag &&
-    line.front.id !== door.id &&
-    !(action.trigger === "walk" && (behind || line.settings.blocksAll))
+    (cells.right - cells.left + 1) * (cells.bottom - cells.top + 1) > maxCells
   );
 }
 
-type LineActions = ReturnType<typeof activeLineActions>;
+const gridSize = 256;
+
+function span(box: Box) {
+  return {
+    left: Math.floor(box.left / gridSize),
+    right: Math.floor(box.right / gridSize),
+    top: Math.floor(box.top / gridSize),
+    bottom: Math.floor(box.bottom / gridSize),
+  };
+}
+
+function cellsOf(box: Box) {
+  const cells = span(box);
+  const keys: string[] = [];
+  for (let x = cells.left; x <= cells.right; x += 1) {
+    for (let y = cells.top; y <= cells.bottom; y += 1) keys.push(`${x},${y}`);
+  }
+  return keys;
+}
+
+function meets(a: Box, b: Box) {
+  return (
+    a.left <= b.right &&
+    a.right >= b.left &&
+    a.top <= b.bottom &&
+    a.bottom >= b.top
+  );
+}
+
+const doorClearance = 4;
+const playerHeight = 56;
 
 function validateDoors(
   map: GameMap,
@@ -587,6 +663,23 @@ function validateDoors(
     }
   }
 }
+
+// A closed door can't be crossed, and its track walls are out of reach.
+function lineOpensDoor(
+  { action, line }: ReturnType<typeof activeLineActions>[number],
+  door: Sector,
+) {
+  if (!opensDoor(action.kind)) return false;
+  const behind = line.back?.id === door.id;
+  if (action.trigger === "door") return behind;
+  return (
+    action.tag === door.tag &&
+    line.front.id !== door.id &&
+    !(action.trigger === "walk" && (behind || line.settings.blocksAll))
+  );
+}
+
+const skills: ThingSkill[] = ["easy", "medium", "hard"];
 
 function validateLines(map: GameMap, issues: MapIssue[], actions: LineActions) {
   for (const { wall, action, line } of actions) {
@@ -775,89 +868,4 @@ function validateGame(
       });
     }
   }
-}
-
-// Warnings are legal in Doom but likely mistakes, so they don't block a build.
-export function inspectMap(map: GameMap, context: CheckContext = {}) {
-  const issues: MapIssue[] = [];
-  const warnings: MapIssue[] = [];
-  if (map.sectors.length === 0) {
-    issues.push({ id: "empty", message: "Draw at least one room." });
-  }
-  let actions: LineActions | undefined;
-  const lineActions = () => (actions ??= activeLineActions(map));
-  let opened: Set<number> | undefined;
-  // A raw special with a tag may move its sector too, so it counts as opening.
-  const openedTags = () =>
-    (opened ??= new Set([
-      ...lineActions()
-        .filter(
-          ({ action }) =>
-            movesSector(action.kind) && lineUsesTag(action) && action.tag > 0,
-        )
-        .map(({ action }) => action.tag),
-      ...Object.values(map.lines ?? {}).flatMap((line) =>
-        line.raw && line.raw.tag > 0 && !line.action ? [line.raw.tag] : [],
-      ),
-    ]));
-  for (const sector of map.sectors) {
-    validateSector(map, sector, issues, openedTags);
-  }
-  if (issues.length === 0) {
-    validateNeighbors(map, issues);
-    validateDoors(map, issues, warnings, lineActions(), openedTags());
-    validateLines(map, issues, lineActions());
-  }
-  validateLevels(map, issues, issues.length === 0);
-  validateGame(map, issues, context);
-  for (const [id, point] of Object.entries(map.vertices)) {
-    if (
-      Math.abs(point.x) > coordinateLimit ||
-      Math.abs(point.y) > coordinateLimit
-    ) {
-      issues.push({
-        id: `range:${id}`,
-        message: "A corner is too far from the map center.",
-      });
-    }
-  }
-
-  const players = map.things.filter((thing) => thing.kind === "player");
-  if (players.length === 0) {
-    issues.push({ id: "no-player", message: "Place a player start." });
-  }
-  for (const kind of thingKinds) {
-    if (!isPlayerStart(kind)) continue;
-    const starts = map.things.filter((thing) => thing.kind === kind);
-    if (starts.length < 2) continue;
-    issues.push({
-      id: kind === "player" ? "many-players" : `many-players:${kind}`,
-      message: `Keep only one ${thingCatalog[kind].label.toLowerCase()}.`,
-      target: starts[1].id,
-    });
-  }
-  if (issues.length === 0) {
-    for (const thing of map.things) {
-      const room = sectorAt(map, thing);
-      if (room?.door) {
-        (isPlayerStart(thing.kind) ? issues : warnings).push({
-          id: `in-door:${thing.id}`,
-          message: `${thing.id} is inside a closed door.`,
-          target: thing.id,
-        });
-      }
-      if (!room) {
-        issues.push({
-          id: `outside:${thing.id}`,
-          message: `${thing.id} is outside every room.`,
-          target: thing.id,
-        });
-      }
-    }
-  }
-  return { errors: issues, warnings };
-}
-
-export function validateMap(map: GameMap, context?: CheckContext): MapIssue[] {
-  return inspectMap(map, context).errors;
 }

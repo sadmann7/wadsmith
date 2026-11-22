@@ -1,5 +1,7 @@
 import * as React from "react";
 
+import type { GameMap, Sector } from "@/lib/map/types";
+
 import {
   loopsPath,
   paintOrder,
@@ -9,7 +11,6 @@ import {
   wallOwners,
 } from "@/lib/map/geometry";
 import { endsLevel, lineUsesTag, movesSector } from "@/lib/map/lines";
-import type { GameMap, Sector } from "@/lib/map/types";
 
 type SectorKind =
   | "floor"

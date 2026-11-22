@@ -1,5 +1,6 @@
-import { sectorEffects } from "./catalog";
 import type { LineTrigger, Sector, SectorEffect } from "./types";
+
+import { sectorEffects } from "./catalog";
 
 export type GeneralizedClass =
   | "floor"
@@ -79,25 +80,6 @@ const speed: BoomField = {
   options: ["Slow", "Normal", "Fast", "Turbo"],
 };
 
-function flag(
-  id: string,
-  label: string,
-  shift: number,
-  when?: BoomField["when"],
-): BoomField {
-  return { id, label, shift, width: 1, options: yesNo, when };
-}
-
-function choice(
-  id: string,
-  label: string,
-  shift: number,
-  options: readonly string[],
-  when?: BoomField["when"],
-): BoomField {
-  return { id, label, shift, width: Math.log2(options.length), options, when };
-}
-
 const changes = [
   "Nothing",
   "Texture, and clears the effect",
@@ -109,21 +91,6 @@ const changeShift = 10;
 const changesSomething = (special: number) =>
   ((special >> changeShift) & 3) !== 0;
 const changesNothing = (special: number) => !changesSomething(special);
-
-// The model bit says which room to copy from, unless nothing is copied; then
-// it lets monsters trigger the line.
-function moverFields(targets: string[], what: string): BoomField[] {
-  return [
-    trigger,
-    speed,
-    choice("direction", "Moves", 6, ["Down", "Up"]),
-    choice("target", "Until it reaches", 7, targets),
-    choice("change", `Changes the ${what}`, changeShift, changes),
-    choice("model", "Copies from", 5, models, changesSomething),
-    flag("monsters", "Monsters can trigger it", 5, changesNothing),
-    flag("crush", "Crushes", 12),
-  ];
-}
 
 export const generalizedKinds: GeneralizedKind[] = [
   {
@@ -314,6 +281,40 @@ export function generalizedFields(special: number) {
   return kind
     ? kind.fields.filter((field) => !field.when || field.when(special))
     : [];
+}
+
+// The model bit says which room to copy from, unless nothing is copied; then
+// it lets monsters trigger the line.
+function moverFields(targets: string[], what: string): BoomField[] {
+  return [
+    trigger,
+    speed,
+    choice("direction", "Moves", 6, ["Down", "Up"]),
+    choice("target", "Until it reaches", 7, targets),
+    choice("change", `Changes the ${what}`, changeShift, changes),
+    choice("model", "Copies from", 5, models, changesSomething),
+    flag("monsters", "Monsters can trigger it", 5, changesNothing),
+    flag("crush", "Crushes", 12),
+  ];
+}
+
+function choice(
+  id: string,
+  label: string,
+  shift: number,
+  options: readonly string[],
+  when?: BoomField["when"],
+): BoomField {
+  return { id, label, shift, width: Math.log2(options.length), options, when };
+}
+
+function flag(
+  id: string,
+  label: string,
+  shift: number,
+  when?: BoomField["when"],
+): BoomField {
+  return { id, label, shift, width: 1, options: yesNo, when };
 }
 
 // Boom keeps the vanilla type in the low five bits and adds damage, secret,

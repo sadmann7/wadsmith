@@ -1,28 +1,20 @@
 import * as React from "react";
 
-import { Choice } from "@/components/play/coop-ui";
-import { engineSlot, slotCount, type GameInfo } from "@/lib/engine/game";
-import { useIwad } from "@/hooks/use-iwad";
-import { MapOutline } from "@/components/map-outline";
-import { complevelLabels, complevels } from "@/lib/map/complevel";
 import type { Complevel } from "@/lib/map/types";
+
+import { MapOutline } from "@/components/map-outline";
 import { MapPlan } from "@/components/map-plan";
-import { featuredMaps, type FeaturedMap } from "@/lib/map/featured";
-import { readWadAssets } from "@/lib/wad/assets";
-import { readLumps } from "@/lib/wad/inspect";
-import {
-  formatPar,
-  freeSlots,
-  mapName,
-  maxDescriptionLength,
-  maxIntertextLength,
-  maxNameLength,
-  parsePar,
-  templates,
-  type MapTemplate,
-  type EpisodeMap,
-} from "@/lib/episodes/episode-data";
+import { Choice } from "@/components/play/coop-ui";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogBackdrop,
+  DialogCloseButton,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Field, FieldItem, FieldLabel, Label } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
@@ -34,15 +26,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useIwad } from "@/hooks/use-iwad";
+import { engineSlot, type GameInfo, slotCount } from "@/lib/engine/game";
 import {
-  Dialog,
-  DialogBackdrop,
-  DialogCloseButton,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  type EpisodeMap,
+  formatPar,
+  freeSlots,
+  mapName,
+  type MapTemplate,
+  maxDescriptionLength,
+  maxIntertextLength,
+  maxNameLength,
+  parsePar,
+  templates,
+} from "@/lib/episodes/episode-data";
+import { complevelLabels, complevels } from "@/lib/map/complevel";
+import { type FeaturedMap, featuredMaps } from "@/lib/map/featured";
+import { readWadAssets } from "@/lib/wad/assets";
+import { readLumps } from "@/lib/wad/inspect";
 
 export interface MapDetails {
   name: string;
@@ -55,58 +56,6 @@ export interface MapDetails {
   complevel: Complevel;
   template: MapTemplate;
   featured: FeaturedMap | null;
-}
-
-// The game's own choice, which UMAPINFO leaves alone.
-const gamesOwn = "default";
-
-interface LumpChoiceProps {
-  label: string;
-  value: string;
-  names: readonly string[];
-  loaded: boolean;
-  onChange: (value: string) => void;
-}
-
-function LumpChoice({
-  label,
-  value,
-  names,
-  loaded,
-  onChange,
-}: LumpChoiceProps) {
-  const items = [
-    { value: gamesOwn, label: "Game's own" },
-    ...(value && !names.includes(value)
-      ? [{ value, label: loaded ? `${value} (not in this game)` : value }]
-      : []),
-    ...names.map((name) => ({ value: name, label: name })),
-  ];
-  return (
-    <Select
-      value={value || gamesOwn}
-      items={items}
-      onValueChange={(next) => {
-        if (next) onChange(next === gamesOwn ? "" : next);
-      }}
-    >
-      <FieldItem>
-        <SelectLabel>{label}</SelectLabel>
-        <SelectTrigger>
-          <SelectValue />
-          <span aria-hidden="true">▾</span>
-        </SelectTrigger>
-      </FieldItem>
-      <SelectContent>
-        {items.map((item) => (
-          <SelectItem key={item.value} value={item.value}>
-            {item.label}
-            <SelectCheck />
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
 }
 
 interface MapDialogProps {
@@ -426,5 +375,57 @@ export function MapDialog({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// The game's own choice, which UMAPINFO leaves alone.
+const gamesOwn = "default";
+
+interface LumpChoiceProps {
+  label: string;
+  value: string;
+  names: readonly string[];
+  loaded: boolean;
+  onChange: (value: string) => void;
+}
+
+function LumpChoice({
+  label,
+  value,
+  names,
+  loaded,
+  onChange,
+}: LumpChoiceProps) {
+  const items = [
+    { value: gamesOwn, label: "Game's own" },
+    ...(value && !names.includes(value)
+      ? [{ value, label: loaded ? `${value} (not in this game)` : value }]
+      : []),
+    ...names.map((name) => ({ value: name, label: name })),
+  ];
+  return (
+    <Select
+      value={value || gamesOwn}
+      items={items}
+      onValueChange={(next) => {
+        if (next) onChange(next === gamesOwn ? "" : next);
+      }}
+    >
+      <FieldItem>
+        <SelectLabel>{label}</SelectLabel>
+        <SelectTrigger>
+          <SelectValue />
+          <span aria-hidden="true">▾</span>
+        </SelectTrigger>
+      </FieldItem>
+      <SelectContent>
+        {items.map((item) => (
+          <SelectItem key={item.value} value={item.value}>
+            {item.label}
+            <SelectCheck />
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }

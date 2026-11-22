@@ -1,21 +1,21 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-
 import { describe, expect, it } from "vitest";
 
+import type { GameMap } from "@/lib/map/types";
+
+import { defined } from "@/lib/defined";
 import { thingKinds } from "@/lib/map/catalog";
 import { updateLine, updateLineSide, updateSector } from "@/lib/map/edit";
-import { parseMapFile, serializeMap } from "@/lib/map/storage";
-import { wallKey } from "@/lib/map/geometry";
 import { addDetail, makePillar } from "@/lib/map/edit";
-import { islandMap, testMap } from "@/lib/map/test-map";
+import { wallKey } from "@/lib/map/geometry";
+import { parseMapFile, serializeMap } from "@/lib/map/storage";
 import {
   describeSurface,
   moveSurfaceHeight,
   paintSurface,
 } from "@/lib/map/surfaces";
-import type { GameMap } from "@/lib/map/types";
-import { compileLumps } from "@/lib/wad/compile";
+import { islandMap, testMap } from "@/lib/map/test-map";
 import {
   createFlatAssets,
   gameFlatShade,
@@ -23,6 +23,8 @@ import {
   readWadAssets,
   type SceneAssets,
 } from "@/lib/wad/assets";
+import { compileLumps } from "@/lib/wad/compile";
+
 import {
   createRenderTarget,
   pointOnPlane,
@@ -37,12 +39,6 @@ const wadPath = resolve(
   "../../../public/engine/freedoom2.wad",
 );
 
-function renderStarter(map = testMap, camera = startCamera(map)) {
-  const target = createRenderTarget(320, 200);
-  expect(renderScene(target, map, camera, { assets })).toBe(true);
-  return (x: number, y: number) => target.surfaces[target.pick[y * 320 + x]];
-}
-
 const stripes = {
   width: 64,
   height: 64,
@@ -51,36 +47,6 @@ const stripes = {
   pixels: Uint8Array.from({ length: 64 * 64 }, (_, index) => index >> 6),
   opaque: new Uint8Array(64 * 64).fill(1),
 };
-const stripedAssets: SceneAssets = {
-  ...assets,
-  shades: Uint32Array.from({ length: 256 * 32 }, (_, index) => index % 256),
-  texture: () => stripes,
-};
-
-function columnAhead(vertices: string[], offsetX?: number) {
-  const room: GameMap = {
-    vertices: {
-      a: { x: 0, y: 0 },
-      b: { x: 128, y: 0 },
-      c: { x: 128, y: 96 },
-      d: { x: 0, y: 96 },
-    },
-    sectors: [{ ...testMap.sectors[0], vertices }],
-    things: [],
-    switches: [],
-  };
-  const map = updateLineSide(room, wallKey("b", "c"), room.sectors[0].id, {
-    offsetX,
-  });
-  const target = createRenderTarget(320, 200);
-  renderScene(
-    target,
-    map,
-    { x: 64, y: 40, angle: 0 },
-    { assets: stripedAssets },
-  );
-  return target.colors[100 * 320 + 160];
-}
 
 describe("renderScene", () => {
   it("runs wall textures from the viewer's left in either winding", () => {
@@ -163,8 +129,10 @@ describe("renderScene", () => {
     const target = createRenderTarget(320, 200);
     const camera = startCamera(testMap);
     const point = { x: 250, y: 200 };
-    const screen = projectPoint(target, testMap, camera, point, 0)!;
-    const back = pointOnPlane(target, testMap, camera, screen.x, screen.y, 0)!;
+    const screen = defined(projectPoint(target, testMap, camera, point, 0));
+    const back = defined(
+      pointOnPlane(target, testMap, camera, screen.x, screen.y, 0),
+    );
     expect(back.x).toBeCloseTo(point.x);
     expect(back.y).toBeCloseTo(point.y);
   });
@@ -187,6 +155,37 @@ describe("renderScene", () => {
   });
 });
 
+const stripedAssets: SceneAssets = {
+  ...assets,
+  shades: Uint32Array.from({ length: 256 * 32 }, (_, index) => index % 256),
+  texture: () => stripes,
+};
+
+function columnAhead(vertices: string[], offsetX?: number) {
+  const room: GameMap = {
+    vertices: {
+      a: { x: 0, y: 0 },
+      b: { x: 128, y: 0 },
+      c: { x: 128, y: 96 },
+      d: { x: 0, y: 96 },
+    },
+    sectors: [{ ...testMap.sectors[0], vertices }],
+    things: [],
+    switches: [],
+  };
+  const map = updateLineSide(room, wallKey("b", "c"), room.sectors[0].id, {
+    offsetX,
+  });
+  const target = createRenderTarget(320, 200);
+  renderScene(
+    target,
+    map,
+    { x: 64, y: 40, angle: 0 },
+    { assets: stripedAssets },
+  );
+  return target.colors[100 * 320 + 160];
+}
+
 describe("surface edits", () => {
   const wall = wallKey("v1", "v15");
   const wallSurface = `wall:sector-1:${wall}:middle`;
@@ -199,7 +198,9 @@ describe("surface edits", () => {
   it("paints one wall and compiles it", () => {
     const map = paintSurface(testMap, wallSurface, "BRICK1");
     expect(describeSurface(map, wallSurface)?.texture).toBe("BRICK1");
-    const sidedefs = compileLumps(map).find((l) => l.name === "SIDEDEFS")!;
+    const sidedefs = defined(
+      compileLumps(map).find((l) => l.name === "SIDEDEFS"),
+    );
     const text = String.fromCharCode(...sidedefs.data);
     expect(text.match(/BRICK1/g)).toHaveLength(1);
   });
@@ -281,7 +282,7 @@ describe.skipIf(!existsSync(wadPath))("readWadAssets", () => {
     expect(new Set(wad.texture("STARTAN3").pixels).size).toBeGreaterThan(4);
     expect(wad.flat("FLOOR4_8").width).toBe(64);
     expect(new Set(wad.flat("FLOOR4_8").pixels).size).toBeGreaterThan(4);
-    const imp = wad.sprite("imp")!;
+    const imp = defined(wad.sprite("imp"));
     expect(imp.height).toBeGreaterThan(30);
     expect(imp.opaque.includes(0)).toBe(true);
     expect(wad.sprite("player")).not.toBeNull();
@@ -322,10 +323,12 @@ describe("rooms inside rooms", () => {
   });
 
   it("sees through a line drawn inside a room", () => {
-    const lined = addDetail(islandMap, [
-      { x: 128, y: 128 },
-      { x: 384, y: 128 },
-    ])!;
+    const lined = defined(
+      addDetail(islandMap, [
+        { x: 128, y: 128 },
+        { x: 384, y: 128 },
+      ]),
+    );
     const pick = renderStarter(lined.map, camera);
     expect(pick(160, 100)).toBe("wall:yard:c|d:middle");
     expect(pick(160, 109)).toBe("floor:stage");
@@ -333,8 +336,14 @@ describe("rooms inside rooms", () => {
   });
 
   it("shows a pillar as solid wall", () => {
-    const pick = renderStarter(makePillar(islandMap, "stage")!, camera);
+    const pick = renderStarter(defined(makePillar(islandMap, "stage")), camera);
     expect(pick(160, 100)).toBe("wall:yard:e|f:middle");
     expect(pick(160, 170)).toBe("floor:yard");
   });
 });
+
+function renderStarter(map = testMap, camera = startCamera(map)) {
+  const target = createRenderTarget(320, 200);
+  expect(renderScene(target, map, camera, { assets })).toBe(true);
+  return (x: number, y: number) => target.surfaces[target.pick[y * 320 + x]];
+}

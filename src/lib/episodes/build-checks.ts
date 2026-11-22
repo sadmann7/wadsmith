@@ -1,6 +1,10 @@
 import type { GameMap } from "@/lib/map/types";
 import type { Lump } from "@/lib/wad/compile";
+
+import { defined } from "@/lib/defined";
+
 import type { BuildCheckRequest, BuildCheckResult } from "./build-worker";
+
 import { buildMap, type EpisodeMap } from "./episode-data";
 
 type Build = Pick<BuildCheckResult, "problem" | "lumps">;
@@ -77,7 +81,7 @@ function runQueue() {
       builders.find((item) => !item.job) ??
       (builders.length < builderLimit() ? startBuilder() : null);
     if (!builder) return;
-    const job = queue.shift()!;
+    const job = defined(queue.shift());
     builder.job = job;
     const request: BuildCheckRequest = { id: job.id, map: job.map };
     builder.worker.postMessage(request);
@@ -111,11 +115,6 @@ export function checkBuild(entry: EpisodeMap) {
   return check.result;
 }
 
-function knownBuild(entry: EpisodeMap) {
-  const known = checks.get(entry.id);
-  return known?.revision === entry.mapRevision ? known.build : undefined;
-}
-
 export function knownBuildProblem(entry: EpisodeMap) {
   return knownBuild(entry)?.problem;
 }
@@ -127,17 +126,6 @@ export function knownLumps(entry: EpisodeMap): Lump[] | null {
 export interface BuildChecks {
   problem: (entry: EpisodeMap) => string | null | undefined;
   lumps: (entry: EpisodeMap) => Lump[] | null;
-}
-
-function readChecks(from: ReadonlyMap<string, Result>): BuildChecks {
-  const build = (entry: EpisodeMap) => {
-    const result = from.get(entry.id);
-    return result?.revision === entry.mapRevision ? result.build : undefined;
-  };
-  return {
-    problem: (entry) => build(entry)?.problem,
-    lumps: (entry) => build(entry)?.lumps ?? null,
-  };
 }
 
 export const noBuildChecks = readChecks(new Map());
@@ -155,4 +143,20 @@ export function subscribeBuildChecks(listener: () => void) {
   return () => {
     listeners.delete(listener);
   };
+}
+
+function readChecks(from: ReadonlyMap<string, Result>): BuildChecks {
+  const build = (entry: EpisodeMap) => {
+    const result = from.get(entry.id);
+    return result?.revision === entry.mapRevision ? result.build : undefined;
+  };
+  return {
+    problem: (entry) => build(entry)?.problem,
+    lumps: (entry) => build(entry)?.lumps ?? null,
+  };
+}
+
+function knownBuild(entry: EpisodeMap) {
+  const known = checks.get(entry.id);
+  return known?.revision === entry.mapRevision ? known.build : undefined;
 }

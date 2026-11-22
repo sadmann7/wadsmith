@@ -1,5 +1,4 @@
-import "./globals.css";
-
+import "@/styles/globals.css";
 import type { Metadata, Viewport } from "next";
 
 import { fontMono, fontSans } from "@/lib/fonts";

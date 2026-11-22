@@ -1,42 +1,19 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { testMap } from "@/lib/map/test-map";
+
 import {
+  type CoopGame,
   formatRoomCode,
   hostRoom,
   joinRoom,
   newRoomCode,
   packGame,
   parseRoomCode,
-  unpackGame,
-  type CoopGame,
   type RoomMessage,
   type RoomTransport,
+  unpackGame,
 } from "./room";
-
-// Delivers each message to every other member, like a BroadcastChannel.
-function createHub() {
-  const members = new Set<{ handler: (message: RoomMessage) => void }>();
-  const transport = (): RoomTransport => {
-    const member = { handler: (_message: RoomMessage) => {} };
-    members.add(member);
-    return {
-      post: (message) => {
-        for (const other of members) {
-          if (other !== member) queueMicrotask(() => other.handler(message));
-        }
-      },
-      listen: (handler) => {
-        member.handler = handler;
-      },
-      identify: () => {},
-      close: () => {
-        members.delete(member);
-      },
-    };
-  };
-  return { transport };
-}
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -49,48 +26,6 @@ const game: CoopGame = {
   slot: "MAP01",
   par: 90,
 };
-
-function hostEvents() {
-  return {
-    onRoster: vi.fn(),
-    onLeft: vi.fn(),
-    onPacket: vi.fn(),
-    onSignal: vi.fn(),
-    onDropped: vi.fn(),
-  };
-}
-
-function guestEvents() {
-  return {
-    onInfo: vi.fn(),
-    onJoined: vi.fn(),
-    onRefused: vi.fn(),
-    onRoster: vi.fn(),
-    onProgress: vi.fn(),
-    onGame: vi.fn(),
-    onStart: vi.fn(),
-    onStall: vi.fn(),
-    onPacket: vi.fn(),
-    onSignal: vi.fn(),
-    onClosed: vi.fn(),
-  };
-}
-
-function openRoom(maxPlayers = 3, version = "v1") {
-  const hub = createHub();
-  const events = hostEvents();
-  const host = hostRoom(
-    hub.transport(),
-    { game, name: "Sadman", version, maxPlayers },
-    events,
-  );
-  const guest = (version = "v1") => {
-    const guestEvents_ = guestEvents();
-    const room = joinRoom(hub.transport(), version, guestEvents_);
-    return { room, events: guestEvents_ };
-  };
-  return { host, events, guest };
-}
 
 afterEach(() => {
   vi.useRealTimers();
@@ -227,6 +162,72 @@ describe("co-op room", () => {
     expect(events.onClosed).toHaveBeenCalledWith("lost");
   });
 });
+
+function openRoom(maxPlayers = 3, version = "v1") {
+  const hub = createHub();
+  const events = hostEvents();
+  const host = hostRoom(
+    hub.transport(),
+    { game, name: "Sadman", version, maxPlayers },
+    events,
+  );
+  const guest = (version = "v1") => {
+    const guestEvents_ = guestEvents();
+    const room = joinRoom(hub.transport(), version, guestEvents_);
+    return { room, events: guestEvents_ };
+  };
+  return { host, events, guest };
+}
+
+// Delivers each message to every other member, like a BroadcastChannel.
+function createHub() {
+  const members = new Set<{ handler: (message: RoomMessage) => void }>();
+  const transport = (): RoomTransport => {
+    const member = { handler: (_message: RoomMessage) => {} };
+    members.add(member);
+    return {
+      post: (message) => {
+        for (const other of members) {
+          if (other !== member) queueMicrotask(() => other.handler(message));
+        }
+      },
+      listen: (handler) => {
+        member.handler = handler;
+      },
+      identify: () => {},
+      close: () => {
+        members.delete(member);
+      },
+    };
+  };
+  return { transport };
+}
+
+function hostEvents() {
+  return {
+    onRoster: vi.fn(),
+    onLeft: vi.fn(),
+    onPacket: vi.fn(),
+    onSignal: vi.fn(),
+    onDropped: vi.fn(),
+  };
+}
+
+function guestEvents() {
+  return {
+    onInfo: vi.fn(),
+    onJoined: vi.fn(),
+    onRefused: vi.fn(),
+    onRoster: vi.fn(),
+    onProgress: vi.fn(),
+    onGame: vi.fn(),
+    onStart: vi.fn(),
+    onStall: vi.fn(),
+    onPacket: vi.fn(),
+    onSignal: vi.fn(),
+    onClosed: vi.fn(),
+  };
+}
 
 describe("room codes and map packing", () => {
   it("makes short codes that survive being typed back", () => {

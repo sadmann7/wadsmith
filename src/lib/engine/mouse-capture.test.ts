@@ -1,20 +1,16 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  MouseFire,
   clickFires,
   holdsGame,
   initialMouseCapture,
+  type MouseCapture,
+  MouseFire,
   nextMouseCapture,
   notePointerReleased,
   relockWait,
   wantsFire,
-  type MouseCapture,
 } from "./mouse-capture";
-
-function after(...events: Parameters<typeof nextMouseCapture>[1][]) {
-  return events.reduce<MouseCapture>(nextMouseCapture, initialMouseCapture);
-}
 
 describe("mouse capture", () => {
   it("uses the first click to capture rather than fire", () => {
@@ -118,3 +114,7 @@ describe("mouse capture", () => {
     expect(after("request", "locked", "cancelled").mode).toBe("locked");
   });
 });
+
+function after(...events: Parameters<typeof nextMouseCapture>[1][]) {
+  return events.reduce<MouseCapture>(nextMouseCapture, initialMouseCapture);
+}

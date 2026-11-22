@@ -1,16 +1,18 @@
-import {
-  defaultGame,
-  slotCount as gameSlots,
-  type GameInfo,
-} from "@/lib/engine/game";
-import { addRoomOnSide, type RoomSide } from "@/lib/map/edit";
-import { checkMap } from "@/lib/map/checks";
-import { blankMap, starterMap } from "@/lib/map/starter-map";
-import { loadSavedMap, MapFileError, parseMap } from "@/lib/map/storage";
 import type { Complevel, GameMap } from "@/lib/map/types";
 import type { CheckContext } from "@/lib/map/validate";
-import { compileLumps } from "@/lib/wad/compile";
+
+import { defined } from "@/lib/defined";
+import {
+  defaultGame,
+  type GameInfo,
+  slotCount as gameSlots,
+} from "@/lib/engine/game";
+import { checkMap } from "@/lib/map/checks";
+import { addRoomOnSide, type RoomSide } from "@/lib/map/edit";
 import { featuredMaps } from "@/lib/map/featured";
+import { blankMap, starterMap } from "@/lib/map/starter-map";
+import { loadSavedMap, MapFileError, parseMap } from "@/lib/map/storage";
+import { compileLumps } from "@/lib/wad/compile";
 
 export interface Episode {
   id: string;
@@ -76,7 +78,7 @@ export const maxDescriptionLength = 160;
 export const maxIntertextLength = 2000;
 // Longer than any par the dialog accepts, and still a plain number in a lump.
 const maxPar = 99_999;
-const lumpName = /^[A-Z0-9_\-\\[\]]{1,8}$/;
+
 // Doom II has 32 map slots; Ultimate Doom's four episodes hold 36.
 const maxSlots = 36;
 const firstEpisodeId = "first-project";
@@ -102,26 +104,6 @@ export const templates: { value: MapTemplate; label: string; map: GameMap }[] =
     { value: "room", label: "Starter room", map: blankMap },
     { value: "hub", label: "Hub and spokes", map: hubMap() },
   ];
-
-function hubMap() {
-  return hubSides.reduce((map, side) => {
-    const center = map.sectors[0];
-    return (
-      addRoomOnSide(map, center.id, side, 192, {
-        floor: center.floor,
-        ceiling: center.ceiling,
-        light: center.light,
-      })?.map ?? map
-    );
-  }, blankMap);
-}
-
-function newId() {
-  const bytes = crypto.getRandomValues(new Uint8Array(12));
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(
-    "",
-  );
-}
 
 // Each game has only as many slots as its maps or episodes hold.
 export function freeSlots(
@@ -153,24 +135,6 @@ export function buildMap(map: GameMap) {
 
 export function buildProblem(map: GameMap) {
   return buildMap(map).problem;
-}
-
-const checked = new Map<
-  string,
-  { revision: number; game: string; checks: ReturnType<typeof checkMap> }
->();
-
-// Every edit to a saved map bumps its revision, and new maps get new ids. A
-// change of game checks every map again.
-function checksOf(entry: EpisodeMap, context?: CheckContext) {
-  const game = context?.game?.id ?? "";
-  const known = checked.get(entry.id);
-  if (known?.revision === entry.mapRevision && known.game === game) {
-    return known.checks;
-  }
-  const checks = checkMap(entry.map, context);
-  checked.set(entry.id, { revision: entry.mapRevision, game, checks });
-  return checks;
 }
 
 // A problem of undefined means the build hasn't been checked yet.
@@ -205,11 +169,6 @@ export function mapStatus(
     };
   }
   return { kind: "ready" as const, label: "Playable" };
-}
-
-function newEpisodeId() {
-  const bytes = crypto.getRandomValues(new Uint8Array(8));
-  return Array.from(bytes, (byte) => (byte % 36).toString(36)).join("");
 }
 
 export function createEpisode(name: string): Episode {
@@ -284,7 +243,7 @@ export function isSlotConflict(error: unknown) {
 }
 
 export function mapFromTemplate(template: MapTemplate, name: string): GameMap {
-  const { map } = templates.find((item) => item.value === template)!;
+  const { map } = defined(templates.find((item) => item.value === template));
   return { ...structuredClone(map), name };
 }
 
@@ -443,14 +402,6 @@ export function serializeEpisode(episode: Episode, maps: EpisodeMap[]) {
   });
 }
 
-function lumpField(field: unknown) {
-  if (field === undefined) return undefined;
-  if (typeof field !== "string" || !lumpName.test(field)) {
-    throw new MapFileError("The episode names a lump that can't exist.");
-  }
-  return field;
-}
-
 export function parseEpisodeBackup(text: string) {
   if (text.length > maxBackupBytes) {
     throw new MapFileError("The file is too large.");
@@ -521,4 +472,57 @@ export function parsePar(text: string) {
   if (match[1] && seconds > 59) return undefined;
   const total = Number(match[1] ?? 0) * 60 + seconds;
   return total > 0 ? total : undefined;
+}
+
+function hubMap() {
+  return hubSides.reduce((map, side) => {
+    const center = map.sectors[0];
+    return (
+      addRoomOnSide(map, center.id, side, 192, {
+        floor: center.floor,
+        ceiling: center.ceiling,
+        light: center.light,
+      })?.map ?? map
+    );
+  }, blankMap);
+}
+
+const checked = new Map<
+  string,
+  { revision: number; game: string; checks: ReturnType<typeof checkMap> }
+>();
+
+// Every edit to a saved map bumps its revision, and new maps get new ids. A
+// change of game checks every map again.
+function checksOf(entry: EpisodeMap, context?: CheckContext) {
+  const game = context?.game?.id ?? "";
+  const known = checked.get(entry.id);
+  if (known?.revision === entry.mapRevision && known.game === game) {
+    return known.checks;
+  }
+  const checks = checkMap(entry.map, context);
+  checked.set(entry.id, { revision: entry.mapRevision, game, checks });
+  return checks;
+}
+
+function newEpisodeId() {
+  const bytes = crypto.getRandomValues(new Uint8Array(8));
+  return Array.from(bytes, (byte) => (byte % 36).toString(36)).join("");
+}
+
+function newId() {
+  const bytes = crypto.getRandomValues(new Uint8Array(12));
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(
+    "",
+  );
+}
+
+const lumpName = /^[A-Z0-9_\-\\[\]]{1,8}$/;
+
+function lumpField(field: unknown) {
+  if (field === undefined) return undefined;
+  if (typeof field !== "string" || !lumpName.test(field)) {
+    throw new MapFileError("The episode names a lump that can't exist.");
+  }
+  return field;
 }

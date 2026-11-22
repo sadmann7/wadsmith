@@ -39,6 +39,7 @@ import {
   LampFloor,
   Layers,
   Link,
+  type LucideIcon,
   Map,
   MapPin,
   Orbit,
@@ -64,7 +65,6 @@ import {
   Wand,
   Wind,
   Zap,
-  type LucideIcon,
 } from "lucide-react";
 
 import type { ThingKind } from "@/lib/map/types";

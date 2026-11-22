@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { starterMap } from "@/lib/map/starter-map";
+
 import {
   buildChecksSnapshot,
   checkBuild,

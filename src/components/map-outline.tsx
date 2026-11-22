@@ -1,7 +1,8 @@
 import * as React from "react";
 
-import { wallOwners } from "@/lib/map/geometry";
 import type { GameMap } from "@/lib/map/types";
+
+import { wallOwners } from "@/lib/map/geometry";
 
 interface MapOutlineProps {
   map: GameMap;

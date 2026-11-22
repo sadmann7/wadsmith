@@ -61,15 +61,6 @@ const onLineTolerance = 0.75;
 // so a step that finds no partition tries again with exact sides.
 const exactTolerance = 0.001;
 
-// Positive is left of the partition, which is the engine's back child.
-function distance(partition: Partition, point: Point) {
-  return (
-    (partition.dx * (point.y - partition.y) -
-      partition.dy * (point.x - partition.x)) /
-    partition.length
-  );
-}
-
 export function buildNodes(
   sourceVertices: Point[],
   lines: NodeLine[],
@@ -361,4 +352,13 @@ export function buildNodes(
   build(initial);
 
   return { vertices, segs: orderedSegs, subsectors, nodes };
+}
+
+// Positive is left of the partition, which is the engine's back child.
+function distance(partition: Partition, point: Point) {
+  return (
+    (partition.dx * (point.y - partition.y) -
+      partition.dy * (point.x - partition.x)) /
+    partition.length
+  );
 }

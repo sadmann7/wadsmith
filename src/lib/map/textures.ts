@@ -1,5 +1,6 @@
-import { wallOwners, wallPartTexture } from "./geometry";
 import type { GameMap } from "./types";
+
+import { wallOwners, wallPartTexture } from "./geometry";
 
 export type TextureUse = Map<string, number>;
 
@@ -11,10 +12,6 @@ export interface TextureNames {
   flats: readonly string[];
   middles: readonly string[];
   textures: readonly string[];
-}
-
-function countUse(use: TextureUse, name: string) {
-  use.set(name, (use.get(name) ?? 0) + 1);
 }
 
 export function flatUse(map: GameMap) {
@@ -39,4 +36,8 @@ export function wallUse(map: GameMap) {
     }
   }
   return use;
+}
+
+function countUse(use: TextureUse, name: string) {
+  use.set(name, (use.get(name) ?? 0) + 1);
 }

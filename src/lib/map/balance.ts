@@ -1,6 +1,7 @@
+import type { GameMap, KeyColor, ThingKind, ThingSkill } from "./types";
+
 import { keyThings, thingCatalog } from "./catalog";
 import { activeLineActions } from "./validate";
-import type { GameMap, KeyColor, ThingKind, ThingSkill } from "./types";
 
 const startingHealth = 60;
 const startingDamage = 500;
@@ -65,10 +66,6 @@ export function appearsOn(skills: ThingSkill[] | undefined, skill: ThingSkill) {
   return !skills || skills.includes(skill);
 }
 
-function sumOf(values: (number | undefined)[]) {
-  return values.reduce<number>((total, value) => total + (value ?? 0), 0);
-}
-
 export function mapBalance(map: GameMap, skill: ThingSkill) {
   const kinds = map.things
     .filter((thing) => appearsOn(thing.skills, skill))
@@ -101,4 +98,8 @@ export function mapBalance(map: GameMap, skill: ThingSkill) {
     healthShort: Math.max(0, Math.ceil(healthGap / healthPerPickup)),
     ammoShort: Math.max(0, Math.ceil(damageGap / damagePerPickup)),
   };
+}
+
+function sumOf(values: (number | undefined)[]) {
+  return values.reduce<number>((total, value) => total + (value ?? 0), 0);
 }

@@ -5,26 +5,21 @@ import {
   createUndoStack,
   matchesShortcut,
 } from "@ui-sdk/core";
-import { useShortcut } from "@ui-sdk/react/shortcuts";
 import * as SegmentedControlPrimitive from "@ui-sdk/react/segmented-control";
+import { useShortcut } from "@ui-sdk/react/shortcuts";
 import {
-  Resizable,
-  ResizableHandle,
-  ResizablePanel,
-} from "@/components/ui/resizable";
-import {
-  CircleCheck,
-  CircleX,
-  CircleDot,
-  Ellipsis,
-  Pentagon,
   Check,
+  CircleCheck,
+  CircleDot,
+  CircleX,
+  Ellipsis,
   PenLine,
-  Route,
+  Pentagon,
   Play,
   Redo2,
-  StickyNote,
+  Route,
   Slash,
+  StickyNote,
   TriangleAlert,
   Undo2,
   Users,
@@ -32,85 +27,10 @@ import {
 } from "lucide-react";
 import * as React from "react";
 
-import { agent } from "@/lib/editor/agent";
-import { BuildDialog } from "./build-dialog";
-import { ShortcutSheet } from "./shortcut-sheet";
-import { editorShortcuts, type EditorShortcut } from "@/lib/editor/shortcuts";
-import { MapContextMenu } from "./context-menu";
-import {
-  LineInspector,
-  SectorInspector,
-  SwitchInspector,
-  ThingInspector,
-} from "./inspector";
-import { MapCanvas } from "./map-canvas";
-import { NewMapPanel } from "./new-map-panel";
-import {
-  normalizeControlClick,
-  pointOfTarget,
-  targetExists,
-  targetForIssue,
-  targetForKeys,
-  targetForSurface,
-  viewOfTarget,
-  type MapTarget,
-} from "@/lib/editor/map-target";
-import type { EditMode, MapTool, MapViewStatus } from "./map-editor";
-import { PlayTogether, type HostedGame } from "@/components/play/play-together";
-import { GameView, type PlayerSpot } from "@/components/play/play-panel";
-import { thingCatalog, thingKinds } from "@/lib/map/catalog";
-import {
-  addPlayerStarts,
-  addNote,
-  addSwitch,
-  duplicateThings,
-  freeWallAt,
-  removeNote,
-  setDoorTexture,
-  setLineTarget,
-  setRoomDoor,
-  setRoomWalls,
-  switchKeyPrefix,
-  gridSize,
-  gridSizes,
-  thingKeyPrefix,
-  updateLine,
-  updateLineSide,
-  updateSector,
-  updateSwitch,
-  updateThings,
-  type RoomSide,
-} from "@/lib/map/edit";
-import { describeLine } from "@/lib/map/lines";
-import {
-  MapFileError,
-  maxFileBytes,
-  parseMapFile,
-  serializeMap,
-} from "@/lib/map/storage";
 import type { GameMap, Point, ThingCategory, ThingKind } from "@/lib/map/types";
-import { checkMap, fixIssue, issueText } from "@/lib/map/checks";
-import { MapSwitcher, type EpisodeEntry, type MapHealth } from "./map-switcher";
-import { defaultGame, engineSlot } from "@/lib/engine/game";
-import { useIwad } from "@/hooks/use-iwad";
-import { SceneCamera } from "@/lib/preview/scene-camera";
-import { SceneCanvas, type DraftSource } from "./scene-editor";
-import { SurfacePanel } from "./surface-panel";
-import {
-  describeSurface,
-  paintSurface,
-  parseSurface,
-  surfaceKey,
-} from "@/lib/map/surfaces";
-import {
-  loopEdges,
-  sectorAt,
-  sectorLoops,
-  wallKey,
-  wallOwners,
-} from "@/lib/map/geometry";
-import { createFlatAssets, readWadAssets } from "@/lib/wad/assets";
-import { compileMap } from "@/lib/wad/compile";
+
+import { GameView, type PlayerSpot } from "@/components/play/play-panel";
+import { type HostedGame, PlayTogether } from "@/components/play/play-together";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -126,11 +46,93 @@ import {
   MenuSeparator,
   MenuTrigger,
 } from "@/components/ui/menu";
-
+import {
+  Resizable,
+  ResizableHandle,
+  ResizablePanel,
+} from "@/components/ui/resizable";
 import {
   SegmentedControl,
   SegmentedControlItem,
 } from "@/components/ui/segmented-control";
+import { useIwad } from "@/hooks/use-iwad";
+import { agent } from "@/lib/editor/agent";
+import {
+  type MapTarget,
+  normalizeControlClick,
+  pointOfTarget,
+  targetExists,
+  targetForIssue,
+  targetForKeys,
+  targetForSurface,
+  viewOfTarget,
+} from "@/lib/editor/map-target";
+import { type EditorShortcut, editorShortcuts } from "@/lib/editor/shortcuts";
+import { defaultGame, engineSlot } from "@/lib/engine/game";
+import { thingCatalog, thingKinds } from "@/lib/map/catalog";
+import { checkMap, fixIssue, issueText } from "@/lib/map/checks";
+import {
+  addNote,
+  addPlayerStarts,
+  addSwitch,
+  duplicateThings,
+  freeWallAt,
+  gridSize,
+  gridSizes,
+  removeNote,
+  type RoomSide,
+  setDoorTexture,
+  setLineTarget,
+  setRoomDoor,
+  setRoomWalls,
+  switchKeyPrefix,
+  thingKeyPrefix,
+  updateLine,
+  updateLineSide,
+  updateSector,
+  updateSwitch,
+  updateThings,
+} from "@/lib/map/edit";
+import {
+  loopEdges,
+  sectorAt,
+  sectorLoops,
+  wallKey,
+  wallOwners,
+} from "@/lib/map/geometry";
+import { describeLine } from "@/lib/map/lines";
+import {
+  MapFileError,
+  maxFileBytes,
+  parseMapFile,
+  serializeMap,
+} from "@/lib/map/storage";
+import {
+  describeSurface,
+  paintSurface,
+  parseSurface,
+  surfaceKey,
+} from "@/lib/map/surfaces";
+import { SceneCamera } from "@/lib/preview/scene-camera";
+import { createFlatAssets, readWadAssets } from "@/lib/wad/assets";
+import { compileMap } from "@/lib/wad/compile";
+
+import type { EditMode, MapTool, MapViewStatus } from "./map-editor";
+
+import { BuildDialog } from "./build-dialog";
+import { MapContextMenu } from "./context-menu";
+import {
+  LineInspector,
+  SectorInspector,
+  SwitchInspector,
+  ThingInspector,
+} from "./inspector";
+import { MapCanvas } from "./map-canvas";
+import { type EpisodeEntry, type MapHealth, MapSwitcher } from "./map-switcher";
+import { NewMapPanel } from "./new-map-panel";
+import { type DraftSource, SceneCanvas } from "./scene-editor";
+import { ShortcutSheet } from "./shortcut-sheet";
+import { SurfacePanel } from "./surface-panel";
 
 const modeHints: Record<EditMode, string> = {
   vertices:
@@ -167,7 +169,6 @@ const savedLayout = createLocalStorage("wadsmith:layout");
 const savedWelcome = createLocalStorage("wadsmith:welcomed");
 // Below this width, two panes can't hold the map controls and a usable 3D view.
 const narrowQuery = "(max-width: 1100px)";
-const defaultSplit = [50, 50];
 
 type RailMode = EditMode | "draw" | "line";
 
@@ -194,126 +195,12 @@ const modeNames: Record<RailMode, string> = {
   line: "Draw line",
 };
 
-function loadLayout() {
-  try {
-    const saved = JSON.parse(savedLayout.get() ?? "null");
-    return {
-      view: ["map", "split", "scene"].includes(saved?.view)
-        ? (saved.view as ViewLayout)
-        : ("map" as ViewLayout),
-      dock: saved?.dock !== false,
-      sizes:
-        Array.isArray(saved?.sizes) &&
-        saved.sizes.length === 2 &&
-        saved.sizes.every(Number.isFinite)
-          ? (saved.sizes as number[])
-          : defaultSplit,
-    };
-  } catch {
-    return { view: "map" as ViewLayout, dock: true, sizes: defaultSplit };
-  }
-}
-
-function saveLayout(view: ViewLayout, sizes: number[], dock: boolean) {
-  savedLayout.set(JSON.stringify({ view, sizes, dock }));
-}
-
 interface GridSetting {
   size: number;
   snap: boolean;
 }
 
 const savedGrid = createLocalStorage("wadsmith:grid");
-
-function loadGrid(): GridSetting {
-  try {
-    const saved = JSON.parse(savedGrid.get() ?? "null");
-    return {
-      size: (gridSizes as readonly number[]).includes(saved?.size)
-        ? (saved.size as number)
-        : gridSize,
-      snap: saved?.snap !== false,
-    };
-  } catch {
-    return { size: gridSize, snap: true };
-  }
-}
-
-// Without storage the card would come back on every visit.
-function loadWelcomed() {
-  return !savedWelcome.available() || savedWelcome.get() !== null;
-}
-
-function subscribeNarrow(listener: () => void) {
-  const query = matchMedia(narrowQuery);
-  query.addEventListener("change", listener);
-  return () => query.removeEventListener("change", listener);
-}
-
-function getIsNarrow() {
-  return matchMedia(narrowQuery).matches;
-}
-
-function createDraftChannel() {
-  const listeners = new Set<(map: GameMap | null) => void>();
-  const subscribe: DraftSource = (listener) => {
-    listeners.add(listener);
-    return () => listeners.delete(listener);
-  };
-  const publish = (map: GameMap | null) => {
-    for (const listener of listeners) listener(map);
-  };
-  return { subscribe, publish };
-}
-
-const listRoles = '[role="combobox"], [role="listbox"], [role="menu"]';
-
-function shortcut(name: EditorShortcut, when?: () => boolean) {
-  return {
-    description: editorShortcuts[name].description,
-    when: () => !document.querySelector(".game-stage") && (when?.() ?? true),
-  };
-}
-
-// Letters belong to typeahead in open lists, and to walking in the 3D view.
-function mapKeys() {
-  return !document.activeElement?.closest(listRoles);
-}
-
-function modeKeys() {
-  return mapKeys() && !document.activeElement?.closest(".scene");
-}
-
-function notTyping() {
-  const focused = document.activeElement;
-  return !(
-    focused instanceof HTMLElement &&
-    (focused.isContentEditable ||
-      /^(INPUT|TEXTAREA|SELECT)$/.test(focused.tagName))
-  );
-}
-
-function downloadFile(name: string, data: BlobPart, type: string) {
-  const url = URL.createObjectURL(new Blob([data], { type }));
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = name;
-  link.click();
-  URL.revokeObjectURL(url);
-}
-
-function downloadWad(
-  map: GameMap,
-  slot: string,
-  fileName: string,
-  level: Parameters<typeof compileMap>[2],
-) {
-  downloadFile(
-    fileName,
-    compileMap(map, slot, level).slice().buffer,
-    "application/octet-stream",
-  );
-}
 
 interface AppProps {
   initialMap: GameMap;
@@ -773,6 +660,7 @@ export function EditorScreen({
     selectedWall && !selectedSwitch && !thing
       ? describeLine(map, selectedWall.wall, selectedWall.sector)
       : null;
+  const freeWall = line ? freeWallAt(map, line.wall) : null;
 
   const selectSurface = (key: string | null) => {
     setSurface(key);
@@ -987,9 +875,9 @@ export function EditorScreen({
     !placingThings;
   const runQuickBuild = (action: string) => {
     if (!sector) return;
-    if (action === "imp") runAgent("placeThing", ["imp", sector.name]);
-    else if (action === "door") runAgent("makeDoor", [sector.name, "use"]);
-    else runAgent("addConnectedRoom", [sector.name, action, 192]);
+    if (action === "imp") void runAgent("placeThing", ["imp", sector.name]);
+    else if (action === "door") void runAgent("makeDoor", [sector.name, "use"]);
+    else void runAgent("addConnectedRoom", [sector.name, action, 192]);
   };
   const railMode: RailMode =
     tool === "draw" || tool === "line"
@@ -1159,7 +1047,7 @@ export function EditorScreen({
           />
           <span className="separator" aria-hidden="true" />
           <div className="flex items-center gap-4">
-            <Menu onAction={(action) => runFileAction(action as string)}>
+            <Menu onAction={(action) => runFileAction(action)}>
               <MenuTrigger
                 className={buttonVariants({
                   variant: "text",
@@ -1204,7 +1092,7 @@ export function EditorScreen({
                 </MenuItem>
               </MenuContent>
             </Menu>
-            <Menu onAction={(action) => runViewAction(action as string)}>
+            <Menu onAction={(action) => runViewAction(action)}>
               <MenuTrigger
                 className={buttonVariants({
                   variant: "text",
@@ -1233,7 +1121,7 @@ export function EditorScreen({
                 </MenuItem>
               </MenuContent>
             </Menu>
-            <Menu onAction={(action) => runMapAction(action as string)}>
+            <Menu onAction={(action) => runMapAction(action)}>
               <MenuTrigger
                 className={buttonVariants({
                   variant: "text",
@@ -1372,7 +1260,7 @@ export function EditorScreen({
               className="views-group"
               defaultLayout={initialLayout.sizes}
               onLayoutCommit={(sizes) => {
-                splitSizes.current = sizes as number[];
+                splitSizes.current = sizes;
                 saveLayout(layout, splitSizes.current, showDock);
               }}
             >
@@ -1609,7 +1497,7 @@ export function EditorScreen({
                 <p>{selectionMeta}</p>
               </div>
               {sector ? (
-                <Menu onAction={(action) => runQuickBuild(action as string)}>
+                <Menu onAction={(action) => runQuickBuild(action)}>
                   <MenuTrigger
                     className={buttonVariants({
                       variant: "ghost",
@@ -1646,7 +1534,7 @@ export function EditorScreen({
               </section>
             ) : null}
 
-            {surfaceInfo && !surfaceInfo.thing && !selectedWall ? (
+            {surface && surfaceInfo && !surfaceInfo.thing && !selectedWall ? (
               <section
                 className="inspector-section"
                 aria-label="Selected surface"
@@ -1657,7 +1545,7 @@ export function EditorScreen({
                   info={surfaceInfo}
                   assets={assets}
                   onPaint={(texture, wholeRoom) =>
-                    commit(paintSurface(map, surface!, texture, wholeRoom))
+                    commit(paintSurface(map, surface, texture, wholeRoom))
                   }
                 />
               </section>
@@ -1671,14 +1559,13 @@ export function EditorScreen({
                 sector={line.sector.id}
                 assets={assets}
                 onAddSwitch={
-                  freeWallAt(map, line.wall)
+                  freeWall
                     ? () => {
-                        const wall = freeWallAt(map, line.wall)!;
-                        const a = map.vertices[wall.from];
-                        const b = map.vertices[wall.to];
+                        const a = map.vertices[freeWall.from];
+                        const b = map.vertices[freeWall.to];
                         const added = addSwitch(
                           map,
-                          wall,
+                          freeWall,
                           { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
                           null,
                           grid,
@@ -2011,4 +1898,120 @@ export function EditorScreen({
       ) : null}
     </>
   );
+}
+
+function loadGrid(): GridSetting {
+  try {
+    const saved = JSON.parse(savedGrid.get() ?? "null");
+    return {
+      size: (gridSizes as readonly number[]).includes(saved?.size)
+        ? (saved.size as number)
+        : gridSize,
+      snap: saved?.snap !== false,
+    };
+  } catch {
+    return { size: gridSize, snap: true };
+  }
+}
+
+// Without storage the card would come back on every visit.
+function loadWelcomed() {
+  return !savedWelcome.available() || savedWelcome.get() !== null;
+}
+
+const defaultSplit = [50, 50];
+
+function loadLayout() {
+  try {
+    const saved = JSON.parse(savedLayout.get() ?? "null");
+    return {
+      view: ["map", "split", "scene"].includes(saved?.view)
+        ? (saved.view as ViewLayout)
+        : ("map" as ViewLayout),
+      dock: saved?.dock !== false,
+      sizes:
+        Array.isArray(saved?.sizes) &&
+        saved.sizes.length === 2 &&
+        saved.sizes.every(Number.isFinite)
+          ? (saved.sizes as number[])
+          : defaultSplit,
+    };
+  } catch {
+    return { view: "map" as ViewLayout, dock: true, sizes: defaultSplit };
+  }
+}
+
+function subscribeNarrow(listener: () => void) {
+  const query = matchMedia(narrowQuery);
+  query.addEventListener("change", listener);
+  return () => query.removeEventListener("change", listener);
+}
+
+function getIsNarrow() {
+  return matchMedia(narrowQuery).matches;
+}
+
+function createDraftChannel() {
+  const listeners = new Set<(map: GameMap | null) => void>();
+  const subscribe: DraftSource = (listener) => {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  };
+  const publish = (map: GameMap | null) => {
+    for (const listener of listeners) listener(map);
+  };
+  return { subscribe, publish };
+}
+
+function shortcut(name: EditorShortcut, when?: () => boolean) {
+  return {
+    description: editorShortcuts[name].description,
+    when: () => !document.querySelector(".game-stage") && (when?.() ?? true),
+  };
+}
+
+function notTyping() {
+  const focused = document.activeElement;
+  return !(
+    focused instanceof HTMLElement &&
+    (focused.isContentEditable ||
+      /^(INPUT|TEXTAREA|SELECT)$/.test(focused.tagName))
+  );
+}
+
+function saveLayout(view: ViewLayout, sizes: number[], dock: boolean) {
+  savedLayout.set(JSON.stringify({ view, sizes, dock }));
+}
+
+function modeKeys() {
+  return mapKeys() && !document.activeElement?.closest(".scene");
+}
+
+const listRoles = '[role="combobox"], [role="listbox"], [role="menu"]';
+
+// Letters belong to typeahead in open lists, and to walking in the 3D view.
+function mapKeys() {
+  return !document.activeElement?.closest(listRoles);
+}
+
+function downloadWad(
+  map: GameMap,
+  slot: string,
+  fileName: string,
+  level: Parameters<typeof compileMap>[2],
+) {
+  downloadFile(
+    fileName,
+    compileMap(map, slot, level).slice().buffer,
+    "application/octet-stream",
+  );
+}
+
+function downloadFile(name: string, data: BlobPart, type: string) {
+  const url = URL.createObjectURL(new Blob([data], { type }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  link.click();
+  URL.revokeObjectURL(url);
 }

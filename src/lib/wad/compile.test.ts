@@ -1,40 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  addDetail,
-  addPlayerStarts,
-  addRoom,
-  addRoomOnSide,
-  addSwitch,
-  addThing,
-  addSwitchInRoom,
-  changeThings,
-  connectedCorners,
-  duplicateThings,
-  faceThings,
-  fillHole,
-  freeWallAt,
-  freeWallNear,
-  flipDetailLine,
-  makePillar,
-  mergeCorners,
-  removeDetailLine,
-  removeHole,
-  removeSector,
-  removeThings,
-  setDoorTexture,
-  setLineTarget,
-  snapCorners,
-  snapPoint,
-  splitWall,
-  setRoomDoor,
-  updateLine,
-  updateLineSide,
-  wallNear,
-  updateSector,
-  updateThing,
-  updateThings,
-} from "@/lib/map/edit";
+import type { GameMap, LineAction } from "@/lib/map/types";
+
+import { wadFileName } from "@/components/editor/build-dialog";
+import { defined } from "@/lib/defined";
 import {
   canStand,
   targetExists,
@@ -44,23 +13,6 @@ import {
   viewOfTarget,
   wallTarget,
 } from "@/lib/editor/map-target";
-import {
-  containerOf,
-  interiorPoint,
-  pointInPolygon,
-  sectorAt,
-  wallKey,
-  wallOwners,
-} from "@/lib/map/geometry";
-import {
-  describeLine,
-  fitLineAction,
-  lineActionGroups,
-  lineActionKinds,
-  lineActions,
-  newLineAction,
-  triggersFor,
-} from "@/lib/map/lines";
 import { games } from "@/lib/engine/game";
 import { mapBalance } from "@/lib/map/balance";
 import {
@@ -78,14 +30,65 @@ import {
   wallTextures,
 } from "@/lib/map/catalog";
 import { buildChecks, checkMap, fixIssue, issueText } from "@/lib/map/checks";
-import { wadFileName } from "@/components/editor/build-dialog";
+import {
+  addDetail,
+  addPlayerStarts,
+  addRoom,
+  addRoomOnSide,
+  addSwitch,
+  addSwitchInRoom,
+  addThing,
+  changeThings,
+  connectedCorners,
+  duplicateThings,
+  faceThings,
+  fillHole,
+  flipDetailLine,
+  freeWallAt,
+  freeWallNear,
+  makePillar,
+  mergeCorners,
+  removeDetailLine,
+  removeHole,
+  removeSector,
+  removeThings,
+  setDoorTexture,
+  setLineTarget,
+  setRoomDoor,
+  snapCorners,
+  snapPoint,
+  splitWall,
+  updateLine,
+  updateLineSide,
+  updateSector,
+  updateThing,
+  updateThings,
+  wallNear,
+} from "@/lib/map/edit";
 import { freedoomFlats, freedoomWalls } from "@/lib/map/freedoom-textures";
-import { describeSurface, paintSurface, surfaceKey } from "@/lib/map/surfaces";
-import { wallUse } from "@/lib/map/textures";
-import { islandMap, testMap } from "@/lib/map/test-map";
+import {
+  containerOf,
+  interiorPoint,
+  pointInPolygon,
+  sectorAt,
+  wallKey,
+  wallOwners,
+} from "@/lib/map/geometry";
+import {
+  describeLine,
+  fitLineAction,
+  lineActionGroups,
+  lineActionKinds,
+  lineActions,
+  newLineAction,
+  triggersFor,
+} from "@/lib/map/lines";
 import { parseMapFile, serializeMap } from "@/lib/map/storage";
-import type { GameMap, LineAction } from "@/lib/map/types";
+import { describeSurface, paintSurface, surfaceKey } from "@/lib/map/surfaces";
+import { islandMap, testMap } from "@/lib/map/test-map";
+import { wallUse } from "@/lib/map/textures";
 import { inspectMap, validateMap } from "@/lib/map/validate";
+
 import {
   buildLevel,
   compileEpisode,
@@ -94,8 +97,8 @@ import {
   toDoom,
 } from "./compile";
 import { inspectWads, readLumps } from "./inspect";
-import { readMaps } from "./read-map";
 import { buildNodes, subsectorFlag } from "./nodes";
+import { readMaps } from "./read-map";
 
 const lShape: GameMap = {
   vertices: {
@@ -112,60 +115,6 @@ const lShape: GameMap = {
   things: [{ id: "player-1", kind: "player", x: 64, y: 64, angle: 0 }],
   switches: [],
 };
-
-function updateSectorCeiling(map: GameMap, id: string, ceiling: number) {
-  return {
-    ...map,
-    sectors: map.sectors.map((sector) =>
-      sector.id === id ? { ...sector, ceiling } : sector,
-    ),
-  };
-}
-
-function lump(map: GameMap, name: string) {
-  const found = compileLumps(map).find((item) => item.name === name);
-  if (!found) throw new Error(`Missing ${name}.`);
-  return found.data;
-}
-
-function expectConvexLeaves(map: GameMap) {
-  const { vertices, lines } = buildLevel(map);
-  const bsp = buildNodes(vertices, lines);
-  for (const subsector of bsp.subsectors) {
-    const segs = bsp.segs.slice(
-      subsector.first,
-      subsector.first + subsector.count,
-    );
-    expect(new Set(segs.map((seg) => seg.sector)).size).toBe(1);
-    for (const seg of segs) {
-      const start = bsp.vertices[seg.start];
-      const end = bsp.vertices[seg.end];
-      const length = Math.hypot(end.x - start.x, end.y - start.y);
-      for (const other of segs) {
-        for (const index of [other.start, other.end]) {
-          const point = bsp.vertices[index];
-          const side =
-            ((end.x - start.x) * (point.y - start.y) -
-              (end.y - start.y) * (point.x - start.x)) /
-            length;
-          expect(side).toBeLessThanOrEqual(1);
-        }
-      }
-    }
-  }
-  return bsp;
-}
-
-function linesOf(map: GameMap) {
-  const { lines } = buildLevel(map);
-  const view = new DataView(lump(map, "LINEDEFS").buffer);
-  return lines.map((line, index) => ({
-    line,
-    flags: view.getInt16(index * 14 + 4, true),
-    special: view.getInt16(index * 14 + 6, true),
-    tag: view.getInt16(index * 14 + 8, true),
-  }));
-}
 
 describe("compileMap", () => {
   it("writes a patch WAD with every map lump in engine order", () => {
@@ -221,7 +170,7 @@ describe("compileMap", () => {
   it("splits a concave room into convex leaves", () => {
     const bsp = expectConvexLeaves(lShape);
     expect(bsp.nodes.length).toBeGreaterThan(0);
-    expect(bsp.nodes.at(-1)!.rightChild).toBeDefined();
+    expect(defined(bsp.nodes.at(-1)).rightChild).toBeDefined();
   });
 
   it("keeps a convex room as a single leaf", () => {
@@ -267,23 +216,8 @@ describe("compileMap", () => {
   });
 });
 
-// Which side of start -> end a point is on, as the engine reads it: the
-// front is on the right, where this is negative.
-function sideOf(
-  vertices: { x: number; y: number }[],
-  line: { start: number; end: number },
-  point: { x: number; y: number },
-) {
-  const start = vertices[line.start];
-  const end = vertices[line.end];
-  return (
-    (end.x - start.x) * (point.y - start.y) -
-    (end.y - start.y) * (point.x - start.x)
-  );
-}
-
 describe("rooms inside rooms", () => {
-  const pillar = makePillar(islandMap, "stage")!;
+  const pillar = defined(makePillar(islandMap, "stage"));
 
   it("accepts a room inside another and finds it under the pointer", () => {
     expect(validateMap(islandMap)).toEqual([]);
@@ -334,7 +268,7 @@ describe("rooms inside rooms", () => {
   });
 
   it("turns a pillar back into a room or takes it away", () => {
-    const filled = fillHole(pillar, "yard", 0)!;
+    const filled = defined(fillHole(pillar, "yard", 0));
     expect(filled.map.sectors).toHaveLength(2);
     expect(filled.map.sectors[0].holes).toBeUndefined();
     expect(filled.map.sectors[1]).toMatchObject({
@@ -383,7 +317,7 @@ describe("rooms inside rooms", () => {
     expectConvexLeaves(ledge.map);
     const pressed = addSwitch(
       ledge.map,
-      freeWallAt(ledge.map, wallKey("e", "f"))!,
+      defined(freeWallAt(ledge.map, wallKey("e", "f"))),
       { x: 256, y: 192 },
     );
     expect(pressed.map.sectors[0].holes?.[0]).toHaveLength(6);
@@ -399,7 +333,7 @@ describe("rooms inside rooms", () => {
       { x: 320, y: 320 },
     ]);
     expect(validateMap(pair.map)).toEqual([]);
-    const made = makePillar(pair.map, "stage")!;
+    const made = defined(makePillar(pair.map, "stage"));
     expect(validateMap(made)).toEqual([]);
     expect(() => compileMap(made)).not.toThrow();
     expect(
@@ -456,7 +390,7 @@ describe("rooms inside rooms", () => {
     const free = freeWallAt(pillar, wallKey("e", "f"));
     expect(free).toMatchObject({ sector: "yard" });
     expect(freeWallAt(islandMap, wallKey("e", "f"))).toBeNull();
-    const added = addSwitch(pillar, free!, { x: 256, y: 192 });
+    const added = addSwitch(pillar, defined(free), { x: 256, y: 192 });
     expect(added.map.switches).toHaveLength(1);
     expect(added.map.sectors[0].holes?.[0]).toHaveLength(6);
     expect(added.map.sectors[0].vertices).toHaveLength(4);
@@ -579,11 +513,28 @@ describe("rooms inside rooms", () => {
   });
 });
 
+// Which side of start -> end a point is on, as the engine reads it: the
+// front is on the right, where this is negative.
+function sideOf(
+  vertices: { x: number; y: number }[],
+  line: { start: number; end: number },
+  point: { x: number; y: number },
+) {
+  const start = vertices[line.start];
+  const end = vertices[line.end];
+  return (
+    (end.x - start.x) * (point.y - start.y) -
+    (end.y - start.y) * (point.x - start.x)
+  );
+}
+
 describe("lines inside rooms", () => {
-  const drawn = addDetail(islandMap, [
-    { x: 128, y: 400 },
-    { x: 384, y: 400 },
-  ])!;
+  const drawn = defined(
+    addDetail(islandMap, [
+      { x: 128, y: 400 },
+      { x: 384, y: 400 },
+    ]),
+  );
   const key = wallKey("v1", "v2");
 
   it("draws a line inside a room with the room on both sides", () => {
@@ -608,7 +559,7 @@ describe("lines inside rooms", () => {
     });
     const { lines } = buildLevel(grate);
     expect(lines).toHaveLength(9);
-    const line = lines.find((item) => item.wall === key)!;
+    const line = defined(lines.find((item) => item.wall === key));
     expect(line).toMatchObject({ frontSector: 0, backSector: 0 });
     const index = lines.indexOf(line);
     const linedefs = new DataView(lump(grate, "LINEDEFS").buffer);
@@ -636,9 +587,9 @@ describe("lines inside rooms", () => {
       "stage",
     );
     expect(validateMap(wired)).toEqual([]);
-    expect(linesOf(wired).find((item) => item.line.wall === key)!.special).toBe(
-      38,
-    );
+    expect(
+      defined(linesOf(wired).find((item) => item.line.wall === key)).special,
+    ).toBe(38);
   });
 
   it("refuses a line outside a room, on a wall, across a wall or in a door", () => {
@@ -702,10 +653,12 @@ describe("lines inside rooms", () => {
         { x: 384, y: 224 },
       ]),
     ).toBeNull();
-    const along = addDetail(islandMap, [
-      { x: 0, y: 0 },
-      { x: 256, y: 0 },
-    ])!;
+    const along = defined(
+      addDetail(islandMap, [
+        { x: 0, y: 0 },
+        { x: 256, y: 0 },
+      ]),
+    );
     expect(along).not.toBeNull();
     expect(validateMap(along.map).map((issue) => issue.id)).toContain(
       `line-wall:${wallKey("a", "v1")}`,
@@ -724,20 +677,24 @@ describe("lines inside rooms", () => {
   });
 
   it("flips which way a line faces and leaves the rest of its chain", () => {
-    const before = buildLevel(drawn.map).lines.find(
-      (item) => item.wall === key,
-    )!;
+    const before = defined(
+      buildLevel(drawn.map).lines.find((item) => item.wall === key),
+    );
     const flipped = flipDetailLine(drawn.map, "yard", key);
     expect(flipped.sectors[0].details).toEqual([["v2", "v1"]]);
-    const after = buildLevel(flipped).lines.find((item) => item.wall === key)!;
+    const after = defined(
+      buildLevel(flipped).lines.find((item) => item.wall === key),
+    );
     expect(after.start).toBe(before.end);
     expect(after.end).toBe(before.start);
-    const chain = addDetail(islandMap, [
-      { x: 64, y: 400 },
-      { x: 192, y: 400 },
-      { x: 320, y: 400 },
-      { x: 448, y: 400 },
-    ])!;
+    const chain = defined(
+      addDetail(islandMap, [
+        { x: 64, y: 400 },
+        { x: 192, y: 400 },
+        { x: 320, y: 400 },
+        { x: 448, y: 400 },
+      ]),
+    );
     const middle = flipDetailLine(chain.map, "yard", wallKey("v2", "v3"));
     expect(middle.sectors[0].details).toEqual([
       ["v1", "v2"],
@@ -747,11 +704,13 @@ describe("lines inside rooms", () => {
   });
 
   it("deletes one line from a chain along with its spare corners", () => {
-    const chain = addDetail(islandMap, [
-      { x: 64, y: 400 },
-      { x: 256, y: 400 },
-      { x: 448, y: 400 },
-    ])!;
+    const chain = defined(
+      addDetail(islandMap, [
+        { x: 64, y: 400 },
+        { x: 256, y: 400 },
+        { x: 448, y: 400 },
+      ]),
+    );
     expect(chain.map.sectors[0].details).toEqual([["v1", "v2", "v3"]]);
     const cut = removeDetailLine(chain.map, "yard", wallKey("v1", "v2"));
     expect(cut.sectors[0].details).toEqual([["v2", "v3"]]);
@@ -768,10 +727,12 @@ describe("lines inside rooms", () => {
       "g",
       "h",
     ]);
-    const staged = addDetail(islandMap, [
-      { x: 224, y: 256 },
-      { x: 288, y: 256 },
-    ])!;
+    const staged = defined(
+      addDetail(islandMap, [
+        { x: 224, y: 256 },
+        { x: 288, y: 256 },
+      ]),
+    );
     expect(staged.id).toBe("stage");
     expect(makePillar(staged.map, "stage")).toBeNull();
   });
@@ -788,6 +749,34 @@ describe("lines inside rooms", () => {
     expect(() => parseMapFile(serializeMap(broken))).toThrow("corners");
   });
 });
+
+function expectConvexLeaves(map: GameMap) {
+  const { vertices, lines } = buildLevel(map);
+  const bsp = buildNodes(vertices, lines);
+  for (const subsector of bsp.subsectors) {
+    const segs = bsp.segs.slice(
+      subsector.first,
+      subsector.first + subsector.count,
+    );
+    expect(new Set(segs.map((seg) => seg.sector)).size).toBe(1);
+    for (const seg of segs) {
+      const start = bsp.vertices[seg.start];
+      const end = bsp.vertices[seg.end];
+      const length = Math.hypot(end.x - start.x, end.y - start.y);
+      for (const other of segs) {
+        for (const index of [other.start, other.end]) {
+          const point = bsp.vertices[index];
+          const side =
+            ((end.x - start.x) * (point.y - start.y) -
+              (end.y - start.y) * (point.x - start.x)) /
+            length;
+          expect(side).toBeLessThanOrEqual(1);
+        }
+      }
+    }
+  }
+  return bsp;
+}
 
 describe("compatibility and raw specials", () => {
   const map: GameMap = {
@@ -821,9 +810,9 @@ describe("compatibility and raw specials", () => {
 
   it("writes raw specials, effects and flags the menus don't have", () => {
     expect(validateMap(map)).toEqual([]);
-    const line = linesOf(map).find(
-      (item) => item.line.wall === wallKey("e", "f"),
-    )!;
+    const line = defined(
+      linesOf(map).find((item) => item.line.wall === wallKey("e", "f")),
+    );
     expect(line.special).toBe(200);
     expect(line.tag).toBe(3);
     expect(line.flags & 0x360).toBe(0x360);
@@ -917,7 +906,9 @@ describe("wall editing", () => {
         islandMap.sectors[1],
       ],
     };
-    const split = splitWall(marked, wallKey("a", "b"), { x: 250, y: 3 })!;
+    const split = defined(
+      splitWall(marked, wallKey("a", "b"), { x: 250, y: 3 }),
+    );
     expect(split.map.vertices[split.id]).toEqual({ x: 248, y: 0 });
     expect(split.map.sectors[0].vertices).toEqual([
       "a",
@@ -935,17 +926,19 @@ describe("wall editing", () => {
       sides: { yard: { offsetX: 288 } },
     });
     // The same room drawn the other way round reads its walls the same way.
-    const reversed = splitWall(
-      {
-        ...marked,
-        sectors: [
-          { ...marked.sectors[0], vertices: ["a", "d", "c", "b"] },
-          marked.sectors[1],
-        ],
-      },
-      wallKey("a", "b"),
-      { x: 250, y: 3 },
-    )!;
+    const reversed = defined(
+      splitWall(
+        {
+          ...marked,
+          sectors: [
+            { ...marked.sectors[0], vertices: ["a", "d", "c", "b"] },
+            marked.sectors[1],
+          ],
+        },
+        wallKey("a", "b"),
+        { x: 250, y: 3 },
+      ),
+    );
     expect(reversed.map.lines?.[wallKey("a", reversed.id)]?.sides).toEqual({
       yard: { offsetX: 40 },
     });
@@ -953,14 +946,16 @@ describe("wall editing", () => {
       yard: { offsetX: 288 },
     });
     // The yard reads the stage's wall from its far end, as the back side.
-    const around = splitWall(
-      {
-        ...islandMap,
-        lines: { [wallKey("e", "f")]: { sides: { yard: { offsetX: 40 } } } },
-      },
-      wallKey("e", "f"),
-      { x: 256, y: 192 },
-    )!;
+    const around = defined(
+      splitWall(
+        {
+          ...islandMap,
+          lines: { [wallKey("e", "f")]: { sides: { yard: { offsetX: 40 } } } },
+        },
+        wallKey("e", "f"),
+        { x: 256, y: 192 },
+      ),
+    );
     expect(around.map.lines?.[wallKey("f", around.id)]?.sides).toEqual({
       yard: { offsetX: 40 },
     });
@@ -981,11 +976,15 @@ describe("wall editing", () => {
   });
 
   it("splits a pillar's wall and a shared wall in every outline", () => {
-    const pillar = makePillar(islandMap, "stage")!;
-    const split = splitWall(pillar, wallKey("e", "f"), { x: 256, y: 192 })!;
+    const pillar = defined(makePillar(islandMap, "stage"));
+    const split = defined(
+      splitWall(pillar, wallKey("e", "f"), { x: 256, y: 192 }),
+    );
     expect(pillar.sectors[0].holes?.[0]).toHaveLength(4);
     expect(split.map.sectors[0].holes?.[0]).toHaveLength(5);
-    const shared = splitWall(testMap, wallKey("v3", "v4"), { x: 384, y: 160 })!;
+    const shared = defined(
+      splitWall(testMap, wallKey("v3", "v4"), { x: 384, y: 160 }),
+    );
     expect(shared.map.sectors[0].vertices).toContain(shared.id);
     expect(shared.map.sectors[1].vertices).toContain(shared.id);
     expect(validateMap(shared.map)).toEqual([]);
@@ -1106,21 +1105,23 @@ describe("grid sizes", () => {
       y: 402,
     });
     expect(validateMap(room.map)).toEqual([]);
-    const line = addDetail(
-      islandMap,
-      [
-        { x: 129, y: 401 },
-        { x: 385, y: 401 },
-      ],
-      1,
-    )!;
+    const line = defined(
+      addDetail(
+        islandMap,
+        [
+          { x: 129, y: 401 },
+          { x: 385, y: 401 },
+        ],
+        1,
+      ),
+    );
     expect(line.map.vertices.v1).toEqual({ x: 129, y: 401 });
     const thing = addThing(islandMap, "imp", { x: 65, y: 67 }, 0, 4);
     expect(thing.map.things.at(-1)).toMatchObject({ x: 64, y: 68 });
-    const pillar = makePillar(islandMap, "stage")!;
+    const pillar = defined(makePillar(islandMap, "stage"));
     const pressed = addSwitch(
       pillar,
-      freeWallAt(pillar, wallKey("e", "f"))!,
+      defined(freeWallAt(pillar, wallKey("e", "f"))),
       { x: 250, y: 192 },
       null,
       1,
@@ -1154,7 +1155,7 @@ describe("grid sizes", () => {
     };
     const wide = addSwitch(
       narrow,
-      freeWallAt(narrow, wallKey("a", "b"))!,
+      defined(freeWallAt(narrow, wallKey("a", "b"))),
       { x: 80, y: 0 },
       null,
       64,
@@ -1222,8 +1223,8 @@ describe("validateMap", () => {
   it("keeps a room added to a free wall valid and connected", () => {
     const added = addRoomOnSide(testMap, "sector-1", "west", 128);
     expect(added).not.toBeNull();
-    expect(validateMap(added!.map)).toEqual([]);
-    const { lines } = buildLevel(added!.map);
+    expect(validateMap(defined(added).map)).toEqual([]);
+    const { lines } = buildLevel(defined(added).map);
     expect(lines.filter((line) => line.backSector !== null)).toHaveLength(4);
   });
 
@@ -1249,6 +1250,15 @@ describe("validateMap", () => {
     expect(issues.map((issue) => issue.id)).toContain("switch-open:switch-1");
   });
 });
+
+function updateSectorCeiling(map: GameMap, id: string, ceiling: number) {
+  return {
+    ...map,
+    sectors: map.sectors.map((sector) =>
+      sector.id === id ? { ...sector, ceiling } : sector,
+    ),
+  };
+}
 
 describe("wallNear", () => {
   it("picks the side of a shared wall under the pointer", () => {
@@ -1295,7 +1305,7 @@ describe("wallNear", () => {
 
 describe("doors and switches", () => {
   const doorIndex = testMap.sectors.findIndex((item) => item.door);
-  const door = testMap.sectors[doorIndex].door!;
+  const door = defined(testMap.sectors[doorIndex].door);
 
   it("starts a door closed and tags it for its switch", () => {
     const sectors = new DataView(lump(testMap, "SECTORS").buffer);
@@ -1360,11 +1370,11 @@ describe("doors and switches", () => {
   it("cuts a short section out of a long wall for a switch", () => {
     const added = addSwitchInRoom(testMap, "sector-3", "sector-4");
     expect(added).not.toBeNull();
-    const item = added!.map.switches.at(-1)!;
-    const a = added!.map.vertices[item.from];
-    const b = added!.map.vertices[item.to];
+    const item = defined(defined(added).map.switches.at(-1));
+    const a = defined(added).map.vertices[item.from];
+    const b = defined(added).map.vertices[item.to];
     expect(Math.hypot(b.x - a.x, b.y - a.y)).toBe(64);
-    expect(validateMap(added!.map)).toEqual([]);
+    expect(validateMap(defined(added).map)).toEqual([]);
   });
 
   it("disconnects switches when a door becomes a room again", () => {
@@ -1372,38 +1382,6 @@ describe("doors and switches", () => {
     expect(map.switches[0].door).toBeNull();
   });
 });
-
-function lineOn(map: GameMap, wall: string) {
-  return linesOf(map).find((item) => item.line.wall === wall)!;
-}
-
-function lowerFloor(patch: Partial<LineAction>): LineAction {
-  return {
-    kind: "floor-lower",
-    trigger: "walk",
-    repeat: false,
-    tag: 0,
-    ...patch,
-  };
-}
-
-function lineIssues(wall: string, patch: Partial<LineAction>) {
-  return validateMap(
-    updateLine(testMap, wall, { action: lowerFloor(patch) }),
-  ).map((issue) => issue.id);
-}
-
-function doorOpenerIssues(wall: string, trigger: LineAction["trigger"]) {
-  return validateMap(
-    setLineTarget(
-      updateLine({ ...testMap, switches: [] }, wall, {
-        action: { ...lowerFloor({ trigger }), kind: "door-open" },
-      }),
-      wall,
-      "sector-4",
-    ),
-  ).map((issue) => issue.id);
-}
 
 describe("line editing", () => {
   const solidWall = wallKey("v1", "v15");
@@ -1471,7 +1449,7 @@ describe("line editing", () => {
       openWall,
       "sector-3",
     );
-    const tag = map.lines![openWall].action!.tag;
+    const tag = defined(defined(map.lines)[openWall].action).tag;
     expect(tag).toBeGreaterThan(0);
     expect(map.sectors[2].tag).toBe(tag);
   });
@@ -1529,10 +1507,10 @@ describe("line editing", () => {
     const action = lowerFloor({ trigger: "switch", tag: 4 });
     const map = updateLine(testMap, wall, { action, hidden: true });
     const at = { x: 960, y: 160 };
-    const added = addSwitch(map, freeWallNear(map, at, 32)!, at);
-    const item = added.map.switches.at(-1)!;
+    const added = addSwitch(map, defined(freeWallNear(map, at, 32)), at);
+    const item = defined(added.map.switches.at(-1));
     expect(added.map.lines?.[wallKey(item.from, item.to)]).toEqual({ action });
-    const halves = Object.values(added.map.lines!).filter(
+    const halves = Object.values(defined(added.map.lines)).filter(
       (line) => line.hidden,
     );
     expect(halves).toHaveLength(2);
@@ -1583,7 +1561,7 @@ describe("line editing", () => {
       tag: 0,
     };
     const map = updateLine(testMap, wall, { action });
-    const added = addSwitchInRoom(map, "sector-1", "sector-4")!;
+    const added = defined(addSwitchInRoom(map, "sector-1", "sector-4"));
     expect(added.map.lines?.[wall]?.action).toEqual(action);
     expect(lineOn(added.map, wall).special).toBe(11);
   });
@@ -1596,7 +1574,7 @@ describe("line editing", () => {
       openWall,
       "sector-2",
     );
-    expect(map.lines![openWall].action!.tag).toBe(1);
+    expect(defined(defined(map.lines)[openWall].action).tag).toBe(1);
     expect(parseMapFile(serializeMap(map))).toEqual(map);
   });
 
@@ -1629,13 +1607,45 @@ describe("line editing", () => {
     const wall = wallKey("v10", "v11");
     const map = updateLine(testMap, wall, { hidden: true });
     const at = { x: 960, y: 160 };
-    const added = addSwitch(map, freeWallNear(map, at, 32)!, at);
+    const added = addSwitch(map, defined(freeWallNear(map, at, 32)), at);
     expect(added.map.lines?.[wall]).toBeUndefined();
     expect(
       Object.values(added.map.lines ?? {}).filter((line) => line.hidden),
     ).toHaveLength(2);
   });
 });
+
+function lineOn(map: GameMap, wall: string) {
+  return defined(linesOf(map).find((item) => item.line.wall === wall));
+}
+
+function lineIssues(wall: string, patch: Partial<LineAction>) {
+  return validateMap(
+    updateLine(testMap, wall, { action: lowerFloor(patch) }),
+  ).map((issue) => issue.id);
+}
+
+function lowerFloor(patch: Partial<LineAction>): LineAction {
+  return {
+    kind: "floor-lower",
+    trigger: "walk",
+    repeat: false,
+    tag: 0,
+    ...patch,
+  };
+}
+
+function doorOpenerIssues(wall: string, trigger: LineAction["trigger"]) {
+  return validateMap(
+    setLineTarget(
+      updateLine({ ...testMap, switches: [] }, wall, {
+        action: { ...lowerFloor({ trigger }), kind: "door-open" },
+      }),
+      wall,
+      "sector-4",
+    ),
+  ).map((issue) => issue.id);
+}
 
 describe("context menu edits", () => {
   const ids = ["imp-1", "demon-1"];
@@ -1677,7 +1687,7 @@ describe("context menu edits", () => {
       ],
     };
     const copies = duplicateThings(cornered, ["imp-9"]);
-    const copy = copies.map.things.at(-1)!;
+    const copy = defined(copies.map.things.at(-1));
     expect(sectorAt(copies.map, copy)?.id).toBe("sector-1");
     expect(validateMap(copies.map).map((issue) => issue.id)).not.toContain(
       `outside:${copy.id}`,
@@ -1776,17 +1786,10 @@ describe("context menu targets", () => {
   });
 });
 
-function thingFlagsOf(map: GameMap, index: number) {
-  return new DataView(lump(map, "THINGS").buffer).getInt16(
-    index * 10 + 8,
-    true,
-  );
-}
-
 describe("thing settings", () => {
   it("adds missing co-op starts beside player 1", () => {
     const map = addPlayerStarts(testMap, 4);
-    const first = map.things.find((thing) => thing.kind === "player")!;
+    const first = defined(map.things.find((thing) => thing.kind === "player"));
     const added = map.things.filter((thing) =>
       ["player-2", "player-3", "player-4"].includes(thing.kind),
     );
@@ -1850,7 +1853,9 @@ describe("thing settings", () => {
   });
 
   it("rejects a player start inside a closed door", () => {
-    const start = testMap.things.find((thing) => thing.kind === "player")!;
+    const start = defined(
+      testMap.things.find((thing) => thing.kind === "player"),
+    );
     const map = updateThing(testMap, start.id, { x: 504, y: 160 });
     expect(validateMap(map).map((issue) => issue.id)).toContain(
       `in-door:${start.id}`,
@@ -1924,8 +1929,11 @@ describe("thing settings", () => {
   });
 });
 
-function checkIds(map: GameMap) {
-  return checkMap(map).map((issue) => issue.id);
+function thingFlagsOf(map: GameMap, index: number) {
+  return new DataView(lump(map, "THINGS").buffer).getInt16(
+    index * 10 + 8,
+    true,
+  );
 }
 
 describe("map check", () => {
@@ -2040,23 +2048,23 @@ describe("map check", () => {
 
   it("fixes problems with one safe answer", () => {
     const low = updateSector(testMap, "sector-1", { ceiling: 0 });
-    const issue = validateMap(low).find((item) =>
-      item.id.startsWith("height"),
-    )!;
-    expect(validateMap(fixIssue(low, issue)!)).toEqual([]);
+    const issue = defined(
+      validateMap(low).find((item) => item.id.startsWith("height")),
+    );
+    expect(validateMap(defined(fixIssue(low, issue)))).toEqual([]);
     const unwired = { ...testMap, switches: [] };
-    const door = validateMap(unwired).find((item) =>
-      item.id.startsWith("door-unwired"),
-    )!;
+    const door = defined(
+      validateMap(unwired).find((item) => item.id.startsWith("door-unwired")),
+    );
     expect(fixIssue(unwired, door)).toBeNull();
     const wall = wallKey("v1", "v15");
     const walking = updateLine(testMap, wall, {
       action: { kind: "exit", trigger: "walk", repeat: false, tag: 0 },
     });
-    const walkIssue = validateMap(walking).find((item) =>
-      item.id.startsWith("line-walk"),
-    )!;
-    const fixedWalk = fixIssue(walking, walkIssue)!;
+    const walkIssue = defined(
+      validateMap(walking).find((item) => item.id.startsWith("line-walk")),
+    );
+    const fixedWalk = defined(fixIssue(walking, walkIssue));
     expect(fixedWalk.lines?.[wall]?.action).toMatchObject({
       kind: "exit",
       trigger: "switch",
@@ -2093,9 +2101,9 @@ describe("map check", () => {
       action: newLineAction(false, "teleport"),
     });
     expect(() => parseMapFile(serializeMap(map))).not.toThrow();
-    const issue = validateMap(map).find((item) =>
-      item.id.startsWith("line-walk"),
-    )!;
+    const issue = defined(
+      validateMap(map).find((item) => item.id.startsWith("line-walk")),
+    );
     expect(issue).toBeDefined();
     expect(fixIssue(map, issue)?.lines?.["v1|v15"]?.action).toBeUndefined();
   });
@@ -2103,8 +2111,9 @@ describe("map check", () => {
   it("builds a line from the room chosen as its front", () => {
     const front = (map: GameMap) => {
       const { lines, sectors } = buildLevel(map);
-      return sectors[lines.find((line) => line.wall === "v3|v4")!.frontSector]
-        .id;
+      return sectors[
+        defined(lines.find((line) => line.wall === "v3|v4")).frontSector
+      ].id;
     };
     expect(front(updateLine(testMap, "v3|v4", { front: "sector-2" }))).toBe(
       "sector-2",
@@ -2125,7 +2134,9 @@ describe("map check", () => {
       const index = buildLevel(map).lines.findIndex(
         (line) => line.wall === "v3|v4",
       );
-      const lines = compileLumps(map).find((lump) => lump.name === "LINEDEFS")!;
+      const lines = defined(
+        compileLumps(map).find((lump) => lump.name === "LINEDEFS"),
+      );
       return new DataView(lines.data.buffer, lines.data.byteOffset).getUint16(
         index * 14 + 6,
         true,
@@ -2171,7 +2182,7 @@ describe("map check", () => {
       "Lights",
       "Level",
     ]);
-    const floors = groups.find((group) => group.label === "Floors")!;
+    const floors = defined(groups.find((group) => group.label === "Floors"));
     expect(floors.items[0]).toMatchObject({
       label: "Floor: lower to lowest",
       short: "Lower to lowest",
@@ -2206,6 +2217,10 @@ describe("map check", () => {
     expect([...flats, ...walls].every((name) => name.length <= 8)).toBe(true);
   });
 });
+
+function checkIds(map: GameMap) {
+  return checkMap(map).map((issue) => issue.id);
+}
 
 describe("doors line by line", () => {
   const useDoor: GameMap = {
@@ -2268,7 +2283,7 @@ describe("doors line by line", () => {
     expect(validateMap(map)).toEqual([]);
     const lines = linesOf(map);
     const byWall = (wall: string) =>
-      lines.find((item) => item.line.wall === wall)!;
+      defined(lines.find((item) => item.line.wall === wall));
     expect(byWall(corridorSide)).toMatchObject({ special: 0, tag: 0 });
     expect(byWall(arenaSide)).toMatchObject({ special: 31, tag: 5 });
     expect(
@@ -2346,7 +2361,9 @@ describe("doors line by line", () => {
     );
     expect(describeSurface(painted, face)?.texture).toBe("BIGDOOR1");
     expect(describeSurface(useDoor, face)?.texture).toBe("BIGDOOR2");
-    const sides = sidesOf(painted).find((item) => item.wall === arenaSide)!;
+    const sides = defined(
+      sidesOf(painted).find((item) => item.wall === arenaSide),
+    );
     expect(
       [sides.front, sides.back].find((side) => side?.sector === 2)?.upper,
     ).toBe("BIGDOOR1");
@@ -2366,8 +2383,8 @@ describe("doors line by line", () => {
 
   it("builds a Boom special from its fields and aims it at a sector", () => {
     const wall = wallKey("e", "f");
-    const start = generalizedClass("floor")!.start;
-    const crusher = generalizedClass("crusher")!;
+    const start = defined(generalizedClass("floor")).start;
+    const crusher = defined(generalizedClass("crusher"));
     expect(newGeneralized(crusher, true)).toBe(crusher.start);
     expect(generalizedTrigger(newGeneralized(crusher, false))).toMatchObject({
       trigger: "switch",
@@ -2376,7 +2393,7 @@ describe("doors line by line", () => {
       raw: { special: start, tag: 0 },
     });
     const aimed = setLineTarget(raw, wall, "yard");
-    const tag = aimed.sectors[0].tag!;
+    const tag = defined(aimed.sectors[0].tag);
     expect(tag).toBeGreaterThan(0);
     expect(aimed.lines?.[wall]?.raw).toEqual({ special: start, tag });
     expect(validateMap(aimed).map((issue) => issue.id)).toEqual([
@@ -2388,9 +2405,9 @@ describe("doors line by line", () => {
       { special: start, tag },
     );
     // Nothing walks over or presses the back of a wall with nothing behind.
-    const trigger = generalizedFields(start).find(
-      (field) => field.id === "trigger",
-    )!;
+    const trigger = defined(
+      generalizedFields(start).find((field) => field.id === "trigger"),
+    );
     const outerWall = wallKey("a", "b");
     const walked: GameMap = {
       ...boom,
@@ -2413,6 +2430,17 @@ describe("doors line by line", () => {
     expect(setLineTarget(aimed, wall, null).lines?.[wall]?.raw?.tag).toBe(0);
   });
 });
+
+function linesOf(map: GameMap) {
+  const { lines } = buildLevel(map);
+  const view = new DataView(lump(map, "LINEDEFS").buffer);
+  return lines.map((line, index) => ({
+    line,
+    flags: view.getInt16(index * 14 + 4, true),
+    special: view.getInt16(index * 14 + 6, true),
+    tag: view.getInt16(index * 14 + 8, true),
+  }));
+}
 
 describe("the game's own things and textures", () => {
   const doom = games.doom;
@@ -2571,9 +2599,17 @@ describe("the game's own things and textures", () => {
     expect(validateMap(painted, { names, game: doom })[0].message).toBe(
       "Arena: The Ultimate Doom has no texture called AQF001.",
     );
-    const groups = buildChecks(painted, { names }).find(
-      (group) => group.name === "Compatibility",
-    )!;
+    const groups = defined(
+      buildChecks(painted, { names }).find(
+        (group) => group.name === "Compatibility",
+      ),
+    );
     expect(groups.issues).toHaveLength(2);
   });
 });
+
+function lump(map: GameMap, name: string) {
+  const found = compileLumps(map).find((item) => item.name === name);
+  if (!found) throw new Error(`Missing ${name}.`);
+  return found.data;
+}

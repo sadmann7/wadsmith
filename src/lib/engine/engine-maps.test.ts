@@ -1,12 +1,15 @@
 import { afterEach, describe, expect, it } from "vitest";
 
+import type { GameMap, LineActionKind } from "@/lib/map/types";
+
+import { defined } from "@/lib/defined";
 import { thingCatalog } from "@/lib/map/catalog";
 import { featuredMaps } from "@/lib/map/featured";
 import { pointInPolygon, wallKey, wallOwners } from "@/lib/map/geometry";
 import { starterMap } from "@/lib/map/starter-map";
-import type { GameMap, LineActionKind } from "@/lib/map/types";
 import { compileEpisode } from "@/lib/wad/compile";
-import { doomKeys, type DoomGame } from "./runtime";
+
+import { type DoomGame, doomKeys } from "./runtime";
 import {
   launch,
   play,
@@ -19,121 +22,11 @@ import {
 
 afterEach(stopGames);
 
-// Stands the player just in front of a wall, inside the given room, facing it.
-function facingWall(map: GameMap, from: string, to: string, roomId: string) {
-  const a = map.vertices[from];
-  const b = map.vertices[to];
-  const middle = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-  const length = Math.hypot(b.x - a.x, b.y - a.y);
-  const normal = { x: -(b.y - a.y) / length, y: (b.x - a.x) / length };
-  const room = map.sectors.find((sector) => sector.id === roomId)!;
-  const polygon = room.vertices.map((id) => map.vertices[id]);
-  const inward = pointInPolygon(
-    { x: middle.x + normal.x * 8, y: middle.y + normal.y * 8 },
-    polygon,
-  )
-    ? 1
-    : -1;
-  const x = Math.round(middle.x + normal.x * inward * 36);
-  const y = Math.round(middle.y + normal.y * inward * 36);
-  // Doom angles turn counter-clockwise with y up, and editor y points down.
-  const angle =
-    Math.round((Math.atan2(y - middle.y, middle.x - x) * 180) / Math.PI + 360) %
-    360;
-  return playerAt(map, x, y, angle);
-}
-
 interface Press {
   label: string;
   map: GameMap;
   height: (game: DoomGame) => number;
   done: (game: DoomGame, before: number) => boolean;
-}
-
-function pressesOf(map: GameMap): Press[] {
-  const presses: Press[] = [];
-  const owners = wallOwners(map);
-  const switchWalls = new Set(
-    map.switches.map((item) => wallKey(item.from, item.to)),
-  );
-  for (const item of map.switches) {
-    if (!item.door) continue;
-    const door = map.sectors.findIndex((sector) => sector.id === item.door);
-    presses.push({
-      label: `switch opens ${map.sectors[door].name}`,
-      map: facingWall(map, item.from, item.to, item.sector),
-      height: (game) => game.sectorCeiling(door),
-      done: (game, before) => game.sectorCeiling(door) > before + 56,
-    });
-  }
-  for (const [wall, line] of Object.entries(map.lines ?? {})) {
-    const action = line.action;
-    if (action?.trigger !== "switch") continue;
-    const [from, to] = wall.split("|");
-    const target = map.sectors.findIndex((sector) => sector.tag === action.tag);
-    const room = switchWalls.has(wall)
-      ? map.switches.find((item) => wallKey(item.from, item.to) === wall)!
-          .sector
-      : owners.get(wall)!.find((sector) => sector.tag !== action.tag)!.id;
-    const placed = facingWall(map, from, to, room);
-    if (action.kind === "exit" || action.kind === "exit-secret") {
-      presses.push({
-        label: "exit switch ends the level",
-        map: placed,
-        height: () => 0,
-        done: (game) => !game.status().inLevel,
-      });
-    } else if (action.kind === "floor-raise-next") {
-      presses.push({
-        label: `switch raises ${map.sectors[target].name}`,
-        map: placed,
-        height: (game) => game.sectorFloor(target),
-        done: (game, before) => game.sectorFloor(target) > before,
-      });
-    } else if (action.kind === "lift" || action.kind === "lift-fast") {
-      presses.push({
-        label: `pressing ${wall} lowers ${map.sectors[target].name}`,
-        map: placed,
-        height: (game) => game.sectorFloor(target),
-        done: (game, before) => game.sectorFloor(target) < before - 32,
-      });
-    } else if (action.kind === "floor-lower") {
-      presses.push({
-        label: `pressing lowers ${map.sectors[target].name}`,
-        map: placed,
-        height: (game) => game.sectorFloor(target),
-        done: (game, before) => game.sectorFloor(target) < before - 56,
-      });
-    } else if (
-      action.kind.startsWith("ceiling-lower") ||
-      action.kind === "crusher"
-    ) {
-      presses.push({
-        label: `pressing lowers the ceiling of ${map.sectors[target].name}`,
-        map: placed,
-        height: (game) => game.sectorCeiling(target),
-        done: (game, before) => game.sectorCeiling(target) < before - 32,
-      });
-    } else if (action.kind.startsWith("stairs")) {
-      presses.push({
-        label: `pressing builds stairs from ${map.sectors[target].name}`,
-        map: placed,
-        height: (game) => game.sectorFloor(target),
-        done: (game, before) => game.sectorFloor(target) > before,
-      });
-    } else if (
-      action.kind.startsWith("floor-raise") ||
-      action.kind === "floor-crush"
-    ) {
-      presses.push({
-        label: `pressing raises ${map.sectors[target].name}`,
-        map: placed,
-        height: (game) => game.sectorFloor(target),
-        done: (game, before) => game.sectorFloor(target) > before + 32,
-      });
-    }
-  }
-  return presses;
 }
 
 describe.skipIf(!ready)("featured maps in the engine", () => {
@@ -157,31 +50,15 @@ describe.skipIf(!ready)("featured maps in the engine", () => {
   }
 });
 
-async function ticsToFinish(map: GameMap, label: string) {
-  const quiet: GameMap = {
-    ...map,
-    things: map.things.filter(
-      (thing) => thingCatalog[thing.kind].category !== "enemy",
-    ),
-  };
-  const press = pressesOf(quiet).find((item) => item.label.startsWith(label))!;
-  const game = await launch(press.map);
-  await waitForPlay(game);
-  const before = press.height(game);
-  const start = game.gameTic();
-  await pressUse(game);
-  await play(game, 6000, () => press.done(game, before));
-  expect(press.done(game, before)).toBe(true);
-  return game.gameTic() - start;
-}
-
 describe.skipIf(!ready)("fast actions in the engine", () => {
   it("lowers a fast lift sooner than a lift", async () => {
-    const featured = featuredMaps.find((item) =>
-      Object.values(item.map.lines ?? {}).some(
-        (line) => line.action?.kind === "lift",
+    const featured = defined(
+      featuredMaps.find((item) =>
+        Object.values(item.map.lines ?? {}).some(
+          (line) => line.action?.kind === "lift",
+        ),
       ),
-    )!;
+    );
     const lifts = (kind: LineActionKind): GameMap => ({
       ...featured.map,
       lines: Object.fromEntries(
@@ -257,6 +134,26 @@ describe.skipIf(!ready)("a secret exit in the engine", () => {
   }, 30_000);
 });
 
+async function ticsToFinish(map: GameMap, label: string) {
+  const quiet: GameMap = {
+    ...map,
+    things: map.things.filter(
+      (thing) => thingCatalog[thing.kind].category !== "enemy",
+    ),
+  };
+  const press = defined(
+    pressesOf(quiet).find((item) => item.label.startsWith(label)),
+  );
+  const game = await launch(press.map);
+  await waitForPlay(game);
+  const before = press.height(game);
+  const start = game.gameTic();
+  await pressUse(game);
+  await play(game, 6000, () => press.done(game, before));
+  expect(press.done(game, before)).toBe(true);
+  return game.gameTic() - start;
+}
+
 describe.skipIf(!ready)("an episode in the engine", () => {
   it("moves on to the next map after the tally screen", async () => {
     const [first] = featuredMaps;
@@ -266,9 +163,9 @@ describe.skipIf(!ready)("an episode in the engine", () => {
         (thing) => thingCatalog[thing.kind].category !== "enemy",
       ),
     };
-    const exit = pressesOf(quiet).find((press) =>
-      press.label.startsWith("exit"),
-    )!;
+    const exit = defined(
+      pressesOf(quiet).find((press) => press.label.startsWith("exit")),
+    );
     const game = await launch(
       compileEpisode([
         { slot: "MAP01", map: exit.map },
@@ -289,3 +186,116 @@ describe.skipIf(!ready)("an episode in the engine", () => {
     expect(game.status()).toMatchObject({ inLevel: true, map: 2 });
   }, 30_000);
 });
+
+function pressesOf(map: GameMap): Press[] {
+  const presses: Press[] = [];
+  const owners = wallOwners(map);
+  const switchWalls = new Set(
+    map.switches.map((item) => wallKey(item.from, item.to)),
+  );
+  for (const item of map.switches) {
+    if (!item.door) continue;
+    const door = map.sectors.findIndex((sector) => sector.id === item.door);
+    presses.push({
+      label: `switch opens ${map.sectors[door].name}`,
+      map: facingWall(map, item.from, item.to, item.sector),
+      height: (game) => game.sectorCeiling(door),
+      done: (game, before) => game.sectorCeiling(door) > before + 56,
+    });
+  }
+  for (const [wall, line] of Object.entries(map.lines ?? {})) {
+    const action = line.action;
+    if (action?.trigger !== "switch") continue;
+    const [from, to] = wall.split("|");
+    const target = map.sectors.findIndex((sector) => sector.tag === action.tag);
+    const room = switchWalls.has(wall)
+      ? defined(
+          map.switches.find((item) => wallKey(item.from, item.to) === wall),
+        ).sector
+      : defined(
+          defined(owners.get(wall)).find((sector) => sector.tag !== action.tag),
+        ).id;
+    const placed = facingWall(map, from, to, room);
+    if (action.kind === "exit" || action.kind === "exit-secret") {
+      presses.push({
+        label: "exit switch ends the level",
+        map: placed,
+        height: () => 0,
+        done: (game) => !game.status().inLevel,
+      });
+    } else if (action.kind === "floor-raise-next") {
+      presses.push({
+        label: `switch raises ${map.sectors[target].name}`,
+        map: placed,
+        height: (game) => game.sectorFloor(target),
+        done: (game, before) => game.sectorFloor(target) > before,
+      });
+    } else if (action.kind === "lift" || action.kind === "lift-fast") {
+      presses.push({
+        label: `pressing ${wall} lowers ${map.sectors[target].name}`,
+        map: placed,
+        height: (game) => game.sectorFloor(target),
+        done: (game, before) => game.sectorFloor(target) < before - 32,
+      });
+    } else if (action.kind === "floor-lower") {
+      presses.push({
+        label: `pressing lowers ${map.sectors[target].name}`,
+        map: placed,
+        height: (game) => game.sectorFloor(target),
+        done: (game, before) => game.sectorFloor(target) < before - 56,
+      });
+    } else if (
+      action.kind.startsWith("ceiling-lower") ||
+      action.kind === "crusher"
+    ) {
+      presses.push({
+        label: `pressing lowers the ceiling of ${map.sectors[target].name}`,
+        map: placed,
+        height: (game) => game.sectorCeiling(target),
+        done: (game, before) => game.sectorCeiling(target) < before - 32,
+      });
+    } else if (action.kind.startsWith("stairs")) {
+      presses.push({
+        label: `pressing builds stairs from ${map.sectors[target].name}`,
+        map: placed,
+        height: (game) => game.sectorFloor(target),
+        done: (game, before) => game.sectorFloor(target) > before,
+      });
+    } else if (
+      action.kind.startsWith("floor-raise") ||
+      action.kind === "floor-crush"
+    ) {
+      presses.push({
+        label: `pressing raises ${map.sectors[target].name}`,
+        map: placed,
+        height: (game) => game.sectorFloor(target),
+        done: (game, before) => game.sectorFloor(target) > before + 32,
+      });
+    }
+  }
+  return presses;
+}
+
+// Stands the player just in front of a wall, inside the given room, facing it.
+function facingWall(map: GameMap, from: string, to: string, roomId: string) {
+  const a = map.vertices[from];
+  const b = map.vertices[to];
+  const middle = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  const length = Math.hypot(b.x - a.x, b.y - a.y);
+  const normal = { x: -(b.y - a.y) / length, y: (b.x - a.x) / length };
+  const room = defined(map.sectors.find((sector) => sector.id === roomId));
+  const polygon = room.vertices.map((id) => map.vertices[id]);
+  const inward = pointInPolygon(
+    { x: middle.x + normal.x * 8, y: middle.y + normal.y * 8 },
+    polygon,
+  )
+    ? 1
+    : -1;
+  const x = Math.round(middle.x + normal.x * inward * 36);
+  const y = Math.round(middle.y + normal.y * inward * 36);
+  // Doom angles turn counter-clockwise with y up, and editor y points down.
+  const angle =
+    Math.round((Math.atan2(y - middle.y, middle.x - x) * 180) / Math.PI + 360) %
+    360;
+  return playerAt(map, x, y, angle);
+}
