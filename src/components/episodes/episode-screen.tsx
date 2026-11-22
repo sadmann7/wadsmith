@@ -234,6 +234,9 @@ export function EpisodeScreen() {
   } | null>(null);
   // A wait before each map's next sync, so a burst of edits goes as one.
   const live = React.useRef<{ mapId: string; link: LiveMap } | null>(null);
+  // Maps whose live link ended and will rebase, which keeps the whole-map
+  // sync away from them meanwhile.
+  const rebasing = React.useRef(new Set<string>());
   const remoteListeners = React.useRef(new Set<(patch: MapPatch) => void>());
   const [peers, setPeers] = React.useState<LivePeer[]>([]);
   const cloudTimers = React.useRef(
@@ -334,7 +337,13 @@ export function EpisodeScreen() {
   const runCloudSync = React.useCallback(
     async (active: EpisodeStore, mapId: string) => {
       // The live link keeps an open map in step by itself.
-      if (!cloudApi || live.current?.mapId === mapId) return;
+      if (
+        !cloudApi ||
+        live.current?.mapId === mapId ||
+        rebasing.current.has(mapId)
+      ) {
+        return;
+      }
       const opened = () =>
         sessionRef.current?.id === mapId ? sessionRef.current : null;
       await opened()?.saver.flush();
@@ -493,7 +502,8 @@ export function EpisodeScreen() {
           onRemote: (patch) => takeRemote(active, mapId, patch),
           onReload: () => {
             stopLive();
-            void rebase(active, mapId, link.map);
+            rebasing.current.add(mapId);
+            void rebase(active, mapId, link.confirmed);
           },
           onPeers: setPeers,
           onIdle: () => settle(active, mapId),
@@ -505,9 +515,10 @@ export function EpisodeScreen() {
               setCloudProblem("This link can no longer edit the map.");
               return;
             }
+            rebasing.current.add(mapId);
             setTimeout(() => {
               if (sessionRef.current === current) {
-                void rebase(active, mapId, link.map);
+                void rebase(active, mapId, link.confirmed);
               }
             }, reconnectMs);
           },
@@ -525,9 +536,15 @@ export function EpisodeScreen() {
       known: GameMap,
     ) => {
       const current = sessionRef.current;
-      if (current?.id !== mapId || !cloudApi) return;
+      if (current?.id !== mapId || !cloudApi) {
+        rebasing.current.delete(mapId);
+        return;
+      }
       const entry = await active.getMap(mapId);
-      if (!entry?.cloud?.secret) return;
+      if (!entry?.cloud?.secret) {
+        rebasing.current.delete(mapId);
+        return;
+      }
       let online: Awaited<ReturnType<typeof cloudApi.read>>;
       try {
         online = await cloudApi.read(entry.cloud.id);
@@ -537,6 +554,7 @@ export function EpisodeScreen() {
         setTimeout(() => void rebase(active, mapId, known), reconnectMs);
         return;
       }
+      rebasing.current.delete(mapId);
       if (sessionRef.current !== current || live.current?.mapId === mapId) {
         return;
       }
@@ -575,6 +593,7 @@ export function EpisodeScreen() {
             cloudSteps.current.settle(active, saved.id);
             return;
           }
+          if (rebasing.current.has(saved.id)) return;
           const timers = cloudTimers.current;
           clearTimeout(timers.get(saved.id));
           timers.set(
@@ -1184,10 +1203,9 @@ export function EpisodeScreen() {
         for (const listener of remoteListeners.current) listener(settings);
         if (live.current?.mapId === id) {
           live.current.link.rename(saved.map.name ?? "");
-          return null;
         }
       }
-      if (saved.cloud) void syncCloud(store, id);
+      if (saved.cloud && live.current?.mapId !== id) void syncCloud(store, id);
       if (sessionRef.current?.id === id) setDetails(detailsOf(saved));
       else await refresh(store, saved.episodeId);
       return null;

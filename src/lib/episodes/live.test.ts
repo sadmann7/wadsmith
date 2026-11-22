@@ -58,6 +58,46 @@ describe("live editing in the browser", () => {
     expect(ana.live.send(ana.map)).toBe(false);
   });
 
+  it("lets a removal land under a change to one of its fields", () => {
+    const server = fakeServer(testMap);
+    const ana = server.join("Ana");
+    const bo = server.join("Bo");
+    server.run();
+    ana.edit((map) => ({
+      ...map,
+      things: map.things.filter((thing) => thing.id !== "imp-1"),
+    }));
+    bo.edit((map) => updateThing(map, "imp-1", { x: 300 }));
+    server.run();
+    for (const map of [server.map, ana.map, bo.map]) {
+      expect(map.things.some((thing) => thing.id === "imp-1")).toBe(false);
+    }
+  });
+
+  it("keeps two people's changes to different fields of one thing", () => {
+    const server = fakeServer(testMap);
+    const ana = server.join("Ana");
+    const bo = server.join("Bo");
+    server.run();
+    ana.edit((map) => updateThing(map, "imp-1", { x: 300 }));
+    bo.edit((map) => updateThing(map, "imp-1", { angle: 90 }));
+    server.run();
+    for (const map of [server.map, ana.map, bo.map]) {
+      expect(map.things[3]).toMatchObject({ x: 300, angle: 90 });
+    }
+  });
+
+  it("knows the map as the server confirmed it", () => {
+    const server = fakeServer(testMap);
+    const ana = server.join("Ana");
+    server.run();
+    ana.edit((map) => updateThing(map, "imp-1", { x: 300 }));
+    // Sent but not handed back yet.
+    expect(ana.live.confirmed.things[3].x).toBe(testMap.things[3].x);
+    server.run();
+    expect(ana.live.confirmed).toEqual(server.map);
+  });
+
   it("holds edits made before the server welcomes the link", () => {
     const server = fakeServer(testMap);
     const ana = server.join("Ana");

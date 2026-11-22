@@ -57,12 +57,66 @@ export function openLiveMap({
   // The map as this browser last sent it, with others' edits taken in, so the
   // next edit is told apart from theirs.
   let base = map;
+  // The map as the server has it, from every edit it has handed back.
+  let confirmed = map;
   let me = 0;
   let revision = 0;
   let sent = 0;
   let closed = false;
-  // The last edit sent for each thing, until the server hands it back.
-  const waiting = new Map<string, number>();
+  // What this browser has on its way for each thing, until the server hands
+  // back the last edit sent for it: the whole thing, or some of its fields.
+  const waiting = new Map<
+    string,
+    { id: number; whole: boolean; fields: Set<string> }
+  >();
+  // Someone else's edit, with what this browser's edits on their way will
+  // change after it on the server taken out, so this copy ends up as the
+  // server's will. A removal still lands under a change to a field, which
+  // the server then drops.
+  const yieldTo = (patch: MapPatch): MapPatch => {
+    const set: Record<string, Record<string, unknown>> = {};
+    const merge: Record<string, Record<string, Record<string, unknown>>> = {};
+    for (const [name, changes] of Object.entries(patch.set ?? {})) {
+      for (const [key, value] of Object.entries(changes ?? {})) {
+        const mine = waiting.get(`${name}:${key}`);
+        if (mine?.whole) continue;
+        let kept = value;
+        if (mine && value !== null) {
+          const own = entityOf(base, name, key) ?? {};
+          kept = { ...(value as Record<string, unknown>) };
+          for (const field of mine.fields) {
+            if (field in own)
+              (kept as Record<string, unknown>)[field] = own[field];
+            else delete (kept as Record<string, unknown>)[field];
+          }
+        }
+        (set[name] ??= {})[key] = kept;
+      }
+    }
+    for (const [name, changes] of Object.entries(patch.merge ?? {})) {
+      for (const [key, fields] of Object.entries(changes ?? {})) {
+        const mine = waiting.get(`${name}:${key}`);
+        if (mine?.whole) continue;
+        const kept = Object.fromEntries(
+          Object.entries(fields).filter(([field]) => !mine?.fields.has(field)),
+        );
+        if (Object.keys(kept).length > 0) (merge[name] ??= {})[key] = kept;
+      }
+    }
+    const fields = Object.fromEntries(
+      Object.entries(patch.fields ?? {}).filter(
+        ([name]) => !waiting.has(`field:${name}`),
+      ),
+    );
+    return withoutKeys(
+      {
+        ...(Object.keys(set).length > 0 && { set }),
+        ...(Object.keys(merge).length > 0 && { merge }),
+        ...(Object.keys(fields).length > 0 && { fields }),
+      },
+      new Set(),
+    );
+  };
   const peers = new Map<number, LivePeer>();
   let cursorAt = 0;
   let cursorTimer: ReturnType<typeof setTimeout> | undefined;
@@ -131,12 +185,13 @@ export function openLiveMap({
       const patch = parsePatch(data.patch);
       if (!patch) return;
       revision = Number(data.revision);
+      confirmed = applyPatch(confirmed, patch);
       if (Number(data.peer) === me) {
         for (const key of patchKeys(patch)) {
-          if (waiting.get(key) === data.id) waiting.delete(key);
+          if (waiting.get(key)?.id === data.id) waiting.delete(key);
         }
       } else {
-        const theirs = withoutKeys(patch, new Set(waiting.keys()));
+        const theirs = yieldTo(patch);
         if (!getIsEmptyPatch(theirs)) {
           base = applyPatch(base, theirs);
           events.onRemote(theirs);
@@ -147,20 +202,48 @@ export function openLiveMap({
   });
 
   return {
-    // Sends what changed since the map this browser last knew. It returns
-    // false when there was nothing to send.
     // Renames the map for everyone. A map's name isn't part of its edits.
     rename(next: string) {
       sent += 1;
-      waiting.set("field:name", sent);
+      waiting.set("field:name", { id: sent, whole: true, fields: new Set() });
       post({ type: "patch", id: sent, patch: { fields: { name: next } } });
     },
+    // Sends what changed since the map this browser last knew. It returns
+    // false when there was nothing to send.
     send(next: GameMap) {
       const patch = diffMaps(base, next);
       base = next;
       if (getIsEmptyPatch(patch)) return false;
       sent += 1;
-      for (const key of patchKeys(patch)) waiting.set(key, sent);
+      for (const [name, changes] of Object.entries(patch.set ?? {})) {
+        for (const key of Object.keys(changes ?? {})) {
+          waiting.set(`${name}:${key}`, {
+            id: sent,
+            whole: true,
+            fields: new Set(),
+          });
+        }
+      }
+      for (const [name, changes] of Object.entries(patch.merge ?? {})) {
+        for (const [key, fields] of Object.entries(changes ?? {})) {
+          const earlier = waiting.get(`${name}:${key}`);
+          waiting.set(`${name}:${key}`, {
+            id: sent,
+            whole: earlier?.whole ?? false,
+            fields: new Set([
+              ...(earlier?.fields ?? []),
+              ...Object.keys(fields),
+            ]),
+          });
+        }
+      }
+      for (const name of Object.keys(patch.fields ?? {})) {
+        waiting.set(`field:${name}`, {
+          id: sent,
+          whole: true,
+          fields: new Set(),
+        });
+      }
       post({ type: "patch", id: sent, patch });
       return true;
     },
@@ -173,6 +256,11 @@ export function openLiveMap({
     },
     get revision() {
       return revision;
+    },
+    // The map as the server last confirmed it, without edits it hasn't
+    // handed back.
+    get confirmed() {
+      return confirmed;
     },
     // Where this browser's pointer is on the map, at most ten times a second.
     cursor(at: Point | null) {
@@ -201,4 +289,16 @@ export type LiveMap = ReturnType<typeof openLiveMap>;
 // The address of a map's live connection on the rooms server.
 export function liveUrl(roomsUrl: string, id: string) {
   return `${roomsUrl.replace(/^http/, "ws")}/maps/${id}/live`;
+}
+
+function entityOf(map: GameMap, name: string, key: string) {
+  const collection = (map as unknown as Record<string, unknown>)[name];
+  if (Array.isArray(collection)) {
+    return collection.find(
+      (item: Record<string, unknown>) => item.id === key,
+    ) as Record<string, unknown> | undefined;
+  }
+  return (collection as Record<string, Record<string, unknown>> | undefined)?.[
+    key
+  ];
 }

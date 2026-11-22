@@ -4,7 +4,7 @@
 import { DurableObject } from "cloudflare:workers";
 
 import { ConnectionLimits } from "./limits";
-import { applyPatch, parsePatch } from "./map-patch";
+import { applyPatch, type MapPatch, parsePatch } from "./map-patch";
 
 export interface MapsEnv {
   MAPS: DurableObjectNamespace<MapCopy>;
@@ -34,6 +34,8 @@ interface Stored {
   revision: number;
   secret: string;
   parts: number;
+  // The revision the parts hold. Edits after it wait in the log.
+  saved: number;
 }
 
 type Write =
@@ -195,6 +197,12 @@ class MapCopy extends DurableObject<MapsEnv> {
     }
     this.size = size;
     const revision = current.revision + 1;
+    // Each edit is kept in a small log entry before anyone hears of it, and
+    // the log folds into the whole map at most once a second.
+    await this.ctx.storage.put({
+      [logKey(revision)]: JSON.stringify(patch),
+      revision,
+    });
     this.cached = { revision, map };
     this.dirty = true;
     if (Date.now() - this.savedAt >= saveEveryMs) await this.save();
@@ -210,14 +218,24 @@ class MapCopy extends DurableObject<MapsEnv> {
     );
   }
 
-  // Writes edits still in memory to storage.
+  // Folds the log into the whole map.
   private async save() {
     if (!this.dirty || !this.cached) return;
     const { parts } = await this.stored();
     const { revision, map } = this.cached;
     const text = JSON.stringify(map);
     this.size = byteLength(text);
-    await this.ctx.storage.put({ ...partsOf(text, parts ?? 0), revision });
+    await this.ctx.storage.put({
+      ...partsOf(text, parts ?? 0),
+      revision,
+      saved: revision,
+    });
+    const logged = [
+      ...(await this.ctx.storage.list({ prefix: logPrefix })).keys(),
+    ];
+    for (let at = 0; at < logged.length; at += 128) {
+      await this.ctx.storage.delete(logged.slice(at, at + 128));
+    }
     this.dirty = false;
     this.savedAt = Date.now();
   }
@@ -261,16 +279,23 @@ class MapCopy extends DurableObject<MapsEnv> {
     if (set === null || set > time) await this.ctx.storage.setAlarm(time);
   }
 
+  // The map with every logged edit, as in memory or rebuilt from storage.
   private async current() {
     if (this.dirty && this.cached) return this.cached;
-    const { revision = 0, parts = 0 } = await this.stored();
+    const { revision = 0, parts = 0, saved = revision } = await this.stored();
     if (this.cached?.revision !== revision) {
       const text = (await this.map(parts)) || "{}";
       this.size = byteLength(text);
-      this.cached = {
-        revision,
-        map: JSON.parse(text) as Record<string, unknown>,
-      };
+      let map = JSON.parse(text) as Record<string, unknown>;
+      const logged = await this.ctx.storage.list<string>({ prefix: logPrefix });
+      let replayed = false;
+      for (const [key, patch] of logged) {
+        if (Number(key.slice(logPrefix.length)) <= saved) continue;
+        map = applyPatch(map, JSON.parse(patch) as MapPatch);
+        replayed = true;
+      }
+      this.cached = { revision, map };
+      this.dirty = replayed;
     }
     return this.cached;
   }
@@ -306,17 +331,23 @@ class MapCopy extends DurableObject<MapsEnv> {
 
   async create(secret: string, map: string) {
     if (await this.ctx.storage.get<number>("revision")) return false;
-    await this.ctx.storage.put({ ...partsOf(map, 0), revision: 1, secret });
+    await this.ctx.storage.put({
+      ...partsOf(map, 0),
+      revision: 1,
+      saved: 1,
+      secret,
+    });
     return true;
   }
 
   async read() {
-    await this.save();
-    const { revision, parts } = await this.stored();
-    return revision && parts ? { revision, map: await this.map(parts) } : null;
+    if (!(await this.ctx.storage.get<number>("revision"))) return null;
+    const { revision, map } = await this.current();
+    return { revision, map: JSON.stringify(map) };
   }
 
   async write(secret: string, base: number, map: string): Promise<Write> {
+    await this.current();
     await this.save();
     const stored = await this.stored();
     if (!stored.revision) return { ok: false, status: 404 };
@@ -337,6 +368,7 @@ class MapCopy extends DurableObject<MapsEnv> {
     await this.ctx.storage.put({
       ...partsOf(map, stored.parts ?? 0),
       revision,
+      saved: revision,
     });
     this.cached = null;
     // Live editors take the whole new map from a read.
@@ -349,6 +381,7 @@ class MapCopy extends DurableObject<MapsEnv> {
       "revision",
       "secret",
       "parts",
+      "saved",
     ]);
     return Object.fromEntries(values);
   }
@@ -484,6 +517,13 @@ async function answer(
     }
     return text;
   }
+}
+
+const logPrefix = "log:";
+
+// Padded, so the log lists in order.
+function logKey(revision: number) {
+  return `${logPrefix}${String(revision).padStart(12, "0")}`;
 }
 
 function byteLength(text: string) {
