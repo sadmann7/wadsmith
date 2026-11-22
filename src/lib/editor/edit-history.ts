@@ -1,5 +1,6 @@
 import {
   applyPatch,
+  combinePatches,
   diffMaps,
   getIsEmptyPatch,
   type MapPatch,
@@ -7,6 +8,7 @@ import {
 
 import type { GameMap } from "@/lib/map/types";
 
+import { sectorVertices } from "@/lib/map/geometry";
 interface Step {
   undo: MapPatch;
   redo: MapPatch;
@@ -35,8 +37,8 @@ export function createEditHistory({ limit, groupDelay }: EditHistoryOptions) {
       const last = done.at(-1);
       undone.length = 0;
       if (group && last?.group === group && now - last.at < groupDelay) {
-        last.redo = mergePatches(last.redo, redo);
-        last.undo = mergePatches(undo, last.undo);
+        last.redo = combinePatches(last.redo, redo);
+        last.undo = combinePatches(undo, last.undo);
         last.at = now;
         return;
       }
@@ -47,29 +49,37 @@ export function createEditHistory({ limit, groupDelay }: EditHistoryOptions) {
       const step = done.pop();
       if (!step) return undefined;
       undone.push(step);
-      return applyPatch(current, step.undo);
+      return keepCorners(current, applyPatch(current, step.undo));
     },
     redo(current: GameMap) {
       const step = undone.pop();
       if (!step) return undefined;
       done.push({ ...step, group: undefined });
-      return applyPatch(current, step.redo);
+      return keepCorners(current, applyPatch(current, step.redo));
     },
     canUndo: () => done.length > 0,
     canRedo: () => undone.length > 0,
+    // Forgets every step, as when the whole map was swapped for another.
+    clear() {
+      done.length = 0;
+      undone.length = 0;
+    },
   };
 }
 
-// One patch that does both, the second winning where they touch one thing.
-function mergePatches(first: MapPatch, second: MapPatch): MapPatch {
-  const set: NonNullable<MapPatch["set"]> = { ...first.set };
-  for (const [name, changes] of Object.entries(second.set ?? {})) {
-    const key = name as keyof typeof set;
-    set[key] = { ...set[key], ...changes };
-  }
-  const fields = { ...first.fields, ...second.fields };
+// Corners a step would take away that a room still uses, like one someone
+// else drew against them since, stay where they are.
+function keepCorners(current: GameMap, next: GameMap): GameMap {
+  const used = new Set(next.sectors.flatMap(sectorVertices));
+  const missing = [...used].filter(
+    (id) => !next.vertices[id] && current.vertices[id],
+  );
+  if (missing.length === 0) return next;
   return {
-    ...(Object.keys(set).length > 0 && { set }),
-    ...(Object.keys(fields).length > 0 && { fields }),
+    ...next,
+    vertices: {
+      ...next.vertices,
+      ...Object.fromEntries(missing.map((id) => [id, current.vertices[id]])),
+    },
   };
 }

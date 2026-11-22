@@ -25,6 +25,9 @@ export interface LiveEvents {
   onPeers: (peers: LivePeer[]) => void;
   // Nothing sent is still on its way, as of the server's revision.
   onIdle: (revision: number) => void;
+  // The link ended. It was refused when its secret no longer edits the map;
+  // otherwise this browser and the server may disagree until it reads the
+  // map again.
   onClosed: (refused: boolean) => void;
 }
 
@@ -37,6 +40,8 @@ interface LiveOptions extends LiveEvents {
 }
 
 const cursorEveryMs = 100;
+// The close code the server uses for a link whose secret it refused.
+export const refusedCode = 4003;
 
 // One browser's live link to a map's online copy. It sends each edit as the
 // things it changed, applies everyone else's, and keeps everyone's pointers.
@@ -63,20 +68,31 @@ export function openLiveMap({
   let cursorTimer: ReturnType<typeof setTimeout> | undefined;
   let nextCursor: Point | null = null;
 
+  // Edits wait until the server has taken the link's hello.
+  let welcomed = false;
+  const outbox: string[] = [];
   const post = (message: object) => {
-    if (socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify(message));
-    }
+    const text = JSON.stringify(message);
+    if (welcomed && socket.readyState === WebSocket.OPEN) socket.send(text);
+    else outbox.push(text);
   };
-  const showPeers = () => events.onPeers([...peers.values()]);
-
-  socket.addEventListener("open", () => post({ type: "hello", secret, name }));
-  socket.addEventListener("close", (event) => {
+  const end = (refused: boolean) => {
     if (closed) return;
     closed = true;
     clearTimeout(cursorTimer);
-    events.onClosed(event.code === 1008);
-  });
+    try {
+      socket.close();
+    } catch {
+      // It may already be closed.
+    }
+    events.onClosed(refused);
+  };
+  const showPeers = () => events.onPeers([...peers.values()]);
+
+  socket.addEventListener("open", () =>
+    socket.send(JSON.stringify({ type: "hello", secret, name })),
+  );
+  socket.addEventListener("close", (event) => end(event.code === refusedCode));
   socket.addEventListener("message", (event) => {
     let data: Record<string, unknown>;
     try {
@@ -91,6 +107,11 @@ export function openLiveMap({
         peers.set(peer.peer, { peer: peer.peer, name: peer.name, at: null });
       }
       showPeers();
+      welcomed = true;
+      for (const text of outbox.splice(0)) socket.send(text);
+    } else if (data.type === "refused") {
+      // An edit the server didn't take leaves the two apart.
+      end(false);
     } else if (data.type === "join") {
       const peer = Number(data.peer);
       const named = typeof data.name === "string" ? data.name : "";
@@ -128,6 +149,12 @@ export function openLiveMap({
   return {
     // Sends what changed since the map this browser last knew. It returns
     // false when there was nothing to send.
+    // Renames the map for everyone. A map's name isn't part of its edits.
+    rename(next: string) {
+      sent += 1;
+      waiting.set("field:name", sent);
+      post({ type: "patch", id: sent, patch: { fields: { name: next } } });
+    },
     send(next: GameMap) {
       const patch = diffMaps(base, next);
       base = next;
@@ -162,6 +189,9 @@ export function openLiveMap({
       closed = true;
       clearTimeout(cursorTimer);
       socket.close();
+    },
+    get closed() {
+      return closed;
     },
   };
 }

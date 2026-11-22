@@ -9,6 +9,7 @@ import { applyPatch, parsePatch } from "./map-patch";
 export interface MapsEnv {
   MAPS: DurableObjectNamespace<MapCopy>;
   NEW_MAPS?: RateLimit;
+  MAP_HELLO_SECONDS?: string;
 }
 
 export const maxMapBytes = 5 * 1024 * 1024;
@@ -17,11 +18,16 @@ const mapPath = /^\/maps(?:\/([a-z0-9]{16})(\/live)?)?$/;
 // People editing one map at once.
 const maxEditors = 16;
 const maxNameLength = 24;
+// Edits land in memory at once and reach storage at most this often.
+const saveEveryMs = 1000;
+// The close code for a link whose secret is refused, so it doesn't retry.
+const refusedCode = 4003;
 
 // Who a live connection is: 0 until it shows the map's secret.
 interface Editor {
   peer: number;
   name: string;
+  since: number;
 }
 
 interface Stored {
@@ -35,12 +41,24 @@ type Write =
   | { ok: false; status: 403 | 404 }
   | { ok: false; status: 409; revision: number; map: string };
 
-class MapCopy extends DurableObject {
+class MapCopy extends DurableObject<MapsEnv> {
   private readonly limits = new WeakMap<WebSocket, ConnectionLimits>();
   // The map as last stored, kept while the object is awake so each edit
   // doesn't read and parse it again.
   private cached: { revision: number; map: Record<string, unknown> } | null =
     null;
+  // The cached map has edits storage doesn't have yet, and when it last
+  // caught up.
+  private dirty = false;
+  private savedAt = 0;
+  // At least the cached map's size in bytes, measured again only near the
+  // limit.
+  private size = 0;
+
+  // How long a live connection has to show the secret before it is let go.
+  private get helloMs() {
+    return Number(this.env.MAP_HELLO_SECONDS ?? 10) * 1000;
+  }
 
   // A live connection, which edits the map once it shows the secret and sees
   // everyone else's edits and pointers.
@@ -51,6 +69,7 @@ class MapCopy extends DurableObject {
     if (!(await this.ctx.storage.get<number>("revision"))) {
       return new Response("No such map.", { status: 404 });
     }
+    this.dropSilent(Date.now());
     if (this.ctx.getWebSockets().length >= maxEditors) {
       return new Response("This map has as many editors as it can take.", {
         status: 409,
@@ -58,7 +77,13 @@ class MapCopy extends DurableObject {
     }
     const [client, server] = Object.values(new WebSocketPair());
     this.ctx.acceptWebSocket(server);
-    server.serializeAttachment({ peer: 0, name: "" } satisfies Editor);
+    const now = Date.now();
+    server.serializeAttachment({
+      peer: 0,
+      name: "",
+      since: now,
+    } satisfies Editor);
+    await this.wakeAt(now + this.helloMs);
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -74,11 +99,17 @@ class MapCopy extends DurableObject {
       socket.close(1008, "Too much traffic.");
       return;
     }
-    if (verdict === "drop") return;
     let data: Record<string, unknown>;
     try {
       data = JSON.parse(message) as Record<string, unknown>;
     } catch {
+      return;
+    }
+    if (verdict === "drop") {
+      // A pointer can be skipped, but a skipped edit has to be said.
+      if (data.type === "patch") {
+        socket.send(JSON.stringify({ type: "refused", id: data.id }));
+      }
       return;
     }
     const editor = socket.deserializeAttachment() as Editor;
@@ -116,7 +147,7 @@ class MapCopy extends DurableObject {
     const secret = typeof data.secret === "string" ? data.secret : "";
     const stored = await this.stored();
     if (data.type !== "hello" || !(await sameHash(secret, stored.secret))) {
-      socket.close(1008, "This link can't edit the map.");
+      socket.close(refusedCode, "This link can't edit the map.");
       return;
     }
     const others = this.editors().filter((item) => item.socket !== socket);
@@ -125,7 +156,11 @@ class MapCopy extends DurableObject {
       typeof data.name === "string"
         ? data.name.trim().slice(0, maxNameLength)
         : "";
-    socket.serializeAttachment({ peer, name } satisfies Editor);
+    socket.serializeAttachment({
+      peer,
+      name,
+      since: Date.now(),
+    } satisfies Editor);
     socket.send(
       JSON.stringify({
         type: "welcome",
@@ -148,17 +183,22 @@ class MapCopy extends DurableObject {
     if (!patch) return;
     const current = await this.current();
     const map = applyPatch(current.map, patch);
-    const text = JSON.stringify(map);
-    if (text.length > maxMapBytes) {
+    // A map grows by at most what the patch holds, so the whole map is
+    // measured again only when that could take it past the limit.
+    let size = this.size + byteLength(JSON.stringify(patch));
+    if (size > maxMapBytes) size = byteLength(JSON.stringify(map));
+    if (size > maxMapBytes) {
       socket.send(
         JSON.stringify({ type: "refused", id: data.id, error: "too-big" }),
       );
       return;
     }
+    this.size = size;
     const revision = current.revision + 1;
-    const { parts } = await this.stored();
-    await this.ctx.storage.put({ ...partsOf(text, parts ?? 0), revision });
     this.cached = { revision, map };
+    this.dirty = true;
+    if (Date.now() - this.savedAt >= saveEveryMs) await this.save();
+    else await this.wakeAt(this.savedAt + saveEveryMs);
     this.broadcast(
       JSON.stringify({
         type: "patch",
@@ -170,15 +210,66 @@ class MapCopy extends DurableObject {
     );
   }
 
+  // Writes edits still in memory to storage.
+  private async save() {
+    if (!this.dirty || !this.cached) return;
+    const { parts } = await this.stored();
+    const { revision, map } = this.cached;
+    const text = JSON.stringify(map);
+    this.size = byteLength(text);
+    await this.ctx.storage.put({ ...partsOf(text, parts ?? 0), revision });
+    this.dirty = false;
+    this.savedAt = Date.now();
+  }
+
+  // Saves what waits, and lets go of connections that never showed the
+  // secret.
+  async alarm() {
+    await this.save();
+    let next = this.dropSilent(Date.now());
+    if (this.dirty) next = Math.min(next, this.savedAt + saveEveryMs);
+    if (next < Infinity) await this.ctx.storage.setAlarm(next);
+  }
+
+  // Closes connections that never showed the secret in time, so they can't
+  // hold every place. Returns when the next one runs out.
+  private dropSilent(now: number) {
+    let next = Infinity;
+    for (const socket of this.ctx.getWebSockets()) {
+      const { peer, since } = socket.deserializeAttachment() as Editor;
+      if (peer) continue;
+      if (now - since < this.helloMs) {
+        next = Math.min(next, since + this.helloMs);
+        continue;
+      }
+      socket.serializeAttachment({
+        peer: 0,
+        name: "",
+        since: 0,
+      } satisfies Editor);
+      try {
+        socket.close(refusedCode, "No hello.");
+      } catch {
+        // It may already be closed.
+      }
+    }
+    return next;
+  }
+
+  private async wakeAt(time: number) {
+    const set = await this.ctx.storage.getAlarm();
+    if (set === null || set > time) await this.ctx.storage.setAlarm(time);
+  }
+
   private async current() {
+    if (this.dirty && this.cached) return this.cached;
     const { revision = 0, parts = 0 } = await this.stored();
     if (this.cached?.revision !== revision) {
+      const text = (await this.map(parts)) || "{}";
+      this.size = byteLength(text);
       this.cached = {
         revision,
-        map: JSON.parse((await this.map(parts)) || "{}") as Record<
-          string,
-          unknown
-        >,
+        map: JSON.parse(text) as Record<string, unknown>,
       };
     }
     return this.cached;
@@ -192,8 +283,8 @@ class MapCopy extends DurableObject {
   }
 
   private left(socket: WebSocket) {
-    const { peer } = socket.deserializeAttachment() as Editor;
-    socket.serializeAttachment({ peer: 0, name: "" } satisfies Editor);
+    const { peer, since } = socket.deserializeAttachment() as Editor;
+    socket.serializeAttachment({ peer: 0, name: "", since } satisfies Editor);
     try {
       socket.close();
     } catch {
@@ -220,11 +311,13 @@ class MapCopy extends DurableObject {
   }
 
   async read() {
+    await this.save();
     const { revision, parts } = await this.stored();
     return revision && parts ? { revision, map: await this.map(parts) } : null;
   }
 
   async write(secret: string, base: number, map: string): Promise<Write> {
+    await this.save();
     const stored = await this.stored();
     if (!stored.revision) return { ok: false, status: 404 };
     if (!(await sameHash(secret, stored.secret))) {
@@ -391,6 +484,10 @@ async function answer(
     }
     return text;
   }
+}
+
+function byteLength(text: string) {
+  return new TextEncoder().encode(text).length;
 }
 
 function randomText(length: number) {

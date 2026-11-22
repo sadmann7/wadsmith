@@ -11,6 +11,7 @@ beforeAll(async () => {
     config: resolve(import.meta.dirname, "../wrangler.jsonc"),
     ip: "127.0.0.1",
     persist: false,
+    vars: { MAP_HELLO_SECONDS: "1" },
     logLevel: "none",
     experimental: { disableExperimentalWarning: true },
   });
@@ -169,7 +170,7 @@ describe("live editing", () => {
     const { id, secret } = await create();
     const stranger = await live(id);
     stranger.socket.send(JSON.stringify({ type: "hello", secret: "nope" }));
-    expect(await stranger.closed).toBe(1008);
+    expect(await stranger.closed).toBe(4003);
 
     const editor = await live(id);
     editor.socket.send(JSON.stringify({ type: "hello", secret }));
@@ -185,6 +186,41 @@ describe("live editing", () => {
     editor.socket.close();
     await expect(live("0000000000000000")).rejects.toThrow();
   });
+
+  it("keeps edits made in quick succession, and lets a silent link go", async () => {
+    const { id, secret } = await create({ ...map, things: [] });
+    const editor = await live(id);
+    editor.socket.send(JSON.stringify({ type: "hello", secret }));
+    await editor.next();
+    for (let x = 1; x <= 5; x += 1) {
+      editor.socket.send(
+        JSON.stringify({
+          type: "patch",
+          id: x,
+          patch: {
+            set: { things: { t: { id: "t", kind: "imp", x, y: 0, angle: 0 } } },
+          },
+        }),
+      );
+    }
+    for (let x = 1; x <= 5; x += 1) {
+      expect(await editor.next()).toMatchObject({ type: "patch", id: x });
+    }
+    // A read straight after sees every edit, saved or still in memory.
+    expect(await (await send(`/maps/${id}`)).json()).toMatchObject({
+      revision: 6,
+      map: { things: [{ x: 5 }] },
+    });
+    editor.socket.close();
+
+    // A connection that never shows the secret is let go once a new one
+    // comes after its time is up.
+    const silent = await live(id);
+    await new Promise((done) => setTimeout(done, 1200));
+    const next = await live(id);
+    expect(await silent.closed).toBe(4003);
+    next.socket.close();
+  }, 20_000);
 });
 
 function live(id: string) {

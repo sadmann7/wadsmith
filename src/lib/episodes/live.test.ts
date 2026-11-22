@@ -52,10 +52,22 @@ describe("live editing in the browser", () => {
     ana.edit((map) => updateThing(map, "imp-1", { x: 5 }));
     server.run();
     expect(server.patches.at(-1)).toEqual({
-      set: { things: { "imp-1": { ...testMap.things[3], x: 5 } } },
+      merge: { things: { "imp-1": { x: 5 } } },
     });
     // Nothing more to send once the map is what it was sent as.
     expect(ana.live.send(ana.map)).toBe(false);
+  });
+
+  it("holds edits made before the server welcomes the link", () => {
+    const server = fakeServer(testMap);
+    const ana = server.join("Ana");
+    // The hello is still queued at the server when Ana edits.
+    ana.edit((map) => updateThing(map, "imp-1", { x: 9 }));
+    server.run();
+    // The edit went out after the welcome, so the server took it.
+    expect(server.patches).toHaveLength(1);
+    expect(server.map.things[3].x).toBe(9);
+    expect(ana.live.idle).toBe(true);
   });
 
   it("passes pointers on to the others", async () => {

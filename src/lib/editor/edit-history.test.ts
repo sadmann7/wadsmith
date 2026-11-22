@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { updateSector, updateThing } from "@/lib/map/edit";
+import { defined } from "@/lib/defined";
+import { addRoom, updateSector, updateThing } from "@/lib/map/edit";
 import { testMap } from "@/lib/map/test-map";
 
 import { createEditHistory } from "./edit-history";
@@ -30,6 +31,41 @@ describe("an edit history", () => {
     const undone = history.undo(theirs);
     expect(undone?.things[3].x).toBe(testMap.things[3].x);
     expect(undone?.sectors[2].light).toBe(90);
+  });
+
+  it("keeps corners someone else's room uses since", () => {
+    const history = createEditHistory(options);
+    const mine = addRoom(testMap, [
+      { x: -200, y: 0 },
+      { x: -100, y: 0 },
+      { x: -100, y: 100 },
+      { x: -200, y: 100 },
+    ]);
+    history.record(testMap, mine.map);
+    const corners = mine.map.sectors.at(-1)?.vertices ?? [];
+    // Another editor draws a room against two of those corners.
+    const [a, b] = corners;
+    const theirs = {
+      ...mine.map,
+      vertices: { ...mine.map.vertices, far: { x: -150, y: -80 } },
+      sectors: [
+        ...mine.map.sectors,
+        { ...testMap.sectors[0], id: "sector-9", vertices: [a, b, "far"] },
+      ],
+    };
+    const undone = defined(history.undo(theirs));
+    expect(undone.sectors.some((sector) => sector.id === mine.id)).toBe(false);
+    expect(undone.vertices[a]).toEqual(mine.map.vertices[a]);
+    expect(undone.vertices[b]).toEqual(mine.map.vertices[b]);
+    // The corners only this room used go with it.
+    expect(undone.vertices[corners[2]]).toBeUndefined();
+  });
+
+  it("forgets its steps when the map is swapped whole", () => {
+    const history = createEditHistory(options);
+    history.record(testMap, updateThing(testMap, "imp-1", { x: 1 }));
+    history.clear();
+    expect(history.canUndo()).toBe(false);
   });
 
   it("joins a group's edits into one step and keeps only so many", () => {

@@ -15,9 +15,7 @@ describe("map patches", () => {
   it("carries only the entities an edit changed", () => {
     const moved = updateThing(testMap, "imp-1", { x: 800 });
     const patch = diffMaps(testMap, moved);
-    expect(patch).toEqual({
-      set: { things: { "imp-1": { ...testMap.things[3], x: 800 } } },
-    });
+    expect(patch).toEqual({ merge: { things: { "imp-1": { x: 800 } } } });
     expect(applyPatch(testMap, patch)).toEqual(moved);
     expect(getIsEmptyPatch(diffMaps(testMap, testMap))).toBe(true);
   });
@@ -53,6 +51,24 @@ describe("map patches", () => {
     });
   });
 
+  it("combines two people's edits to different fields of one thing", () => {
+    const mine = diffMaps(
+      testMap,
+      updateSector(testMap, "sector-3", { floorTexture: "FLAT1" }),
+    );
+    const theirs = diffMaps(
+      testMap,
+      updateSector(testMap, "sector-3", { floor: 8 }),
+    );
+    const both = applyPatch(applyPatch(testMap, mine), theirs);
+    expect(both.sectors[2]).toMatchObject({ floorTexture: "FLAT1", floor: 8 });
+    // A change to something removed meanwhile does nothing.
+    const gone = applyPatch(testMap, {
+      set: { sectors: { "sector-3": null } },
+    });
+    expect(applyPatch(gone, mine)).toEqual(gone);
+  });
+
   it("combines two people's edits to different things", () => {
     const mine = diffMaps(testMap, updateThing(testMap, "imp-1", { x: 800 }));
     const theirs = diffMaps(
@@ -84,7 +100,10 @@ describe("map patches", () => {
     expect(parsePatch({ set: { things: { a: { id: "b" } } } })).toBeNull();
     expect(parsePatch({ set: { secrets: {} } })).toBeNull();
     expect(parsePatch({ set: { vertices: { v: 3 } } })).toBeNull();
-    expect(parsePatch({ fields: { name: "x" } })).toBeNull();
+    expect(parsePatch({ fields: { name: "x" } })).not.toBeNull();
+    expect(parsePatch({ fields: { vertices: {} } })).toBeNull();
+    expect(parsePatch({ merge: { things: { a: { id: "b" } } } })).toBeNull();
+    expect(parsePatch({ merge: { things: { a: null } } })).toBeNull();
     expect(parsePatch("x")).toBeNull();
     expect(
       parsePatch(JSON.parse('{"set":{"lines":{"__proto__":{}}}}')),

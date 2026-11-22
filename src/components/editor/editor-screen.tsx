@@ -1141,13 +1141,15 @@ export function EditorScreen({
   React.useEffect(
     () =>
       watchExternal((next) => {
+        // The steps were taken on a map that is gone now.
+        history.clear();
         mapRef.current = next;
         setMap(next);
         setSelection([]);
         setSurface(null);
         syncUndoable();
       }),
-    [syncUndoable, watchExternal],
+    [history, syncUndoable, watchExternal],
   );
 
   // Someone else's edit lands on the map as it stands, without an undo step,
