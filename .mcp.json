@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "wadsmith": {
+      "command": "node",
+      "args": [
+        "--experimental-transform-types",
+        "--no-warnings",
+        "scripts/wadsmith-mcp.mjs"
+      ]
+    }
+  }
+}

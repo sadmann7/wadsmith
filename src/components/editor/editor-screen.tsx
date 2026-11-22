@@ -164,7 +164,12 @@ import { SceneCamera } from "@/lib/preview/scene-camera";
 import { createFlatAssets, readWadAssets } from "@/lib/wad/assets";
 import { compileMap } from "@/lib/wad/compile";
 
-import type { EditMode, MapTool, MapViewStatus } from "./map-editor";
+import type {
+  AgentReport,
+  EditMode,
+  MapTool,
+  MapViewStatus,
+} from "./map-editor";
 
 import { BuildDialog } from "./build-dialog";
 import { MapContextMenu } from "./context-menu";
@@ -1240,9 +1245,10 @@ export function EditorScreen({
     !placingThings;
   const runQuickBuild = (action: string) => {
     if (!sector) return;
-    if (action === "imp") void runAgent("placeThing", ["imp", sector.name]);
-    else if (action === "door") void runAgent("makeDoor", [sector.name, "use"]);
-    else void runAgent("addConnectedRoom", [sector.name, action, 192]);
+    // Two rooms can share a name, so the room goes by its id.
+    if (action === "imp") void runAgent("placeThing", ["imp", sector.id]);
+    else if (action === "door") void runAgent("makeDoor", [sector.id, "use"]);
+    else void runAgent("addConnectedRoom", [sector.id, action, 192]);
   };
   const railMode: RailMode =
     tool === "draw" || tool === "line"
@@ -1415,12 +1421,21 @@ export function EditorScreen({
     });
     const failure =
       typeof result.error === "string" ? result.error : result.error?.message;
-    setNotice(
-      result.ok
-        ? `${action} ran through the agent bridge.`
-        : (failure ?? `${action} was refused.`),
-    );
+    // An edit that landed has logged itself already.
+    if (!result.ok) setNotice(failure ?? `${action} was refused.`);
   };
+
+  // The visible trail of what an agent did, whoever the agent is.
+  const logAgentAction = (action: string, { fixed, todo }: AgentReport) =>
+    setNotice(
+      [
+        `${action} ran through the agent bridge.`,
+        fixed.length > 0 ? `Fixed on the way: ${fixed.join(" ")}` : "",
+        todo.length > 0 ? `Still to do: ${todo.join(" ")}` : "",
+      ]
+        .filter(Boolean)
+        .join(" "),
+    );
 
   return (
     <>
@@ -1710,6 +1725,7 @@ export function EditorScreen({
                           details.reason === "move-key" ? "nudge" : undefined,
                         )
                       }
+                      onAgentAction={logAgentAction}
                       onToolChange={setTool}
                       onActiveSectorChange={setActiveSector}
                       onSelectionChange={(next) => {

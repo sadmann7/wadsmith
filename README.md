@@ -51,7 +51,23 @@ Maps save per browser address. The dev server now uses `localhost:3000`, so a ma
 
 Your map saves in this browser as you edit. Use **File** to start a new map, save a map file, open one again, or download a WAD.
 
-`window.agent` exposes the UI SDK agent bridge, with `addConnectedRoom`, `setRoomHeights`, `placeThing`, `makeDoor` and `addDoorSwitch` on the Map component.
+## Agents
+
+An agent can build a whole map. Every edit the editor makes is an action it can call: rooms, pillars, doors, lines and their actions, textures, things with their flags, switches and notes. Read actions describe the map, list its rooms and things, and return its errors, warnings and balance. An edit that would break the map is refused and changes nothing, a problem with a known fix is fixed on the way, and each edit answers with what the map still needs.
+
+- **In the page:** `window.agent` is the UI SDK agent bridge. `agent.snapshot()` lists the Map component's actions, and `agent.act({ steps: [{ ref: "Map", action: "help" }] })` returns each one with what it takes.
+- **Outside the page:** the `wadsmith` MCP server offers the same actions as tools, with `openMap`, `saveMap` and `exportWad` for files. Claude Code picks it up from `.mcp.json`. For another client, run `node --experimental-transform-types scripts/wadsmith-mcp.mjs`, and add `--map file.json` to open that file and save it after every edit.
+
+To build a map from a sentence, open the repo in Claude Code and ask for one:
+
+```text
+Use the wadsmith tools to build a small techbase: a start room, a locked
+blue door with its key behind a lift, an arena with six imps, and an exit
+switch. Check the map, then save it as maps/techbase.json and export
+maps/techbase.wad.
+```
+
+Open the saved file with **File**, then **Open**, or play the WAD in any Doom engine.
 
 ## License
 

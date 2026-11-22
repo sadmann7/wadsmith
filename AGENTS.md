@@ -41,7 +41,7 @@ Wadsmith is a Doom map editor built with Next.js, Tailwind CSS and UI SDK. It co
   - `wad`: the WAD compiler, including the BSP and blockmap builders.
   - `engine`: the game runs in `doom-worker.ts`, `game-client.ts` connects it to the page and an AudioWorklet, `mouse-capture.ts` holds the pointer lock rules, `room.ts` runs co-op rooms, and `peer-link.ts` sends game packets directly over WebRTC when it can.
   - `episodes`: episode data, routes, storage and build checks. Saved data still says "project" (the IndexedDB stores, a map's `projectId` and the backup format) so existing browsers and backups keep working.
-  - `editor`: editor shortcuts, targets, thing icons and the agent.
+  - `editor`: editor shortcuts, targets, thing icons and the agent. `agent-actions.ts` is the one table of actions an agent can take on a map, each checked before it lands. The page's agent bridge and the MCP server in `mcp-server.ts`, started by `scripts/wadsmith-mcp.mjs`, both run it.
   - `preview`: the 3D view's software renderer and camera. It is not the game renderer.
 - `rooms`: the Cloudflare Worker for online co-op rooms, one Durable Object per room. It passes messages between a room's players, and has its own `tsconfig.json`.
 - `engine/woof.patch`: every change to Woof, including the browser frame loop, the audio mixer and Wadsmith's exports. To change it, edit `.cache/woof`, then run `git add -AN && git diff > ../../engine/woof.patch` there.
