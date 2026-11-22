@@ -10,8 +10,10 @@ function Alert({
   return (
     <p
       className={cn(
-        "rounded-[3px] border p-2.5 wrap-anywhere",
-        variant === "destructive" ? "border-destructive" : "border-input",
+        "rounded-lg border bg-card px-4 py-3 wrap-anywhere",
+        variant === "destructive"
+          ? "border-destructive/50 text-destructive"
+          : "border-border",
         className,
       )}
       {...props}

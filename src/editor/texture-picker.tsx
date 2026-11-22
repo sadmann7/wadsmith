@@ -1,4 +1,3 @@
-import { Toggle, ToggleGroup } from "@ui-sdk/react/toggle";
 import { Search } from "lucide-react";
 import * as React from "react";
 
@@ -9,6 +8,7 @@ import type { Picture, SceneAssets } from "@/wad/assets";
 import { TextureGrid, TextureTile } from "./texture-grid";
 import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupInput } from "@/components/ui/input";
+import { Toggle, ToggleGroup } from "@/components/ui/toggle";
 import {
   Dialog,
   DialogBackdrop,
@@ -158,7 +158,7 @@ function TexturePicker({
               aria-label="Category"
               orientation="vertical"
               deselectable={false}
-              className="grid content-start gap-0.5"
+              className="grid content-start"
               value={[category]}
               onValueChange={(next) => {
                 if (!next[0]) return;
@@ -170,7 +170,7 @@ function TexturePicker({
                 <Toggle
                   key={item.id}
                   value={item.id}
-                  className="flex h-8 items-center justify-between gap-2 rounded-[3px] border-0 bg-transparent px-2 text-left text-muted-foreground hover:text-foreground aria-pressed:bg-muted aria-pressed:text-foreground aria-pressed:ring-1 aria-pressed:ring-input aria-pressed:ring-inset"
+                  className="h-8 justify-between rounded-[3px] text-left"
                 >
                   <span className="truncate">{item.label}</span>
                   <span className="font-mono text-xs text-muted-foreground">

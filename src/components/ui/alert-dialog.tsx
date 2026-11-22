@@ -22,7 +22,7 @@ function AlertDialogContent({
 }: React.ComponentProps<typeof AlertDialogPrimitive.AlertDialogContent>) {
   return (
     <AlertDialogPrimitive.AlertDialogContent
-      className={cn(contentClass, "gap-3 p-5", className)}
+      className={cn(contentClass, "gap-4 p-6", className)}
       {...props}
     />
   );
