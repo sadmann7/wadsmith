@@ -166,13 +166,18 @@ function groups(): { title: string; items: Shortcut[] }[] {
         { keys: [key("W"), key("S")], does: "Walk forward or back" },
         { keys: [key("A"), key("D")], does: "Step sideways" },
         { keys: [key("←", "left"), key("→", "right")], does: "Turn" },
+        { keys: [key("Space"), key("C")], does: "Fly up or down" },
+        {
+          keys: [key("Z")],
+          does: "Look with the mouse, and act on what the crosshair is over",
+        },
         {
           keys: [key("N"), key("P")],
           does: "Select the next or previous surface",
         },
         {
           keys: [key("Page Up"), key("Page Down")],
-          does: "Raise or lower the selected surface, with Shift for 3 steps",
+          does: "Raise or lower the selected surface by the grid, with Shift for 3 steps and Alt for light",
         },
         {
           keys: [key("O")],
@@ -197,7 +202,15 @@ function groups(): { title: string; items: Shortcut[] }[] {
         },
         {
           keys: [key("Wheel")],
-          does: "Raise or lower a floor or ceiling, with Shift for brightness",
+          does: "Raise or lower a floor or ceiling by the grid, by 1 with Shift, or change its light with Alt",
+        },
+        {
+          keys: [key("Shift+A")],
+          does: "Align the texture along the walls beside the one aimed at",
+        },
+        {
+          keys: [key(","), key(".")],
+          does: "Turn the selected thing left or right",
         },
         { keys: [key("Alt-arrows")], does: "Nudge the selected thing" },
         { keys: [backspace], does: "Delete the selected thing" },

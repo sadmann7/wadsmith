@@ -33,7 +33,14 @@ import {
 
 import { withMovers } from "./movers";
 
-export type Camera = Point & { angle: number; eye?: number };
+// Pitch tilts the view up by that share of its height, the way the engine
+// looks up and down, and lift raises the eye above standing height.
+export type Camera = Point & {
+  angle: number;
+  eye?: number;
+  pitch?: number;
+  lift?: number;
+};
 
 export interface RenderTarget {
   width: number;
@@ -88,11 +95,12 @@ interface Wall {
 }
 
 const fieldOfView = Math.PI / 2;
+const focalShare = 0.8;
 const maxPortals = 32;
 const skyColor = 0xff000000;
 const skyFlat = "F_SKY1";
 // The engine wraps the sky four times round the player, puts its row 100 on
-// the horizon and draws it as if the view were 320 wide.
+// the horizon and draws it as if the view were 320 wide at a 90° view.
 const skyTurn = 1024;
 const skyHorizon = 100;
 const skyView = 320;
@@ -117,7 +125,9 @@ export function createRenderTarget(
     extent: new Uint16Array(width * height),
     reach: new Float32Array(width * height),
     surfaces: [""],
-    focal: width / 2 / Math.tan(fieldOfView / 2),
+    // The focal length follows the height, so a wider view sees more to the
+    // sides rather than zooming in.
+    focal: (height * focalShare) / Math.tan(fieldOfView / 2),
   };
 }
 
@@ -142,7 +152,7 @@ export function projectPoint(
   const scale = target.focal / distance;
   return {
     x: target.width / 2 + (dx * right.x + dy * right.y) * scale,
-    y: target.height / 2 - (plane - eyeOf(map, camera)) * scale,
+    y: horizonOf(target, camera) - (plane - eyeOf(map, camera)) * scale,
   };
 }
 
@@ -154,7 +164,7 @@ export function pointOnPlane(
   y: number,
   plane: number,
 ): Point | null {
-  const rows = y - target.height / 2;
+  const rows = y - horizonOf(target, camera);
   const height = eyeOf(map, camera) - plane;
   if (rows === 0 || height / rows <= 0) return null;
   const distance = (height * target.focal) / rows;
@@ -210,8 +220,8 @@ export function renderScene(
 
   const walls = wallsBySector(map);
   const { forward, right } = cameraBasis(camera);
-  const halfWidth = Math.tan(fieldOfView / 2);
-  const horizon = height / 2;
+  const halfWidth = width / 2 / focal;
+  const horizon = horizonOf(target, camera);
   const eye = eyeOf(map, camera);
 
   for (let x = 0; x < width; x += 1) {
@@ -242,7 +252,7 @@ export function renderScene(
       if (!heavens) return;
       for (let y = Math.max(from, top); y <= Math.min(to, bottom); y += 1) {
         const row = wrap(
-          skyHorizon + ((y + 0.5 - horizon) * skyView) / width,
+          skyHorizon + ((y + 0.5 - horizon) * skyView) / (2 * focal),
           heavens.height,
         );
         const index = y * width + x;
@@ -636,7 +646,14 @@ export function startCamera(map: GameMap): Camera {
 const eyeHeight = 41;
 
 function eyeOf(map: GameMap, camera: Camera) {
-  return camera.eye ?? (sectorAt(map, camera)?.floor ?? 0) + eyeHeight;
+  return (
+    camera.eye ??
+    (sectorAt(map, camera)?.floor ?? 0) + eyeHeight + (camera.lift ?? 0)
+  );
+}
+
+function horizonOf(target: RenderTarget, camera: Camera) {
+  return target.height / 2 + (camera.pitch ?? 0) * target.height;
 }
 
 const sectorWalls = new WeakMap<GameMap, Map<string, Wall[]>>();
