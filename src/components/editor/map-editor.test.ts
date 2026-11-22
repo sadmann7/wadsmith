@@ -183,6 +183,30 @@ describe("map editor parts", () => {
     );
   });
 
+  it("wake the measure as a wall is drawn and when a wall is selected", () => {
+    const instance = mapEditor({ id, map: testMap, tool: "draw" });
+    let heard = 0;
+    const part = instance.part("measure" as never, {} as never);
+    slots.measure.selects.subscribe(
+      part,
+      () => {
+        heard += 1;
+      },
+      {},
+    );
+    const { store } = instance.part("handle", { value: "v1" });
+    store.set({ drawing: [{ x: 0, y: 0 }] });
+    store.set({ cursor: { x: 64, y: 0 } });
+    expect(heard).toBe(2);
+    instance.setOptions({
+      id,
+      map: testMap,
+      tool: "select",
+      highlightedWall: "v9|v10",
+    });
+    expect(heard).toBeGreaterThan(2);
+  });
+
   it("wake no shape for the same map rendered again", () => {
     const instance = mapEditor({ id, map: testMap });
     const parts = listen(instance);

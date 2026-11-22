@@ -857,7 +857,7 @@ export function splitWall(
     );
   // The room around a nested room has no edge of its own on their shared
   // wall, and reads it from the other end.
-  const owners = wallOwners(map).get(wall) ?? [];
+  const owners = line?.sides ? (wallOwners(map).get(wall) ?? []) : [];
   const startFor = (sectorId: string) => {
     const sector = owners.find((item) => item.id === sectorId);
     const own = sector && wallStart(map, sector, wall);

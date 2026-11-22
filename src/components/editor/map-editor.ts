@@ -1334,14 +1334,13 @@ export const mapEditor = definePrimitive({
     measure: slot({
       selects: selects<MapEditorState, unknown, {}>({
         ...readsNothing,
-        map: whole,
         positions: whole,
         moving: whole,
         tool: whole,
+        drawing: whole,
+        cursor: whole,
         highlightedWall: whole,
         drawShape: whole,
-        drawSides: whole,
-        grid: whole,
       }),
       attrs: (state) => measureAttrs(state),
       live: live<MapEditorState, unknown, {}>((state) => measureAttrs(state)),
@@ -1648,7 +1647,7 @@ function measureOf(state: MapEditorState) {
       text:
         drawShape === "rectangle"
           ? `${wide} × ${tall}`
-          : `${Math.round(Math.hypot(wide, tall))} across the middle`,
+          : `${Math.round(Math.hypot(wide, tall) * 2)} across`,
     };
   }
   if (tool !== "select" || !highlightedWall) return null;

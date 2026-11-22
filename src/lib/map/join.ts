@@ -1,51 +1,81 @@
 import type { GameMap, Point } from "./types";
 
 import { splitWall } from "./edit";
-import { cross, sectorEdges, wallKey, wallOwners } from "./geometry";
+import { cross, sectorEdges, wallKey } from "./geometry";
+
+interface Wall {
+  key: string;
+  from: string;
+  to: string;
+  a: Point;
+  b: Point;
+}
 
 interface Cut {
-  wall: string;
+  walls: string[];
   at: Point;
 }
 
 const mostCuts = 512;
 
 // Where a wall of these rooms meets a wall already there, both get a corner
-// at that spot and share it. A corner that sits on another wall's length
-// becomes a corner of that wall, and two walls that cross get one where they
-// cross. A wall that holds a switch stays whole.
+// at that spot and share it. A corner on another wall's length becomes a
+// corner of that wall, and two walls that cross get one where they cross. A
+// wall that holds a switch stays whole.
 export function joinWalls(map: GameMap, ids: string[]): GameMap {
+  const rooms = new Set(ids);
   const skipped = new Set<string>();
   let next = map;
   for (let cuts = 0; cuts < mostCuts; cuts += 1) {
-    const cut = findCut(next, new Set(ids), skipped);
+    const cut = findCut(next, rooms, skipped);
     if (!cut) break;
-    const split = splitWall(next, cut.wall, cut.at, 1, true);
-    if (split) next = split.map;
-    else skipped.add(cutKey(cut));
+    let changed = false;
+    for (const wall of cut.walls) {
+      const split = splitWall(next, wall, cut.at, 1, true);
+      if (!split) continue;
+      next = split.map;
+      changed = true;
+    }
+    if (!changed) skipped.add(cutKey(cut));
   }
   return next;
 }
 
-function findCut(map: GameMap, ids: Set<string>, skipped: Set<string>) {
-  const fresh = new Set(
-    map.sectors
-      .filter((sector) => ids.has(sector.id))
-      .flatMap((sector) =>
-        sectorEdges(sector).map(({ from, to }) => wallKey(from, to)),
-      ),
+// Only the walls near the rooms are looked at, so a room drawn in one corner
+// of a big map costs the same as on a small one.
+function findCut(map: GameMap, rooms: Set<string>, skipped: Set<string>) {
+  const fresh = new Map<string, Wall>();
+  const others = new Map<string, Wall>();
+  for (const sector of map.sectors) {
+    const into = rooms.has(sector.id) ? fresh : others;
+    for (const { from, to } of sectorEdges(sector)) {
+      const key = wallKey(from, to);
+      into.set(key, {
+        key,
+        from,
+        to,
+        a: map.vertices[from],
+        b: map.vertices[to],
+      });
+    }
+  }
+  if (fresh.size === 0) return null;
+  const points = [...fresh.values()].flatMap(({ a, b }) => [a, b]);
+  const left = Math.min(...points.map((point) => point.x)) - 1;
+  const right = Math.max(...points.map((point) => point.x)) + 1;
+  const top = Math.min(...points.map((point) => point.y)) - 1;
+  const bottom = Math.max(...points.map((point) => point.y)) + 1;
+  const near = [...others.values()].filter(
+    ({ key, a, b }) =>
+      !fresh.has(key) &&
+      Math.max(a.x, b.x) >= left &&
+      Math.min(a.x, b.x) <= right &&
+      Math.max(a.y, b.y) >= top &&
+      Math.min(a.y, b.y) <= bottom,
   );
-  const walls = [...wallOwners(map).keys()].map((key) => {
-    const [from, to] = key.split("|");
-    return { key, from, to, a: map.vertices[from], b: map.vertices[to] };
-  });
   const offer = (cut: Cut) => (skipped.has(cutKey(cut)) ? null : cut);
-  for (const mine of walls) {
-    if (!fresh.has(mine.key)) continue;
-    for (const other of walls) {
-      if (other.key === mine.key) continue;
-      // Two walls of the rooms themselves are the drawn shape's own business.
-      if (fresh.has(other.key) && other.key < mine.key) continue;
+  for (const mine of fresh.values()) {
+    for (const other of near) {
       const shared = [other.from, other.to].filter(
         (id) => id === mine.from || id === mine.to,
       );
@@ -55,7 +85,7 @@ function findCut(map: GameMap, ids: Set<string>, skipped: Set<string>) {
         [other.to, other.b],
       ] as const) {
         if (!shared.includes(id) && getIsWithin(mine.a, mine.b, point)) {
-          const cut = offer({ wall: mine.key, at: point });
+          const cut = offer({ walls: [mine.key], at: point });
           if (cut) return cut;
         }
       }
@@ -64,24 +94,21 @@ function findCut(map: GameMap, ids: Set<string>, skipped: Set<string>) {
         [mine.to, mine.b],
       ] as const) {
         if (!shared.includes(id) && getIsWithin(other.a, other.b, point)) {
-          const cut = offer({ wall: other.key, at: point });
+          const cut = offer({ walls: [other.key], at: point });
           if (cut) return cut;
         }
       }
       if (shared.length > 0) continue;
       const at = crossing(mine.a, mine.b, other.a, other.b);
-      if (!at) continue;
-      // Both walls take the same whole-number spot, the nearer one first.
-      const cut =
-        offer({ wall: mine.key, at }) ?? offer({ wall: other.key, at });
+      const cut = at && offer({ walls: [mine.key, other.key], at });
       if (cut) return cut;
     }
   }
   return null;
 }
 
-function cutKey({ wall, at }: Cut) {
-  return `${wall}@${at.x},${at.y}`;
+function cutKey({ walls, at }: Cut) {
+  return `${walls.join("+")}@${at.x},${at.y}`;
 }
 
 // On the wall's length, and at neither of its ends.
@@ -97,8 +124,9 @@ function getIsWithin(a: Point, b: Point, point: Point) {
   );
 }
 
-// Where two walls cut through each other, to the nearest whole unit, or null
-// when they only touch or miss.
+// Where two walls cut through each other, on whole units, or null when they
+// only touch or miss. A crossing within a unit of a wall's end is that end,
+// so no wall a unit long is left over.
 function crossing(a: Point, b: Point, c: Point, d: Point): Point | null {
   const d1 = cross(c, d, a);
   const d2 = cross(c, d, b);
@@ -110,6 +138,9 @@ function crossing(a: Point, b: Point, c: Point, d: Point): Point | null {
     x: Math.round(a.x + (b.x - a.x) * along),
     y: Math.round(a.y + (b.y - a.y) * along),
   };
-  const ends = [a, b, c, d];
-  return ends.some((end) => end.x === at.x && end.y === at.y) ? null : at;
+  return (
+    [a, b, c, d].find(
+      (end) => Math.abs(end.x - at.x) <= 1 && Math.abs(end.y - at.y) <= 1,
+    ) ?? at
+  );
 }

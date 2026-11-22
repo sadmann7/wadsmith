@@ -466,18 +466,41 @@ function validateNeighbors(map: GameMap, issues: MapIssue[]) {
     const polygon = sectorPolygon(map, sector);
     const holes = sectorHoles(map, sector);
     const corners = new Set(sectorVertices(sector));
+    const own = new Set(
+      sectorLoops(sector)
+        .flatMap(loopEdges)
+        .map(({ from, to }) => edgeKey(from, to)),
+    );
     for (const other of nearSectors(index).map((near) => map.sectors[near])) {
-      const free = other.vertices
-        .filter((id) => !corners.has(id))
-        .map((id) => map.vertices[id]);
-      const inside = free.filter((point) => pointInPolygon(point, polygon));
-      if (inside.length === 0) continue;
       const overlap = () =>
         issues.push({
           id: `overlap:${sector.id}:${other.id}`,
           message: `${other.name} overlaps ${sector.name}.`,
           target: other.id,
         });
+      // Two rooms can share every corner where their walls cross and still
+      // lie over each other: then some of the other room's walls run through
+      // this room's floor and some don't.
+      const loose = loopEdges(other.vertices).filter(
+        ({ from, to }) => !own.has(edgeKey(from, to)),
+      );
+      const through = loose.filter(({ from, to }) => {
+        const a = map.vertices[from];
+        const b = map.vertices[to];
+        return pointInSector(map, sector, {
+          x: (a.x + b.x) / 2,
+          y: (a.y + b.y) / 2,
+        });
+      });
+      if (through.length > 0 && through.length < loose.length) {
+        overlap();
+        continue;
+      }
+      const free = other.vertices
+        .filter((id) => !corners.has(id))
+        .map((id) => map.vertices[id]);
+      const inside = free.filter((point) => pointInPolygon(point, polygon));
+      if (inside.length === 0) continue;
       if (inside.length < free.length) {
         overlap();
         continue;
@@ -740,7 +763,7 @@ function validateLines(
           map.things.some(
             (thing) =>
               thing.kind === "teleport-destination" &&
-              pointInSector(map, sector, thing),
+              sectorAt(map, thing) === sector,
           ),
       )
     ) {

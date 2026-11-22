@@ -1,7 +1,7 @@
 import type { GameMap, LineSettings, Point, Sector } from "./types";
 
 import { roomCenter } from "./edit";
-import { pointInSector } from "./geometry";
+import { sectorAt } from "./geometry";
 import { lineUsesTag } from "./lines";
 
 // A line and something it acts on at a distance: the middle of a room it
@@ -54,7 +54,7 @@ function landing(
       ? map.things.find(
           (thing) =>
             thing.kind === "teleport-destination" &&
-            pointInSector(map, sector, thing),
+            sectorAt(map, thing) === sector,
         )
       : undefined;
   return spot ? { x: spot.x, y: spot.y } : roomCenter(map, sector);

@@ -7,6 +7,7 @@ import type { GameMap, Point } from "./types";
 import { addRoom, addSwitch, updateLine } from "./edit";
 import { wallKey, wallOwners } from "./geometry";
 import { joinWalls } from "./join";
+import { shapeCorners } from "./shapes";
 import { validateMap } from "./validate";
 
 const empty: GameMap = { vertices: {}, sectors: [], things: [], switches: [] };
@@ -47,6 +48,67 @@ describe("joining a drawn room to the walls it meets", () => {
     const [first, second] = tall.map.sectors;
     const both = first.vertices.filter((id) => second.vertices.includes(id));
     expect(both).toHaveLength(4);
+    // The rooms still lie over each other, and the checks say so.
+    expect(
+      validateMap(tall.map).map((issue) => issue.id.split(":")[0]),
+    ).toEqual(expect.arrayContaining(["overlap"]));
+  });
+
+  it("shares the corner of a crossing that falls between whole units", () => {
+    const round = addRoom(
+      empty,
+      defined(shapeCorners("polygon", 8, { x: 0, y: 0 }, { x: 200, y: 0 }, 8)),
+      {},
+      1,
+    );
+    const across = drawn(round.map, box(96, -256, 160, -64));
+    const [octagon, rectangle] = across.map.sectors;
+    const both = octagon.vertices.filter((id) =>
+      rectangle.vertices.includes(id),
+    );
+    expect(both).toHaveLength(2);
+    expect(
+      validateMap(across.map).filter((issue) => issue.id.startsWith("cross")),
+    ).toEqual([]);
+    // No wall of either room came out a unit long.
+    for (const sector of across.map.sectors) {
+      sector.vertices.forEach((id, index) => {
+        const a = across.map.vertices[id];
+        const b =
+          across.map.vertices[
+            sector.vertices[(index + 1) % sector.vertices.length]
+          ];
+        expect(Math.hypot(b.x - a.x, b.y - a.y)).toBeGreaterThan(1);
+      });
+    }
+  });
+
+  it("leaves a drawn outline that crosses itself as it is", () => {
+    const twisted = drawn(empty, [
+      { x: 0, y: 0 },
+      { x: 128, y: 128 },
+      { x: 128, y: 0 },
+      { x: 0, y: 128 },
+    ]);
+    expect(twisted.map.sectors[0].vertices).toHaveLength(4);
+  });
+
+  it("looks only at the walls near the new room", () => {
+    let grid = empty;
+    for (let row = 0; row < 30; row += 1) {
+      for (let column = 0; column < 30; column += 1) {
+        grid = addRoom(
+          grid,
+          box(column * 64, row * 64, column * 64 + 64, row * 64 + 64),
+          {},
+          1,
+        ).map;
+      }
+    }
+    const started = performance.now();
+    const across = drawn(grid, box(-32, 16, 1952, 48));
+    expect(across.map.sectors).toHaveLength(901);
+    expect(performance.now() - started).toBeLessThan(2000);
   });
 
   it("keeps a split wall's settings on both halves", () => {
