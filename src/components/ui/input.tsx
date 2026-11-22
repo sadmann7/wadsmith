@@ -3,18 +3,16 @@ import * as React from "react";
 
 import { cn } from "@/lib/cn";
 
-type InputProps = React.ComponentProps<typeof InputPrimitive.Input>;
-
 const variants = {
   default: "min-h-[30px] border-input bg-input/30 px-2 py-1 shadow-xs",
   ghost: "border-transparent bg-transparent px-1.5 hover:border-input",
 };
 
-function Input({
-  variant = "default",
-  className,
-  ...props
-}: InputProps & { variant?: keyof typeof variants }) {
+interface InputProps extends React.ComponentProps<typeof InputPrimitive.Input> {
+  variant?: keyof typeof variants;
+}
+
+function Input({ variant = "default", className, ...props }: InputProps) {
   return (
     <InputPrimitive.Input
       className={cn(
@@ -39,7 +37,10 @@ function InputGroup({ className, ...props }: React.ComponentProps<"label">) {
   );
 }
 
-function InputGroupInput({ className, ...props }: InputProps) {
+function InputGroupInput({
+  className,
+  ...props
+}: React.ComponentProps<typeof InputPrimitive.Input>) {
   return (
     <InputPrimitive.Input
       className={cn(

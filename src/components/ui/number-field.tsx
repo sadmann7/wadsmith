@@ -6,17 +6,15 @@ import { cn } from "@/lib/cn";
 const stepClass =
   "border-0 bg-transparent text-muted-foreground transition-colors hover:not-disabled:bg-input/50 hover:not-disabled:text-foreground disabled:opacity-50";
 
-function NumberField({
-  label,
-  className,
-  ...props
-}: Omit<
+interface NumberFieldProps extends Omit<
   React.ComponentProps<typeof NumberInputPrimitive.NumberInput>,
   "className" | "children"
-> & {
+> {
   label: string;
   className?: string;
-}) {
+}
+
+function NumberField({ label, className, ...props }: NumberFieldProps) {
   return (
     <NumberInputPrimitive.NumberInput {...props}>
       <NumberInputPrimitive.NumberInputGroup

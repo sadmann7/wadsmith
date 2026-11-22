@@ -3,14 +3,18 @@ import * as React from "react";
 
 import { cn } from "@/lib/cn";
 
+interface SegmentedControlProps extends Omit<
+  React.ComponentProps<typeof SegmentedControlPrimitive.SegmentedControl>,
+  "children"
+> {
+  children?: React.ReactNode;
+}
+
 function SegmentedControl({
   className,
   children,
   ...props
-}: Omit<
-  React.ComponentProps<typeof SegmentedControlPrimitive.SegmentedControl>,
-  "children"
-> & { children?: React.ReactNode }) {
+}: SegmentedControlProps) {
   return (
     <SegmentedControlPrimitive.SegmentedControl
       className={cn(

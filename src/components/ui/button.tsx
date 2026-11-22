@@ -37,15 +37,14 @@ function buttonVariants({
   );
 }
 
-function Button({
-  variant,
-  size,
-  className,
-  ...props
-}: React.ComponentProps<typeof ButtonPrimitive.Button> & {
+interface ButtonProps extends React.ComponentProps<
+  typeof ButtonPrimitive.Button
+> {
   variant?: ButtonVariant;
   size?: ButtonSize;
-}) {
+}
+
+function Button({ variant, size, className, ...props }: ButtonProps) {
   return (
     <ButtonPrimitive.Button
       className={cn(buttonVariants({ variant, size }), className)}

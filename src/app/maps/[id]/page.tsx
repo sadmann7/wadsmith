@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
-import { EditorLoader } from "@/editor/editor-loader";
-import { featuredMaps } from "@/map/featured";
+import { EditorLoader } from "@/components/editor-loader";
+import { featuredMaps } from "@/lib/map/featured";
 
 export async function generateMetadata({
   params,

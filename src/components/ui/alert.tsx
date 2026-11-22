@@ -2,11 +2,11 @@ import * as React from "react";
 
 import { cn } from "@/lib/cn";
 
-function Alert({
-  variant = "default",
-  className,
-  ...props
-}: React.ComponentProps<"p"> & { variant?: "default" | "destructive" }) {
+interface AlertProps extends React.ComponentProps<"p"> {
+  variant?: "default" | "destructive";
+}
+
+function Alert({ variant = "default", className, ...props }: AlertProps) {
   return (
     <p
       className={cn(

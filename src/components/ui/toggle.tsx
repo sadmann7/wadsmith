@@ -17,13 +17,17 @@ const toggleVariants = {
     "hover:text-foreground aria-pressed:bg-input/30 aria-pressed:text-foreground aria-pressed:shadow-sm aria-pressed:ring-1 aria-pressed:ring-input aria-pressed:ring-inset",
 };
 
+interface ToggleGroupProps extends React.ComponentProps<
+  typeof TogglePrimitive.ToggleGroup
+> {
+  variant?: keyof typeof groupVariants;
+}
+
 function ToggleGroup({
   variant = "default",
   className,
   ...props
-}: React.ComponentProps<typeof TogglePrimitive.ToggleGroup> & {
-  variant?: keyof typeof groupVariants;
-}) {
+}: ToggleGroupProps) {
   return (
     <TogglePrimitive.ToggleGroup
       className={cn(groupVariants[variant], className)}
@@ -32,13 +36,13 @@ function ToggleGroup({
   );
 }
 
-function Toggle({
-  variant = "default",
-  className,
-  ...props
-}: React.ComponentProps<typeof TogglePrimitive.Toggle> & {
+interface ToggleProps extends React.ComponentProps<
+  typeof TogglePrimitive.Toggle
+> {
   variant?: keyof typeof toggleVariants;
-}) {
+}
+
+function Toggle({ variant = "default", className, ...props }: ToggleProps) {
   return (
     <TogglePrimitive.Toggle
       className={cn(

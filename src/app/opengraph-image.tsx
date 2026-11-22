@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { ImageResponse } from "next/og";
 
-import { starterMap } from "@/map/starter-map";
+import { starterMap } from "@/lib/map/starter-map";
 
 export const alt = "Wadsmith, a Doom map editor for the browser";
 export const size = { width: 1200, height: 630 };
