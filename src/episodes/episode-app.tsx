@@ -693,7 +693,7 @@ function EpisodeApp() {
     [],
   );
 
-  if (!store || episodes.length === 0) {
+  if (!store || episodes.length === 0 || settles === 0) {
     return message ? (
       <Alert variant="destructive" className="m-4" role="alert">
         {message}
