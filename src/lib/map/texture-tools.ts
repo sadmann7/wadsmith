@@ -52,6 +52,18 @@ export function alignWalls(
         : []),
     ];
   };
+  // A bare open wall shows its parts once a floor or ceiling moves, as a
+  // lift's shaft does, so one that would wear the run's texture joins it.
+  const hidden = (key: string) => {
+    const sides = owners.get(key) ?? [];
+    const other = sides.find((item) => item !== sector);
+    return other && !other.door && !switches.has(key)
+      ? [
+          wallPartTexture(map, sector, key, "upper"),
+          wallPartTexture(map, sector, key, "lower"),
+        ]
+      : [];
+  };
   const textures = shown(wall);
   if (!textures || textures.length === 0) return map;
   // A room drawn inside this one shows this room its walls from outside, the
@@ -104,7 +116,10 @@ export function alignWalls(
       offsets.set(edge.key, offset);
     }
     return [...offsets].reduce((next, [key, value]) => {
-      if (shown(key)?.length === 0) return next;
+      const bare = shown(key)?.length === 0;
+      if (bare && !hidden(key).some((item) => textures.includes(item))) {
+        return next;
+      }
       const wrapped = ((value % span) + span) % span;
       const current = next.lines?.[key]?.sides?.[sector.id]?.offsetX ?? 0;
       return wrapped === current

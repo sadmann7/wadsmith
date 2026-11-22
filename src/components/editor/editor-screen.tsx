@@ -1933,10 +1933,13 @@ export function EditorScreen({
                 }
                 onShift={(key, delta) => {
                   const moved = selectedRooms.flatMap((room) => {
-                    const value = Math.max(
-                      roomLimits[key].min,
-                      Math.min(roomLimits[key].max, room[key] + delta),
-                    );
+                    // A room already past a limit stays, and never moves
+                    // against the step.
+                    const { min, max } = roomLimits[key];
+                    const value =
+                      delta > 0
+                        ? Math.max(room[key], Math.min(max, room[key] + delta))
+                        : Math.min(room[key], Math.max(min, room[key] + delta));
                     return (room.door && key === "ceiling") ||
                       value === room[key]
                       ? []

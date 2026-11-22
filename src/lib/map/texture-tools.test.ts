@@ -114,6 +114,25 @@ describe("aligning textures along walls", () => {
     });
   });
 
+  it("aligns a bare wall that will show the texture once a floor moves", () => {
+    // The corridor's wall to the start room shows nothing while their floors
+    // are level, and becomes a shaft wall when the corridor lowers.
+    const level = updateSector(
+      updateSector(testMap, "sector-2", { floor: 0, ceiling: 128 }),
+      "sector-2",
+      { wallTexture: "METAL" },
+    );
+    const open = wallKey("v3", "v4");
+    const aligned = alignWalls(
+      level,
+      "sector-2",
+      wallKey("v3", "v13"),
+      () => 64,
+    );
+    // Round the corridor: 112, the door's 128 and 112 again, wrapped at 64.
+    expect(aligned.lines?.[open]?.sides?.["sector-2"]?.offsetX).toBe(32);
+  });
+
   it("aligns the walls a room shows around a room drawn inside it", () => {
     const riser = wallKey("e", "f");
     const shifted = updateLineSide(islandMap, riser, "yard", { offsetX: 16 });
