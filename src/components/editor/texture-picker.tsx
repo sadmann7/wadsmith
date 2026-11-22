@@ -57,10 +57,7 @@ export function TexturePicker({
   onApply,
   onClose,
 }: TexturePickerProps) {
-  const categories = React.useMemo(
-    () => categoriesFor(kind, common, use, assets.names),
-    [assets.names, common, kind, use],
-  );
+  const categories = categoriesFor(kind, common, use, assets.names);
   const [category, setCategory] = React.useState("all");
   const [query, setQuery] = React.useState("");
   const [chosen, setChosen] = React.useState(value);

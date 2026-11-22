@@ -2,6 +2,10 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   devIndicators: false,
+  reactCompiler: true,
+  experimental: {
+    turbopackRustReactCompiler: true,
+  },
   env: {
     // Co-op players must run the same build, so rooms compare this.
     NEXT_PUBLIC_APP_VERSION:

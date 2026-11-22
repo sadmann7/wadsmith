@@ -264,20 +264,17 @@ export function EditorScreen({
   const [gridSetting, setGridSetting] = React.useState(loadGrid);
   // Snapping off still lands on whole units, which is all the engine stores.
   const grid = gridSetting.snap ? gridSetting.size : 1;
-  const changeGrid = React.useCallback((next: GridSetting) => {
+  const changeGrid = (next: GridSetting) => {
     setGridSetting(next);
     savedGrid.set(JSON.stringify(next));
-  }, []);
-  const stepGrid = React.useCallback(
-    (direction: 1 | -1) => {
-      const at = gridSizes.indexOf(
-        gridSetting.size as (typeof gridSizes)[number],
-      );
-      const next = gridSizes[at + direction];
-      if (next !== undefined) changeGrid({ size: next, snap: true });
-    },
-    [changeGrid, gridSetting.size],
-  );
+  };
+  const stepGrid = (direction: 1 | -1) => {
+    const at = gridSizes.indexOf(
+      gridSetting.size as (typeof gridSizes)[number],
+    );
+    const next = gridSizes[at + direction];
+    if (next !== undefined) changeGrid({ size: next, snap: true });
+  };
   const [thingKind, setThingKind] = React.useState<ThingKind>("imp");
   const [activeSector, setActiveSector] = React.useState<string | null>(
     "sector-3",
@@ -364,18 +361,11 @@ export function EditorScreen({
     [assets, iwad],
   );
   // Doom II's things don't exist in a Doom 1 game.
-  const placeable = React.useMemo(
-    () =>
-      iwadGame.doom2
-        ? thingKinds
-        : thingKinds.filter((kind) => !thingCatalog[kind].doom2),
-    [iwadGame],
-  );
+  const placeable = iwadGame.doom2
+    ? thingKinds
+    : thingKinds.filter((kind) => !thingCatalog[kind].doom2);
   const checks = React.useMemo(() => checkMap(map, context), [context, map]);
-  const issues = React.useMemo(
-    () => checks.filter((issue) => issue.severity === "error"),
-    [checks],
-  );
+  const issues = checks.filter((issue) => issue.severity === "error");
   const canPlay = issues.length === 0;
   const liveHealth: MapHealth = checks.some(
     (issue) => issue.severity === "error",
@@ -402,17 +392,13 @@ export function EditorScreen({
     checks.length === 0
       ? "Ready"
       : `${checks.length} ${checks.length === 1 ? "problem" : "problems"}`;
-  const callouts = React.useMemo(
-    () =>
-      issues.slice(0, 5).flatMap((issue) => {
-        const target = issue.target ? targetForIssue(map, issue.target) : null;
-        const point = target ? pointOfTarget(map, target) : null;
-        return point
-          ? [{ id: issue.id, ...point, text: issueText(issue).title }]
-          : [];
-      }),
-    [issues, map],
-  );
+  const callouts = issues.slice(0, 5).flatMap((issue) => {
+    const target = issue.target ? targetForIssue(map, issue.target) : null;
+    const point = target ? pointOfTarget(map, target) : null;
+    return point
+      ? [{ id: issue.id, ...point, text: issueText(issue).title }]
+      : [];
+  });
   const sector = map.sectors.find((item) => item.id === activeSector);
   const selectedThingKey = selection.find((key) =>
     key.startsWith(thingKeyPrefix),
@@ -429,28 +415,22 @@ export function EditorScreen({
   );
   const doors = map.sectors.filter((item) => item.door);
 
-  const showMap = React.useCallback(
-    (next: GameMap) => {
-      setMap(next);
-      onSave(next);
-      syncUndoable();
-    },
-    [onSave, syncUndoable],
-  );
+  const showMap = (next: GameMap) => {
+    setMap(next);
+    onSave(next);
+    syncUndoable();
+  };
 
   const commit = (next: GameMap, group?: string) => {
     history.record(next, group ? { group } : undefined);
     showMap(next);
   };
 
-  const restore = React.useCallback(
-    (next: GameMap | undefined) => {
-      if (!next) return;
-      showMap(next);
-      setSelection([]);
-    },
-    [showMap],
-  );
+  const restore = (next: GameMap | undefined) => {
+    if (!next) return;
+    showMap(next);
+    setSelection([]);
+  };
   const undo = () => restore(history.undo());
   const redo = () => restore(history.redo());
 
@@ -507,49 +487,37 @@ export function EditorScreen({
     shortcut("help"),
   );
 
-  const surfaceInfo = React.useMemo(
-    () => describeSurface(map, surface),
-    [map, surface],
-  );
+  const surfaceInfo = describeSurface(map, surface);
 
   React.useEffect(() => {
     camera.sync(map);
   }, [camera, map]);
 
-  const changeLayout = React.useCallback(
-    (next: ViewLayout) => {
-      setLayout(next);
-      saveLayout(next, splitSizes.current, showDock);
-      if (next === "scene") {
-        setTool((current) =>
-          current === "draw" || current === "line" || current === "switch"
-            ? "select"
-            : current,
-        );
-      }
-    },
-    [showDock],
-  );
+  const changeLayout = (next: ViewLayout) => {
+    setLayout(next);
+    saveLayout(next, splitSizes.current, showDock);
+    if (next === "scene") {
+      setTool((current) =>
+        current === "draw" || current === "line" || current === "switch"
+          ? "select"
+          : current,
+      );
+    }
+  };
 
-  const chooseMode = React.useCallback(
-    (mode: RailMode) => {
-      if (mode === "draw" || mode === "line") {
-        if (visibleLayout !== "scene") setTool(mode);
-        return;
-      }
-      setEditMode(mode);
-      setTool("select");
-    },
-    [visibleLayout],
-  );
+  const chooseMode = (mode: RailMode) => {
+    if (mode === "draw" || mode === "line") {
+      if (visibleLayout !== "scene") setTool(mode);
+      return;
+    }
+    setEditMode(mode);
+    setTool("select");
+  };
 
-  const togglePane = React.useCallback(
-    (pane: SinglePane) => {
-      if (narrow) return;
-      changeLayout(visibleLayout === "split" ? pane : "split");
-    },
-    [changeLayout, narrow, visibleLayout],
-  );
+  const togglePane = (pane: SinglePane) => {
+    if (narrow) return;
+    changeLayout(visibleLayout === "split" ? pane : "split");
+  };
 
   useShortcut(
     editorShortcuts.vertices.keys,
@@ -628,31 +596,29 @@ export function EditorScreen({
     setFindCameraRequest((request) => request + 1);
   };
 
-  const sceneSelection = React.useMemo(() => {
-    if (surfaceInfo) return surface;
-    const key = selection[0];
-    if (key?.startsWith(thingKeyPrefix)) return key;
-    if (key?.startsWith(switchKeyPrefix)) {
-      const item = map.switches.find(
-        (entry) => `${switchKeyPrefix}${entry.id}` === key,
-      );
-      return item
-        ? surfaceKey({
-            kind: "wall",
-            sector: item.sector,
-            wall: wallKey(item.from, item.to),
-            part: "middle",
-          })
-        : null;
-    }
-    return activeSector
-      ? surfaceKey({ kind: "floor", sector: activeSector })
-      : null;
-  }, [activeSector, map.switches, selection, surface, surfaceInfo]);
-  const sceneInfo = React.useMemo(
-    () => describeSurface(map, sceneSelection),
-    [map, sceneSelection],
-  );
+  const selectedKey = selection[0];
+  const selectedSceneSwitch = selectedKey?.startsWith(switchKeyPrefix)
+    ? map.switches.find(
+        (entry) => `${switchKeyPrefix}${entry.id}` === selectedKey,
+      )
+    : undefined;
+  const sceneSelection = surfaceInfo
+    ? surface
+    : selectedKey?.startsWith(thingKeyPrefix)
+      ? selectedKey
+      : selectedKey?.startsWith(switchKeyPrefix)
+        ? selectedSceneSwitch
+          ? surfaceKey({
+              kind: "wall",
+              sector: selectedSceneSwitch.sector,
+              wall: wallKey(selectedSceneSwitch.from, selectedSceneSwitch.to),
+              part: "middle",
+            })
+          : null
+        : activeSector
+          ? surfaceKey({ kind: "floor", sector: activeSector })
+          : null;
+  const sceneInfo = describeSurface(map, sceneSelection);
   const parsedSurface = surface ? parseSurface(surface) : null;
   const selectedWall =
     surfaceInfo && parsedSurface?.kind === "wall" ? parsedSurface : null;
@@ -820,7 +786,7 @@ export function EditorScreen({
     }
   };
 
-  const lineCount = React.useMemo(() => wallOwners(map).size, [map]);
+  const lineCount = wallOwners(map).size;
 
   const showMapCheck = () => {
     mapCheck.current?.scrollIntoView({ block: "nearest" });

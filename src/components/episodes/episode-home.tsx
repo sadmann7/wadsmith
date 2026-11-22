@@ -289,11 +289,8 @@ export function EpisodeHome({
   const accepted = React.useRef(false);
   const episodeFile = React.useRef<HTMLInputElement>(null);
   const { durable } = sidebar;
-  const sorted = React.useMemo(() => bySlot(maps), [maps]);
-  const byId = React.useMemo(
-    () => new Map(sorted.map((entry) => [entry.id, entry])),
-    [sorted],
-  );
+  const sorted = bySlot(maps);
+  const byId = new Map(sorted.map((entry) => [entry.id, entry]));
   const nextSlot = freeSlots(maps, undefined, game)[0];
   const lastEdited = Math.max(...maps.map((entry) => entry.editedAt));
   const label = (slot: string) => engineSlot(slot, game);
@@ -338,10 +335,7 @@ export function EpisodeHome({
     (action: MapAction, entry: EpisodeMap) => latestAct.current(action, entry),
     [],
   );
-  const order = React.useMemo(
-    () => saving ?? sorted.map((entry) => entry.id),
-    [saving, sorted],
-  );
+  const order = saving ?? sorted.map((entry) => entry.id);
 
   return (
     <AppShell

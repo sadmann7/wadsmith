@@ -66,165 +66,141 @@ export function MapCanvas({
   const area = crowded ? (seen ?? nowhere) : null;
   const selection = props.selection ?? noSelection;
 
-  const shapes = React.useMemo(
-    () => (
-      <>
-        {paintOrder(map).map((sector) => (
-          <MapSector
-            key={sector.id}
-            value={sector.id}
-            corners={sector.vertices}
-            holes={sector.holes}
-            door={!!sector.door}
-            className="map-sector"
-          />
-        ))}
-        {wallsOf(map).map((wall) => (
-          <MapWall
-            key={wall.key}
-            value={wall.key}
-            from={wall.from}
-            to={wall.to}
-            className="map-wall"
-            data-portal={wall.shared ? "" : undefined}
-            data-detail={wall.detail ? "" : undefined}
-          />
-        ))}
-        {map.switches.flatMap((item) =>
-          item.door
-            ? [
-                <MapWire
-                  key={item.id}
-                  value={item.id}
-                  from={`${switchKeyPrefix}${item.id}`}
-                  to={`${doorKeyPrefix}${item.door}`}
-                  className="map-wire"
-                />,
-              ]
-            : [],
-        )}
-      </>
-    ),
-    [map],
-  );
-
-  const rooms = React.useMemo(
-    () =>
-      map.sectors
-        .filter((sector) => !sector.door)
-        .map((sector, index) => ({
-          sector,
-          number: String(index + 1).padStart(2, "0"),
-          box: boxOf(map, sector),
-        })),
-    [map],
-  );
-
-  const labels = React.useMemo(
-    () =>
-      clearOf(
-        rooms.filter(
-          ({ box }) =>
-            (box.right - box.left) * labelStep >= labelWidth &&
-            (!area ||
-              (box.right >= area.left &&
-                box.left <= area.right &&
-                box.bottom >= area.top &&
-                box.top <= area.bottom)),
-        ),
-        labelStep,
-      ).map(({ sector, number, box }) => (
-        <MapLabel
+  const shapes = (
+    <>
+      {paintOrder(map).map((sector) => (
+        <MapSector
           key={sector.id}
           value={sector.id}
           corners={sector.vertices}
-          className="map-label"
-          style={
-            { "--room-width": box.right - box.left } as React.CSSProperties
-          }
+          holes={sector.holes}
+          door={!!sector.door}
+          className="map-sector"
+        />
+      ))}
+      {wallsOf(map).map((wall) => (
+        <MapWall
+          key={wall.key}
+          value={wall.key}
+          from={wall.from}
+          to={wall.to}
+          className="map-wall"
+          data-portal={wall.shared ? "" : undefined}
+          data-detail={wall.detail ? "" : undefined}
+        />
+      ))}
+      {map.switches.flatMap((item) =>
+        item.door
+          ? [
+              <MapWire
+                key={item.id}
+                value={item.id}
+                from={`${switchKeyPrefix}${item.id}`}
+                to={`${doorKeyPrefix}${item.door}`}
+                className="map-wire"
+              />,
+            ]
+          : [],
+      )}
+    </>
+  );
+
+  const rooms = map.sectors
+    .filter((sector) => !sector.door)
+    .map((sector, index) => ({
+      sector,
+      number: String(index + 1).padStart(2, "0"),
+      box: boxOf(map, sector),
+    }));
+
+  const labels = clearOf(
+    rooms.filter(
+      ({ box }) =>
+        (box.right - box.left) * labelStep >= labelWidth &&
+        (!area ||
+          (box.right >= area.left &&
+            box.left <= area.right &&
+            box.bottom >= area.top &&
+            box.top <= area.bottom)),
+    ),
+    labelStep,
+  ).map(({ sector, number, box }) => (
+    <MapLabel
+      key={sector.id}
+      value={sector.id}
+      corners={sector.vertices}
+      className="map-label"
+      style={{ "--room-width": box.right - box.left } as React.CSSProperties}
+    >
+      <strong>{sector.name}</strong>
+      <span>
+        S{number} {sector.floor}/{sector.ceiling}
+      </span>
+    </MapLabel>
+  ));
+
+  const handles = Object.entries(map.vertices)
+    .filter(
+      ([id, point]) =>
+        (corners && inArea(area, point)) || selection.includes(id),
+    )
+    .map(([id]) => id)
+    .map((id) => (
+      <MapHandle
+        key={id}
+        value={id}
+        className="map-vertex"
+        aria-label={`Corner ${id}`}
+      />
+    ));
+
+  const things = map.things
+    .filter(
+      (thing) =>
+        inArea(area, thing) ||
+        selection.includes(`${thingKeyPrefix}${thing.id}`),
+    )
+    .map((thing) => {
+      const { label } = thingCatalog[thing.kind];
+      const { style, icon } = thingLook(thing.kind);
+      const startNumber = /^player-(\d)$/.exec(thing.kind)?.[1];
+      return (
+        <MapHandle
+          key={thing.id}
+          value={`${thingKeyPrefix}${thing.id}`}
+          className="map-thing"
+          aria-label={label}
+          title={label}
+          style={style}
         >
-          <strong>{sector.name}</strong>
-          <span>
-            S{number} {sector.floor}/{sector.ceiling}
-          </span>
-        </MapLabel>
-      )),
-    [rooms, labelStep, area],
-  );
+          {far ? null : (startNumber ?? icon)}
+        </MapHandle>
+      );
+    });
 
-  const handles = React.useMemo(
-    () =>
-      Object.entries(map.vertices)
-        .filter(
-          ([id, point]) =>
-            (corners && inArea(area, point)) || selection.includes(id),
-        )
-        .map(([id]) => id)
-        .map((id) => (
-          <MapHandle
-            key={id}
-            value={id}
-            className="map-vertex"
-            aria-label={`Corner ${id}`}
-          />
-        )),
-    [map, corners, area, selection],
-  );
-
-  const things = React.useMemo(
-    () =>
-      map.things
-        .filter(
-          (thing) =>
-            inArea(area, thing) ||
-            selection.includes(`${thingKeyPrefix}${thing.id}`),
-        )
-        .map((thing) => {
-          const { label } = thingCatalog[thing.kind];
-          const { style, icon } = thingLook(thing.kind);
-          const startNumber = /^player-(\d)$/.exec(thing.kind)?.[1];
-          return (
-            <MapHandle
-              key={thing.id}
-              value={`${thingKeyPrefix}${thing.id}`}
-              className="map-thing"
-              aria-label={label}
-              title={label}
-              style={style}
-            >
-              {far ? null : (startNumber ?? icon)}
-            </MapHandle>
-          );
-        }),
-    [map, far, area, selection],
-  );
-
-  const ports = React.useMemo(
-    () => (
-      <>
-        {map.sectors
-          .filter((sector) => sector.door)
-          .map((sector) => (
-            <MapPort
-              key={sector.id}
-              value={`${doorKeyPrefix}${sector.id}`}
-              className="map-port map-door"
-              aria-label={`Door: ${sector.name}`}
-              title={sector.name}
-            />
-          ))}
-        {map.switches.map((item) => (
+  const ports = (
+    <>
+      {map.sectors
+        .filter((sector) => sector.door)
+        .map((sector) => (
           <MapPort
-            key={item.id}
-            value={`${switchKeyPrefix}${item.id}`}
-            className="map-port map-switch"
-            aria-label={`Switch ${item.id}. Drag to a door, or press C.`}
-            title="Drag to a door"
+            key={sector.id}
+            value={`${doorKeyPrefix}${sector.id}`}
+            className="map-port map-door"
+            aria-label={`Door: ${sector.name}`}
+            title={sector.name}
           />
         ))}
-      </>
-    ),
-    [map],
+      {map.switches.map((item) => (
+        <MapPort
+          key={item.id}
+          value={`${switchKeyPrefix}${item.id}`}
+          className="map-port map-switch"
+          aria-label={`Switch ${item.id}. Drag to a door, or press C.`}
+          title="Drag to a door"
+        />
+      ))}
+    </>
   );
 
   return (
