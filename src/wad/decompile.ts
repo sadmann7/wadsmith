@@ -1,5 +1,3 @@
-import earcut from "earcut";
-
 import {
   doorTextures,
   sectorEffects,
@@ -12,7 +10,12 @@ import {
   freedoomWalls,
   middleTextures,
 } from "../map/freedoom-textures";
-import { pointInPolygon, signedArea, wallKey } from "../map/geometry";
+import {
+  pointInPolygon,
+  sectorVertices,
+  signedArea,
+  wallKey,
+} from "../map/geometry";
 import {
   closesDoor,
   isFast,
@@ -56,6 +59,9 @@ type ImportReport = {
 };
 
 type Edge = { from: number; to: number };
+
+// Openings are holes that other rooms fill, which still bound this one.
+type Region = { outer: number[]; holes: number[][]; openings: number[][] };
 
 const lineBlocksAll = 0x0001;
 const lineBlocksEnemies = 0x0002;
@@ -143,10 +149,6 @@ const thingKindOf = new Map<number, ThingKind>(
 const walls = new Set<string>(freedoomWalls);
 const flats = new Set<string>(freedoomFlats);
 
-function cross(o: Point, a: Point, b: Point) {
-  return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
-}
-
 // Keeping the sector on the right and turning as far right as possible walks
 // the smallest outline around it, so a sector that touches itself at a corner
 // comes back as two outlines.
@@ -230,139 +232,6 @@ function holeInside(hole: number[], outer: number[], points: Point[]) {
     return pointInPolygon(center, polygon);
   }
   return free.every((index) => pointInPolygon(points[index], polygon));
-}
-
-function cornerAngle(at: Point, p: Point, q: Point) {
-  const ux = p.x - at.x;
-  const uy = p.y - at.y;
-  const vx = q.x - at.x;
-  const vy = q.y - at.y;
-  return Math.abs(Math.atan2(ux * vy - uy * vx, ux * vx + uy * vy));
-}
-
-function counterClockwise(polygon: number[], points: Point[]) {
-  return areaOf(polygon, points) < 0 ? polygon.toReversed() : polygon;
-}
-
-// Earcut cuts a sector with holes into triangles, then neighbors merge back
-// across their thinnest cuts first, so the cuts that remain are well shaped.
-function cutHoles(outer: number[], holes: number[][], points: Point[]) {
-  const order = [outer, ...holes].flat();
-  const holeStarts: number[] = [];
-  let count = outer.length;
-  for (const hole of holes) {
-    holeStarts.push(count);
-    count += hole.length;
-  }
-  const flat = order.flatMap((index) => [points[index].x, points[index].y]);
-  const corners = earcut(flat, holeStarts);
-  let pieces: number[][] = [];
-  for (let index = 0; index < corners.length; index += 3) {
-    const triangle = corners
-      .slice(index, index + 3)
-      .map((corner) => order[corner]);
-    if (new Set(triangle).size < 3) continue;
-    if (Math.abs(areaOf(triangle, points)) < 0.5) continue;
-    pieces.push(
-      addCornersOnEdges(counterClockwise(triangle, points), order, points),
-    );
-  }
-
-  const outline = new Set(
-    [outer, ...holes].flatMap((loop) =>
-      loop.map((vertex, index) =>
-        wallKey(String(vertex), String(loop[(index + 1) % loop.length])),
-      ),
-    ),
-  );
-  const cuts = new Map<string, { from: number; to: number; score: number }>();
-  for (const triangle of pieces) {
-    if (triangle.length !== 3) continue;
-    triangle.forEach((from, index) => {
-      const to = triangle[(index + 1) % 3];
-      const third = triangle[(index + 2) % 3];
-      const key = wallKey(String(from), String(to));
-      if (outline.has(key)) return;
-      const score = Math.min(
-        cornerAngle(points[from], points[to], points[third]),
-        cornerAngle(points[to], points[from], points[third]),
-      );
-      cuts.set(key, {
-        from,
-        to,
-        score: Math.min(cuts.get(key)?.score ?? Infinity, score),
-      });
-    });
-  }
-  const merged: (number[] | null)[] = pieces;
-  const owner = new Map<string, number>();
-  const own = (index: number) =>
-    merged[index]!.forEach((from, at, piece) =>
-      owner.set(`${from}>${piece[(at + 1) % piece.length]}`, index),
-    );
-  merged.forEach((_, index) => own(index));
-  for (const cut of [...cuts.values()].toSorted((a, b) => a.score - b.score)) {
-    const first = owner.get(`${cut.to}>${cut.from}`);
-    const second = owner.get(`${cut.from}>${cut.to}`);
-    if (first === undefined || second === undefined || first === second) {
-      continue;
-    }
-    const join = joinPieces(merged[first]!, merged[second]!, cut.from, cut.to);
-    if (!join || new Set(join).size !== join.length) continue;
-    merged[first] = join;
-    merged[second] = null;
-    owner.delete(`${cut.to}>${cut.from}`);
-    owner.delete(`${cut.from}>${cut.to}`);
-    own(first);
-  }
-  pieces = merged.filter((piece) => piece !== null);
-  return pieces;
-}
-
-// Earcut skips corners that sit in a straight line along a wall, so they go
-// back into the triangles' edges and neighbors share the same corners.
-function addCornersOnEdges(
-  piece: number[],
-  corners: number[],
-  points: Point[],
-) {
-  return piece.flatMap((from, index) => {
-    const to = piece[(index + 1) % piece.length];
-    const a = points[from];
-    const b = points[to];
-    const length = (b.x - a.x) ** 2 + (b.y - a.y) ** 2;
-    const along = corners
-      .filter((corner) => {
-        if (piece.includes(corner)) return false;
-        const c = points[corner];
-        if (cross(a, b, c) !== 0) return false;
-        const t = (c.x - a.x) * (b.x - a.x) + (c.y - a.y) * (b.y - a.y);
-        return t > 0 && t < length;
-      })
-      .toSorted(
-        (p, q) =>
-          (points[p].x - a.x) ** 2 +
-          (points[p].y - a.y) ** 2 -
-          ((points[q].x - a.x) ** 2 + (points[q].y - a.y) ** 2),
-      );
-    return [from, ...along];
-  });
-}
-
-// `first` runs to -> from along the shared edge and `second` runs from -> to.
-function joinPieces(
-  first: number[],
-  second: number[],
-  from: number,
-  to: number,
-) {
-  const start = first.indexOf(from);
-  const end = second.indexOf(to);
-  if (start < 0 || end < 0) return null;
-  const firstPart = [...first.slice(start), ...first.slice(0, start)];
-  const secondPart = [...second.slice(end), ...second.slice(0, end)];
-  if (firstPart.at(-1) !== to || secondPart.at(-1) !== from) return null;
-  return [...firstPart.slice(0, -1), ...secondPart.slice(0, -1)];
 }
 
 // One sector can hold two doors apart, but pieces cut from one door would
@@ -459,32 +328,29 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
     }
   }
 
-  const pieces = doom.sectors.map((_, index) => {
+  // A sector made of separate areas becomes a room for each, and a hole in
+  // one belongs to the smallest area around it.
+  const pieces = doom.sectors.map((_, index): Region[] => {
     const { loops, broken } = traceLoops(sectorEdges[index], points);
     if (broken || loops.length === 0) {
       if (sectorEdges[index].length > 0) report.skippedSectors += 1;
       return [];
     }
-    const outers = loops
+    const regions = loops
       .filter((loop) => areaOf(loop, points) < -0.5)
       .toSorted(
         (a, b) => Math.abs(areaOf(a, points)) - Math.abs(areaOf(b, points)),
-      );
-    const holes = new Map<number[], number[][]>(
-      outers.map((loop) => [loop, []]),
-    );
+      )
+      .map((outer): Region => ({ outer, holes: [], openings: [] }));
     for (const loop of loops) {
       if (areaOf(loop, points) <= 0.5) continue;
-      const host = outers.find((outer) => holeInside(loop, outer, points));
-      if (host) holes.get(host)!.push(loop);
+      const host = regions.find((region) =>
+        holeInside(loop, region.outer, points),
+      );
+      if (host) host.holes.push(loop);
     }
-    const result = outers.flatMap((outer) => {
-      const inner = holes.get(outer)!;
-      if (inner.length === 0) return [outer];
-      return cutHoles(outer, inner, points);
-    });
-    if (result.length > 1) report.splitSectors += 1;
-    return result;
+    if (regions.length > 1) report.splitSectors += 1;
+    return regions;
   });
 
   const doorCandidates = new Map<number, DoorSettings["opensBy"] | null>();
@@ -527,7 +393,7 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
   for (const [index, opensBy] of doorCandidates) {
     const sector = doom.sectors[index];
     if (!opensBy || sector.ceiling > sector.floor) continue;
-    if (piecesTouch(pieces[index])) {
+    if (piecesTouch(pieces[index].map((region) => region.outer))) {
       report.plainDoors += 1;
       continue;
     }
@@ -577,6 +443,32 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
     pieces[index] = [];
   }
 
+  // A hole that other rooms fill is just those rooms drawn inside this one,
+  // and one with solid wall around any part of it stays a pillar.
+  const lineAt = new Map<string, (typeof lines)[number]>();
+  for (const line of lines) {
+    lineAt.set(wallKey(String(line.start), String(line.end)), line);
+  }
+  pieces.forEach((regions, index) => {
+    for (const region of regions) {
+      const pillars: number[][] = [];
+      for (const hole of region.holes) {
+        const solid = hole.some((vertex, at) => {
+          const line = lineAt.get(
+            wallKey(String(vertex), String(hole[(at + 1) % hole.length])),
+          );
+          const other =
+            line?.frontSector === index
+              ? line.backSector
+              : (line?.frontSector ?? null);
+          return other === null || pieces[other].length === 0;
+        });
+        (solid ? pillars : region.openings).push(hole);
+      }
+      region.holes = pillars;
+    }
+  });
+
   const ids = pieces.map((list, index) =>
     list.map((_, part) =>
       list.length > 1 ? `s${index}-${part + 1}` : `s${index}`,
@@ -584,14 +476,16 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
   );
   const edgeOwner = new Map<string, { sector: number; id: string }>();
   pieces.forEach((list, sector) =>
-    list.forEach((loop, part) =>
-      loop.forEach((vertex, at) => {
-        const next = loop[(at + 1) % loop.length];
-        edgeOwner.set(`${sector}:${wallKey(String(vertex), String(next))}`, {
-          sector,
-          id: ids[sector][part],
-        });
-      }),
+    list.forEach((region, part) =>
+      [region.outer, ...region.holes, ...region.openings].forEach((loop) =>
+        loop.forEach((vertex, at) => {
+          const next = loop[(at + 1) % loop.length];
+          edgeOwner.set(`${sector}:${wallKey(String(vertex), String(next))}`, {
+            sector,
+            id: ids[sector][part],
+          });
+        }),
+      ),
     ),
   );
   const vertexId = (index: number) => `v${index}`;
@@ -658,14 +552,17 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
       ceiling = opened;
     }
 
-    pieces[index].forEach((loop, part) => {
+    pieces[index].forEach((region, part) => {
       const sector: Sector = {
         id: ids[index][part],
         name:
           pieces[index].length > 1
             ? `Sector ${index} part ${part + 1}`
             : `Sector ${index}`,
-        vertices: loop.map(vertexId),
+        vertices: region.outer.map(vertexId),
+        ...(region.holes.length > 0
+          ? { holes: region.holes.map((hole) => hole.map(vertexId)) }
+          : {}),
         floor: source.floor,
         ceiling,
         light: Math.min(255, Math.max(0, source.light)),
@@ -804,12 +701,14 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
     if (Object.keys(entry).length > 0) settings[key] = entry;
   }
 
-  const polygons = sectors.map((sector) =>
-    sector.vertices.map((id) => {
-      const point = points[Number(id.slice(1))];
-      return { x: point.x, y: point.y };
-    }),
-  );
+  const doomPoint = (id: string) => points[Number(id.slice(1))];
+  const regionsOf = sectors.map((sector) => ({
+    outer: sector.vertices.map(doomPoint),
+    holes: (sector.holes ?? []).map((hole) => hole.map(doomPoint)),
+  }));
+  const insideRoom = (point: Point, at: number) =>
+    pointInPolygon(point, regionsOf[at].outer) &&
+    !regionsOf[at].holes.some((hole) => pointInPolygon(point, hole));
   const things: Thing[] = [];
   doom.things.forEach((source, index) => {
     const kind = thingKindOf.get(source.type);
@@ -830,7 +729,7 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
       report.multiplayerThings += 1;
       return;
     }
-    if (!polygons.some((polygon) => pointInPolygon(source, polygon))) {
+    if (!regionsOf.some((_, at) => insideRoom(source, at))) {
       report.outsideThings += 1;
       return;
     }
@@ -856,7 +755,7 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
           .filter(
             (sector, at) =>
               sector.tag !== undefined &&
-              pointInPolygon({ x: thing.x, y: -thing.y }, polygons[at]),
+              insideRoom({ x: thing.x, y: -thing.y }, at),
           )
           .map((sector) => sector.tag),
       ),
@@ -875,7 +774,7 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
     report.droppedActions[group] = (report.droppedActions[group] ?? 0) + 1;
   }
 
-  const used = new Set(sectors.flatMap((sector) => sector.vertices));
+  const used = new Set(sectors.flatMap(sectorVertices));
   const vertices = Object.fromEntries(
     [...used].map((id) => {
       const point = points[Number(id.slice(1))];

@@ -1,8 +1,10 @@
 import { doorTrackTexture, thingCatalog } from "../map/catalog";
 import {
+  loopEdges,
+  loopPolygon,
   sectorAt,
   sectorEdges,
-  sectorPolygon,
+  sectorLoops,
   signedArea,
   wallKey,
   wallOwners,
@@ -92,28 +94,54 @@ function wallsBySector(map: GameMap) {
   const switches = new Map(
     map.switches.map((item) => [wallKey(item.from, item.to), item.texture]),
   );
-  const walls = new Map(
-    map.sectors.map((sector) => {
-      // The engine runs textures left to right as seen from inside the room.
-      const flipped = signedArea(sectorPolygon(map, sector)) < 0;
-      return [
-        sector.id,
-        sectorEdges(sector).map(({ from, to }): Wall => {
-          const key = wallKey(from, to);
-          const line = map.lines?.[key];
-          return {
-            a: map.vertices[flipped ? to : from],
-            b: map.vertices[flipped ? from : to],
-            key,
-            neighbor: owners.get(key)?.find((item) => item !== sector) ?? null,
-            switchTexture: switches.get(key) ?? null,
-            line,
-            side: line?.sides?.[sector.id],
-          };
-        }),
-      ];
-    }),
+  const drawn = new Set<string>();
+  for (const sector of map.sectors) {
+    for (const { from, to } of sectorEdges(sector)) {
+      drawn.add(`${sector.id}:${wallKey(from, to)}`);
+    }
+  }
+  const walls = new Map<string, Wall[]>(
+    map.sectors.map((sector) => [sector.id, []]),
   );
+  const wallOf = (
+    sector: Sector,
+    a: Point,
+    b: Point,
+    key: string,
+    neighbor: Sector | null,
+  ): Wall => {
+    const line = map.lines?.[key];
+    return {
+      a,
+      b,
+      key,
+      neighbor,
+      switchTexture: switches.get(key) ?? null,
+      line,
+      side: line?.sides?.[sector.id],
+    };
+  };
+  for (const sector of map.sectors) {
+    sectorLoops(sector).forEach((loop, at) => {
+      // The engine runs textures left to right as seen from inside the room,
+      // and a pillar's walls face the other way round.
+      const clockwise = signedArea(loopPolygon(map, loop)) < 0;
+      const flipped = at > 0 ? !clockwise : clockwise;
+      for (const { from, to } of loopEdges(loop)) {
+        const key = wallKey(from, to);
+        const owning = owners.get(key) ?? [];
+        if (!owning.includes(sector)) continue;
+        const neighbor = owning.find((item) => item !== sector) ?? null;
+        const a = map.vertices[flipped ? to : from];
+        const b = map.vertices[flipped ? from : to];
+        walls.get(sector.id)!.push(wallOf(sector, a, b, key, neighbor));
+        // A wall that opens onto the room around it is that room's wall too.
+        if (neighbor && !drawn.has(`${neighbor.id}:${key}`)) {
+          walls.get(neighbor.id)!.push(wallOf(neighbor, b, a, key, sector));
+        }
+      }
+    });
+  }
   sectorWalls.set(map, walls);
   return walls;
 }
@@ -246,6 +274,9 @@ function renderScene(
     let top = 0;
     let bottom = height - 1;
     let entered = "";
+    // A room's walls include those of the rooms drawn inside it, so a wall
+    // the ray has already passed can't be the next one it meets.
+    let reached = 0.01;
 
     const drawFlat = (
       from: number,
@@ -281,7 +312,7 @@ function renderScene(
         const oy = wall.a.y - camera.y;
         const distance = (ox * ey - oy * ex) / denominator;
         const along = (ox * ray.y - oy * ray.x) / denominator;
-        if (distance > 0.01 && along >= -1e-6 && along <= 1 + 1e-6) {
+        if (distance > reached && along >= -1e-6 && along <= 1 + 1e-6) {
           if (!hit || distance < hit.distance) {
             hit = { wall, distance, along: along * Math.hypot(ex, ey) };
           }
@@ -392,6 +423,7 @@ function renderScene(
       bottom = Math.min(bottom, Math.min(floorRow, lowerRow));
       if (top > bottom) break;
       entered = wall.key;
+      reached = distance;
       sector = next;
     }
   }

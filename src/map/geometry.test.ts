@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   pointInPolygon,
   sectorAt,
-  sectorBox,
   sectorPolygon,
   wallOwners,
 } from "./geometry";
@@ -73,6 +72,29 @@ describe("sectorAt", () => {
     expect(sectorAt(map, { x: 50, y: 250 })).toBeUndefined();
   });
 
+  it("finds the room drawn inside another, whichever is listed first", () => {
+    const vertices = {
+      a: { x: 0, y: 0 },
+      b: { x: 400, y: 0 },
+      c: { x: 400, y: 400 },
+      d: { x: 0, y: 400 },
+      e: { x: 100, y: 100 },
+      f: { x: 200, y: 100 },
+      g: { x: 200, y: 200 },
+      h: { x: 100, y: 200 },
+    };
+    const outer = room("outer", ["a", "b", "c", "d"]);
+    const inner = room("inner", ["e", "f", "g", "h"]);
+    for (const sectors of [
+      [outer, inner],
+      [inner, outer],
+    ]) {
+      const map: GameMap = { vertices, sectors, things: [], switches: [] };
+      expect(sectorAt(map, { x: 150, y: 150 })?.id).toBe("inner");
+      expect(sectorAt(map, { x: 50, y: 50 })?.id).toBe("outer");
+    }
+  });
+
   it("finds a room far from the origin and on both sides of a grid line", () => {
     const map: GameMap = {
       vertices: {
@@ -97,17 +119,6 @@ describe("sectorAt", () => {
     };
     expect(sectorAt(map, { x: 100, y: 100 })?.id).toBe("sector-1");
     expect(sectorAt(map, { x: 300, y: 10 })?.id).toBe("sector-1");
-  });
-});
-
-describe("sectorBox", () => {
-  it("bounds a room", () => {
-    expect(sectorBox(testMap, testMap.sectors[1])).toEqual({
-      left: 384,
-      top: 96,
-      right: 496,
-      bottom: 224,
-    });
   });
 });
 

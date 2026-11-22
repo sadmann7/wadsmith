@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { checkMap } from "../map/checks";
 import { starterMap } from "../map/starter-map";
 import { serializeMap } from "../map/storage";
 import { validateMap } from "../map/validate";
@@ -251,17 +252,25 @@ describe("episode order", () => {
 
   it("names a map that passes its checks but won't build", () => {
     const [entry] = episodeMaps("p", "one");
+    const status = mapStatus(entry, "Room 1 overlaps another room's wall.");
+    expect(status.kind).toBe("error");
+    expect(status.label).toBe("Won't build");
+  });
+
+  it("catches a room drawn twice before the build", () => {
+    const [entry] = episodeMaps("p", "one");
     const [room] = entry.map.sectors;
-    const overlapping = {
+    const doubled = {
       ...entry,
       map: {
         ...entry.map,
         sectors: [...entry.map.sectors, { ...room, id: `${room.id}-copy` }],
       },
     };
-    const status = mapStatus(overlapping, buildProblem(overlapping.map));
-    expect(status.kind).toBe("error");
-    expect(status.label).toBe("Won't build");
+    expect(mapStatus(doubled, buildProblem(doubled.map)).kind).toBe("error");
+    expect(
+      checkMap(doubled.map).some((issue) => issue.id.startsWith("same-side:")),
+    ).toBe(true);
   });
 });
 

@@ -23,6 +23,7 @@ import {
   ChevronRight,
   Compass,
   Copy,
+  Cuboid,
   DoorOpen,
   EyeOff,
   Grid3x3,
@@ -34,6 +35,7 @@ import {
   Plus,
   Replace,
   Shield,
+  Square,
   ToggleRight,
   Trash2,
   Unlink,
@@ -53,8 +55,11 @@ import {
   defaultDoor,
   duplicateThings,
   faceThings,
+  fillHole,
   freeWallAt,
   gridSize,
+  makePillar,
+  removeHole,
   removeSector,
   removeSwitch,
   removeThings,
@@ -67,7 +72,7 @@ import {
   updateSwitch,
   type RoomSide,
 } from "../map/edit";
-import { sectorAt, wallOwners } from "../map/geometry";
+import { containerOf, sectorAt, wallOwners } from "../map/geometry";
 import {
   describeLine,
   fitLineAction,
@@ -456,6 +461,9 @@ function RoomMenu({
   const holdsPlayer = map.things.some(
     (thing) => thing.kind === "player" && sectorAt(map, thing) === room,
   );
+  const container = containerOf(map, room);
+  const holdsThing = map.things.some((thing) => sectorAt(map, thing) === room);
+  const pillar = holdsThing ? null : makePillar(map, room.id);
   return (
     <>
       <Heading>
@@ -490,6 +498,16 @@ function RoomMenu({
       >
         {room.door ? "Make room" : "Make door"}
       </Item>
+      <Item
+        icon={Cuboid}
+        disabled={!pillar}
+        onSelect={() =>
+          pillar &&
+          onCommit(pillar, { keys: [], sector: container?.id ?? null })
+        }
+      >
+        Make pillar
+      </Item>
       <Rule />
       <ShowItem {...props} />
       <CameraItem {...props} point={point} />
@@ -503,6 +521,42 @@ function RoomMenu({
         }
       >
         {room.door ? "Delete door" : "Delete room"}
+      </Item>
+    </>
+  );
+}
+
+function HoleMenu({
+  sector,
+  index,
+  ...props
+}: BodyProps & { sector: string; index: number; target: MapTarget }) {
+  const { map, onCommit } = props;
+  const room = map.sectors.find((item) => item.id === sector);
+  if (!room) return null;
+  return (
+    <>
+      <Heading>Pillar · {room.name}</Heading>
+      <Item
+        icon={Square}
+        onSelect={() => {
+          const filled = fillHole(map, sector, index);
+          if (filled) onCommit(filled.map, { keys: [], sector: filled.id });
+        }}
+      >
+        Make room
+      </Item>
+      <Rule />
+      <ShowItem {...props} />
+      <Rule />
+      <Item
+        icon={Trash2}
+        destructive
+        onSelect={() =>
+          onCommit(removeHole(map, sector, index), { keys: [], sector })
+        }
+      >
+        Delete pillar
       </Item>
     </>
   );
@@ -731,6 +785,9 @@ function MenuBody({ target, ...props }: BodyProps & { target: MapTarget }) {
     return <SwitchMenu {...shared} id={target.id} />;
   if (target.kind === "wall") {
     return <WallMenu {...shared} sector={target.sector} wall={target.wall} />;
+  }
+  if (target.kind === "hole") {
+    return <HoleMenu {...shared} sector={target.sector} index={target.index} />;
   }
   return <EmptyMenu {...shared} />;
 }

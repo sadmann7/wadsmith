@@ -7,7 +7,8 @@ import { thingKinds } from "../map/catalog";
 import { updateLine, updateLineSide, updateSector } from "../map/edit";
 import { parseMapFile, serializeMap } from "../map/storage";
 import { wallKey } from "../map/geometry";
-import { testMap } from "../map/test-map";
+import { makePillar } from "../map/edit";
+import { islandMap, testMap } from "../map/test-map";
 import {
   describeSurface,
   moveSurfaceHeight,
@@ -289,5 +290,24 @@ describe.skipIf(!existsSync(wadPath))("readWadAssets", () => {
       expect(wad.sprite(kind) === null, kind).toBe(unseen.includes(kind));
     }
     expect(wad.shades[256 * 31 + 100]).not.toBe(wad.shades[100]);
+  });
+});
+
+describe("rooms inside rooms", () => {
+  const camera = { x: 256, y: 64, angle: 270 };
+
+  it("looks over a raised room's step onto its floor", () => {
+    const pick = renderStarter(islandMap, camera);
+    expect(pick(160, 170)).toBe("floor:yard");
+    expect(pick(160, 130)).toBe("wall:yard:e|f:lower");
+    expect(pick(160, 109)).toBe("floor:stage");
+    expect(pick(160, 90)).toBe("wall:yard:c|d:middle");
+    expect(pick(160, 20)).toBe("ceiling:stage");
+  });
+
+  it("shows a pillar as solid wall", () => {
+    const pick = renderStarter(makePillar(islandMap, "stage")!, camera);
+    expect(pick(160, 100)).toBe("wall:yard:e|f:middle");
+    expect(pick(160, 170)).toBe("floor:yard");
   });
 });

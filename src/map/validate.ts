@@ -1,17 +1,26 @@
 import {
+  boxOf,
+  containerOf,
+  loopEdges,
+  loopPolygon,
   pointInPolygon,
+  pointInSector,
   sectorAt,
   sectorEdges,
+  sectorHoles,
+  sectorLoops,
   sectorPolygon,
+  sectorVertices,
   segmentsIntersect,
   signedArea,
   wallKey,
   wallOwners,
+  type Box,
 } from "./geometry";
 import { appearsOn } from "./balance";
 import { isPlayerStart, keyThings, thingCatalog, thingKinds } from "./catalog";
 import { describeLine, lineUsesTag, movesSector, opensDoor } from "./lines";
-import type { GameMap, Point, Sector, ThingSkill } from "./types";
+import type { GameMap, Sector, ThingSkill } from "./types";
 
 type MapIssue = {
   id: string;
@@ -28,17 +37,6 @@ const playerHeight = 56;
 
 const gridSize = 256;
 const maxCells = 4096;
-
-type Box = { left: number; top: number; right: number; bottom: number };
-
-function boxOf(points: Point[]): Box {
-  return {
-    left: Math.min(...points.map((point) => point.x)),
-    right: Math.max(...points.map((point) => point.x)),
-    top: Math.min(...points.map((point) => point.y)),
-    bottom: Math.max(...points.map((point) => point.y)),
-  };
-}
 
 // Imported maps have thousands of walls, so each wall or room is only
 // compared with the ones whose bounds meet its own.
@@ -97,6 +95,12 @@ function edgeKey(a: string, b: string) {
   return a < b ? `${a}|${b}` : `${b}|${a}`;
 }
 
+function sharesCorner(a: { from: string; to: string }, b: typeof a) {
+  return (
+    a.from === b.from || a.from === b.to || a.to === b.from || a.to === b.to
+  );
+}
+
 function validateSector(
   map: GameMap,
   sector: Sector,
@@ -110,15 +114,16 @@ function validateSector(
       target: sector.id,
     });
 
-  if (new Set(sector.vertices).size !== sector.vertices.length) {
+  const loops = sectorLoops(sector);
+  if (loops.some((loop) => new Set(loop).size !== loop.length)) {
     add("repeat", "uses the same corner twice.");
     return;
   }
-  if (sector.vertices.length < 3) {
+  if (loops.some((loop) => loop.length < 3)) {
     add("corners", "needs at least 3 corners.");
     return;
   }
-  if (sector.vertices.some((id) => !map.vertices[id])) {
+  if (sectorVertices(sector).some((id) => !map.vertices[id])) {
     add("missing", "references a corner that no longer exists.");
     return;
   }
@@ -145,8 +150,8 @@ function validateSector(
   }
   const edges = sectorEdges(sector);
   for (let i = 0; i < edges.length; i += 1) {
-    for (let j = i + 2; j < edges.length; j += 1) {
-      if (i === 0 && j === edges.length - 1) continue;
+    for (let j = i + 1; j < edges.length; j += 1) {
+      if (sharesCorner(edges[i], edges[j])) continue;
       if (
         segmentsIntersect(
           map.vertices[edges[i].from],
@@ -156,6 +161,44 @@ function validateSector(
         )
       ) {
         add("twist", "has walls that cross each other.");
+        return;
+      }
+    }
+  }
+
+  const holes = sectorHoles(map, sector);
+  if (holes.some((hole) => Math.abs(signedArea(hole)) < 1)) {
+    add("pillar-area", "has a pillar with no area.");
+  }
+  const outerWalls = new Set(
+    loopEdges(sector.vertices).map(({ from, to }) => edgeKey(from, to)),
+  );
+  const corners = new Set(sector.vertices);
+  const pillars = sector.holes ?? [];
+  for (const [index, hole] of pillars.entries()) {
+    if (
+      loopEdges(hole).some(({ from, to }) => outerWalls.has(edgeKey(from, to)))
+    ) {
+      add("pillar-wall", "has a pillar on one of its walls.");
+      return;
+    }
+    if (
+      hole.some(
+        (id) => !corners.has(id) && !pointInPolygon(map.vertices[id], polygon),
+      )
+    ) {
+      add("pillar-outside", "has a pillar outside its walls.");
+      return;
+    }
+    const shared = new Set(hole);
+    for (const other of pillars.slice(index + 1)) {
+      if (
+        other.some(
+          (id) =>
+            !shared.has(id) && pointInPolygon(map.vertices[id], holes[index]),
+        )
+      ) {
+        add("pillar-overlap", "has pillars that overlap.");
         return;
       }
     }
@@ -194,14 +237,7 @@ function validateNeighbors(map: GameMap, issues: MapIssue[]) {
       if (j <= i) continue;
       const a = walls[i];
       const b = walls[j];
-      if (
-        a.from === b.from ||
-        a.from === b.to ||
-        a.to === b.from ||
-        a.to === b.to
-      ) {
-        continue;
-      }
+      if (sharesCorner(a, b)) continue;
       if (
         segmentsIntersect(
           map.vertices[a.from],
@@ -220,21 +256,89 @@ function validateNeighbors(map: GameMap, issues: MapIssue[]) {
     }
   }
 
+  // Two rooms on the same side of one wall both claim the floor beside it,
+  // unless one is drawn against a pillar in the other and covers that side.
+  const facing = new Map<
+    string,
+    { sector: Sector; from: string; pillar: boolean }[]
+  >();
+  for (const sector of map.sectors) {
+    sectorLoops(sector).forEach((loop, at) => {
+      const clockwise = signedArea(loopPolygon(map, loop)) < 0;
+      const oriented = (at > 0 ? clockwise : !clockwise)
+        ? loop.toReversed()
+        : loop;
+      for (const { from, to } of loopEdges(oriented)) {
+        const key = edgeKey(from, to);
+        facing.set(key, [
+          ...(facing.get(key) ?? []),
+          { sector, from, pillar: at > 0 },
+        ]);
+      }
+    });
+  }
+  for (const [key, sides] of facing) {
+    const [a, b] = sides;
+    if (!b || a.from !== b.from) continue;
+    const covered = (room: typeof a, pillar: typeof a) =>
+      pillar.pillar && containerOf(map, room.sector) === pillar.sector;
+    if (covered(a, b) || covered(b, a)) continue;
+    issues.push({
+      id: `same-side:${key}`,
+      message: `${a.sector.name} and ${b.sector.name} are on the same side of one wall.`,
+      target: b.sector.id,
+    });
+  }
+
+  // A room drawn wholly inside another is fine, and so is one inside a
+  // pillar, which is empty space. Anything in between is two rooms fighting
+  // over the same floor.
   const nearSectors = nearby(
     map.sectors.map((sector) => boxOf(sectorPolygon(map, sector))),
   );
   for (const [index, sector] of map.sectors.entries()) {
     const polygon = sectorPolygon(map, sector);
+    const holes = sectorHoles(map, sector);
+    const corners = new Set(sectorVertices(sector));
     for (const other of nearSectors(index).map((near) => map.sectors[near])) {
-      const shared = new Set(sector.vertices);
-      const inside = other.vertices.some(
-        (id) => !shared.has(id) && pointInPolygon(map.vertices[id], polygon),
-      );
-      if (inside) {
+      const free = other.vertices
+        .filter((id) => !corners.has(id))
+        .map((id) => map.vertices[id]);
+      const inside = free.filter((point) => pointInPolygon(point, polygon));
+      if (inside.length === 0) continue;
+      const overlap = () =>
         issues.push({
           id: `overlap:${sector.id}:${other.id}`,
           message: `${other.name} overlaps ${sector.name}.`,
           target: other.id,
+        });
+      if (inside.length < free.length) {
+        overlap();
+        continue;
+      }
+      const inHoles = free.filter((point) =>
+        holes.some((hole) => pointInPolygon(point, hole)),
+      );
+      if (inHoles.length === free.length) continue;
+      if (inHoles.length > 0) {
+        overlap();
+        continue;
+      }
+      const otherCorners = new Set(sectorVertices(other));
+      const otherPolygon = sectorPolygon(map, other);
+      if (
+        (sector.holes ?? []).some((hole) =>
+          hole.some(
+            (id) =>
+              !otherCorners.has(id) &&
+              pointInPolygon(map.vertices[id], otherPolygon),
+          ),
+        )
+      ) {
+        issues.push({
+          id: `pillar-inside:${sector.id}:${other.id}`,
+          message: `A pillar in ${sector.name} is inside ${other.name}.`,
+          target: sector.id,
         });
       }
     }
@@ -380,7 +484,7 @@ function validateLines(map: GameMap, issues: MapIssue[], actions: LineActions) {
           map.things.some(
             (thing) =>
               thing.kind === "teleport-destination" &&
-              pointInPolygon(thing, sectorPolygon(map, sector)),
+              pointInSector(map, sector, thing),
           ),
       )
     ) {

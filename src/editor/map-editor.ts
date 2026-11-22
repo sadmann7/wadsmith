@@ -43,7 +43,7 @@ import {
   wallNear,
   type RoomSide,
 } from "../map/edit";
-import { sectorAt, wallKey } from "../map/geometry";
+import { holeAt, loopsPath, sectorAt, wallKey } from "../map/geometry";
 import {
   isDragging,
   isKeyboardMenu,
@@ -275,17 +275,25 @@ function connectingAttrs(state: MapEditorState) {
   };
 }
 
-function polygonPoints(state: MapEditorState, corners: readonly string[]) {
-  return corners
-    .map((corner) => {
-      const point = pointOf(state, corner);
-      return `${point.x},${point.y}`;
-    })
-    .join(" ");
+function sectorPath(
+  state: MapEditorState,
+  corners: readonly string[],
+  holes: readonly string[][] = [],
+) {
+  return loopsPath(
+    [corners, ...holes].map((loop) =>
+      loop.map((vertex) => pointOf(state, vertex)),
+    ),
+  );
 }
 
 type KeyedProps = { value: string };
-type SectorProps = { value: string; corners: string[]; door: boolean };
+type SectorProps = {
+  value: string;
+  corners: string[];
+  holes?: string[][];
+  door: boolean;
+};
 type WallProps = { value: string; from: string; to: string };
 type LabelProps = { value: string; corners: string[] };
 
@@ -323,6 +331,10 @@ function movedDraft(
   if (after && after.keys !== before?.keys) {
     for (const key of after.keys) notify(key);
   }
+}
+
+function sectorCorners({ corners, holes = [] }: SectorProps) {
+  return [...corners, ...holes.flat()];
 }
 
 function draftPoints(state: MapEditorState) {
@@ -760,8 +772,10 @@ const mapEditor = definePrimitive({
           : wallTarget(wall.sector, wall.wall, point);
       }
       const room = sectorAt(state.map, at);
-      return room
-        ? { kind: "room", sector: room.id, point }
+      if (room) return { kind: "room", sector: room.id, point };
+      const hole = holeAt(state.map, at);
+      return hole
+        ? { kind: "hole", sector: hole.sector.id, index: hole.index, point }
         : { kind: "empty", point };
     };
 
@@ -1155,20 +1169,25 @@ const mapEditor = definePrimitive({
       })),
     }),
     sector: slot<SectorProps>({
-      props: { value: "string", corners: "list", door: "boolean" },
+      props: {
+        value: "string",
+        corners: "list",
+        holes: "value",
+        door: "boolean",
+      },
       selects: selects<MapEditorState, any, SectorProps>({
         ...readsNothing,
-        positions: ({ props }) => props.corners,
+        positions: ({ props }) => sectorCorners(props),
         moving: whole,
         activeSector: ({ key }) => [key],
       }),
       attrs: (state, { key, props }) => ({
-        points: polygonPoints(state, props.corners),
+        d: sectorPath(state, props.corners, props.holes),
         "data-active": state.activeSector === key ? "" : undefined,
         "data-door": props.door ? "" : undefined,
       }),
       live: live<MapEditorState, any, SectorProps>((state, { props }) => ({
-        points: polygonPoints(state, props.corners),
+        d: sectorPath(state, props.corners, props.holes),
       })),
     }),
     wall: slot<WallProps>({
@@ -1366,7 +1385,7 @@ const mapEditor = definePrimitive({
 const parts = createParts(mapEditor, {
   root: "div",
   world: "div",
-  sector: "polygon",
+  sector: "path",
   wall: "line",
   draft: "polyline",
   handle: "button",

@@ -97,7 +97,7 @@ import {
   parseSurface,
   surfaceKey,
 } from "../map/surfaces";
-import { sectorAt, wallKey, wallOwners } from "../map/geometry";
+import { sectorAt, sectorEdges, wallKey, wallOwners } from "../map/geometry";
 import { createFlatAssets, readWadAssets } from "../wad/assets";
 import { compileMap } from "../wad/compile";
 import { Button, buttonVariants } from "../components/ui/button";
@@ -210,7 +210,7 @@ function subscribeNarrow(listener: () => void) {
   return () => query.removeEventListener("change", listener);
 }
 
-function isNarrow() {
+function getIsNarrow() {
   return matchMedia(narrowQuery).matches;
 }
 
@@ -378,7 +378,7 @@ function App({
     clientX: number;
     clientY: number;
   } | null>(null);
-  const narrow = React.useSyncExternalStore(subscribeNarrow, isNarrow);
+  const narrow = React.useSyncExternalStore(subscribeNarrow, getIsNarrow);
   const visibleLayout = narrow && layout === "split" ? "map" : layout;
   const [surface, setSurface] = React.useState<string | null>(null);
   const [assets, setAssets] = React.useState(createFlatAssets);
@@ -924,7 +924,7 @@ function App({
                   : line.front.name
               }`
             : sector
-              ? `${sector.door ? "Door" : "Sector"} · ${sector.vertices.length} walls`
+              ? `${sector.door ? "Door" : "Sector"} · ${sectorEdges(sector).length} walls`
               : "Click a room, line or thing on the map";
 
   const play = () => {
@@ -1050,7 +1050,7 @@ function App({
               <MenuTrigger
                 className={buttonVariants({
                   variant: "text",
-                  className: "min-h-[24px]",
+                  className: "min-h-6",
                 })}
               >
                 File
@@ -1069,7 +1069,7 @@ function App({
               <MenuTrigger
                 className={buttonVariants({
                   variant: "text",
-                  className: "min-h-[24px]",
+                  className: "min-h-6",
                 })}
               >
                 Edit
@@ -1077,7 +1077,6 @@ function App({
               <MenuContent>
                 <MenuItem
                   value="undo"
-
                   shortcut={editorShortcuts.undo.keys}
                   disabled={!history.canUndo()}
                 >
@@ -1085,7 +1084,6 @@ function App({
                 </MenuItem>
                 <MenuItem
                   value="redo"
-
                   shortcut={editorShortcuts.redo.keys}
                   disabled={!history.canRedo()}
                 >
@@ -1097,18 +1095,14 @@ function App({
               <MenuTrigger
                 className={buttonVariants({
                   variant: "text",
-                  className: "min-h-[24px]",
+                  className: "min-h-6",
                 })}
               >
                 View
               </MenuTrigger>
               <MenuContent>
                 <MenuItem value="map">Map</MenuItem>
-                <MenuItem
-                  value="split"
-
-                  disabled={narrow}
-                >
+                <MenuItem value="split" disabled={narrow}>
                   Split
                 </MenuItem>
                 <MenuItem value="scene">3D</MenuItem>
@@ -1120,7 +1114,6 @@ function App({
                 <MenuSeparator />
                 <MenuItem
                   value="shortcuts"
-
                   shortcut={editorShortcuts.help.keys}
                 >
                   Keyboard shortcuts
@@ -1131,31 +1124,19 @@ function App({
               <MenuTrigger
                 className={buttonVariants({
                   variant: "text",
-                  className: "min-h-[24px]",
+                  className: "min-h-6",
                 })}
               >
                 Map
               </MenuTrigger>
               <MenuContent>
-                <MenuItem
-                  value="check"
-
-                  disabled={checks.length === 0}
-                >
+                <MenuItem value="check" disabled={checks.length === 0}>
                   Check map
                 </MenuItem>
-                <MenuItem
-                  value="play"
-
-                  disabled={!canPlay}
-                >
+                <MenuItem value="play" disabled={!canPlay}>
                   Play
                 </MenuItem>
-                <MenuItem
-                  value="coop"
-
-                  disabled={!canPlayCoop}
-                >
+                <MenuItem value="coop" disabled={!canPlayCoop}>
                   Play together…
                 </MenuItem>
               </MenuContent>
@@ -1176,7 +1157,6 @@ function App({
             <Button
               variant="ghost"
               size="icon"
-
               aria-label="Undo"
               title="Undo"
               disabled={!history.canUndo()}
@@ -1187,7 +1167,6 @@ function App({
             <Button
               variant="ghost"
               size="icon"
-
               aria-label="Redo"
               title="Redo"
               disabled={!history.canRedo()}
@@ -1208,7 +1187,6 @@ function App({
             ) : (
               <Button
                 variant="ghost"
-
                 title="Open map check"
                 aria-label={`Map check: ${mapStatus}`}
                 onClick={showMapCheck}
@@ -1232,7 +1210,6 @@ function App({
             <Button
               variant="primary"
               ref={playButton}
-
               disabled={!canPlay}
               onClick={play}
             >
@@ -1374,7 +1351,6 @@ function App({
                       <div className="flex gap-2">
                         <Button
                           variant="primary"
-
                           disabled={!canPlay}
                           onClick={play}
                         >
