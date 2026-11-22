@@ -85,6 +85,7 @@ import {
   newLineAction,
   triggersFor,
 } from "@/map/lines";
+import { isGeneralized } from "@/map/boom";
 import type { GameMap, Point, Thing, ThingKind } from "@/map/types";
 import { validateMap } from "@/map/validate";
 import {
@@ -576,7 +577,7 @@ function WallMenu({
 }: BodyProps & { sector: string; wall: string; target: MapTarget }) {
   const { map, target, onCommit, grid } = props;
   const line = describeLine(map, wall, sector);
-  const { action, blocksEnemies, hidden } = line.settings;
+  const { action, blocksEnemies, hidden, raw } = line.settings;
   const free = freeWallAt(map, wall);
   const detail =
     (wallOwners(map).get(wall) ?? []).filter((item) => item.id === sector)
@@ -589,7 +590,12 @@ function WallMenu({
   );
   const chooseAction = (kind: string) => {
     if (!isLineActionKind(kind)) {
-      onCommit(updateLine(map, wall, { action: undefined }));
+      onCommit(
+        updateLine(map, wall, {
+          action: undefined,
+          raw: raw && isGeneralized(raw.special) ? undefined : raw,
+        }),
+      );
       return;
     }
     onCommit(
@@ -598,6 +604,8 @@ function WallMenu({
           ? fitLineAction({ ...action, kind }, line.twoSided)
           : newLineAction(line.twoSided, kind),
         scrolls: undefined,
+        raw: undefined,
+        shut: undefined,
       }),
     );
   };

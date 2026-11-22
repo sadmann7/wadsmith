@@ -22,6 +22,7 @@ import {
   removeHole,
   removeSector,
   removeThings,
+  setDoorTexture,
   setLineTarget,
   snapCorners,
   snapPoint,
@@ -62,6 +63,13 @@ import {
 } from "@/map/lines";
 import { mapBalance } from "@/map/balance";
 import {
+  generalizedClass,
+  generalizedFields,
+  generalizedTrigger,
+  newGeneralized,
+  withField,
+} from "@/map/boom";
+import {
   ceilingTextures,
   floorTextures,
   thingCatalog,
@@ -71,11 +79,12 @@ import {
 import { buildChecks, checkMap, fixIssue, issueText } from "@/map/checks";
 import { wadFileName } from "@/editor/build-dialog";
 import { freedoomFlats, freedoomWalls } from "@/map/freedoom-textures";
+import { describeSurface, paintSurface, surfaceKey } from "@/map/surfaces";
 import { wallUse } from "@/map/textures";
 import { islandMap, testMap } from "@/map/test-map";
 import { parseMapFile, serializeMap } from "@/map/storage";
 import type { GameMap, LineAction } from "@/map/types";
-import { validateMap } from "@/map/validate";
+import { inspectMap, validateMap } from "@/map/validate";
 import { buildLevel, compileLumps, compileMap, toDoom } from "./compile";
 import { inspectWads } from "./inspect";
 import { buildNodes, subsectorFlag } from "./nodes";
@@ -2186,5 +2195,212 @@ describe("map check", () => {
     ).toBe(true);
     expect(wallTextures.every((name) => walls.includes(name))).toBe(true);
     expect([...flats, ...walls].every((name) => name.length <= 8)).toBe(true);
+  });
+});
+
+describe("doors line by line", () => {
+  const useDoor: GameMap = {
+    ...testMap,
+    switches: [],
+    sectors: testMap.sectors.map((sector) =>
+      sector.id === "sector-4"
+        ? {
+            ...sector,
+            door: { opensBy: "use", closes: true, texture: "BIGDOOR2" },
+          }
+        : sector,
+    ),
+  };
+  const corridorSide = wallKey("v13", "v14");
+  const arenaSide = wallKey("v7", "v8");
+  const tracks = [wallKey("v13", "v7"), wallKey("v8", "v14")];
+
+  function sidesOf(map: GameMap) {
+    const linedefs = new DataView(lump(map, "LINEDEFS").buffer);
+    const sidedefs = lump(map, "SIDEDEFS");
+    const text = new TextDecoder("latin1");
+    const name = (at: number) =>
+      text.decode(sidedefs.subarray(at, at + 8)).replace(/\0+$/, "");
+    const side = (index: number) =>
+      index === 0xffff
+        ? null
+        : {
+            upper: name(index * 30 + 4),
+            lower: name(index * 30 + 12),
+            middle: name(index * 30 + 20),
+            sector: new DataView(sidedefs.buffer).getInt16(
+              index * 30 + 28,
+              true,
+            ),
+          };
+    return buildLevel(map).lines.map((line, index) => ({
+      wall: line.wall,
+      front: side(linedefs.getUint16(index * 14 + 10, true)),
+      back: side(linedefs.getUint16(index * 14 + 12, true)),
+    }));
+  }
+
+  it("lets each line into a door open it its own way or not at all", () => {
+    const map: GameMap = {
+      ...useDoor,
+      lines: {
+        [corridorSide]: { shut: true },
+        [arenaSide]: {
+          action: {
+            kind: "door-open",
+            trigger: "door",
+            repeat: false,
+            tag: 5,
+          },
+        },
+        [tracks[0]]: { lowerFixed: false },
+      },
+    };
+    expect(validateMap(map)).toEqual([]);
+    const lines = linesOf(map);
+    const byWall = (wall: string) =>
+      lines.find((item) => item.line.wall === wall)!;
+    expect(byWall(corridorSide)).toMatchObject({ special: 0, tag: 0 });
+    expect(byWall(arenaSide)).toMatchObject({ special: 31, tag: 5 });
+    expect(
+      linesOf(useDoor).find((item) => item.line.wall === corridorSide),
+    ).toMatchObject({ special: 1 });
+    // Door tracks stay pegged to the floor unless the line opts out.
+    expect(byWall(tracks[0]).flags & 0x10).toBe(0);
+    expect(byWall(tracks[1]).flags & 0x10).toBe(0x10);
+    expect(parseMapFile(serializeMap(map))).toEqual(map);
+  });
+
+  it("reports a door no line opens unless something else does", () => {
+    const shut: GameMap = {
+      ...useDoor,
+      lines: { [corridorSide]: { shut: true }, [arenaSide]: { shut: true } },
+    };
+    const shutDoors = (map: GameMap) =>
+      inspectMap(map).warnings.map((issue) => issue.id);
+    expect(validateMap(shut)).toEqual([]);
+    expect(shutDoors(shut)).toEqual(["door-shut:sector-4"]);
+    // A line with its own action gives up the door's special.
+    const exits: GameMap = {
+      ...useDoor,
+      lines: {
+        [corridorSide]: { shut: true },
+        [arenaSide]: {
+          action: { kind: "exit", trigger: "switch", repeat: false, tag: 0 },
+        },
+      },
+    };
+    expect(shutDoors(exits)).toEqual(["door-shut:sector-4"]);
+    const wired: GameMap = {
+      ...shut,
+      switches: [{ ...testMap.switches[0], door: "sector-4" }],
+    };
+    expect(shutDoors(wired)).toEqual([]);
+    const opened: GameMap = {
+      ...shut,
+      sectors: shut.sectors.map((sector) =>
+        sector.id === "sector-4" ? { ...sector, tag: 7 } : sector,
+      ),
+      lines: {
+        ...shut.lines,
+        [wallKey("v1", "v15")]: {
+          action: {
+            kind: "door-raise",
+            trigger: "switch",
+            repeat: true,
+            tag: 7,
+          },
+        },
+      },
+    };
+    expect(shutDoors(opened)).toEqual([]);
+    const byRaw: GameMap = {
+      ...opened,
+      lines: {
+        ...shut.lines,
+        [wallKey("v1", "v15")]: { raw: { special: 63, tag: 7 } },
+      },
+    };
+    expect(shutDoors(byRaw)).toEqual([]);
+  });
+
+  it("paints one face of a door or the whole door", () => {
+    const face = surfaceKey({
+      kind: "wall",
+      sector: "sector-3",
+      wall: arenaSide,
+      part: "upper",
+    });
+    const painted = paintSurface(useDoor, face, "BIGDOOR1");
+    expect(painted.lines?.[arenaSide]?.sides?.["sector-3"]?.upper).toBe(
+      "BIGDOOR1",
+    );
+    expect(describeSurface(painted, face)?.texture).toBe("BIGDOOR1");
+    expect(describeSurface(useDoor, face)?.texture).toBe("BIGDOOR2");
+    const sides = sidesOf(painted).find((item) => item.wall === arenaSide)!;
+    expect(
+      [sides.front, sides.back].find((side) => side?.sector === 2)?.upper,
+    ).toBe("BIGDOOR1");
+    expect(
+      [sides.front, sides.back].find((side) => side?.sector === 3)?.upper,
+    ).toBe("BIGDOOR2");
+    // Painting the door's own texture on a face takes the override away, and
+    // painting the whole door changes every face.
+    expect(paintSurface(painted, face, "BIGDOOR2").lines).toBeUndefined();
+    const whole = paintSurface(painted, face, "BIGDOOR4", true);
+    expect(whole.sectors[3].door?.texture).toBe("BIGDOOR4");
+    expect(whole.lines).toBeUndefined();
+    expect(setDoorTexture(painted, "sector-4", "BIGDOOR4")).toEqual(whole);
+    const small = paintSurface(useDoor, face, "DOOR1");
+    expect(parseMapFile(serializeMap(small))).toEqual(small);
+  });
+
+  it("builds a Boom special from its fields and aims it at a sector", () => {
+    const wall = wallKey("e", "f");
+    const start = generalizedClass("floor")!.start;
+    const crusher = generalizedClass("crusher")!;
+    expect(newGeneralized(crusher, true)).toBe(crusher.start);
+    expect(generalizedTrigger(newGeneralized(crusher, false))).toMatchObject({
+      trigger: "switch",
+    });
+    const raw = updateLine(islandMap, wall, {
+      raw: { special: start, tag: 0 },
+    });
+    const aimed = setLineTarget(raw, wall, "yard");
+    const tag = aimed.sectors[0].tag!;
+    expect(tag).toBeGreaterThan(0);
+    expect(aimed.lines?.[wall]?.raw).toEqual({ special: start, tag });
+    expect(validateMap(aimed).map((issue) => issue.id)).toEqual([
+      `line-level:${wall}`,
+    ]);
+    const boom: GameMap = { ...aimed, complevel: "boom" };
+    expect(validateMap(boom)).toEqual([]);
+    expect(linesOf(boom).find((item) => item.line.wall === wall)).toMatchObject(
+      { special: start, tag },
+    );
+    // Nothing walks over or presses the back of a wall with nothing behind.
+    const trigger = generalizedFields(start).find(
+      (field) => field.id === "trigger",
+    )!;
+    const outerWall = wallKey("a", "b");
+    const walked: GameMap = {
+      ...boom,
+      lines: {
+        [outerWall]: { raw: { special: withField(start, trigger, 0), tag } },
+      },
+    };
+    expect(validateMap(walked).map((issue) => issue.id)).toEqual([
+      `line-walk:${outerWall}`,
+    ]);
+    const pressed: GameMap = {
+      ...boom,
+      lines: {
+        [outerWall]: { raw: { special: withField(start, trigger, 7), tag } },
+      },
+    };
+    expect(validateMap(pressed).map((issue) => issue.id)).toEqual([
+      `line-door:${outerWall}`,
+    ]);
+    expect(setLineTarget(aimed, wall, null).lines?.[wall]?.raw?.tag).toBe(0);
   });
 });

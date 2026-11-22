@@ -1,5 +1,6 @@
 import { wallKey, wallOwners } from "./geometry";
 import type {
+  DoorSettings,
   GameMap,
   KeyColor,
   LineAction,
@@ -462,10 +463,43 @@ function fitLineAction(action: LineAction, twoSided: boolean): LineAction {
   const specials = specialsOf(fitted);
   return {
     ...fitted,
+    tag: lineUsesTag(fitted) ? action.tag : 0,
     repeat:
       specials?.once === undefined ||
       (action.repeat && specials.repeat !== undefined),
   };
+}
+
+// The specials a door's own lines and its switch get, from how the door is set
+// to open.
+function doorSpecial(door: DoorSettings) {
+  return lineSpecial({
+    kind: door.fast
+      ? door.closes
+        ? "door-raise-fast"
+        : "door-open-fast"
+      : door.closes
+        ? "door-raise"
+        : "door-open",
+    trigger: "door",
+    repeat: door.closes,
+    tag: 0,
+  })!;
+}
+
+function switchDoorSpecial(door: DoorSettings) {
+  return lineSpecial({
+    kind: door.fast
+      ? door.closes
+        ? "door-raise-fast"
+        : "door-open-fast"
+      : door.closes
+        ? "door-raise"
+        : "door-open",
+    trigger: "switch",
+    repeat: true,
+    tag: 0,
+  })!;
 }
 
 function newLineAction(twoSided: boolean, kind: LineActionKind): LineAction {
@@ -520,6 +554,7 @@ export {
   canRepeatChoice,
   closesDoor,
   describeLine,
+  doorSpecial,
   endsLevel,
   fitLineAction,
   isFast,
@@ -535,6 +570,7 @@ export {
   movesSector,
   newLineAction,
   opensDoor,
+  switchDoorSpecial,
   triggerLabels,
   triggersFor,
   usedFromFront,

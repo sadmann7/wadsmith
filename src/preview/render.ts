@@ -396,7 +396,7 @@ function renderScene(
         const name =
           wall.switchTexture ?? (current.door ? doorTrackTexture : null);
         const picture = name ? assets.texture(name) : partPicture("middle");
-        const pegged = name !== null || wall.line?.lowerFixed;
+        const pegged = wall.line?.lowerFixed ?? name !== null;
         paintWall(ceilingRow, floorRow, "middle", picture, (plane) =>
           pegged
             ? picture.height - (plane - current.floor)
@@ -414,7 +414,7 @@ function renderScene(
       const lowerRow = rowOf(lowerPlane);
       if (next.ceiling < current.ceiling) {
         const picture = next.door
-          ? assets.texture(next.door.texture)
+          ? assets.texture(wall.side?.upper ?? next.door.texture)
           : partPicture("upper");
         paintWall(ceilingRow, upperRow - 1, "upper", picture, (plane) =>
           wall.line?.upperFixed

@@ -7,6 +7,7 @@ import {
   wallTextures,
 } from "./catalog";
 import {
+  setDoorTexture,
   setRoomWalls,
   updateLineSide,
   updateSector,
@@ -130,7 +131,9 @@ function describeSurface(map: GameMap, key: string | null): SurfaceInfo | null {
       ...empty,
       sector,
       label: neighbor.name,
-      texture: neighbor.door.texture,
+      texture:
+        map.lines?.[surface.wall]?.sides?.[sector.id]?.upper ??
+        neighbor.door.texture,
       textures: doorTextures,
       paints: "door",
     };
@@ -173,13 +176,18 @@ function paintSurface(
     return updateSector(map, sector.id, { ceilingTexture: texture });
   }
   if (surface.kind !== "wall") return map;
+  // One face of a door takes its own texture; the whole door takes it as its
+  // texture and every face follows.
   if (info.paints === "door") {
     const door = wallOwners(map)
       .get(surface.wall)
       ?.find((item) => item !== sector);
-    return door?.door
-      ? updateSector(map, door.id, { door: { ...door.door, texture } })
-      : map;
+    if (!door?.door) return map;
+    return wholeRoom
+      ? setDoorTexture(map, door.id, texture)
+      : updateLineSide(map, surface.wall, sector.id, {
+          upper: texture === door.door.texture ? undefined : texture,
+        });
   }
   if (wholeRoom) {
     return (wallTextures as readonly string[]).includes(texture)

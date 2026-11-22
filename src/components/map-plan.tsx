@@ -8,7 +8,7 @@ import {
   sectorPolygon,
   wallOwners,
 } from "@/map/geometry";
-import { endsLevel, movesSector } from "@/map/lines";
+import { endsLevel, lineUsesTag, movesSector } from "@/map/lines";
 import type { GameMap, Sector } from "@/map/types";
 
 type SectorKind =
@@ -36,7 +36,9 @@ function sectorKinds(map: GameMap) {
   const lines = Object.entries(map.lines ?? {});
   const moved = new Set(
     lines.flatMap(([, line]) =>
-      line.action && movesSector(line.action.kind) ? [line.action.tag] : [],
+      line.action && movesSector(line.action.kind) && lineUsesTag(line.action)
+        ? [line.action.tag]
+        : [],
     ),
   );
   const owners = wallOwners(map);

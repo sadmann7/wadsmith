@@ -28,6 +28,7 @@ import {
   linePassUse,
   sectorLevel,
 } from "./complevel";
+import { generalizedKind, generalizedTrigger, isGeneralized } from "./boom";
 import { describeLine, lineUsesTag, movesSector, opensDoor } from "./lines";
 import type { Complevel, GameMap, Point, Sector, ThingSkill } from "./types";
 
@@ -481,6 +482,7 @@ function validateDoors(
   issues: MapIssue[],
   warnings: MapIssue[],
   actions: LineActions,
+  opened: Set<number>,
 ) {
   const owners = wallOwners(map);
   for (const sector of map.sectors) {
@@ -519,6 +521,30 @@ function validateDoors(
       !actions.some((entry) => lineOpensDoor(entry, sector))
     ) {
       add("door-unwired", "connect a switch to open this door.");
+    }
+    // A door shut on every side still opens when something else moves it. A
+    // line with its own action or special gives up the door's, unless that
+    // special is a Boom door pressed from the front.
+    const fromLines = sectorEdges(sector).some(({ from, to }) => {
+      const key = wallKey(from, to);
+      const line = map.lines?.[key];
+      if ((owners.get(key)?.length ?? 0) < 2 || line?.shut || line?.action) {
+        return false;
+      }
+      return (
+        !line?.raw ||
+        (isGeneralized(line.raw.special) &&
+          generalizedTrigger(line.raw.special).trigger === "door")
+      );
+    });
+    if (
+      sector.door.opensBy === "use" &&
+      !fromLines &&
+      !map.switches.some((item) => item.door === sector.id) &&
+      !actions.some((entry) => lineOpensDoor(entry, sector)) &&
+      !(sector.tag && opened.has(sector.tag))
+    ) {
+      add("door-shut", "no line opens it from any side.", warnings);
     }
   }
 
@@ -599,9 +625,10 @@ function validateLines(map: GameMap, issues: MapIssue[], actions: LineActions) {
   }
 }
 
-// A map set to one engine's compatibility can't use what a later one added.
-// Lines are numbered only once every room is whole, since numbering reads
-// the walls.
+// A map set to one engine's compatibility can't use what a later one added,
+// and a Boom special on a wall nothing can cross or press from behind does
+// nothing. Lines are numbered only once every room is whole, since numbering
+// reads the walls.
 function validateLevels(map: GameMap, issues: MapIssue[], whole: boolean) {
   const level = map.complevel ?? "vanilla";
   const needs = (
@@ -623,15 +650,27 @@ function validateLevels(map: GameMap, issues: MapIssue[], whole: boolean) {
     const special = line.raw?.special ?? 0;
     const flags = line.passUse ? linePassUse : 0;
     const owner = owners?.get(wall)?.[0];
-    const number = owner
-      ? describeLine(map, wall, owner.id, entries).number
-      : wall;
+    const info = owner ? describeLine(map, wall, owner.id, entries) : null;
+    const number = info?.number ?? wall;
     needs(
       `line-level:${wall}`,
       `Line ${number}`,
       wall,
       lineLevel(special, flags),
     );
+    if (!info || info.twoSided || !generalizedKind(special)) continue;
+    const { trigger } = generalizedTrigger(special);
+    if (trigger === "door" || trigger === "walk") {
+      issues.push({
+        id: `line-${trigger}:${wall}`,
+        message: `Line ${number}: ${
+          trigger === "door"
+            ? "a press-to-open door needs a sector behind the line."
+            : "nothing can walk over a solid wall."
+        }`,
+        target: wall,
+      });
+    }
   }
   for (const sector of map.sectors) {
     if (sector.rawEffect === undefined) continue;
@@ -666,7 +705,10 @@ function inspectMap(map: GameMap) {
   const openedTags = () =>
     (opened ??= new Set([
       ...lineActions()
-        .filter(({ action }) => movesSector(action.kind) && action.tag > 0)
+        .filter(
+          ({ action }) =>
+            movesSector(action.kind) && lineUsesTag(action) && action.tag > 0,
+        )
         .map(({ action }) => action.tag),
       ...Object.values(map.lines ?? {}).flatMap((line) =>
         line.raw && line.raw.tag > 0 && !line.action ? [line.raw.tag] : [],
@@ -677,7 +719,7 @@ function inspectMap(map: GameMap) {
   }
   if (issues.length === 0) {
     validateNeighbors(map, issues);
-    validateDoors(map, issues, warnings, lineActions());
+    validateDoors(map, issues, warnings, lineActions(), openedTags());
     validateLines(map, issues, lineActions());
   }
   validateLevels(map, issues, issues.length === 0);

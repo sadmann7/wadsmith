@@ -237,10 +237,15 @@ describe("surface edits", () => {
     expect(paintSurface(map, lower, "SW1GRAY", true)).toBe(map);
   });
 
-  it("paints the door from its face", () => {
-    const face = `wall:sector-2:${wallKey("v13", "v14")}:upper`;
+  it("paints one face of the door, or the whole door", () => {
+    const wall = wallKey("v13", "v14");
+    const face = `wall:sector-2:${wall}:upper`;
     const map = paintSurface(testMap, face, "DOOR3");
-    expect(map.sectors[3].door?.texture).toBe("DOOR3");
+    expect(map.lines?.[wall]?.sides?.["sector-2"]?.upper).toBe("DOOR3");
+    expect(map.sectors[3].door?.texture).toBe("BIGDOOR2");
+    const whole = paintSurface(map, face, "DOOR3", true);
+    expect(whole.sectors[3].door?.texture).toBe("DOOR3");
+    expect(whole.lines).toBeUndefined();
   });
 
   it("paints a switch from its wall", () => {

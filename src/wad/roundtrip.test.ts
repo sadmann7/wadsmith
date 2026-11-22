@@ -16,10 +16,6 @@ const freedoom = resolve(
 
 const lineTwoSided = 0x0004;
 const lineBlocksAll = 0x0001;
-const lineLowerUnpegged = 0x0010;
-// A door in the editor opens the same way from every side, with one texture,
-// so the WAD's door lines take the door's special, tag and face.
-const manualDoors = new Set([1, 26, 27, 28, 31, 32, 33, 34, 117, 118]);
 const lineReserved = 0x0800;
 const vanillaLineFlags = 0x01ff;
 const thingAmbush = 0x0008;
@@ -62,10 +58,10 @@ function rebuild(doom: DoomMap) {
   return { map, report, again, sourceIndex };
 }
 
-// What the editor keeps of a map must come back out of the WAD it builds.
-// The exceptions are the choices it makes on purpose: textures it has no
-// name for, doors it opens because it can't hold them shut, and the side of
-// a line it calls the front.
+// What the editor keeps of a map must come back out of the WAD it builds,
+// except where it chose otherwise: textures it has no name for, doors it
+// opens because it can't hold them shut or because the WAD opened them from
+// another piece of the same sector, and the side of a line it calls the front.
 describe.skipIf(!existsSync(freedoom))("Freedoom round trip", () => {
   let maps: DoomMap[] = [];
 
@@ -147,14 +143,17 @@ describe.skipIf(!existsSync(freedoom))("Freedoom round trip", () => {
           sector.door ? [sourceIndex(at)] : [],
         ),
       );
-      // The editor pegs switch art to the floor.
-      const switches = new Set(
-        map.switches.map((item) => {
-          const a = map.vertices[item.from];
-          const b = map.vertices[item.to];
+      // A door line the editor neither shut nor gave an action opens the
+      // door, which the WAD's line did not: nothing else would have.
+      const opened = new Map(
+        Object.entries(map.lines ?? {}).map(([wall, line]) => {
+          const [a, b] = wall.split("|").map((id) => map.vertices[id]);
           const first = `${a.x},${-a.y}`;
           const second = `${b.x},${-b.y}`;
-          return first < second ? `${first}|${second}` : `${second}|${first}`;
+          return [
+            first < second ? `${first}|${second}` : `${second}|${first}`,
+            !line.shut && !line.action,
+          ];
         }),
       );
       for (const line of again.lines) {
@@ -167,41 +166,28 @@ describe.skipIf(!existsSync(freedoom))("Freedoom round trip", () => {
             ? source.flags & vanillaLineFlags
             : source.flags;
         const twoSided = Boolean(line.flags & lineTwoSided);
-        // Switch art and door tracks are pegged to the floor by the editor.
-        const pegged =
-          switches.has(key) ||
-          (!twoSided &&
-            line.front !== null &&
-            doors.has(sourceIndex(again.sides[line.front].sector)));
-        const mask =
-          0xffff &
-          ~(
-            lineTwoSided |
-            (twoSided ? 0 : lineBlocksAll) |
-            (pegged ? lineLowerUnpegged : 0)
-          );
+        const mask = 0xffff & ~(lineTwoSided | (twoSided ? 0 : lineBlocksAll));
         const note = (what: string) =>
           misses.push(`${doom.slot} ${key}: ${what}`);
         if ((line.flags & mask) !== (sourceFlags & mask)) {
           note(`flags ${line.flags} vs ${sourceFlags}`);
         }
-        const doorLine = manualDoors.has(line.special);
-        if (line.tag !== source.tag && line.special !== 0 && !doorLine) {
+        if (line.tag !== source.tag && line.special !== 0) {
           note(`tag ${line.tag} vs ${source.tag}`);
         }
+        const intoDoor =
+          line.back !== null &&
+          doors.has(sourceIndex(again.sides[line.back].sector));
         if (
           line.special !== source.special &&
-          !(
-            doorLine &&
-            (source.special === 0 || manualDoors.has(source.special))
-          )
+          !(intoDoor && source.special === 0 && (opened.get(key) ?? true))
         ) {
           note(`special ${line.special} vs ${source.special}`);
         }
         // Sides pair up by the sector they face, since the editor picks a
         // line's front for itself. Upper and lower textures never show on a
-        // one-sided line or between a sector and itself, the wall above a
-        // door takes the door's own, and a door's track takes the editor's.
+        // one-sided line or between a sector and itself, and a door's track
+        // takes the editor's.
         const sourceSectors = [source.front, source.back].map((side) =>
           side === null ? null : doom.sides[side].sector,
         );
@@ -231,7 +217,7 @@ describe.skipIf(!existsSync(freedoom))("Freedoom round trip", () => {
             if (name === "-" || replaced.has(name)) continue;
             if (!walls.has(name) && !flats.has(name)) continue;
             if ((detail || !twoSided) && part !== "middle") continue;
-            if (onDoor && part !== "lower") continue;
+            if (onDoor && part === "middle") continue;
             if (built[part] !== name) note(`${part} ${built[part]} vs ${name}`);
           }
         }
