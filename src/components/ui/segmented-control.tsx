@@ -14,12 +14,12 @@ function SegmentedControl({
   return (
     <SegmentedControlPrimitive.SegmentedControl
       className={cn(
-        "relative isolate inline-flex rounded-[3px] border border-input bg-background p-0.5",
+        "relative isolate inline-flex rounded-[3px] bg-muted p-0.5",
         className,
       )}
       {...props}
     >
-      <SegmentedControlPrimitive.SegmentedControlIndicator className="absolute top-(--segmented-control-indicator-top) left-(--segmented-control-indicator-left) -z-10 h-(--segmented-control-indicator-height) w-(--segmented-control-indicator-width) rounded-[2px] bg-muted shadow-[inset_0_0_0_1px_var(--color-input)]" />
+      <SegmentedControlPrimitive.SegmentedControlIndicator className="absolute top-(--segmented-control-indicator-top) left-(--segmented-control-indicator-left) -z-10 h-(--segmented-control-indicator-height) w-(--segmented-control-indicator-width) rounded-[2px] bg-input/30 shadow-[inset_0_0_0_1px_var(--color-input)]" />
       {children}
     </SegmentedControlPrimitive.SegmentedControl>
   );
