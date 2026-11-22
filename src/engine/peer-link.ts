@@ -11,13 +11,13 @@ const connectTimeoutMs = 10_000;
 
 type LinkState = "connecting" | "direct" | "relayed";
 
-type Link = {
+interface Link {
   connection: RTCPeerConnection;
   channel: RTCDataChannel | null;
   ready: boolean;
   candidates: RTCIceCandidateInit[];
   timer: ReturnType<typeof setTimeout>;
-};
+}
 
 // Game packets go straight between players once WebRTC connects, and through
 // the room until then. Guests offer and the host answers, so offers never cross.

@@ -2,13 +2,17 @@ import { addRoomOnSide, type RoomSide } from "@/map/edit";
 import { checkMap } from "@/map/checks";
 import { blankMap, starterMap } from "@/map/starter-map";
 import { loadSavedMap, MapFileError, parseMap } from "@/map/storage";
-import type { GameMap } from "@/map/types";
+import type { Complevel, GameMap } from "@/map/types";
 import { compileLumps } from "@/wad/compile";
 import { featuredMaps } from "@/map/featured";
 
-type Episode = { id: string; name: string; createdAt: number };
+interface Episode {
+  id: string;
+  name: string;
+  createdAt: number;
+}
 
-type EpisodeMap = {
+interface EpisodeMap {
   id: string;
   episodeId: string;
   slot: string;
@@ -18,15 +22,18 @@ type EpisodeMap = {
   mapRevision: number;
   map: GameMap;
   broken?: boolean;
-};
+}
 
 type MapTemplate = "blank" | "room" | "hub";
 
 type EpisodeStart = "empty" | "one" | "featured" | "freedoom";
 
-type SlotMove = { id: string; slot: string };
+interface SlotMove {
+  id: string;
+  slot: string;
+}
 
-type EpisodeStore = {
+interface EpisodeStore {
   durable: boolean;
   listEpisodes(): Promise<Episode[]>;
   listMaps(episodeId: string): Promise<EpisodeMap[]>;
@@ -44,7 +51,7 @@ type EpisodeStore = {
   deleteMap(id: string): Promise<void>;
   getSetting(key: string): Promise<string | null>;
   setSetting(key: string, value: string | null): Promise<void>;
-};
+}
 
 const backupFormat = "wadsmith-project";
 const backupVersion = 1;
@@ -171,6 +178,13 @@ function newEpisodeId() {
 
 function createEpisode(name: string): Episode {
   return { id: newEpisodeId(), name, createdAt: Date.now() };
+}
+
+// Vanilla is the default, so a map set to it carries no level at all.
+function withComplevel(map: GameMap, complevel: Complevel): GameMap {
+  const next: GameMap = { ...map, complevel };
+  if (complevel === "vanilla") delete next.complevel;
+  return next;
 }
 
 function createMapEntry(
@@ -471,6 +485,7 @@ export {
   serializeEpisode,
   slotMoves,
   templates,
+  withComplevel,
   type EpisodeStart,
   type MapTemplate,
   type Episode,

@@ -8,11 +8,11 @@ type Instance = ReturnType<typeof mapEditor>;
 
 const id = "map";
 
-type Slot = {
+interface Slot {
   selects: {
     subscribe: (part: object, listener: () => void, props: object) => void;
   };
-};
+}
 
 const { slots } = mapEditor as unknown as { slots: Record<string, Slot> };
 
@@ -131,6 +131,24 @@ describe("map editor parts", () => {
     instance.api.move.moveBy(keys, 5, 0, { reason: "drag" });
     expect(result!.vertices.v1).toEqual({ x: 8, y: 0 });
     expect(result!.vertices.v15).toEqual({ x: 171, y: 0 });
+  });
+
+  it("join a corner dropped onto another corner", () => {
+    let result: GameMap | null = null;
+    const instance = mapEditor({
+      id,
+      map: testMap,
+      onMapChange: (next) => {
+        result = next;
+      },
+    });
+    const { store } = instance.part("handle", { value: "v15" });
+    store.set({ moving: { keys: ["v15"], dx: 64, dy: 0 } });
+    store.set({ moving: null });
+    instance.api.move.moveBy(["v15"], 64, 0, { reason: "drag" });
+    expect(result!.vertices.v15).toBeUndefined();
+    expect(result!.sectors[0].vertices).not.toContain("v15");
+    expect(result!.sectors[0].vertices).toContain("v16");
   });
 
   it("commit nothing for a drop that lands where it started", () => {

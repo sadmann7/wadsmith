@@ -2,12 +2,15 @@ import type { GameMap } from "@/map/types";
 import type { Lump } from "@/wad/compile";
 import { buildMap } from "./episode-data";
 
-type BuildCheckRequest = { id: number; map: GameMap };
-type BuildCheckResult = {
+interface BuildCheckRequest {
+  id: number;
+  map: GameMap;
+}
+interface BuildCheckResult {
   id: number;
   problem: string | null;
   lumps: Lump[] | null;
-};
+}
 
 const scope = self as unknown as Worker;
 

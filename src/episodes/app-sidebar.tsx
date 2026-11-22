@@ -5,7 +5,7 @@ import {
   DrawerContent,
   DrawerTitle,
   DrawerTrigger,
-} from "@ui-sdk/react/drawer";
+} from "@/components/ui/drawer";
 import { PanelLeft, Plus, Star } from "lucide-react";
 import * as React from "react";
 
@@ -170,14 +170,14 @@ function NewEpisodeDialog({
   );
 }
 
-type SidebarProps = {
+interface SidebarProps {
   episodes: Episode[];
   counts: Record<string, number>;
   current: Route | null;
   durable: boolean;
   onNavigate?: (route: Route) => void;
   onCreateEpisode?: (name: string, start: EpisodeStart) => void;
-};
+}
 
 const rowClass =
   "relative flex items-center gap-2.5 rounded-[3px] px-2 py-1.5 text-sm text-foreground no-underline hover:bg-muted hover:text-foreground aria-[current=page]:bg-muted aria-[current=page]:font-semibold aria-[current=page]:text-foreground";
@@ -347,8 +347,8 @@ function SidebarDrawer({
       >
         <PanelLeft size={16} aria-hidden="true" />
       </DrawerTrigger>
-      <DrawerBackdrop className="fixed inset-0 size-full bg-scrim" />
-      <DrawerContent className="h-full w-[248px] border-r border-input text-foreground">
+      <DrawerBackdrop />
+      <DrawerContent className="w-[248px]">
         <DrawerTitle className="sr-only">Wadsmith</DrawerTitle>
         <AppSidebar {...props} onNavigate={navigate} />
       </DrawerContent>

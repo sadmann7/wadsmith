@@ -12,6 +12,7 @@
   --color-background: oklch(0.147 0.004 49.25);
   --color-foreground: oklch(0.97 0.001 106.424);
   --color-card: oklch(0.216 0.006 56.043);
+  --color-popover: var(--color-card);
   --color-muted: oklch(0.268 0.007 34.298);
   --color-muted-foreground: oklch(0.709 0.01 56.259);
   --color-accent: oklch(0.31 0.009 60);
@@ -168,19 +169,6 @@
     min-width: 0;
     min-height: 0;
     overflow: hidden;
-  }
-
-  .view-handle {
-    width: 6px;
-    background: var(--color-border);
-    cursor: col-resize;
-    touch-action: none;
-  }
-
-  .view-handle:hover,
-  .view-handle:focus-visible,
-  .view-handle[data-dragging] {
-    background: var(--color-primary);
   }
 
   .views[data-layout="map"] .view-handle,

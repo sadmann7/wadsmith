@@ -57,7 +57,11 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Alert } from "@/components/ui/alert";
 
-type Confirmation = { title: string; body: string; run: () => void };
+interface Confirmation {
+  title: string;
+  body: string;
+  run: () => void;
+}
 
 const statusDots = {
   ready: "bg-success",

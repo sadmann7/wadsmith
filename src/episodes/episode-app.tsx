@@ -50,6 +50,7 @@ import {
   type Episode,
   type EpisodeMap,
   type EpisodeStore,
+  withComplevel,
 } from "./episode-data";
 import { SidebarDrawer, type SidebarProps } from "./app-sidebar";
 import {
@@ -75,14 +76,18 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Alert } from "@/components/ui/alert";
 
-type Session = {
+interface Session {
   id: string;
   episodeId: string;
   initialMap: GameMap;
   saver: ReturnType<typeof createMapSaver>;
-};
+}
 
-type SessionDetails = { name: string; slot: string; par: number | null };
+interface SessionDetails {
+  name: string;
+  slot: string;
+  par: number | null;
+}
 type SaveStatus = "saving" | "saved" | "failed";
 type HomeView = "episodes" | "featured";
 
@@ -789,9 +794,12 @@ function EpisodeApp() {
     const entry = createMapEntry(
       episode.id,
       form.slot,
-      form.featured
-        ? { ...structuredClone(form.featured.map), name: form.name }
-        : mapFromTemplate(form.template, form.name),
+      withComplevel(
+        form.featured
+          ? { ...structuredClone(form.featured.map), name: form.name }
+          : mapFromTemplate(form.template, form.name),
+        form.complevel,
+      ),
       { description: form.description, par: form.par },
     );
     try {
@@ -813,7 +821,7 @@ function EpisodeApp() {
         slot: form.slot,
         description: form.description,
         par: form.par,
-        map: { ...entry.map, name: form.name },
+        map: withComplevel({ ...entry.map, name: form.name }, form.complevel),
         editedAt: Date.now(),
       }));
       if (!saved) return "This map no longer exists.";

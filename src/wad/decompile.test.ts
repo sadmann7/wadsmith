@@ -238,6 +238,46 @@ describe("decompileMap", () => {
     expect(parseMapFile(serializeMap(map))).toEqual(map);
   });
 
+  it("keeps walls with nothing behind them solid inside another room", () => {
+    const build = doomMap();
+    const hall = build.sector();
+    const hut = build.sector({ floor: 16 });
+    box(build, hall, [0, 0, 512, 512]);
+    const [a, , , d] = box(build, hut, [192, 192, 320, 320]);
+    build.map.things.push({ x: 32, y: 32, angle: 0, type: 1, flags: 7 });
+    const sealed = decompileMap(build.map).map;
+    expect(sealed.sectors).toHaveLength(2);
+    expect(
+      Object.values(sealed.lines ?? {}).filter((line) => line.solid),
+    ).toHaveLength(4);
+    expect(validateMap(sealed)).toEqual([]);
+    expect(
+      buildLevel(sealed).lines.every((line) => line.backSector === null),
+    ).toBe(true);
+    expect(parseMapFile(serializeMap(sealed))).toEqual(sealed);
+
+    // An annex shares one wall with the hut; every other wall of both stays
+    // solid towards the hall.
+    const annex = build.sector({ floor: 16 });
+    build.map.lines.pop();
+    build.map.sides.pop();
+    build.line(d, a, hut, annex);
+    const e = build.vertex(320, 96);
+    const f = build.vertex(192, 96);
+    build.line(d, e, annex);
+    build.line(e, f, annex);
+    build.line(f, a, annex);
+    const mixed = decompileMap(build.map).map;
+    expect(mixed.sectors).toHaveLength(3);
+    expect(
+      Object.values(mixed.lines ?? {}).filter((line) => line.solid),
+    ).toHaveLength(6);
+    expect(validateMap(mixed)).toEqual([]);
+    expect(
+      buildLevel(mixed).lines.filter((line) => line.backSector !== null),
+    ).toHaveLength(1);
+  });
+
   it("turns a closed sector inside a room into a pillar", () => {
     const build = doomMap();
     const hall = build.sector();
@@ -375,7 +415,7 @@ describe("decompileMap", () => {
     expect(validateMap(map)).toEqual([]);
   });
 
-  it("drops a teleporter that only leads to a multiplayer spot", () => {
+  it("keeps a teleporter whose landing only appears in network games", () => {
     const teleporter = (flags: number) => {
       const build = doomMap();
       const hall = build.sector();
@@ -404,12 +444,20 @@ describe("decompileMap", () => {
     ).toBe(true);
     const { map, report } = teleporter(7 | 16);
     expect(Object.values(map.lines ?? {}).some((line) => line.action)).toBe(
+      true,
+    );
+    expect(
+      map.things.find((thing) => thing.kind === "teleport-destination"),
+    ).toMatchObject({ multiplayer: true });
+    expect(report.droppedActions).toEqual({});
+    expect(validateMap(map)).toEqual([]);
+    const { map: lost, report: lostReport } = teleporter(0);
+    expect(Object.values(lost.lines ?? {}).some((line) => line.action)).toBe(
       false,
     );
-    expect(report.droppedActions).toEqual({
-      "Teleporters to multiplayer spots": 1,
+    expect(lostReport.droppedActions).toEqual({
+      "Teleporters with nowhere to land": 1,
     });
-    expect(validateMap(map)).toEqual([]);
   });
 
   it("keeps scrolling walls on the side that scrolls", () => {
@@ -472,7 +520,7 @@ describe("decompileMap", () => {
     expect(parseMapFile(serializeMap(map))).toEqual(map);
   });
 
-  it("reports what the editor can't hold yet", () => {
+  it("passes on specials, effects and flags the editor has no name for", () => {
     const build = doomMap();
     const room = build.sector({ special: 65 });
     const next = build.sector({ floorTexture: "BTSXFLAT" });
@@ -499,14 +547,24 @@ describe("decompileMap", () => {
     const { map, report } = decompileMap(build.map);
     expect(report).toMatchObject({
       droppedThings: { "Other things": 1 },
-      multiplayerThings: 1,
+      multiplayerThings: 0,
       outsideThings: 1,
-      droppedActions: { "Boom and later actions": 1 },
-      droppedEffects: 1,
+      droppedActions: {},
+      droppedEffects: 0,
       seeThroughWalls: 1,
       replacedTextures: ["BTSXFLAT", "BTSXWALL"],
     });
-    expect(kinds(map)).toEqual(["player", "red-skull-key"]);
+    expect(kinds(map)).toEqual(["imp", "player", "red-skull-key"]);
+    expect(map.complevel).toBe("boom");
+    expect(map.sectors[0].rawEffect).toBe(65);
+    expect(map.lines?.[wallKey("v2", "v3")]?.raw).toEqual({
+      special: 242,
+      tag: 0,
+    });
+    expect(map.things.find((thing) => thing.kind === "imp")).toMatchObject({
+      multiplayer: true,
+    });
+    expect(validateMap(map)).toEqual([]);
     expect(parseMapFile(serializeMap(map))).toEqual(map);
   });
 });
@@ -602,7 +660,7 @@ describe.skipIf(!existsSync(freedoom))("Freedoom's maps", () => {
       // A teleporter that only lands on a multiplayer-only spot has nowhere to go.
       expect(
         Object.keys(report.droppedActions).filter(
-          (group) => group !== "Teleporters to multiplayer spots",
+          (group) => group !== "Teleporters with nowhere to land",
         ),
         doom.slot,
       ).toEqual([]);

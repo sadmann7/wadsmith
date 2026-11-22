@@ -11,7 +11,7 @@ import {
   Resizable,
   ResizableHandle,
   ResizablePanel,
-} from "@ui-sdk/react/resizable";
+} from "@/components/ui/resizable";
 import {
   CircleCheck,
   CircleX,
@@ -216,7 +216,10 @@ function saveLayout(view: ViewLayout, sizes: number[], dock: boolean) {
   savedLayout.set(JSON.stringify({ view, sizes, dock }));
 }
 
-type GridSetting = { size: number; snap: boolean };
+interface GridSetting {
+  size: number;
+  snap: boolean;
+}
 
 const savedGrid = createLocalStorage("wadsmith:grid");
 
@@ -305,7 +308,7 @@ function downloadWad(map: GameMap, slot: string, fileName: string) {
   );
 }
 
-type AppProps = {
+interface AppProps {
   initialMap: GameMap;
   mapName: string;
   slot: string;
@@ -326,9 +329,12 @@ type AppProps = {
     canAddMap: boolean;
     onOpenMap: (id: string) => void;
   };
-};
+}
 
-type PlayedGame = { map: GameMap; coop: HostedGame | null };
+interface PlayedGame {
+  map: GameMap;
+  coop: HostedGame | null;
+}
 
 const saveLabels: Record<AppProps["saveStatus"], string> = {
   saving: "Saving…",

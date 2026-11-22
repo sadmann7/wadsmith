@@ -1,17 +1,19 @@
 import { doorTrackTexture, sectorEffects, thingCatalog } from "@/map/catalog";
 import {
+  engineOrder,
   loopEdges,
   sectorContainers,
   sectorDetails,
   sectorLoops,
   sectorVertices,
-  signedArea,
   wallKey,
   wallPartTexture,
   wallTextureOf,
 } from "@/map/geometry";
 import { lineSpecial, lineUsesTag } from "@/map/lines";
+import { higherLevel } from "@/map/complevel";
 import type {
+  Complevel,
   GameMap,
   LineSettings,
   LineSide,
@@ -29,7 +31,11 @@ const lineBlocksEnemies = 0x0002;
 const lineTwoSided = 0x0004;
 const lineUpperUnpegged = 0x0008;
 const lineLowerUnpegged = 0x0010;
+const lineSecret = 0x0020;
+const lineSoundBlock = 0x0040;
 const lineHidden = 0x0080;
+const lineMapped = 0x0100;
+const linePassUse = 0x0200;
 const specialDoorRaise = 1;
 const specialDoorOpen = 31;
 const specialSwitchDoorRaise = 63;
@@ -46,9 +52,16 @@ const thingSkillFlags: Record<ThingSkill, number> = {
 };
 const thingOnAllSkills = 0x0007;
 const thingAmbush = 0x0008;
+const thingMultiplayer = 0x0010;
+const thingNotDeathmatch = 0x0020;
+const thingNotCoop = 0x0040;
+const thingFriendly = 0x0080;
 const noSidedef = 0xffff;
 
-type Lump = { name: string; data: Uint8Array };
+interface Lump {
+  name: string;
+  data: Uint8Array;
+}
 
 class LumpWriter {
   private bytes: number[] = [];
@@ -75,26 +88,19 @@ function toDoom(point: Point): Point {
   return { x: Math.round(point.x), y: -Math.round(point.y) };
 }
 
-// A room sits on the right of its outer walls as the engine reads them, and
-// on the right of a pillar's walls when they run the other way round.
-function orientLoop(map: GameMap, loop: string[], pillar: boolean) {
-  const area = signedArea(loop.map((id) => toDoom(map.vertices[id])));
-  return (pillar ? area < 0 : area > 0) ? loop.toReversed() : loop;
-}
-
 function writeBox(writer: LumpWriter, box: Box) {
   writer.int16(box.top).int16(box.bottom).int16(box.left).int16(box.right);
 }
 
 type LevelLine = NodeLine & { wall: string };
 
-type WallSide = {
+interface WallSide {
   sector: number;
   from: string;
   to: string;
   pillar: boolean;
   detail: boolean;
-};
+}
 
 function buildLevel(map: GameMap) {
   const used = new Set(map.sectors.flatMap(sectorVertices));
@@ -108,7 +114,7 @@ function buildLevel(map: GameMap) {
   const sides = new Map<string, WallSide[]>();
   sectors.forEach((sector, index) => {
     sectorLoops(sector).forEach((loop, at) => {
-      for (const { from, to } of loopEdges(orientLoop(map, loop, at > 0))) {
+      for (const { from, to } of loopEdges(engineOrder(map, loop, at > 0))) {
         const key = wallKey(from, to);
         sides.set(key, [
           ...(sides.get(key) ?? []),
@@ -177,7 +183,9 @@ function buildLevel(map: GameMap) {
     // A room drawn inside another opens onto it wherever no other room
     // shares the wall.
     const container =
-      side.pillar || covered ? null : containers.get(sectors[side.sector].id);
+      side.pillar || covered || map.lines?.[wall]?.solid
+        ? null
+        : containers.get(sectors[side.sector].id);
     const behind =
       other?.sector ?? (container ? indexOf.get(container.id)! : null);
     if (behind === null) {
@@ -220,7 +228,14 @@ function thingFlags(thing: Thing) {
     ? thing.skills.reduce((flags, skill) => flags | thingSkillFlags[skill], 0)
     : thingOnAllSkills;
   const enemy = thingCatalog[thing.kind].category === "enemy";
-  return skills | (enemy && thing.ambush ? thingAmbush : 0);
+  return (
+    skills |
+    (enemy && thing.ambush ? thingAmbush : 0) |
+    (thing.multiplayer ? thingMultiplayer : 0) |
+    (thing.notDeathmatch ? thingNotDeathmatch : 0) |
+    (thing.notCoop ? thingNotCoop : 0) |
+    (enemy && thing.friendly ? thingFriendly : 0)
+  );
 }
 
 function lineFlags(line: LineSettings | undefined) {
@@ -228,8 +243,24 @@ function lineFlags(line: LineSettings | undefined) {
     (line?.blocksEnemies ? lineBlocksEnemies : 0) |
     (line?.upperFixed ? lineUpperUnpegged : 0) |
     (line?.lowerFixed ? lineLowerUnpegged : 0) |
-    (line?.hidden ? lineHidden : 0)
+    (line?.hidden ? lineHidden : 0) |
+    (line?.secret ? lineSecret : 0) |
+    (line?.soundBlock ? lineSoundBlock : 0) |
+    (line?.mapped ? lineMapped : 0) |
+    (line?.passUse ? linePassUse : 0)
   );
+}
+
+// Woof reads the compatibility level from this lump when no flag names one.
+function complevelLump(maps: GameMap[]): Lump {
+  const level = maps.reduce<Complevel>(
+    (highest, map) => higherLevel(highest, map.complevel ?? "vanilla"),
+    "vanilla",
+  );
+  return {
+    name: "COMPLVL",
+    data: Uint8Array.from(level, (c) => c.charCodeAt(0)),
+  };
 }
 
 // A switch's door gets a tag no line or sector in the map has chosen.
@@ -366,6 +397,9 @@ function compileLumps(map: GameMap, slot = mapLumpName): Lump[] {
     if (settings?.action && !wired) {
       special = lineSpecial(settings.action) ?? 0;
       tag = lineUsesTag(settings.action) ? settings.action.tag : 0;
+    } else if (settings?.raw && !wired) {
+      special = settings.raw.special;
+      tag = settings.raw.tag;
     }
     if (settings?.scrolls && special === 0) special = specialScrollLeft;
 
@@ -422,7 +456,11 @@ function compileLumps(map: GameMap, slot = mapLumpName): Lump[] {
       .name(sector.floorTexture)
       .name(sector.ceilingTexture)
       .int16(sector.light)
-      .int16(sector.effect ? sectorEffects[sector.effect].special : 0)
+      .int16(
+        sector.effect
+          ? sectorEffects[sector.effect].special
+          : (sector.rawEffect ?? 0),
+      )
       .int16(tags[index]);
   });
 
@@ -478,7 +516,7 @@ function packWad(lumps: Lump[]) {
 }
 
 function compileMap(map: GameMap, slot = mapLumpName) {
-  return packWad(compileLumps(map, slot));
+  return packWad([...compileLumps(map, slot), complevelLump([map])]);
 }
 
 // Lumps built ahead of time keep their data and take the slot they're packed
@@ -486,13 +524,14 @@ function compileMap(map: GameMap, slot = mapLumpName) {
 function compileEpisode(
   maps: { slot: string; map: GameMap; lumps?: Lump[] | null }[],
 ) {
-  return packWad(
-    maps.flatMap(({ slot, map, lumps }) =>
+  return packWad([
+    ...maps.flatMap(({ slot, map, lumps }) =>
       lumps
         ? [{ name: slot, data: new Uint8Array() }, ...lumps.slice(1)]
         : compileLumps(map, slot),
     ),
-  );
+    complevelLump(maps.map(({ map }) => map)),
+  ]);
 }
 
 export {

@@ -12,11 +12,11 @@ export const metadata: Metadata = {
     "Source for the Doom engine Wadsmith runs, and the licences of everything in it.",
 };
 
-type EngineInfo = {
+interface EngineInfo {
   woof: { version: string; commit: string; repository: string };
   freedoom: { version: string };
   licenses: string[];
-};
+}
 
 const licenseNames: Record<string, string> = {
   "base64.txt": "base64",

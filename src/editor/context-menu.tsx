@@ -68,6 +68,7 @@ import {
   roomCenter,
   setRoomDoor,
   snapCorners,
+  splitWall,
   switchKeyPrefix,
   thingKeyPrefix,
   updateLine,
@@ -95,9 +96,12 @@ import {
 } from "./map-target";
 import { thingIcons } from "./thing-icons";
 
-type Selection = { keys?: string[]; sector?: string | null };
+interface Selection {
+  keys?: string[];
+  sector?: string | null;
+}
 
-type MapContextMenuProps = {
+interface MapContextMenuProps {
   controller: MenuController;
   map: GameMap;
   target: MapTarget | null;
@@ -111,14 +115,14 @@ type MapContextMenuProps = {
   onFitMap: () => void;
   onDrawRoom: (point: Point) => void;
   grid: number;
-};
+}
 
 type BodyProps = Omit<MapContextMenuProps, "controller" | "onOpenChange">;
 
 const contentClass =
-  "z-30 w-54 rounded-[7px] border border-input bg-muted p-1 shadow-popover outline-none";
+  "z-30 w-54 rounded-md border border-border bg-popover p-1 shadow-popover outline-none";
 const itemClass =
-  "flex h-7 cursor-default items-center gap-2 rounded-[4px] px-2 outline-none select-none data-[disabled]:text-muted-foreground/60 data-[highlighted]:bg-accent data-[popup-open]:bg-accent";
+  "flex h-7 cursor-default items-center gap-2 rounded-sm px-2 outline-none select-none data-[disabled]:text-muted-foreground/60 data-[highlighted]:bg-accent data-[popup-open]:bg-accent";
 const iconClass = "flex w-3.5 shrink-0 justify-center text-muted-foreground";
 const destructiveIconClass =
   "flex w-3.5 shrink-0 justify-center text-destructive";
@@ -302,7 +306,7 @@ function Heading({ children }: { children: React.ReactNode }) {
 }
 
 function Rule() {
-  return <MenuSeparator className="mx-0 my-1 h-px bg-border" />;
+  return <MenuSeparator className="-mx-1 my-1 h-px bg-border" />;
 }
 
 function ShowItem({ map, target, onShow }: BodyProps & { target: MapTarget }) {
@@ -577,6 +581,12 @@ function WallMenu({
   const detail =
     (wallOwners(map).get(wall) ?? []).filter((item) => item.id === sector)
       .length > 1;
+  const corner = splitWall(
+    map,
+    wall,
+    target.point ?? wallMiddle(map, wall),
+    grid,
+  );
   const chooseAction = (kind: string) => {
     if (!isLineActionKind(kind)) {
       onCommit(updateLine(map, wall, { action: undefined }));
@@ -616,6 +626,15 @@ function WallMenu({
         }}
       >
         Add switch
+      </Item>
+      <Item
+        icon={Plus}
+        disabled={!corner}
+        onSelect={() =>
+          corner && onCommit(corner.map, { keys: [corner.id], sector: null })
+        }
+      >
+        Add corner here
       </Item>
       <SubMenu icon={Zap} label="Action" disabled={line.wiredSwitch}>
         <Choices
