@@ -46,4 +46,6 @@ Your map saves in this browser as you edit. Use **File** to start a new map, sav
 
 ## License
 
-Woof is GPL-2.0 and Freedoom is BSD-licensed. Neither is committed here. `setup:engine` writes their licenses to `public/engine`, and `public/engine/licenses` holds the notices for everything else linked into the engine, including SDL3, Emscripten's runtime, musl, miniz, spng, yyjson and Nuked OPL3. Anything that distributes the compiled engine has to meet the GPL's terms, including offering the matching source: the pinned Woof commit plus `engine/woof.patch`.
+Wadsmith is GPL-2.0-or-later, the same license as Woof, with the text in `LICENSE`. `engine/woof.patch` holds every change to Woof, and the compiled engine is a build of Woof with that patch.
+
+Woof is GPL-2.0-or-later and Freedoom is BSD-licensed. Neither is committed here. `setup:engine` writes their licenses to `public/engine`, and `public/engine/licenses` holds the notices for everything else linked into the engine, including SDL3, Emscripten's runtime, musl, miniz, spng, yyjson and Nuked OPL3. Anything that distributes Wadsmith or the compiled engine has to meet the GPL's terms, including offering the matching source: this repository, the pinned Woof commit and `engine/woof.patch`.
