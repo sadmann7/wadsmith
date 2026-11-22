@@ -13,11 +13,11 @@ import {
 } from "lucide-react";
 import * as React from "react";
 
-import { MapOutline } from "../components/map-outline";
-import { MapPlan } from "../components/map-plan";
+import { MapOutline } from "@/components/map-outline";
+import { MapPlan } from "@/components/map-plan";
 import { skillNames } from "./coop";
 import { PlayerBadge } from "./coop-ui";
-import type { GameMap } from "../map/types";
+import type { GameMap } from "@/map/types";
 import type { MouseMode } from "./mouse-capture";
 import {
   fragLimit,
@@ -27,9 +27,9 @@ import {
   type Screen,
   type Skill,
 } from "./runtime";
-import { Button } from "../components/ui/button";
-import { Input } from "../components/ui/input";
-import { Slider } from "../components/ui/slider";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Slider } from "@/components/ui/slider";
 
 type SoundSettings = { volume: number; muted: boolean };
 

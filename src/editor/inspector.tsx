@@ -17,10 +17,10 @@ import {
   thingCatalog,
   thingKinds,
   wallTextures,
-} from "../map/catalog";
-import { appearsOn, mapBalance } from "../map/balance";
-import { middleTextures } from "../map/freedoom-textures";
-import { defaultDoor, gridSize } from "../map/edit";
+} from "@/map/catalog";
+import { appearsOn, mapBalance } from "@/map/balance";
+import { middleTextures } from "@/map/freedoom-textures";
+import { defaultDoor, gridSize } from "@/map/edit";
 import {
   canRepeatChoice,
   describeLine,
@@ -35,8 +35,8 @@ import {
   triggerLabels,
   triggersFor,
   usedFromFront,
-} from "../map/lines";
-import { describeSurface, surfaceKey, type WallPart } from "../map/surfaces";
+} from "@/map/lines";
+import { describeSurface, surfaceKey, type WallPart } from "@/map/surfaces";
 import type {
   DoorSettings,
   GameMap,
@@ -50,14 +50,14 @@ import type {
   Thing,
   ThingKind,
   ThingSkill,
-} from "../map/types";
-import { flatUse, wallUse, type TextureUse } from "../map/textures";
-import { TextureSwatch } from "../preview/surface-panel";
-import type { SceneAssets } from "../wad/assets";
+} from "@/map/types";
+import { flatUse, wallUse, type TextureUse } from "@/map/textures";
+import { TextureSwatch } from "@/preview/surface-panel";
+import type { SceneAssets } from "@/wad/assets";
 import { TexturePicker, type TextureKind } from "./texture-picker";
 import { thingIcons } from "./thing-icons";
-import { Button } from "../components/ui/button";
-import { InputGroup, InputGroupInput } from "../components/ui/input";
+import { Button } from "@/components/ui/button";
+import { InputGroup, InputGroupInput } from "@/components/ui/input";
 import {
   Select,
   SelectCheck,
@@ -68,15 +68,15 @@ import {
   SelectLabel,
   SelectTrigger,
   SelectValue,
-} from "../components/ui/select";
-import { FieldItem, Label } from "../components/ui/field";
-import { NumberField } from "../components/ui/number-field";
+} from "@/components/ui/select";
+import { FieldItem, Label } from "@/components/ui/field";
+import { NumberField } from "@/components/ui/number-field";
 import {
   SegmentedControl,
   SegmentedControlItem,
-} from "../components/ui/segmented-control";
-import { Slider, SliderValue } from "../components/ui/slider";
-import { Switch } from "../components/ui/switch";
+} from "@/components/ui/segmented-control";
+import { Slider, SliderValue } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
 
 type ThingTab = "enemy" | "item" | "key" | "decor";
 

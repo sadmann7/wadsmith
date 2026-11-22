@@ -17,7 +17,7 @@ import {
 import { createParts } from "@ui-sdk/react/primitive";
 import * as React from "react";
 
-import { thingKinds } from "../map/catalog";
+import { thingKinds } from "@/map/catalog";
 import {
   addDetail,
   addRoom,
@@ -43,8 +43,8 @@ import {
   updateSwitch,
   wallNear,
   type RoomSide,
-} from "../map/edit";
-import { holeAt, loopsPath, sectorAt, wallKey } from "../map/geometry";
+} from "@/map/edit";
+import { holeAt, loopsPath, sectorAt, wallKey } from "@/map/geometry";
 import {
   isDragging,
   isKeyboardMenu,
@@ -54,15 +54,15 @@ import {
   wallTarget,
   type MapTarget,
 } from "./map-target";
-import type { Camera } from "../preview/render";
-import type { SceneCamera } from "../preview/scene-camera";
+import type { Camera } from "@/preview/render";
+import type { SceneCamera } from "@/preview/scene-camera";
 import type {
   DoorSettings,
   GameMap,
   Point,
   Sector,
   ThingKind,
-} from "../map/types";
+} from "@/map/types";
 
 type MapTool = "select" | "draw" | "line" | "thing" | "switch";
 type EditMode = "vertices" | "lines" | "sectors" | "things";

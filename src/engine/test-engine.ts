@@ -2,10 +2,10 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { setRoomDoor, updateThing } from "../map/edit";
-import { testMap } from "../map/test-map";
-import type { GameMap } from "../map/types";
-import { compileMap } from "../wad/compile";
+import { setRoomDoor, updateThing } from "@/map/edit";
+import { testMap } from "@/map/test-map";
+import type { GameMap } from "@/map/types";
+import { compileMap } from "@/wad/compile";
 import {
   doomKeys,
   keysByCode,

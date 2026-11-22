@@ -1,5 +1,5 @@
-import { sectorAt } from "../map/geometry";
-import type { GameMap, Point } from "../map/types";
+import { sectorAt } from "@/map/geometry";
+import type { GameMap, Point } from "@/map/types";
 import { startCamera, type Camera } from "./render";
 
 class SceneCamera {

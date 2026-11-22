@@ -4,11 +4,11 @@ import { Worker } from "node:worker_threads";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { addThing } from "../map/edit";
-import { featuredMaps } from "../map/featured";
-import type { GameMap } from "../map/types";
-import { testMap } from "../map/test-map";
-import { compileMap } from "../wad/compile";
+import { addThing } from "@/map/edit";
+import { featuredMaps } from "@/map/featured";
+import type { GameMap } from "@/map/types";
+import { testMap } from "@/map/test-map";
+import { compileMap } from "@/wad/compile";
 import { NetInbox } from "./net-inbox";
 import { doomKeys } from "./runtime";
 

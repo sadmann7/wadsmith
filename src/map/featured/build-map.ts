@@ -1,4 +1,4 @@
-import { wallKey } from "../geometry";
+import { wallKey } from "@/map/geometry";
 import type {
   DoorSettings,
   GameMap,
@@ -6,7 +6,7 @@ import type {
   SectorEffect,
   ThingKind,
   ThingSkill,
-} from "../types";
+} from "@/map/types";
 
 type Corner = [number, number];
 

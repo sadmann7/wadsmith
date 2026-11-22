@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import { thingCatalog } from "../map/catalog";
-import { featuredMaps } from "../map/featured";
-import { pointInPolygon, wallKey, wallOwners } from "../map/geometry";
-import { starterMap } from "../map/starter-map";
-import type { GameMap, LineActionKind } from "../map/types";
-import { compileEpisode } from "../wad/compile";
+import { thingCatalog } from "@/map/catalog";
+import { featuredMaps } from "@/map/featured";
+import { pointInPolygon, wallKey, wallOwners } from "@/map/geometry";
+import { starterMap } from "@/map/starter-map";
+import type { GameMap, LineActionKind } from "@/map/types";
+import { compileEpisode } from "@/wad/compile";
 import { doomKeys, type DoomGame } from "./runtime";
 import {
   launch,

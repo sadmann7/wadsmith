@@ -6,11 +6,11 @@ import {
 } from "lucide-react";
 import * as React from "react";
 
-import { buildChecks, issueText, type CheckedIssue } from "../map/checks";
-import type { GameMap } from "../map/types";
-import { Button } from "../components/ui/button";
-import { Field, FieldItem, FieldLabel, Label } from "../components/ui/field";
-import { Input } from "../components/ui/input";
+import { buildChecks, issueText, type CheckedIssue } from "@/map/checks";
+import type { GameMap } from "@/map/types";
+import { Button } from "@/components/ui/button";
+import { Field, FieldItem, FieldLabel, Label } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogBackdrop,
@@ -20,7 +20,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "../components/ui/dialog";
+} from "@/components/ui/dialog";
 
 const maxNameLength = 64;
 

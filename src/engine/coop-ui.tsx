@@ -1,8 +1,8 @@
 import type { LucideIcon } from "lucide-react";
 import * as React from "react";
 
-import { MapPlan } from "../components/map-plan";
-import type { GameMap } from "../map/types";
+import { MapPlan } from "@/components/map-plan";
+import type { GameMap } from "@/map/types";
 import { formatRoomCode } from "./room";
 
 // Doom's own player colors: green, indigo, brown and red.

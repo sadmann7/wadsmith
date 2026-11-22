@@ -67,7 +67,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-import type { ThingKind } from "../map/types";
+import type { ThingKind } from "@/map/types";
 
 const thingIcons: Record<ThingKind, { icon: LucideIcon; color: string }> = {
   player: { icon: ArrowRight, color: "var(--color-thing-start)" },

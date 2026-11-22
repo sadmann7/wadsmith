@@ -1,4 +1,4 @@
-import { doorTrackTexture, sectorEffects, thingCatalog } from "../map/catalog";
+import { doorTrackTexture, sectorEffects, thingCatalog } from "@/map/catalog";
 import {
   loopEdges,
   sectorContainers,
@@ -9,8 +9,8 @@ import {
   wallKey,
   wallPartTexture,
   wallTextureOf,
-} from "../map/geometry";
-import { lineSpecial, lineUsesTag } from "../map/lines";
+} from "@/map/geometry";
+import { lineSpecial, lineUsesTag } from "@/map/lines";
 import type {
   GameMap,
   LineSettings,
@@ -19,7 +19,7 @@ import type {
   Sector,
   Thing,
   ThingSkill,
-} from "../map/types";
+} from "@/map/types";
 import { buildBlockmap } from "./blockmap";
 import { buildNodes, type Box, type NodeLine } from "./nodes";
 

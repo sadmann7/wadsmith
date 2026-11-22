@@ -1,4 +1,4 @@
-import type { LineSettings } from "../types";
+import type { LineSettings } from "@/map/types";
 import { buildMap, rect, type Corner } from "./build-map";
 
 const stone = {

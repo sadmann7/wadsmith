@@ -1,4 +1,4 @@
-import type { Point } from "../map/types";
+import type { Point } from "@/map/types";
 
 type NodeLine = {
   start: number;

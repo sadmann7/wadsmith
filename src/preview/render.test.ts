@@ -3,26 +3,26 @@ import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { thingKinds } from "../map/catalog";
-import { updateLine, updateLineSide, updateSector } from "../map/edit";
-import { parseMapFile, serializeMap } from "../map/storage";
-import { wallKey } from "../map/geometry";
-import { addDetail, makePillar } from "../map/edit";
-import { islandMap, testMap } from "../map/test-map";
+import { thingKinds } from "@/map/catalog";
+import { updateLine, updateLineSide, updateSector } from "@/map/edit";
+import { parseMapFile, serializeMap } from "@/map/storage";
+import { wallKey } from "@/map/geometry";
+import { addDetail, makePillar } from "@/map/edit";
+import { islandMap, testMap } from "@/map/test-map";
 import {
   describeSurface,
   moveSurfaceHeight,
   paintSurface,
-} from "../map/surfaces";
-import type { GameMap } from "../map/types";
-import { compileLumps } from "../wad/compile";
+} from "@/map/surfaces";
+import type { GameMap } from "@/map/types";
+import { compileLumps } from "@/wad/compile";
 import {
   createFlatAssets,
   gameFlatShade,
   gameWallShade,
   readWadAssets,
   type SceneAssets,
-} from "../wad/assets";
+} from "@/wad/assets";
 import {
   createRenderTarget,
   pointOnPlane,

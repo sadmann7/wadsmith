@@ -1,10 +1,10 @@
-import { addRoomOnSide, type RoomSide } from "../map/edit";
-import { checkMap } from "../map/checks";
-import { blankMap, starterMap } from "../map/starter-map";
-import { loadSavedMap, MapFileError, parseMap } from "../map/storage";
-import type { GameMap } from "../map/types";
-import { compileLumps } from "../wad/compile";
-import { featuredMaps } from "../map/featured";
+import { addRoomOnSide, type RoomSide } from "@/map/edit";
+import { checkMap } from "@/map/checks";
+import { blankMap, starterMap } from "@/map/starter-map";
+import { loadSavedMap, MapFileError, parseMap } from "@/map/storage";
+import type { GameMap } from "@/map/types";
+import { compileLumps } from "@/wad/compile";
+import { featuredMaps } from "@/map/featured";
 
 type Episode = { id: string; name: string; createdAt: number };
 

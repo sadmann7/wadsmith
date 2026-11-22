@@ -20,6 +20,7 @@ Default to no comment. Write one only for a constraint, an external quirk, or an
 
 ## UI
 
+- Import from another folder through `@/`, which maps to `src`, and from the same folder with `./`.
 - Import React and UI SDK parts as namespaces: `import * as React from "react"`, `import * as DialogPrimitive from "@ui-sdk/react/dialog"`.
 - `cn` in `src/lib/cn.ts` also takes a class name that's a function of a part's state, so pass a part's `className` through it without narrowing it to a string.
 

@@ -1,10 +1,10 @@
 import { Focus, LocateFixed, Maximize, StickyNote } from "lucide-react";
 import * as React from "react";
 
-import { thingCatalog } from "../map/catalog";
-import { doorKeyPrefix, switchKeyPrefix, thingKeyPrefix } from "../map/edit";
-import { paintOrder, wallOwners } from "../map/geometry";
-import type { GameMap, Sector, ThingKind } from "../map/types";
+import { thingCatalog } from "@/map/catalog";
+import { doorKeyPrefix, switchKeyPrefix, thingKeyPrefix } from "@/map/edit";
+import { paintOrder, wallOwners } from "@/map/geometry";
+import type { GameMap, Sector, ThingKind } from "@/map/types";
 import {
   MapCamera,
   MapConnecting,
@@ -23,7 +23,7 @@ import {
   MapWorld,
 } from "./map-editor";
 import { thingIcons } from "./thing-icons";
-import { buttonVariants } from "../components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 
 const worldSize = 65536;
 const crowdedRooms = 60;

@@ -1,18 +1,18 @@
 import { Copy, FolderOpen, Play, Users } from "lucide-react";
 import * as React from "react";
 
-import { MapPlan } from "../components/map-plan";
-import { fragLimit } from "../engine/runtime";
-import { thingCatalog } from "../map/catalog";
+import { MapPlan } from "@/components/map-plan";
+import { fragLimit } from "@/engine/runtime";
+import { thingCatalog } from "@/map/catalog";
 import {
   featuredMaps,
   type FeaturedMap,
   type FeaturedMode,
-} from "../map/featured";
+} from "@/map/featured";
 import { AppShell, type SidebarProps } from "./app-sidebar";
 import { formatPar } from "./episode-data";
-import { Button } from "../components/ui/button";
-import { Alert } from "../components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Alert } from "@/components/ui/alert";
 
 const modes: Record<FeaturedMode, { label: string; dot: string }> = {
   single: { label: "Single player", dot: "bg-info" },

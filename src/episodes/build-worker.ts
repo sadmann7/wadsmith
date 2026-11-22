@@ -1,5 +1,5 @@
-import type { GameMap } from "../map/types";
-import type { Lump } from "../wad/compile";
+import type { GameMap } from "@/map/types";
+import type { Lump } from "@/wad/compile";
 import { buildMap } from "./episode-data";
 
 type BuildCheckRequest = { id: number; map: GameMap };

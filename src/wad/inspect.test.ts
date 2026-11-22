@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { starterMap } from "../map/starter-map";
+import { starterMap } from "@/map/starter-map";
 import { compileLumps, compileMap } from "./compile";
 import { WadFileError, inspectWads, readLumps } from "./inspect";
 import { isZip, unzip } from "./zip";

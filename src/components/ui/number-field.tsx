@@ -1,7 +1,7 @@
 import * as NumberInputPrimitive from "@ui-sdk/react/number-input";
 import * as React from "react";
 
-import { cn } from "../../lib/cn";
+import { cn } from "@/lib/cn";
 
 const stepClass =
   "border-0 bg-transparent text-muted-foreground hover:not-disabled:bg-accent hover:not-disabled:text-foreground disabled:opacity-40";

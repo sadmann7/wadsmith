@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import * as React from "react";
 
-import { MapPlan } from "../components/map-plan";
+import { MapPlan } from "@/components/map-plan";
 import { knownBuildProblem, useBuildChecks } from "./build-checks";
 import { MapDialog } from "./map-dialog";
 import type { MapDetails } from "./map-dialog";
@@ -31,30 +31,30 @@ import {
   type EpisodeMap,
 } from "./episode-data";
 import { AppShell, Crumb, type SidebarProps } from "./app-sidebar";
-import { Button, buttonVariants } from "../components/ui/button";
-import { Field, FieldLabel } from "../components/ui/field";
-import { Input } from "../components/ui/input";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import {
   Menu,
   MenuContent,
   MenuItem,
   MenuSeparator,
   MenuTrigger,
-} from "../components/ui/menu";
+} from "@/components/ui/menu";
 import {
   Dialog,
   DialogBackdrop,
   DialogContent,
   DialogTitle,
-} from "../components/ui/dialog";
+} from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogBackdrop,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogTitle,
-} from "../components/ui/alert-dialog";
-import { Alert } from "../components/ui/alert";
+} from "@/components/ui/alert-dialog";
+import { Alert } from "@/components/ui/alert";
 
 type Confirmation = { title: string; body: string; run: () => void };
 

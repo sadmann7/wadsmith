@@ -2,7 +2,7 @@ import * as DialogPrimitive from "@ui-sdk/react/dialog";
 import { X } from "lucide-react";
 import * as React from "react";
 
-import { cn } from "../../lib/cn";
+import { cn } from "@/lib/cn";
 
 const backdropClass = "fixed inset-0 z-40 bg-scrim";
 const contentClass =

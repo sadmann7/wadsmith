@@ -9,15 +9,15 @@ import {
 import { PanelLeft, Plus, Star } from "lucide-react";
 import * as React from "react";
 
-import { MapOutline } from "../components/map-outline";
-import { MapPlan } from "../components/map-plan";
-import { featuredMaps } from "../map/featured";
-import { blankMap } from "../map/starter-map";
+import { MapOutline } from "@/components/map-outline";
+import { MapPlan } from "@/components/map-plan";
+import { featuredMaps } from "@/map/featured";
+import { blankMap } from "@/map/starter-map";
 import { maxNameLength, type EpisodeStart, type Episode } from "./episode-data";
 import { pathOf, type Route } from "./routes";
-import { Button, buttonVariants } from "../components/ui/button";
-import { Field, FieldLabel } from "../components/ui/field";
-import { Input } from "../components/ui/input";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogBackdrop,
@@ -26,7 +26,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "../components/ui/dialog";
+} from "@/components/ui/dialog";
 
 const starts: { value: EpisodeStart; label: string; detail: string }[] = [
   { value: "empty", label: "Empty", detail: "No maps yet" },

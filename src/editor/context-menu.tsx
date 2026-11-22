@@ -46,7 +46,7 @@ import {
 } from "lucide-react";
 import * as React from "react";
 
-import { isPlayerStart, thingCatalog, thingKinds } from "../map/catalog";
+import { isPlayerStart, thingCatalog, thingKinds } from "@/map/catalog";
 import {
   addRoomOnSide,
   addSwitch,
@@ -73,8 +73,8 @@ import {
   updateLine,
   updateSwitch,
   type RoomSide,
-} from "../map/edit";
-import { containerOf, sectorAt, wallOwners } from "../map/geometry";
+} from "@/map/edit";
+import { containerOf, sectorAt, wallOwners } from "@/map/geometry";
 import {
   describeLine,
   fitLineAction,
@@ -83,9 +83,9 @@ import {
   lineActionKinds,
   newLineAction,
   triggersFor,
-} from "../map/lines";
-import type { GameMap, Point, Thing, ThingKind } from "../map/types";
-import { validateMap } from "../map/validate";
+} from "@/map/lines";
+import type { GameMap, Point, Thing, ThingKind } from "@/map/types";
+import { validateMap } from "@/map/validate";
 import {
   canStand,
   targetExists,

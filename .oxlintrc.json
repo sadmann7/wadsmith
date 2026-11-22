@@ -25,6 +25,17 @@
     "no-unused-vars": ["error", { "args": "all", "argsIgnorePattern": "^_" }],
     "typescript/no-explicit-any": "off",
     "react/react-in-jsx-scope": "off",
+    "no-restricted-imports": [
+      "error",
+      {
+        "patterns": [
+          {
+            "group": ["../**"],
+            "message": "Import from another folder through @/ instead."
+          }
+        ]
+      }
+    ],
     "wadsmith/comment-style": "error"
   }
 }

@@ -1,4 +1,4 @@
-import { doorTrackTexture, thingCatalog } from "../map/catalog";
+import { doorTrackTexture, thingCatalog } from "@/map/catalog";
 import {
   loopEdges,
   loopPolygon,
@@ -10,9 +10,9 @@ import {
   wallKey,
   wallOwners,
   wallPartTexture,
-} from "../map/geometry";
-import type { WallPart } from "../map/surfaces";
-import { surfaceKey } from "../map/surfaces";
+} from "@/map/geometry";
+import type { WallPart } from "@/map/surfaces";
+import { surfaceKey } from "@/map/surfaces";
 import type {
   GameMap,
   LineSettings,
@@ -21,13 +21,13 @@ import type {
   Sector,
   Thing,
   ThingKind,
-} from "../map/types";
+} from "@/map/types";
 import {
   gameFlatShade,
   gameWallShade,
   type Picture,
   type SceneAssets,
-} from "../wad/assets";
+} from "@/wad/assets";
 
 type Camera = Point & { angle: number; eye?: number };
 

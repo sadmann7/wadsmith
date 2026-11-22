@@ -1,7 +1,7 @@
 import * as FieldPrimitive from "@ui-sdk/react/field";
 import * as React from "react";
 
-import { cn } from "../../lib/cn";
+import { cn } from "@/lib/cn";
 
 const fieldClass = "flex flex-col gap-1 [&_[data-slot=select-trigger]]:w-full";
 const labelClass = "text-sm text-muted-foreground";

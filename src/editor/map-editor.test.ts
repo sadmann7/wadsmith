@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { testMap } from "../map/test-map";
-import type { GameMap } from "../map/types";
+import { testMap } from "@/map/test-map";
+import type { GameMap } from "@/map/types";
 import { mapEditor } from "./map-editor";
 
 type Instance = ReturnType<typeof mapEditor>;

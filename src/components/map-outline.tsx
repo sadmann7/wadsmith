@@ -1,7 +1,7 @@
 import * as React from "react";
 
-import { wallOwners } from "../map/geometry";
-import type { GameMap } from "../map/types";
+import { wallOwners } from "@/map/geometry";
+import type { GameMap } from "@/map/types";
 
 function MapOutline({
   map,

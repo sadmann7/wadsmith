@@ -1,8 +1,8 @@
 import * as React from "react";
 
-import { MapOutline } from "../components/map-outline";
-import { MapPlan } from "../components/map-plan";
-import { featuredMaps, type FeaturedMap } from "../map/featured";
+import { MapOutline } from "@/components/map-outline";
+import { MapPlan } from "@/components/map-plan";
+import { featuredMaps, type FeaturedMap } from "@/map/featured";
 import {
   formatPar,
   freeSlots,
@@ -14,9 +14,9 @@ import {
   type MapTemplate,
   type EpisodeMap,
 } from "./episode-data";
-import { Button } from "../components/ui/button";
-import { Field, FieldItem, FieldLabel, Label } from "../components/ui/field";
-import { Input } from "../components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Field, FieldItem, FieldLabel, Label } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectCheck,
@@ -25,7 +25,7 @@ import {
   SelectLabel,
   SelectTrigger,
   SelectValue,
-} from "../components/ui/select";
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogBackdrop,
@@ -34,7 +34,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "../components/ui/dialog";
+} from "@/components/ui/dialog";
 
 type MapDetails = {
   name: string;

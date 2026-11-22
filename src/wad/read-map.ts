@@ -1,4 +1,4 @@
-import type { Point } from "../map/types";
+import type { Point } from "@/map/types";
 import { WadFileError, readLumps, type GameFile } from "./inspect";
 
 type DoomLine = {

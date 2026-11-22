@@ -1,4 +1,4 @@
-import type { Complevel } from "../engine/runtime";
+import type { Complevel } from "@/engine/runtime";
 
 type GameFile = { name: string; data: Uint8Array };
 

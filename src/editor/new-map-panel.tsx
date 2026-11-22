@@ -1,9 +1,9 @@
 import { Check } from "lucide-react";
 
-import { roomDefaults } from "../map/edit";
-import { hasExit } from "../map/checks";
-import { sectorAt } from "../map/geometry";
-import type { GameMap } from "../map/types";
+import { roomDefaults } from "@/map/edit";
+import { hasExit } from "@/map/checks";
+import { sectorAt } from "@/map/geometry";
+import type { GameMap } from "@/map/types";
 
 function NewMapPanel({
   map,
