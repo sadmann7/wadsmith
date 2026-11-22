@@ -154,6 +154,10 @@ function groups(): { title: string; items: Shortcut[] }[] {
         },
         { keys: [key("Alt-click")], does: "Paint the copied look on" },
         {
+          keys: [key("Shift")],
+          does: "While dragging a wall's texture, align the walls beside it",
+        },
+        {
           keys: [key("F")],
           does: "Flood the copied texture along joined walls",
         },

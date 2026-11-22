@@ -40,6 +40,7 @@ import {
   moveSurfaceHeight,
   parseSurface,
 } from "@/lib/map/surfaces";
+import { alignWalls } from "@/lib/map/texture-tools";
 import { getIsMover, moverAt, withMovers } from "@/lib/preview/movers";
 import {
   cameraBasis,
@@ -192,6 +193,7 @@ const sceneEditor = definePrimitive({
     let dragging = false;
     let touchPress: Point | null = null;
     const held = new Set<string>();
+    let shiftHeld = false;
     let wheeled = { surface: "", sum: 0 };
 
     const shownMap = () => {
@@ -532,11 +534,21 @@ const sceneEditor = definePrimitive({
           moved =
             offsetX !== (side?.offsetX ?? 0) ||
             offsetY !== (side?.offsetY ?? 0);
+          const shifted = updateLineSide(map, wall, sector, {
+            offsetX: wrapOffset(offsetX) || undefined,
+            offsetY: wrapOffset(offsetY) || undefined,
+          });
+          // With Shift held the walls beside this one follow, so the texture
+          // stays unbroken along the room as it moves.
           store.set({
-            draftMap: updateLineSide(map, wall, sector, {
-              offsetX: wrapOffset(offsetX) || undefined,
-              offsetY: wrapOffset(offsetY) || undefined,
-            }),
+            draftMap: shiftHeld
+              ? alignWalls(
+                  shifted,
+                  sector,
+                  wall,
+                  (name) => store.get().assets?.texture(name).width ?? 1,
+                )
+              : shifted,
           });
         },
         onEnd: (end, canceled) => {
@@ -785,6 +797,7 @@ const sceneEditor = definePrimitive({
         if (next !== map) change("map", next, { reason: "wheel", event });
       },
       keydown(event: KeyboardEvent) {
+        if (event.key === "Shift") shiftHeld = true;
         if (stopDrag || openMenuFromKey(event)) return;
         const { map, placing } = store.get();
         const thing = selectedThing();
@@ -851,9 +864,11 @@ const sceneEditor = definePrimitive({
         }
       },
       keyup(event: KeyboardEvent) {
+        if (event.key === "Shift") shiftHeld = false;
         held.delete(event.code);
       },
       blur() {
+        shiftHeld = false;
         held.clear();
       },
     };
