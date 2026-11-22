@@ -17,7 +17,7 @@
     "incremental": true,
     "types": ["node"],
     "plugins": [{ "name": "next" }],
-    "paths": { "@/*": ["./src/*"] }
+    "paths": { "@/*": ["./src/*"], "@rooms/*": ["./rooms/src/*"] }
   },
   "include": [
     "next-env.d.ts",

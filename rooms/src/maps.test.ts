@@ -105,17 +105,121 @@ describe("online map copies", () => {
   });
 });
 
-async function create(body: unknown = map) {
-  const response = await send("/maps", {
-    method: "POST",
-    body: JSON.stringify(body),
+interface Live {
+  socket: WebSocket;
+  next: () => Promise<Record<string, unknown>>;
+  closed: Promise<number>;
+}
+
+describe("live editing", () => {
+  it("hands every editor each edit in order, and keeps it", async () => {
+    const { id, secret } = await create({
+      ...map,
+      things: [{ id: "imp-1", kind: "imp", x: 0, y: 0, angle: 0 }],
+    });
+    const a = await live(id);
+    a.socket.send(JSON.stringify({ type: "hello", secret, name: "Ana" }));
+    expect(await a.next()).toEqual({
+      type: "welcome",
+      peer: 1,
+      revision: 1,
+      peers: [],
+    });
+    const b = await live(id);
+    b.socket.send(JSON.stringify({ type: "hello", secret, name: "Bo" }));
+    expect(await b.next()).toMatchObject({
+      peer: 2,
+      peers: [{ peer: 1, name: "Ana" }],
+    });
+    expect(await a.next()).toEqual({ type: "join", peer: 2, name: "Bo" });
+
+    const moved = { id: "imp-1", kind: "imp", x: 64, y: 0, angle: 0 };
+    a.socket.send(
+      JSON.stringify({
+        type: "patch",
+        id: 7,
+        patch: { set: { things: { "imp-1": moved } } },
+      }),
+    );
+    const echo = { type: "patch", revision: 2, peer: 1, id: 7 };
+    expect(await a.next()).toMatchObject(echo);
+    expect(await b.next()).toMatchObject(echo);
+    expect(await (await send(`/maps/${id}`)).json()).toMatchObject({
+      revision: 2,
+      map: { things: [moved] },
+    });
+
+    b.socket.send(JSON.stringify({ type: "cursor", x: 10.4, y: -3 }));
+    expect(await a.next()).toEqual({
+      type: "cursor",
+      peer: 2,
+      at: { x: 10, y: -3 },
+    });
+
+    // A whole map saved over the web tells everyone to read it again.
+    expect((await put(id, secret, 2, map)).status).toBe(200);
+    expect(await a.next()).toEqual({ type: "map", revision: 3 });
+
+    b.socket.close();
+    expect(await a.next()).toEqual({ type: "leave", peer: 2 });
+    a.socket.close();
   });
-  expect(response.status).toBe(201);
-  return (await response.json()) as {
-    id: string;
-    secret: string;
-    revision: number;
-  };
+
+  it("turns away a connection without the secret and a bad patch", async () => {
+    const { id, secret } = await create();
+    const stranger = await live(id);
+    stranger.socket.send(JSON.stringify({ type: "hello", secret: "nope" }));
+    expect(await stranger.closed).toBe(1008);
+
+    const editor = await live(id);
+    editor.socket.send(JSON.stringify({ type: "hello", secret }));
+    await editor.next();
+    editor.socket.send(
+      JSON.stringify({ type: "patch", patch: { set: { secrets: {} } } }),
+    );
+    editor.socket.send(JSON.stringify({ type: "cursor", x: 1, y: 2 }));
+    // The bad patch is dropped, and nothing came back for either message.
+    expect(await (await send(`/maps/${id}`)).json()).toMatchObject({
+      revision: 1,
+    });
+    editor.socket.close();
+    await expect(live("0000000000000000")).rejects.toThrow();
+  });
+});
+
+function live(id: string) {
+  return new Promise<Live>((done, fail) => {
+    const socket = new WebSocket(
+      `${base.replace("http", "ws")}/maps/${id}/live`,
+      {
+        headers: { Origin: origin },
+      } as unknown as string[],
+    );
+    const received: Record<string, unknown>[] = [];
+    const waiting: ((message: Record<string, unknown>) => void)[] = [];
+    socket.addEventListener("message", (event) => {
+      const message = JSON.parse(String(event.data)) as Record<string, unknown>;
+      const take = waiting.shift();
+      if (take) take(message);
+      else received.push(message);
+    });
+    const closed = new Promise<number>((close) =>
+      socket.addEventListener("close", (event) => close(event.code)),
+    );
+    socket.addEventListener("open", () =>
+      done({
+        socket,
+        closed,
+        next: () =>
+          new Promise((take) => {
+            const message = received.shift();
+            if (message) take(message);
+            else waiting.push(take);
+          }),
+      }),
+    );
+    socket.addEventListener("error", () => fail(new Error("Refused.")));
+  });
 }
 
 function send(
@@ -128,4 +232,17 @@ function send(
     ...init,
     headers: { Origin: origin, ...init.headers },
   });
+}
+
+async function create(body: unknown = map) {
+  const response = await send("/maps", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  expect(response.status).toBe(201);
+  return (await response.json()) as {
+    id: string;
+    secret: string;
+    revision: number;
+  };
 }

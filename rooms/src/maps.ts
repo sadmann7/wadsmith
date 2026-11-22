@@ -3,6 +3,9 @@
 // current revision, so a stale device can't overwrite a newer copy.
 import { DurableObject } from "cloudflare:workers";
 
+import { ConnectionLimits } from "./limits";
+import { applyPatch, parsePatch } from "./map-patch";
+
 export interface MapsEnv {
   MAPS: DurableObjectNamespace<MapCopy>;
   NEW_MAPS?: RateLimit;
@@ -10,7 +13,16 @@ export interface MapsEnv {
 
 export const maxMapBytes = 5 * 1024 * 1024;
 
-const mapPath = /^\/maps(?:\/([a-z0-9]{16}))?$/;
+const mapPath = /^\/maps(?:\/([a-z0-9]{16})(\/live)?)?$/;
+// People editing one map at once.
+const maxEditors = 16;
+const maxNameLength = 24;
+
+// Who a live connection is: 0 until it shows the map's secret.
+interface Editor {
+  peer: number;
+  name: string;
+}
 
 interface Stored {
   revision: number;
@@ -24,6 +36,183 @@ type Write =
   | { ok: false; status: 409; revision: number; map: string };
 
 class MapCopy extends DurableObject {
+  private readonly limits = new WeakMap<WebSocket, ConnectionLimits>();
+  // The map as last stored, kept while the object is awake so each edit
+  // doesn't read and parse it again.
+  private cached: { revision: number; map: Record<string, unknown> } | null =
+    null;
+
+  // A live connection, which edits the map once it shows the secret and sees
+  // everyone else's edits and pointers.
+  async fetch(request: Request) {
+    if (request.headers.get("Upgrade") !== "websocket") {
+      return new Response("Expected a WebSocket.", { status: 426 });
+    }
+    if (!(await this.ctx.storage.get<number>("revision"))) {
+      return new Response("No such map.", { status: 404 });
+    }
+    if (this.ctx.getWebSockets().length >= maxEditors) {
+      return new Response("This map has as many editors as it can take.", {
+        status: 409,
+      });
+    }
+    const [client, server] = Object.values(new WebSocketPair());
+    this.ctx.acceptWebSocket(server);
+    server.serializeAttachment({ peer: 0, name: "" } satisfies Editor);
+    return new Response(null, { status: 101, webSocket: client });
+  }
+
+  async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer) {
+    const now = Date.now();
+    let limits = this.limits.get(socket);
+    if (!limits) {
+      limits = new ConnectionLimits(now, 60);
+      this.limits.set(socket, limits);
+    }
+    const verdict = limits.check(message, now);
+    if (verdict === "close" || typeof message !== "string") {
+      socket.close(1008, "Too much traffic.");
+      return;
+    }
+    if (verdict === "drop") return;
+    let data: Record<string, unknown>;
+    try {
+      data = JSON.parse(message) as Record<string, unknown>;
+    } catch {
+      return;
+    }
+    const editor = socket.deserializeAttachment() as Editor;
+    if (!editor.peer) {
+      await this.hello(socket, data);
+      return;
+    }
+    if (data.type === "patch") {
+      await this.patch(socket, editor, data);
+    } else if (data.type === "cursor") {
+      const { x, y } = data;
+      const at =
+        typeof x === "number" &&
+        typeof y === "number" &&
+        Number.isFinite(x) &&
+        Number.isFinite(y)
+          ? { x: Math.round(x), y: Math.round(y) }
+          : null;
+      this.broadcast(
+        JSON.stringify({ type: "cursor", peer: editor.peer, at }),
+        socket,
+      );
+    }
+  }
+
+  webSocketClose(socket: WebSocket) {
+    this.left(socket);
+  }
+
+  webSocketError(socket: WebSocket) {
+    this.left(socket);
+  }
+
+  private async hello(socket: WebSocket, data: Record<string, unknown>) {
+    const secret = typeof data.secret === "string" ? data.secret : "";
+    const stored = await this.stored();
+    if (data.type !== "hello" || !(await sameHash(secret, stored.secret))) {
+      socket.close(1008, "This link can't edit the map.");
+      return;
+    }
+    const others = this.editors().filter((item) => item.socket !== socket);
+    const peer = Math.max(0, ...others.map((item) => item.editor.peer)) + 1;
+    const name =
+      typeof data.name === "string"
+        ? data.name.trim().slice(0, maxNameLength)
+        : "";
+    socket.serializeAttachment({ peer, name } satisfies Editor);
+    socket.send(
+      JSON.stringify({
+        type: "welcome",
+        peer,
+        revision: stored.revision,
+        peers: others.map((item) => item.editor),
+      }),
+    );
+    this.broadcast(JSON.stringify({ type: "join", peer, name }), socket);
+  }
+
+  // Edits apply in the order they arrive, and everyone, the sender too, hears
+  // each one with its revision, so every copy ends up the same.
+  private async patch(
+    socket: WebSocket,
+    editor: Editor,
+    data: Record<string, unknown>,
+  ) {
+    const patch = parsePatch(data.patch);
+    if (!patch) return;
+    const current = await this.current();
+    const map = applyPatch(current.map, patch);
+    const text = JSON.stringify(map);
+    if (text.length > maxMapBytes) {
+      socket.send(
+        JSON.stringify({ type: "refused", id: data.id, error: "too-big" }),
+      );
+      return;
+    }
+    const revision = current.revision + 1;
+    const { parts } = await this.stored();
+    await this.ctx.storage.put({ ...partsOf(text, parts ?? 0), revision });
+    this.cached = { revision, map };
+    this.broadcast(
+      JSON.stringify({
+        type: "patch",
+        patch,
+        revision,
+        peer: editor.peer,
+        id: data.id,
+      }),
+    );
+  }
+
+  private async current() {
+    const { revision = 0, parts = 0 } = await this.stored();
+    if (this.cached?.revision !== revision) {
+      this.cached = {
+        revision,
+        map: JSON.parse((await this.map(parts)) || "{}") as Record<
+          string,
+          unknown
+        >,
+      };
+    }
+    return this.cached;
+  }
+
+  private editors() {
+    return this.ctx.getWebSockets().flatMap((socket) => {
+      const editor = socket.deserializeAttachment() as Editor;
+      return editor.peer ? [{ socket, editor }] : [];
+    });
+  }
+
+  private left(socket: WebSocket) {
+    const { peer } = socket.deserializeAttachment() as Editor;
+    socket.serializeAttachment({ peer: 0, name: "" } satisfies Editor);
+    try {
+      socket.close();
+    } catch {
+      // The socket may already be closed.
+    }
+    if (peer) this.broadcast(JSON.stringify({ type: "leave", peer }), socket);
+  }
+
+  private broadcast(message: string, except?: WebSocket) {
+    for (const { socket } of this.editors()) {
+      if (socket === except) continue;
+      try {
+        socket.send(message);
+      } catch {
+        // A closing socket gets its own close event.
+      }
+    }
+  }
+
   async create(secret: string, map: string) {
     if (await this.ctx.storage.get<number>("revision")) return false;
     await this.ctx.storage.put({ ...partsOf(map, 0), revision: 1, secret });
@@ -56,6 +245,9 @@ class MapCopy extends DurableObject {
       ...partsOf(map, stored.parts ?? 0),
       revision,
     });
+    this.cached = null;
+    // Live editors take the whole new map from a read.
+    this.broadcast(JSON.stringify({ type: "map", revision }));
     return { ok: true, revision };
   }
 
@@ -144,6 +336,12 @@ async function answer(
     return reply({ id: newId, secret, revision: 1 }, 201);
   }
   const copy = env.MAPS.get(env.MAPS.idFromName(id));
+  if (match[2]) {
+    if (!headers["Access-Control-Allow-Origin"]) {
+      return new Response("Forbidden.", { status: 403 });
+    }
+    return copy.fetch(request);
+  }
   if (request.method === "GET") {
     const found = await copy.read();
     return found

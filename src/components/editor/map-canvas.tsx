@@ -1,6 +1,13 @@
-import { Focus, LocateFixed, Maximize, StickyNote } from "lucide-react";
+import {
+  Focus,
+  LocateFixed,
+  Maximize,
+  MousePointer2,
+  StickyNote,
+} from "lucide-react";
 import * as React from "react";
 
+import type { LivePeer } from "@/lib/episodes/live";
 import type { MapLink } from "@/lib/map/links";
 import type { PlaytestRun, RunMark } from "@/lib/map/playtest";
 import type { GameMap, Sector, ThingKind } from "@/lib/map/types";
@@ -56,6 +63,8 @@ interface MapCanvasProps extends React.ComponentProps<typeof MapEditor> {
   links: MapLink[];
   // The last playtest's paths and marks, or null to leave them off the map.
   trail: PlaytestRun | null;
+  // Other people editing the map, at their pointers.
+  peers?: LivePeer[];
 }
 
 export function MapCanvas({
@@ -63,6 +72,7 @@ export function MapCanvas({
   callouts,
   links,
   trail,
+  peers = [],
   onViewChange,
   ...props
 }: MapCanvasProps) {
@@ -313,6 +323,23 @@ export function MapCanvas({
             <StickyNote size={12} aria-hidden="true" />
           </MapMarker>
         ))}
+        {peers.map(({ peer, name, at }) =>
+          at ? (
+            <MapMarker
+              key={`peer-${peer}`}
+              value={`peer-${peer}`}
+              x={at.x}
+              y={at.y}
+              data-peer={(peer - 1) % peerColors}
+              className="map-peer pointer-events-none origin-top-left [transform:scale(calc(1/var(--canvas-zoom,1)))]"
+            >
+              <MousePointer2 size={16} aria-hidden="true" />
+              <span className="map-peer-name">
+                <span>{name || `Editor ${peer}`}</span>
+              </span>
+            </MapMarker>
+          ) : null,
+        )}
         {callouts.map((callout) => (
           <MapMarker
             key={callout.id}
@@ -459,6 +486,7 @@ function thingLook(kind: ThingKind) {
 
 // Doom gives its four players a color each, and a path wears its player's.
 const trailColors = 4;
+const peerColors = 4;
 
 // A hit's mark grows with the damage, up to this many times its size.
 const heavyHit = 40;

@@ -314,6 +314,38 @@
     pointer-events: none;
   }
 
+  .map-peer {
+    display: flex;
+    align-items: flex-start;
+    gap: 2px;
+    color: var(--color-success);
+  }
+
+  .map-peer[data-peer="1"] {
+    color: var(--color-info);
+  }
+
+  .map-peer[data-peer="2"] {
+    color: var(--color-warning);
+  }
+
+  .map-peer[data-peer="3"] {
+    color: var(--color-destructive);
+  }
+
+  .map-peer-name {
+    margin-top: 12px;
+    padding: 1px 4px;
+    border-radius: 3px;
+    background: currentColor;
+    font: 500 11px var(--font-sans);
+    white-space: nowrap;
+  }
+
+  .map-peer-name > span {
+    color: var(--color-primary-foreground);
+  }
+
   .map-trail-path {
     fill: none;
     stroke: var(--color-success);
