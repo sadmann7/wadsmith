@@ -17,6 +17,7 @@ import {
   freeWallNear,
   flipDetailLine,
   makePillar,
+  mergeCorners,
   removeDetailLine,
   removeHole,
   removeSector,
@@ -24,6 +25,7 @@ import {
   setLineTarget,
   snapCorners,
   snapPoint,
+  splitWall,
   setRoomDoor,
   updateLine,
   updateLineSide,
@@ -75,6 +77,7 @@ import { parseMapFile, serializeMap } from "@/map/storage";
 import type { GameMap, LineAction } from "@/map/types";
 import { validateMap } from "@/map/validate";
 import { buildLevel, compileLumps, compileMap, toDoom } from "./compile";
+import { inspectWads } from "./inspect";
 import { buildNodes, subsectorFlag } from "./nodes";
 
 const lShape: GameMap = {
@@ -152,8 +155,8 @@ describe("compileMap", () => {
     const wad = compileMap(testMap);
     const view = new DataView(wad.buffer);
     expect(String.fromCharCode(...wad.slice(0, 4))).toBe("PWAD");
-    expect(view.getInt32(4, true)).toBe(11);
-    const names = Array.from({ length: 11 }, (_, index) => {
+    expect(view.getInt32(4, true)).toBe(12);
+    const names = Array.from({ length: 12 }, (_, index) => {
       const start = view.getInt32(8, true) + index * 16 + 8;
       return String.fromCharCode(...wad.slice(start, start + 8)).replace(
         /\0+$/,
@@ -172,6 +175,7 @@ describe("compileMap", () => {
       "SECTORS",
       "REJECT",
       "BLOCKMAP",
+      "COMPLVL",
     ]);
   });
 
@@ -449,6 +453,25 @@ describe("rooms inside rooms", () => {
       ],
     });
     expect(issues.map((issue) => issue.id)).toContain("outside:imp-1");
+  });
+
+  it("keeps a wall solid towards the room around it when asked", () => {
+    const walled: GameMap = {
+      ...islandMap,
+      lines: { [wallKey("e", "f")]: { solid: true } },
+    };
+    expect(validateMap(walled)).toEqual([]);
+    expect(
+      wallOwners(walled)
+        .get(wallKey("e", "f"))
+        ?.map((sector) => sector.id),
+    ).toEqual(["stage"]);
+    const { lines } = buildLevel(walled);
+    expect(lines.filter((line) => line.backSector !== null)).toHaveLength(3);
+    expect(lines.find((line) => line.wall === wallKey("e", "f"))).toMatchObject(
+      { frontSector: 1, backSector: null },
+    );
+    expect(parseMapFile(serializeMap(walled))).toEqual(walled);
   });
 
   it("lets a room sit inside a pillar, closed in by solid wall", () => {
@@ -745,6 +768,299 @@ describe("lines inside rooms", () => {
       ],
     };
     expect(() => parseMapFile(serializeMap(broken))).toThrow("corners");
+  });
+});
+
+describe("compatibility and raw specials", () => {
+  const map: GameMap = {
+    ...islandMap,
+    complevel: "mbf21",
+    sectors: [{ ...islandMap.sectors[0], rawEffect: 32 }, islandMap.sectors[1]],
+    lines: {
+      [wallKey("e", "f")]: {
+        raw: { special: 200, tag: 3 },
+        passUse: true,
+        soundBlock: true,
+        mapped: true,
+        secret: true,
+      },
+    },
+    things: [
+      ...islandMap.things,
+      {
+        id: "imp-1",
+        kind: "imp",
+        x: 64,
+        y: 400,
+        angle: 0,
+        multiplayer: true,
+        notDeathmatch: true,
+        notCoop: true,
+        friendly: true,
+      },
+    ],
+  };
+
+  it("writes raw specials, effects and flags the menus don't have", () => {
+    expect(validateMap(map)).toEqual([]);
+    const line = linesOf(map).find(
+      (item) => item.line.wall === wallKey("e", "f"),
+    )!;
+    expect(line.special).toBe(200);
+    expect(line.tag).toBe(3);
+    expect(line.flags & 0x360).toBe(0x360);
+    const sectors = new DataView(lump(map, "SECTORS").buffer);
+    expect(sectors.getInt16(22, true)).toBe(32);
+    const things = new DataView(lump(map, "THINGS").buffer);
+    expect(things.getInt16((map.things.length - 1) * 10 + 8, true) & 0xf0).toBe(
+      0xf0,
+    );
+    const summary = inspectWads([{ name: "map.wad", data: compileMap(map) }]);
+    expect(summary).toMatchObject({ complevel: "mbf21", declared: true });
+    expect(
+      inspectWads([{ name: "map.wad", data: compileMap(islandMap) }]).complevel,
+    ).toBe("vanilla");
+  });
+
+  it("rejects specials and flags past the map's compatibility", () => {
+    expect(
+      validateMap({ ...map, complevel: undefined }).map((issue) => issue.id),
+    ).toEqual([
+      `line-level:${wallKey("e", "f")}`,
+      "sector-level:yard",
+      "thing-level:imp-1",
+    ]);
+    expect(
+      validateMap({ ...map, complevel: "boom" }).map((issue) => issue.id),
+    ).toEqual(["thing-level:imp-1"]);
+    expect(validateMap({ ...map, complevel: undefined })[0].message).toMatch(
+      /^Line \d+: needs Boom/,
+    );
+    const copies = duplicateThings(map, ["imp-1"]);
+    expect(copies.map.things.at(-1)).toMatchObject({
+      multiplayer: true,
+      notDeathmatch: true,
+      notCoop: true,
+      friendly: true,
+    });
+  });
+
+  it("reports a torn room beside a closed tagged room", () => {
+    const torn: GameMap = {
+      ...islandMap,
+      sectors: [
+        { ...islandMap.sectors[0], vertices: ["a", "b", "c", "zz"] },
+        { ...islandMap.sectors[1], ceiling: 32, tag: 3 },
+      ],
+    };
+    expect(validateMap(torn).map((issue) => issue.id)).toContain(
+      "missing:yard",
+    );
+  });
+
+  it("reports a torn room instead of failing on its raw special", () => {
+    const torn: GameMap = {
+      ...map,
+      sectors: [
+        { ...map.sectors[0], vertices: ["a", "b", "c", "zz"] },
+        map.sectors[1],
+      ],
+    };
+    expect(
+      validateMap({ ...torn, complevel: undefined }).map((issue) => issue.id),
+    ).toEqual(
+      expect.arrayContaining([
+        "missing:yard",
+        `line-level:${wallKey("e", "f")}`,
+      ]),
+    );
+  });
+
+  it("saves and reopens them, and refuses an unknown level", () => {
+    expect(parseMapFile(serializeMap(map))).toEqual(map);
+    expect(() =>
+      parseMapFile(serializeMap({ ...map, complevel: "zdoom" as never })),
+    ).toThrow("compatibility");
+  });
+});
+
+describe("wall editing", () => {
+  it("splits a wall at a point and gives both halves its settings", () => {
+    const marked: GameMap = {
+      ...islandMap,
+      lines: {
+        [wallKey("a", "b")]: { hidden: true, sides: { yard: { offsetX: 40 } } },
+      },
+      sectors: [
+        {
+          ...islandMap.sectors[0],
+          wallOverrides: { [wallKey("a", "b")]: "BROWN1" },
+        },
+        islandMap.sectors[1],
+      ],
+    };
+    const split = splitWall(marked, wallKey("a", "b"), { x: 250, y: 3 })!;
+    expect(split.map.vertices[split.id]).toEqual({ x: 248, y: 0 });
+    expect(split.map.sectors[0].vertices).toEqual([
+      "a",
+      split.id,
+      "b",
+      "c",
+      "d",
+    ]);
+    expect(split.map.lines?.[wallKey("a", split.id)]).toEqual({
+      hidden: true,
+      sides: { yard: { offsetX: 40 } },
+    });
+    expect(split.map.lines?.[wallKey(split.id, "b")]).toEqual({
+      hidden: true,
+      sides: { yard: { offsetX: 288 } },
+    });
+    // The same room drawn the other way round reads its walls the same way.
+    const reversed = splitWall(
+      {
+        ...marked,
+        sectors: [
+          { ...marked.sectors[0], vertices: ["a", "d", "c", "b"] },
+          marked.sectors[1],
+        ],
+      },
+      wallKey("a", "b"),
+      { x: 250, y: 3 },
+    )!;
+    expect(reversed.map.lines?.[wallKey("a", reversed.id)]?.sides).toEqual({
+      yard: { offsetX: 40 },
+    });
+    expect(reversed.map.lines?.[wallKey(reversed.id, "b")]?.sides).toEqual({
+      yard: { offsetX: 288 },
+    });
+    // The yard reads the stage's wall from its far end, as the back side.
+    const around = splitWall(
+      {
+        ...islandMap,
+        lines: { [wallKey("e", "f")]: { sides: { yard: { offsetX: 40 } } } },
+      },
+      wallKey("e", "f"),
+      { x: 256, y: 192 },
+    )!;
+    expect(around.map.lines?.[wallKey("f", around.id)]?.sides).toEqual({
+      yard: { offsetX: 40 },
+    });
+    expect(around.map.lines?.[wallKey("e", around.id)]?.sides).toEqual({
+      yard: { offsetX: 104 },
+    });
+    expect(split.map.lines?.[wallKey("a", "b")]).toBeUndefined();
+    expect(split.map.sectors[0].wallOverrides).toEqual({
+      [wallKey("a", split.id)]: "BROWN1",
+      [wallKey(split.id, "b")]: "BROWN1",
+    });
+    expect(validateMap(split.map)).toEqual([]);
+    expect(splitWall(islandMap, wallKey("a", "b"), { x: 2, y: 0 })).toBeNull();
+    const item = testMap.switches[0];
+    expect(
+      splitWall(testMap, wallKey(item.from, item.to), { x: 0, y: 0 }),
+    ).toBeNull();
+  });
+
+  it("splits a pillar's wall and a shared wall in every outline", () => {
+    const pillar = makePillar(islandMap, "stage")!;
+    const split = splitWall(pillar, wallKey("e", "f"), { x: 256, y: 192 })!;
+    expect(pillar.sectors[0].holes?.[0]).toHaveLength(4);
+    expect(split.map.sectors[0].holes?.[0]).toHaveLength(5);
+    const shared = splitWall(testMap, wallKey("v3", "v4"), { x: 384, y: 160 })!;
+    expect(shared.map.sectors[0].vertices).toContain(shared.id);
+    expect(shared.map.sectors[1].vertices).toContain(shared.id);
+    expect(validateMap(shared.map)).toEqual([]);
+  });
+
+  it("lets the surviving wall keep its settings when a dropped one lands on it", () => {
+    const clash: GameMap = {
+      vertices: {
+        v1: { x: 0, y: 0 },
+        v2: { x: 64, y: 0 },
+        v3: { x: 64, y: 64 },
+        v4: { x: 0, y: 64 },
+        v15: { x: 0, y: 0 },
+        v6: { x: 32, y: -64 },
+      },
+      sectors: [
+        {
+          ...islandMap.sectors[0],
+          id: "top",
+          vertices: ["v1", "v2", "v3", "v4"],
+        },
+        { ...islandMap.sectors[0], id: "low", vertices: ["v15", "v2", "v6"] },
+      ],
+      things: [],
+      switches: [],
+      lines: {
+        [wallKey("v1", "v2")]: { hidden: true },
+        [wallKey("v15", "v2")]: { blocksEnemies: true },
+      },
+    };
+    const joined = mergeCorners(clash, ["v1"]);
+    expect(joined.lines).toEqual({
+      [wallKey("v15", "v2")]: { blocksEnemies: true },
+    });
+    expect(joined.sectors[0].vertices).toEqual(["v15", "v2", "v3", "v4"]);
+  });
+
+  it("leaves a corner dropped on a far corner of its own room alone", () => {
+    const folded: GameMap = {
+      ...islandMap,
+      vertices: { ...islandMap.vertices, b: { x: 0, y: 512 } },
+    };
+    expect(mergeCorners(folded, ["b"])).toBe(folded);
+  });
+
+  it("joins a corner dropped onto another and rekeys its walls", () => {
+    const beside: GameMap = {
+      ...islandMap,
+      vertices: {
+        ...islandMap.vertices,
+        p: { x: 512, y: 0 },
+        q: { x: 768, y: 0 },
+        r: { x: 768, y: 512 },
+        s: { x: 512, y: 512 },
+      },
+      sectors: [
+        ...islandMap.sectors,
+        {
+          ...islandMap.sectors[0],
+          id: "annex",
+          name: "Annex",
+          vertices: ["p", "q", "r", "s"],
+        },
+      ],
+      lines: { [wallKey("p", "q")]: { hidden: true } },
+    };
+    const joined = mergeCorners(beside, ["p", "s"]);
+    expect(joined.vertices.p).toBeUndefined();
+    expect(joined.vertices.s).toBeUndefined();
+    expect(joined.sectors[2].vertices).toEqual(["b", "q", "r", "c"]);
+    expect(joined.lines).toEqual({ [wallKey("b", "q")]: { hidden: true } });
+    expect(
+      wallOwners(joined)
+        .get(wallKey("b", "c"))
+        ?.map((sector) => sector.id),
+    ).toEqual(["yard", "annex"]);
+    expect(validateMap(joined)).toEqual([]);
+    const shorter = mergeCorners(
+      { ...testMap, vertices: { ...testMap.vertices, v16: { x: 384, y: 0 } } },
+      ["v16"],
+    );
+    expect(shorter.vertices.v16).toBeUndefined();
+    expect(shorter.sectors[0].vertices).toEqual([
+      "v1",
+      "v15",
+      "v2",
+      "v3",
+      "v4",
+      "v5",
+      "v6",
+    ]);
+    expect(shorter.switches[0]).toMatchObject({ from: "v15", to: "v2" });
+    expect(validateMap(shorter)).toEqual([]);
   });
 });
 

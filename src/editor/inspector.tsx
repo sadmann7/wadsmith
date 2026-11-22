@@ -21,6 +21,7 @@ import {
 import { appearsOn, mapBalance } from "@/map/balance";
 import { middleTextures } from "@/map/freedoom-textures";
 import { defaultDoor, gridSize } from "@/map/edit";
+import { containerOf } from "@/map/geometry";
 import {
   canRepeatChoice,
   describeLine,
@@ -109,10 +110,27 @@ const partLabels: Record<WallPart, string> = {
 };
 const lineFlags: { flag: keyof LineSettings; label: string }[] = [
   { flag: "blocksEnemies", label: "Blocks enemies" },
+  { flag: "soundBlock", label: "Blocks sound" },
   { flag: "upperFixed", label: "Keep upper texture fixed" },
   { flag: "lowerFixed", label: "Keep lower texture fixed" },
   { flag: "hidden", label: "Hide on automap" },
+  { flag: "secret", label: "Look solid on automap" },
+  { flag: "mapped", label: "Show on automap from the start" },
+  { flag: "passUse", label: "Let use pass through (Boom)" },
 ];
+
+const thingFlags: {
+  flag: "multiplayer" | "notDeathmatch" | "notCoop" | "friendly";
+  label: string;
+  enemies?: boolean;
+}[] = [
+  { flag: "multiplayer", label: "Only in network games" },
+  { flag: "notDeathmatch", label: "Not in deathmatch (Boom)" },
+  { flag: "notCoop", label: "Not in co-op (Boom)" },
+  { flag: "friendly", label: "Fights for the player (MBF)", enemies: true },
+];
+
+const rawSpecialLimit = 32767;
 
 function tabOf(kind: ThingKind): ThingTab {
   const { category } = thingCatalog[kind];
@@ -500,9 +518,22 @@ function SectorInspector({
               onChange({
                 effect:
                   effect === "none" ? undefined : (effect as SectorEffect),
+                rawEffect: undefined,
               })
             }
           />
+          {sector.effect ? null : (
+            <NumberSetting
+              label="Special number"
+              value={sector.rawEffect ?? 0}
+              step={1}
+              min={0}
+              max={rawSpecialLimit}
+              onChange={(rawEffect) =>
+                onChange({ rawEffect: rawEffect || undefined })
+              }
+            />
+          )}
           <NumberSetting
             label="Tag"
             value={sector.tag ?? 0}
@@ -723,6 +754,7 @@ function LineInspector({
                   onLineChange({
                     action: newLineAction(twoSided, kind),
                     scrolls: undefined,
+                    raw: undefined,
                   });
                 }
               }}
@@ -818,7 +850,10 @@ function LineInspector({
                   label="Texture scrolls"
                   checked={Boolean(settings.scrolls)}
                   onChange={(checked) =>
-                    onLineChange({ scrolls: checked || undefined })
+                    onLineChange({
+                      scrolls: checked || undefined,
+                      raw: checked ? undefined : settings.raw,
+                    })
                   }
                 />
                 {settings.scrolls && detail ? (
@@ -846,6 +881,37 @@ function LineInspector({
             )}
           </>
         )}
+        {!line.wiredSwitch && !action && !opensDoor ? (
+          <div className="flex items-center gap-2 [&>*]:min-w-0 [&>*]:flex-1">
+            <NumberSetting
+              label="Special number"
+              value={settings.raw?.special ?? 0}
+              step={1}
+              min={0}
+              max={rawSpecialLimit}
+              onChange={(special) =>
+                onLineChange({
+                  raw: special
+                    ? { special, tag: settings.raw?.tag ?? 0 }
+                    : undefined,
+                  scrolls: special ? undefined : settings.scrolls,
+                })
+              }
+            />
+            {settings.raw ? (
+              <NumberSetting
+                label="Tag"
+                value={settings.raw.tag}
+                step={1}
+                min={0}
+                max={tagLimit}
+                onChange={(tag) =>
+                  onLineChange({ raw: { special: settings.raw!.special, tag } })
+                }
+              />
+            ) : null}
+          </div>
+        ) : null}
       </InspectorSection>
       <InspectorSection title="Flags">
         {twoSided ? (
@@ -854,6 +920,16 @@ function LineInspector({
             checked={Boolean(settings.blocksAll)}
             onChange={(checked) =>
               onLineChange({ blocksAll: checked || undefined })
+            }
+          />
+        ) : null}
+        {settings.solid ||
+        (back && !back.door && containerOf(map, front)?.id === back.id) ? (
+          <ToggleField
+            label="Solid towards the room around it"
+            checked={Boolean(settings.solid)}
+            onChange={(checked) =>
+              onLineChange({ solid: checked || undefined })
             }
           />
         ) : null}
@@ -1182,6 +1258,31 @@ function ThingFields({
               Wait until player is seen
             </label>
           ) : null}
+          {thingFlags
+            .filter(({ enemies: only }) => !only || enemies.length > 0)
+            .map(({ flag, label, enemies: only }) => {
+              const applies = only ? enemies : placed;
+              return (
+                <label key={flag} className="flex items-center gap-2">
+                  <Checkbox
+                    className="flex size-4 items-center justify-center rounded-[2px] border border-input bg-transparent p-0 text-primary-foreground aria-checked:border-primary aria-checked:bg-primary"
+                    checked={applies.every((thing) => thing[flag])}
+                    onCheckedChange={(checked) =>
+                      onChange((thing) =>
+                        !only || thingCatalog[thing.kind].category === "enemy"
+                          ? { [flag]: checked === true || undefined }
+                          : {},
+                      )
+                    }
+                  >
+                    <CheckboxIndicator>
+                      <Check size={12} aria-hidden="true" />
+                    </CheckboxIndicator>
+                  </Checkbox>
+                  {label}
+                </label>
+              );
+            })}
         </InspectorSection>
       ) : null}
     </>

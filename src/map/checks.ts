@@ -174,6 +174,11 @@ const buildGroups: {
     passed: "Within classic Doom limits",
     ids: /^(range|height-range)(:|$)/,
   },
+  {
+    name: "Compatibility",
+    passed: "Nothing past the map's level",
+    ids: /^(line-level|sector-level|thing-level)(:|$)/,
+  },
 ];
 
 // validateMap stops at the first layer of errors, so later groups stay unknown.

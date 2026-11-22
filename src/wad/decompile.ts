@@ -11,7 +11,14 @@ import {
   middleTextures,
 } from "@/map/freedoom-textures";
 import {
+  higherLevel,
+  lineLevel,
+  sectorLevel,
+  thingLevel,
+} from "@/map/complevel";
+import {
   pointInPolygon,
+  sectorContainers,
   sectorVertices,
   signedArea,
   wallKey,
@@ -27,6 +34,7 @@ import {
   usedFromFront,
 } from "@/map/lines";
 import type {
+  Complevel,
   DoorSettings,
   GameMap,
   LineAction,
@@ -78,9 +86,20 @@ const lineBlocksAll = 0x0001;
 const lineBlocksEnemies = 0x0002;
 const lineUpperUnpegged = 0x0008;
 const lineLowerUnpegged = 0x0010;
+const lineSecret = 0x0020;
+const lineSoundBlock = 0x0040;
 const lineHidden = 0x0080;
-const thingMultiplayer = 0x0010;
+const lineMapped = 0x0100;
+const linePassUse = 0x0200;
+// Old editors left junk in the high bits and set this one, so the bits past
+// vanilla's mean nothing on such a line.
+const lineReserved = 0x0800;
+const vanillaLineFlags = 0x01ff;
 const thingAmbush = 0x0008;
+const thingMultiplayer = 0x0010;
+const thingNotDeathmatch = 0x0020;
+const thingNotCoop = 0x0040;
+const thingFriendly = 0x0080;
 const skillFlags: [ThingSkill, number][] = [
   ["easy", 0x0001],
   ["medium", 0x0002],
@@ -110,10 +129,6 @@ const keyedManualDoors = new Set([26, 27, 28, 32, 33, 34]);
 const fastManualDoors = new Set([117, 118]);
 
 const specialScrollLeft = 48;
-
-function actionGroup(special: number) {
-  return special > 141 ? "Boom and later actions" : "Other actions";
-}
 
 function actionTable() {
   const table = new Map<number, Omit<LineAction, "tag">>();
@@ -560,7 +575,7 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
     const wallTexture =
       mostCommon(middles) ?? mostCommon(parts) ?? fallbackWall;
     const effect = effects.get(source.special);
-    if (source.special !== 0 && !effect) report.droppedEffects += 1;
+    const rawEffect = source.special !== 0 && !effect ? source.special : null;
 
     let door: DoorSettings | undefined;
     let ceiling = Math.max(source.ceiling, source.floor);
@@ -622,6 +637,7 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
         wallTexture,
         ...(door ? { door } : {}),
         ...(effect ? { effect } : {}),
+        ...(rawEffect === null ? {} : { rawEffect }),
         ...(source.tag ? { tag: source.tag } : {}),
       };
       sectors.push(sector);
@@ -669,8 +685,7 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
           tag: lineUsesTag(value) ? line.tag : 0,
         };
       } else if (!action && !automatic) {
-        const group = actionGroup(line.special);
-        report.droppedActions[group] = (report.droppedActions[group] ?? 0) + 1;
+        entry.raw = { special: line.special, tag: line.tag };
       }
     }
 
@@ -752,10 +767,16 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
       const value = offsets(side);
       if (Object.keys(value).length > 0) sides[id] = value;
     }
-    if (line.flags & lineBlocksEnemies) entry.blocksEnemies = true;
-    if (line.flags & lineUpperUnpegged) entry.upperFixed = true;
-    if (line.flags & lineLowerUnpegged) entry.lowerFixed = true;
-    if (line.flags & lineHidden) entry.hidden = true;
+    const flags =
+      line.flags & lineReserved ? line.flags & vanillaLineFlags : line.flags;
+    if (flags & lineBlocksEnemies) entry.blocksEnemies = true;
+    if (flags & lineUpperUnpegged) entry.upperFixed = true;
+    if (flags & lineLowerUnpegged) entry.lowerFixed = true;
+    if (flags & lineSecret) entry.secret = true;
+    if (flags & lineSoundBlock) entry.soundBlock = true;
+    if (flags & lineHidden) entry.hidden = true;
+    if (flags & lineMapped) entry.mapped = true;
+    if (flags & linePassUse) entry.passUse = true;
     if (Object.keys(sides).length > 0) entry.sides = sides;
     if (Object.keys(entry).length > 0) settings[key] = entry;
   }
@@ -777,10 +798,6 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
       return;
     }
     const isStart = source.type >= 1 && source.type <= 4;
-    if (!isStart && source.type !== 11 && source.flags & thingMultiplayer) {
-      report.multiplayerThings += 1;
-      return;
-    }
     const skills = skillFlags
       .filter(([, flag]) => source.flags & flag)
       .map(([skill]) => skill);
@@ -801,11 +818,14 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
       angle: ((source.angle % 360) + 360) % 360,
       ...(skills.length > 0 && skills.length < 3 ? { skills } : {}),
       ...(enemy && source.flags & thingAmbush ? { ambush: true } : {}),
+      ...(source.flags & thingMultiplayer ? { multiplayer: true } : {}),
+      ...(source.flags & thingNotDeathmatch ? { notDeathmatch: true } : {}),
+      ...(source.flags & thingNotCoop ? { notCoop: true } : {}),
+      ...(enemy && source.flags & thingFriendly ? { friendly: true } : {}),
     });
   });
 
-  // Multiplayer spots are dropped, so a teleporter that only leads to one
-  // would go nowhere.
+  // A teleporter whose tagged sector holds no landing at all goes nowhere.
   const landings = new Set(
     things
       .filter((thing) => thing.kind === "teleport-destination")
@@ -829,7 +849,7 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
     }
     delete entry.action;
     if (Object.keys(entry).length === 0) delete settings[key];
-    const group = "Teleporters to multiplayer spots";
+    const group = "Teleporters with nowhere to land";
     report.droppedActions[group] = (report.droppedActions[group] ?? 0) + 1;
   }
 
@@ -841,9 +861,42 @@ function decompileMap(doom: DoomMap): { map: GameMap; report: ImportReport } {
     }),
   );
   report.replacedTextures = [...replaced].toSorted();
+
+  // A wall with nothing behind it in the WAD stays solid even where the
+  // editor sees a room around the one it belongs to.
+  const drawn: GameMap = { vertices, sectors, things, switches };
+  const containers = sectorContainers(drawn);
+  for (const sector of sectors) {
+    if (!containers.get(sector.id)) continue;
+    const index = Number(/^s(\d+)/.exec(sector.id)![1]);
+    sector.vertices.forEach((id, at) => {
+      const next = sector.vertices[(at + 1) % sector.vertices.length];
+      const line = lineAt.get(wallKey(id.slice(1), next.slice(1)));
+      const other =
+        line?.frontSector === index
+          ? line.backSector
+          : (line?.frontSector ?? null);
+      if (other !== null) return;
+      const key = wallKey(id, next);
+      settings[key] = { ...settings[key], solid: true };
+    });
+  }
+
+  let complevel: Complevel = "vanilla";
+  for (const line of doom.lines) {
+    const flags = line.flags & lineReserved ? 0 : line.flags;
+    complevel = higherLevel(complevel, lineLevel(line.special, flags));
+  }
+  for (const sector of doom.sectors) {
+    complevel = higherLevel(complevel, sectorLevel(sector.special));
+  }
+  for (const thing of doom.things) {
+    complevel = higherLevel(complevel, thingLevel(thing.type));
+  }
   return {
     map: {
       name: doom.title ?? doom.slot,
+      ...(complevel === "vanilla" ? {} : { complevel }),
       vertices,
       sectors,
       things,
