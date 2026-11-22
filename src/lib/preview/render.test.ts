@@ -376,6 +376,27 @@ describe("the sky, open lines and movers", () => {
     expect(outlined).toBeLessThan(span / 4);
   });
 
+  it("doesn't outline what shows through a see-through texture hole by hole", () => {
+    const fenced = updateLineSide(testMap, open, "sector-1", {
+      middle: "GRATE",
+    });
+    const checkered = {
+      ...grate(1),
+      opaque: Uint8Array.from({ length: 64 * 128 }, (_, index) => index % 2),
+    };
+    const hovered = (map: GameMap) => {
+      const target = createRenderTarget(320, 200);
+      renderScene(target, map, startCamera(map), {
+        assets: withTextures({ GRATE: checkered }),
+        hovered: "wall:sector-2:v13|v14:upper",
+      });
+      return target.colors.filter((color) => color === 0xffffffff).length;
+    };
+    // The door's face behind the fence gets no more outline than without it.
+    expect(hovered(testMap)).toBeGreaterThan(0);
+    expect(hovered(fenced)).toBeLessThanOrEqual(hovered(testMap));
+  });
+
   it("shows a taller room's walls above a lower one when both are open to the sky", () => {
     const yard: GameMap = {
       ...outdoors,

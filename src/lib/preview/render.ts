@@ -43,8 +43,10 @@ export interface RenderTarget {
   depth: Float32Array;
   pick: Uint16Array;
   // The see-through texture whose span covers each pixel, holes included, so
-  // its outline runs round the span and not round every hole.
+  // its outline runs round the span and not round every hole, and how far
+  // away it is there.
   extent: Uint16Array;
+  reach: Float32Array;
   surfaces: string[];
   focal: number;
 }
@@ -111,6 +113,7 @@ export function createRenderTarget(
     depth: new Float32Array(width * height),
     pick: new Uint16Array(width * height),
     extent: new Uint16Array(width * height),
+    reach: new Float32Array(width * height),
     surfaces: [""],
     focal: width / 2 / Math.tan(fieldOfView / 2),
   };
@@ -168,7 +171,8 @@ export function renderScene(
   camera: Camera,
   { assets, hovered, selected, ghost, sky, opened = noMovers }: SceneOptions,
 ) {
-  const { width, height, colors, depth: depths, pick, extent, focal } = target;
+  const { width, height, colors, pick, extent, reach, focal } = target;
+  const depths = target.depth;
   const { shades } = assets;
   const map = withMovers(sourceMap, opened);
   const skyPicture = sky ? assets.texture(sky) : null;
@@ -412,6 +416,12 @@ export function renderScene(
               : lowerPlane - plane,
         );
       }
+      // Two rooms open to the sky share one sky, so the opening between them
+      // reaches the further room's ceiling, above this room's or below.
+      const openSky =
+        heavens &&
+        current.ceilingTexture === skyFlat &&
+        next.ceilingTexture === skyFlat;
       const middle = wall.side?.middle;
       const picture =
         middle && !next.door && !current.door ? assets.texture(middle) : null;
@@ -428,7 +438,10 @@ export function renderScene(
           (wall.b.x - wall.a.x) * (camera.y - wall.a.y) <
             (wall.b.y - wall.a.y) * (camera.x - wall.a.x);
         masked.push({
-          from: Math.max(top, ceilingRow, upperRow),
+          from: Math.max(
+            top,
+            openSky ? rowOf(next.ceiling) : Math.max(ceilingRow, upperRow),
+          ),
           to: Math.min(bottom, floorRow, lowerRow),
           distance,
           column: wrap(
@@ -448,12 +461,6 @@ export function renderScene(
           ),
         });
       }
-      // Two rooms open to the sky share one sky, so the opening between them
-      // reaches the further room's ceiling, above this room's or below.
-      const openSky =
-        heavens &&
-        current.ceilingTexture === skyFlat &&
-        next.ceilingTexture === skyFlat;
       top = Math.max(
         top,
         openSky ? rowOf(next.ceiling) : Math.max(ceilingRow, upperRow),
@@ -474,6 +481,7 @@ export function renderScene(
         if (row < 0 || row >= picture.height) continue;
         const index = y * width + x;
         extent[index] = item.id;
+        reach[index] = item.distance;
         const source = item.column * picture.height + row;
         if (!picture.opaque[source]) continue;
         colors[index] = shades[item.level * 256 + picture.pixels[source]];
@@ -547,6 +555,8 @@ export function renderScene(
         colors[index] = color;
         depths[index] = distance;
         pick[index] = id;
+        // A thing in front of a see-through texture covers its span there.
+        if (extent[index] && distance < reach[index]) extent[index] = 0;
       }
     }
   }
@@ -563,7 +573,12 @@ export function renderScene(
       ]) {
         if (nextX < 0 || nextX >= width || nextY < 0 || nextY >= height)
           continue;
-        if (ids[nextY * width + nextX] !== id) return true;
+        const beside = ids[nextY * width + nextX];
+        // What shows through a see-through texture ends at its holes all
+        // over, which is no edge of its own.
+        if (beside !== id && !(ids === pick && seeThrough.has(beside))) {
+          return true;
+        }
       }
     }
     return false;
@@ -575,14 +590,19 @@ export function renderScene(
         // A see-through texture is outlined round its span, read from the
         // extent, and any other surface round the pixels that show it.
         const span = extent[index];
-        const spanned = span === selectedId || span === hoveredId;
-        const ids = spanned ? extent : pick;
-        const id = spanned ? span : pick[index];
-        if (id !== selectedId && id !== hoveredId) continue;
-        if (!spanned && seeThrough.has(id)) continue;
-        if (getIsEdge(x, y, id, ids)) {
-          colors[index] = id === selectedId ? selectedOutline : hoveredOutline;
-        }
+        const shown = pick[index];
+        const spanEdge =
+          (span === selectedId || span === hoveredId) &&
+          getIsEdge(x, y, span, extent);
+        const shownEdge =
+          (shown === selectedId || shown === hoveredId) &&
+          !seeThrough.has(shown) &&
+          getIsEdge(x, y, shown, pick);
+        if (!spanEdge && !shownEdge) continue;
+        const isSelected =
+          (spanEdge && span === selectedId) ||
+          (shownEdge && shown === selectedId);
+        colors[index] = isSelected ? selectedOutline : hoveredOutline;
       }
     }
   }

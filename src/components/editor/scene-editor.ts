@@ -686,7 +686,10 @@ const sceneEditor = definePrimitive({
         if (state.ghost) hover = "place";
         else if (surface?.kind === "thing") hover = "thing";
         else if (state.placing) hover = undefined;
-        else if (surface?.kind === "floor" || surface?.kind === "ceiling") {
+        else if (
+          (surface?.kind === "floor" || surface?.kind === "ceiling") &&
+          !state.opened.includes(surface.sector)
+        ) {
           hover = "height";
         } else if (surface) hover = "surface";
         return { "data-hover": hover };
