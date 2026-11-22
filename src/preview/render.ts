@@ -18,6 +18,7 @@ import type {
   LineSide,
   Point,
   Sector,
+  Thing,
   ThingKind,
 } from "../map/types";
 import {
@@ -80,7 +81,15 @@ function createRenderTarget(width: number, height: number): RenderTarget {
   };
 }
 
+// A frame shows the same map as the one before until an edit, so what a frame
+// works out from its map is kept with the map, which is never changed in place.
+const closedDoorMaps = new WeakMap<GameMap, GameMap>();
+const sectorWalls = new WeakMap<GameMap, Map<string, Wall[]>>();
+const thingOwners = new WeakMap<GameMap, Map<Thing, Sector | undefined>>();
+
 function wallsBySector(map: GameMap) {
+  const cached = sectorWalls.get(map);
+  if (cached) return cached;
   const owners = wallOwners(map);
   const switches = new Map(
     map.switches.map((item) => [wallKey(item.from, item.to), item.texture]),
@@ -133,16 +142,31 @@ function wallsBySector(map: GameMap) {
       }
     });
   }
+  sectorWalls.set(map, walls);
   return walls;
 }
 
 function withClosedDoors(map: GameMap): GameMap {
-  return {
+  const cached = closedDoorMaps.get(map);
+  if (cached) return cached;
+  const closed = {
     ...map,
     sectors: map.sectors.map((sector) =>
       sector.door ? { ...sector, ceiling: sector.floor } : sector,
     ),
   };
+  closedDoorMaps.set(map, closed);
+  return closed;
+}
+
+function thingOwner(map: GameMap, thing: Thing) {
+  let owners = thingOwners.get(map);
+  if (!owners) {
+    owners = new Map();
+    thingOwners.set(map, owners);
+  }
+  if (!owners.has(thing)) owners.set(thing, sectorAt(map, thing));
+  return owners.get(thing);
 }
 
 function wrap(value: number, size: number) {
@@ -426,7 +450,7 @@ function renderScene(
   for (const { thing, isGhost, distance, side } of sprites) {
     const picture = assets.sprite(thing.kind);
     if (!picture) continue;
-    const owner = sectorAt(map, thing);
+    const owner = isGhost ? sectorAt(map, thing) : thingOwner(map, thing);
     const { hangs } = thingCatalog[thing.kind];
     const base =
       hangs === undefined

@@ -4,10 +4,22 @@ type Edge = { from: string; to: string };
 
 type Box = { left: number; top: number; right: number; bottom: number };
 
+type Outline = { polygon: Point[]; box: Box; area: number };
+
+type SectorIndex = {
+  outlines: Map<Sector, Outline>;
+  cells: Map<number, Sector[]>;
+};
+
+const cellSize = 512;
+const cellOffset = 1024;
+const cellRow = 4096;
+
 // Maps are replaced on every edit, never changed in place, so what's worked
 // out for one stays right for as long as it's in use.
 const containerCache = new WeakMap<GameMap, Map<string, Sector | null>>();
 const ownerCache = new WeakMap<GameMap, Map<string, Sector[]>>();
+const indexCache = new WeakMap<GameMap, SectorIndex>();
 
 function loopEdges(loop: string[]): Edge[] {
   return loop.map((from, index) => ({
@@ -187,15 +199,63 @@ function pointInSector(map: GameMap, sector: Sector, point: Point) {
   );
 }
 
+function inBox(box: Box, point: Point) {
+  return (
+    point.x >= box.left &&
+    point.x <= box.right &&
+    point.y >= box.top &&
+    point.y <= box.bottom
+  );
+}
+
+function cellOf(x: number, y: number) {
+  return (
+    (Math.floor(x / cellSize) + cellOffset) * cellRow +
+    Math.floor(y / cellSize) +
+    cellOffset
+  );
+}
+
+// Each sector is filed under the grid cells its bounds cover, in map order, so
+// a point is tested against the few sectors around it, not every one on the
+// map. A sector with a missing corner has no outline and is never found.
+function sectorIndex(map: GameMap): SectorIndex {
+  const cached = indexCache.get(map);
+  if (cached) return cached;
+  const outlines = new Map<Sector, Outline>();
+  const cells = new Map<number, Sector[]>();
+  for (const sector of map.sectors) {
+    const polygon = sectorPolygon(map, sector);
+    if (polygon.length === 0 || polygon.some((point) => !point)) continue;
+    const box = boxOf(polygon);
+    outlines.set(sector, { polygon, box, area: Math.abs(signedArea(polygon)) });
+    const left = Math.floor(box.left / cellSize);
+    const right = Math.floor(box.right / cellSize);
+    const top = Math.floor(box.top / cellSize);
+    const bottom = Math.floor(box.bottom / cellSize);
+    for (let x = left; x <= right; x += 1) {
+      for (let y = top; y <= bottom; y += 1) {
+        const key = (x + cellOffset) * cellRow + y + cellOffset;
+        const filed = cells.get(key);
+        if (filed) filed.push(sector);
+        else cells.set(key, [sector]);
+      }
+    }
+  }
+  const index = { outlines, cells };
+  indexCache.set(map, index);
+  return index;
+}
+
 // The smallest room whose outline holds the point is the one drawn deepest
 // inside the others, and a pillar there is empty space.
 function innermostAt(map: GameMap, point: Point) {
+  const { outlines, cells } = sectorIndex(map);
   let best: Sector | undefined;
   let bestArea = Infinity;
-  for (const sector of map.sectors) {
-    const polygon = sectorPolygon(map, sector);
-    if (!pointInPolygon(point, polygon)) continue;
-    const area = Math.abs(signedArea(polygon));
+  for (const sector of cells.get(cellOf(point.x, point.y)) ?? []) {
+    const { polygon, box, area } = outlines.get(sector)!;
+    if (!inBox(box, point) || !pointInPolygon(point, polygon)) continue;
     if (area < bestArea) {
       best = sector;
       bestArea = area;

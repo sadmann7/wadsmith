@@ -105,6 +105,18 @@ describe("renderScene", () => {
     expect(at(160, 96)).toMatch(/^wall:sector-2:.*:upper$/);
   });
 
+  it("shows an edit after rendering the map before it", () => {
+    expect(renderStarter()(160, 96)).toMatch(/upper$/);
+    const opened = {
+      ...testMap,
+      sectors: testMap.sectors.map((sector) =>
+        sector.id === "sector-4" ? { ...sector, door: undefined } : sector,
+      ),
+    };
+    expect(renderStarter(opened)(160, 96)).not.toMatch(/upper$/);
+    expect(renderStarter()(160, 96)).toMatch(/upper$/);
+  });
+
   it("makes things selectable", () => {
     const map = {
       ...testMap,

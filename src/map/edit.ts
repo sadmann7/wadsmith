@@ -53,11 +53,24 @@ function nextId(prefix: string, used: Iterable<string>) {
   return `${prefix}${highest + 1}`;
 }
 
+const positionCache = new WeakMap<GameMap, Record<string, Point>>();
+const thingPoints = new WeakMap<Thing, Point>();
+
+// The editor reads positions from its map on every render, and a fresh object
+// would count as a change that wakes every part on the canvas.
 function positionsOf(map: GameMap): Record<string, Point> {
+  const cached = positionCache.get(map);
+  if (cached) return cached;
   const positions: Record<string, Point> = { ...map.vertices };
   for (const thing of map.things) {
-    positions[`${thingKeyPrefix}${thing.id}`] = { x: thing.x, y: thing.y };
+    let point = thingPoints.get(thing);
+    if (!point) {
+      point = { x: thing.x, y: thing.y };
+      thingPoints.set(thing, point);
+    }
+    positions[`${thingKeyPrefix}${thing.id}`] = point;
   }
+  positionCache.set(map, positions);
   return positions;
 }
 
@@ -72,10 +85,12 @@ function applyPositions(
   return {
     ...map,
     vertices,
-    things: map.things.map((thing) => ({
-      ...thing,
-      ...positions[`${thingKeyPrefix}${thing.id}`],
-    })),
+    things: map.things.map((thing) => {
+      const at = positions[`${thingKeyPrefix}${thing.id}`];
+      return !at || (at.x === thing.x && at.y === thing.y)
+        ? thing
+        : { ...thing, x: at.x, y: at.y };
+    }),
   };
 }
 

@@ -4,7 +4,7 @@ import * as React from "react";
 import { thingCatalog } from "../map/catalog";
 import { doorKeyPrefix, switchKeyPrefix, thingKeyPrefix } from "../map/edit";
 import { paintOrder, wallOwners } from "../map/geometry";
-import type { GameMap, Sector } from "../map/types";
+import type { GameMap, Sector, ThingKind } from "../map/types";
 import {
   MapCamera,
   MapConnecting,
@@ -31,6 +31,25 @@ const farZoom = 0.5;
 const labelWidth = 80;
 const noSelection: string[] = [];
 const nowhere = { left: 0, top: 0, right: -1, bottom: -1 };
+const thingLooks = new Map<
+  ThingKind,
+  { style: React.CSSProperties; icon: React.ReactElement }
+>();
+
+// A thing part renders again only when a prop changes, so a kind's style and
+// icon are made once and shared.
+function thingLook(kind: ThingKind) {
+  let look = thingLooks.get(kind);
+  if (!look) {
+    const { icon: Icon, color } = thingIcons[kind];
+    look = {
+      style: { "--thing-color": color } as React.CSSProperties,
+      icon: <Icon size={13} aria-hidden="true" />,
+    };
+    thingLooks.set(kind, look);
+  }
+  return look;
+}
 
 function wallsOf(map: GameMap) {
   return [...wallOwners(map)].map(([key, owners]) => {
@@ -166,7 +185,14 @@ function MapCanvas({
     () => (
       <>
         {paintOrder(map).map((sector) => (
-          <MapSector key={sector.id} value={sector.id} className="map-sector" />
+          <MapSector
+            key={sector.id}
+            value={sector.id}
+            corners={sector.vertices}
+            holes={sector.holes}
+            door={!!sector.door}
+            className="map-sector"
+          />
         ))}
         {wallsOf(map).map((wall) => (
           <MapWall
@@ -225,6 +251,7 @@ function MapCanvas({
         <MapLabel
           key={sector.id}
           value={sector.id}
+          corners={sector.vertices}
           className="map-label"
           style={
             { "--room-width": box.right - box.left } as React.CSSProperties
@@ -268,7 +295,7 @@ function MapCanvas({
         )
         .map((thing) => {
           const { label } = thingCatalog[thing.kind];
-          const { icon: Icon, color } = thingIcons[thing.kind];
+          const { style, icon } = thingLook(thing.kind);
           const startNumber = /^player-(\d)$/.exec(thing.kind)?.[1];
           return (
             <MapHandle
@@ -277,11 +304,9 @@ function MapCanvas({
               className="map-thing"
               aria-label={label}
               title={label}
-              style={{ "--thing-color": color } as React.CSSProperties}
+              style={style}
             >
-              {far
-                ? null
-                : (startNumber ?? <Icon size={13} aria-hidden="true" />)}
+              {far ? null : (startNumber ?? icon)}
             </MapHandle>
           );
         }),
