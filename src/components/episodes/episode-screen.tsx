@@ -327,17 +327,22 @@ export function EpisodeScreen() {
       if (outcome.kind === "pushed") {
         // Edits made while the copy was on its way scheduled a sync of their
         // own, which runs next and sends them.
-        await active.updateMap(mapId, (latest) => ({
-          ...latest,
-          cloud:
-            latest.mapRevision === entry.mapRevision
-              ? outcome.link
-              : { ...outcome.link, pending: true },
-        }));
+        await active.updateMap(mapId, (latest) =>
+          // A map no longer kept online stays that way.
+          latest.cloud?.id === entry.cloud?.id
+            ? {
+                ...latest,
+                cloud:
+                  latest.mapRevision === entry.mapRevision
+                    ? outcome.link
+                    : { ...outcome.link, pending: true },
+              }
+            : latest,
+        );
         return;
       }
       const pulled = await active.updateMap(mapId, (latest) =>
-        latest.cloud?.pending
+        latest.cloud?.pending || latest.cloud?.id !== entry.cloud?.id
           ? latest
           : {
               ...latest,
