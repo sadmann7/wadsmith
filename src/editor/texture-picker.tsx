@@ -156,7 +156,7 @@ function TexturePicker({
         <div className="grid min-h-0 flex-1 grid-cols-[168px_minmax(0,1fr)_244px] max-[820px]:grid-cols-[minmax(0,1fr)_200px]">
           <nav
             aria-label="Texture categories"
-            className="min-h-0 overflow-y-auto border-r border-border p-3 max-[820px]:hidden"
+            className="relative min-h-0 overflow-y-auto border-r border-border p-3 max-[820px]:hidden"
           >
             <ToggleGroup
               aria-label="Category"
@@ -203,7 +203,7 @@ function TexturePicker({
                 }}
               />
             </InputGroup>
-            <div className="min-h-0 flex-1 overflow-y-auto">
+            <div className="relative min-h-0 flex-1 overflow-y-auto">
               {names.length === 0 ? (
                 <p className="text-muted-foreground">No textures match.</p>
               ) : (
@@ -265,7 +265,7 @@ function TexturePicker({
               ) : null}
             </div>
           </div>
-          <aside className="flex min-h-0 flex-col justify-between gap-4 overflow-y-auto border-l border-border p-4">
+          <aside className="relative flex min-h-0 flex-col justify-between gap-4 overflow-y-auto border-l border-border p-4">
             <div className="grid gap-3">
               <TextureSwatch
                 name={chosen}

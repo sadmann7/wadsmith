@@ -533,7 +533,7 @@ function PlayTogether({
       <DialogBackdrop />
       <DialogContent className="w-[480px] overflow-hidden">
         <CardPreview map={map} code={code ?? undefined} />
-        <div className="grid min-h-0 gap-[18px] overflow-y-auto px-6 pt-5">
+        <div className="relative grid min-h-0 gap-[18px] overflow-y-auto px-6 pt-5">
           <CardHeading
             eyebrow={
               code

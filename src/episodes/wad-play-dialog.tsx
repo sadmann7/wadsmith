@@ -75,7 +75,7 @@ function WadPlayDialog({
           </div>
           <DialogCloseButton />
         </DialogHeader>
-        <div className="grid min-h-0 gap-4 overflow-y-auto p-5">
+        <div className="relative grid min-h-0 gap-4 overflow-y-auto p-5">
           <FieldItem>
             <Label>Compatibility</Label>
             <Choice

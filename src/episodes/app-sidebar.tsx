@@ -107,7 +107,7 @@ function NewEpisodeDialog({
             <DialogTitle>New episode</DialogTitle>
             <DialogCloseButton />
           </DialogHeader>
-          <div className="grid min-h-0 gap-5 overflow-y-auto p-5">
+          <div className="relative grid min-h-0 gap-5 overflow-y-auto p-5">
             <Field>
               <FieldLabel>Name</FieldLabel>
               <Input
@@ -238,7 +238,7 @@ function AppSidebar({
       </div>
       <nav
         aria-label="Main"
-        className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-2.5 pt-1"
+        className="relative flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-2.5 pt-1"
       >
         <SidebarLink
           route={{ kind: "featured" }}
@@ -403,7 +403,7 @@ function AppShell({
             <div className="flex shrink-0 items-center gap-2">{actions}</div>
           ) : null}
         </header>
-        <div className="min-h-0 overflow-y-auto">{children}</div>
+        <div className="relative min-h-0 overflow-y-auto">{children}</div>
       </div>
     </div>
   );

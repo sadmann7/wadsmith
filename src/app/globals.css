@@ -141,6 +141,7 @@
   }
 
   .workspace {
+    position: relative;
     display: grid;
     grid-template-columns: minmax(0, 1fr) 372px;
     min-height: 0;
@@ -362,6 +363,7 @@
   }
 
   .side {
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: 10px;
