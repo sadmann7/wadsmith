@@ -19,8 +19,8 @@ import * as React from "react";
 import { MapPlan } from "@/components/map-plan";
 import { engineSlot, slotCount, type GameInfo } from "@/lib/engine/game";
 import type { CheckContext } from "@/lib/map/validate";
-import { useBuildChecks } from "@/hooks/use-build-checks";
-import { knownBuildProblem } from "@/lib/episodes/build-checks";
+import { useBuildProblem } from "@/hooks/use-build-checks";
+import { useNow } from "@/hooks/use-now";
 import { MapDialog } from "./map-dialog";
 import { MapOrder, MapOrderHandle, MapOrderRow } from "./map-order";
 import type { MapDetails } from "./map-dialog";
@@ -75,8 +75,8 @@ const statusDots = {
   checking: "bg-muted-foreground",
 };
 
-function formatEdited(time: number) {
-  const minutes = Math.floor((Date.now() - time) / 60_000);
+function formatEdited(time: number, now: number) {
+  const minutes = Math.floor((now - time) / 60_000);
   if (minutes < 1) return "Just now";
   if (minutes < 60) return `${minutes} min ago`;
   if (minutes < 24 * 60) return `${Math.floor(minutes / 60)} hr ago`;
@@ -173,19 +173,9 @@ function ConfirmDialog({ confirmation, onClose }: ConfirmDialogProps) {
   );
 }
 
-// Memoized so a drag, which rerenders the list on every swap, redraws only the
-// rows whose props changed.
-const MapRow = React.memo(function MapRow({
-  entry,
-  slot,
-  context,
-  canDuplicate,
-  canMoveUp,
-  canMoveDown,
-  hint,
-  onAction,
-}: {
+interface MapRowProps {
   entry: EpisodeMap;
+  now: number;
   slot: string;
   context: CheckContext;
   canDuplicate: boolean;
@@ -193,10 +183,24 @@ const MapRow = React.memo(function MapRow({
   canMoveDown: boolean;
   hint: string;
   onAction: (action: MapAction, entry: EpisodeMap) => void;
-}) {
+}
+
+// Memoized so a drag, which rerenders the list on every swap, redraws only the
+// rows whose props changed.
+const MapRow = React.memo(function MapRow({
+  entry,
+  now,
+  slot,
+  context,
+  canDuplicate,
+  canMoveUp,
+  canMoveDown,
+  hint,
+  onAction,
+}: MapRowProps) {
   const onOpen = () => onAction("open", entry);
-  useBuildChecks(React.useMemo(() => [entry], [entry]));
-  const status = mapStatus(entry, knownBuildProblem(entry), context);
+  const problem = useBuildProblem(entry);
+  const status = mapStatus(entry, problem, context);
   const name = mapName(entry);
   return (
     <MapOrderRow
@@ -265,7 +269,7 @@ const MapRow = React.memo(function MapRow({
         </span>
       </td>
       <td className="w-24 text-sm whitespace-nowrap text-muted-foreground max-[900px]:hidden">
-        {formatEdited(entry.editedAt)}
+        {formatEdited(entry.editedAt, now)}
       </td>
       <td className="w-10">
         <Menu>
@@ -368,6 +372,7 @@ export function EpisodeHome({
   onDeleteMap,
   onReorderMaps,
 }: EpisodeHomeProps) {
+  const now = useNow(60_000);
   const [creatingMap, setCreatingMap] = React.useState(false);
   const [editing, setEditing] = React.useState<EpisodeMap | null>(null);
   const [renaming, setRenaming] = React.useState(false);
@@ -509,7 +514,7 @@ export function EpisodeHome({
               countLabel(maps.length),
               range,
               maps.length > 0
-                ? `edited ${formatEdited(lastEdited).toLowerCase()}`
+                ? `edited ${formatEdited(lastEdited, now).toLowerCase()}`
                 : null,
             ]
               .filter(Boolean)
@@ -595,6 +600,7 @@ export function EpisodeHome({
                         <MapRow
                           key={entry.id}
                           entry={entry}
+                          now={now}
                           slot={label(sorted[index]?.slot ?? entry.slot)}
                           context={context}
                           canDuplicate={Boolean(nextSlot)}

@@ -48,14 +48,15 @@ export const noInlineProps = {
       FunctionDeclaration(node: Node) {
         check(node.id?.name, node);
       },
+      FunctionExpression(node: Node) {
+        check(node.id?.name, node);
+      },
       VariableDeclarator(node: Node) {
         const init = node.init;
-        if (
-          init?.type !== "ArrowFunctionExpression" &&
-          init?.type !== "FunctionExpression"
-        ) {
-          return;
-        }
+        const unnamed =
+          init?.type === "ArrowFunctionExpression" ||
+          (init?.type === "FunctionExpression" && !init.id);
+        if (!unnamed) return;
         check(node.id?.name, init);
       },
     };

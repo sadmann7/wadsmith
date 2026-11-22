@@ -92,7 +92,6 @@ import type { GameMap, Point, ThingCategory, ThingKind } from "@/lib/map/types";
 import { checkMap, fixIssue, issueText } from "@/lib/map/checks";
 import { MapSwitcher, type EpisodeEntry, type MapHealth } from "./map-switcher";
 import { defaultGame, engineSlot } from "@/lib/engine/game";
-import { loadIwad } from "@/lib/engine/iwad";
 import { useIwad } from "@/hooks/use-iwad";
 import { SceneCamera } from "@/lib/preview/scene-camera";
 import { SceneCanvas, type DraftSource } from "./scene-editor";
@@ -414,7 +413,6 @@ export function EditorScreen({
   const playButton = React.useRef<HTMLButtonElement>(null);
   const fileInput = React.useRef<HTMLInputElement>(null);
   const [agentLog, setAgentLog] = React.useState("");
-  const [, setHistoryVersion] = React.useState(0);
   const [initialLayout] = React.useState(loadLayout);
   const [layout, setLayout] = React.useState(initialLayout.view);
   const [findCameraRequest, setFindCameraRequest] = React.useState(0);
@@ -453,14 +451,26 @@ export function EditorScreen({
   const narrow = React.useSyncExternalStore(subscribeNarrow, getIsNarrow);
   const visibleLayout = narrow && layout === "split" ? "map" : layout;
   const [surface, setSurface] = React.useState<string | null>(null);
-  const [assets, setAssets] = React.useState(createFlatAssets);
   const [drafts] = React.useState(createDraftChannel);
   const [camera] = React.useState(() => new SceneCamera(initialMap));
   const [history] = React.useState(() =>
     createUndoStack(initialMap, { limit: 200, groupDelay: 500 }),
   );
+  const [undoable, setUndoable] = React.useState({ undo: false, redo: false });
+  const syncUndoable = React.useCallback(
+    () => setUndoable({ undo: history.canUndo(), redo: history.canRedo() }),
+    [history],
+  );
 
   const iwad = useIwad();
+  const assets = React.useMemo(() => {
+    if (!iwad) return createFlatAssets();
+    try {
+      return readWadAssets(iwad.data);
+    } catch {
+      return createFlatAssets();
+    }
+  }, [iwad]);
   const iwadGame = iwad?.game ?? defaultGame;
   const context = React.useMemo(
     () => ({ game: iwad?.game, names: iwad ? assets.names : undefined }),
@@ -536,9 +546,9 @@ export function EditorScreen({
     (next: GameMap) => {
       setMap(next);
       onSave(next);
-      setHistoryVersion((version) => version + 1);
+      syncUndoable();
     },
-    [onSave],
+    [onSave, syncUndoable],
   );
 
   const commit = (next: GameMap, group?: string) => {
@@ -609,18 +619,6 @@ export function EditorScreen({
     () => setShowShortcuts(true),
     shortcut("help"),
   );
-
-  React.useEffect(() => {
-    let active = true;
-    loadIwad()
-      .then((loaded) => {
-        if (active) setAssets(readWadAssets(loaded.data));
-      })
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, []);
 
   const surfaceInfo = React.useMemo(
     () => describeSurface(map, surface),
@@ -912,9 +910,9 @@ export function EditorScreen({
         setMap(next);
         setSelection([]);
         setSurface(null);
-        setHistoryVersion((version) => version + 1);
+        syncUndoable();
       }),
-    [history, watchExternal],
+    [history, syncUndoable, watchExternal],
   );
 
   React.useEffect(() => {
@@ -1193,14 +1191,14 @@ export function EditorScreen({
                 <MenuItem
                   value="undo"
                   shortcut={editorShortcuts.undo.keys}
-                  disabled={!history.canUndo()}
+                  disabled={!undoable.undo}
                 >
                   Undo
                 </MenuItem>
                 <MenuItem
                   value="redo"
                   shortcut={editorShortcuts.redo.keys}
-                  disabled={!history.canRedo()}
+                  disabled={!undoable.redo}
                 >
                   Redo
                 </MenuItem>
@@ -1274,7 +1272,7 @@ export function EditorScreen({
               size="icon"
               aria-label="Undo"
               title="Undo"
-              disabled={!history.canUndo()}
+              disabled={!undoable.undo}
               onClick={undo}
             >
               <Undo2 size={16} aria-hidden="true" />
@@ -1284,7 +1282,7 @@ export function EditorScreen({
               size="icon"
               aria-label="Redo"
               title="Redo"
-              disabled={!history.canRedo()}
+              disabled={!undoable.redo}
               onClick={redo}
             >
               <Redo2 size={16} aria-hidden="true" />
