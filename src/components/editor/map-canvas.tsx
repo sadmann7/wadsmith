@@ -20,6 +20,7 @@ import {
   MapLabel,
   MapLookHere,
   MapMarker,
+  MapMarquee,
   MapPort,
   MapSector,
   MapWall,
@@ -273,6 +274,7 @@ export function MapCanvas({
         {handles}
         {things}
         {ports}
+        <MapMarquee className="map-marquee" />
         {map.notes?.map((note) => (
           <MapMarker
             key={note.id}

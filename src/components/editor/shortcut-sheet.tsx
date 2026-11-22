@@ -104,7 +104,17 @@ function groups(): { title: string; items: Shortcut[] }[] {
           keys: [key("Arrows")],
           does: "Nudge the selection, with Shift for 8 steps",
         },
-        { keys: [key("Shift-click")], does: "Add to the selection" },
+        {
+          keys: [key("Shift-click")],
+          does: "Add a corner, a thing or a room to the selection",
+        },
+        {
+          keys: [key("Shift-drag")],
+          does: "Select every corner and thing in a box",
+        },
+        { keys: [chord("mod+c")], does: "Copy the selected rooms and things" },
+        { keys: [chord("mod+x")], does: "Cut them" },
+        { keys: [chord("mod+v")], does: "Paste at the pointer" },
         { keys: [backspace], does: "Delete the selection" },
         { keys: [key("+"), key("−", "minus")], does: "Zoom in or out" },
         { keys: [key("0")], does: "Reset the zoom" },

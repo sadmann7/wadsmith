@@ -10,7 +10,27 @@ export const editorShortcuts = {
   snap: { keys: "g", description: "Snap to the grid, on or off", area: "map" },
   undo: { keys: "mod+z", description: "Undo" },
   redo: { keys: "mod+shift+z", description: "Redo" },
-  duplicate: { keys: "mod+d", description: "Duplicate the selected things" },
+  duplicate: { keys: "mod+d", description: "Duplicate the selection" },
+  rotateRight: {
+    keys: "r",
+    description: "Turn the selection a quarter to the right",
+    area: "map",
+  },
+  rotateLeft: {
+    keys: "shift+r",
+    description: "Turn the selection a quarter to the left",
+    area: "map",
+  },
+  flipAcross: {
+    keys: "shift+h",
+    description: "Flip the selection left to right",
+    area: "map",
+  },
+  flipOver: {
+    keys: "shift+v",
+    description: "Flip the selection top to bottom",
+    area: "map",
+  },
   pane: {
     keys: "m",
     description: "Maximise the pane under the pointer, or split again",
