@@ -65,6 +65,22 @@ describe("online map copies", () => {
     ).toBe(400);
   });
 
+  it("keeps a big map in parts and reads it back whole", async () => {
+    const note = { id: "n", x: 0, y: 0, text: "é".repeat(1_500_000) };
+    const big = { ...map, notes: [note] };
+    const { id, secret } = await create(big);
+    expect(await (await send(`/maps/${id}`)).json()).toEqual({
+      revision: 1,
+      map: big,
+    });
+    // A shorter version leaves no part of the longer one behind.
+    expect((await put(id, secret, 1, map)).status).toBe(200);
+    expect(await (await send(`/maps/${id}`)).json()).toEqual({
+      revision: 2,
+      map,
+    });
+  });
+
   it("refuses what isn't a map and what is too big", async () => {
     const bad = await send("/maps", { method: "POST", body: "not json" });
     expect(bad.status).toBe(400);

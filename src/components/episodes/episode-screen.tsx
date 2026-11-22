@@ -25,6 +25,7 @@ import { clearPlaytest } from "@/lib/editor/playtests";
 import {
   defaultGame,
   engineSlot,
+  type GameInfo,
   getIsMapLump,
   indexSlot,
   lumpSlotIndex,
@@ -218,7 +219,10 @@ export function EpisodeScreen() {
     revision: number;
     map: GameMap;
   } | null>(null);
-  const cloudTimer = React.useRef<ReturnType<typeof setTimeout>>(undefined);
+  // A wait before each map's next sync, so a burst of edits goes as one.
+  const cloudTimers = React.useRef(
+    new Map<string, ReturnType<typeof setTimeout>>(),
+  );
   const [wadPick, setWadPick] = React.useState<{
     title: string;
     summary: WadSummary;
@@ -293,45 +297,46 @@ export function EpisodeScreen() {
     [refresh],
   );
 
-  // Brings the open map and its online copy together: sends edits made here,
-  // takes a newer copy when nothing here clashes with it, and otherwise asks.
-  // One runs at a time, so a push never races another against a stale base.
+  // Brings a map and its online copy together: sends edits made here, takes a
+  // newer copy when nothing here clashes with it, and otherwise asks. It runs
+  // for the map it was asked about even once another map is open, so a push
+  // that lands after leaving still records its revision.
   const runCloudSync = React.useCallback(
-    async (active: EpisodeStore) => {
-      const current = sessionRef.current;
-      if (!current || !cloudApi) return;
-      await current.saver.flush();
-      const entry = await active.getMap(current.id);
-      if (!entry?.cloud || sessionRef.current !== current) return;
+    async (active: EpisodeStore, mapId: string) => {
+      if (!cloudApi) return;
+      const opened = () =>
+        sessionRef.current?.id === mapId ? sessionRef.current : null;
+      await opened()?.saver.flush();
+      const entry = await active.getMap(mapId);
+      if (!entry?.cloud || entry.broken) return;
       let outcome: Awaited<ReturnType<typeof syncMap>>;
       try {
         outcome = await syncMap(cloudApi, entry.cloud, entry.map);
       } catch (error) {
-        if (sessionRef.current === current) {
-          setCloudProblem((error as Error).message);
-        }
+        if (opened()) setCloudProblem((error as Error).message);
         return;
       }
-      if (sessionRef.current !== current) return;
-      setCloudProblem(null);
+      if (opened()) setCloudProblem(null);
       if (outcome.kind === "same") return;
       if (outcome.kind === "conflict") {
-        setClash({ revision: outcome.revision, map: outcome.map });
+        // A map that isn't open asks when it next opens.
+        if (opened())
+          setClash({ revision: outcome.revision, map: outcome.map });
         return;
       }
       if (outcome.kind === "pushed") {
-        // Edits made while the copy was on its way still have to follow it.
-        await active.updateMap(current.id, (latest) => ({
+        // Edits made while the copy was on its way scheduled a sync of their
+        // own, which runs next and sends them.
+        await active.updateMap(mapId, (latest) => ({
           ...latest,
           cloud:
             latest.mapRevision === entry.mapRevision
               ? outcome.link
               : { ...outcome.link, pending: true },
         }));
-        // Edits made meanwhile scheduled a sync of their own, which runs next.
         return;
       }
-      const pulled = await active.updateMap(current.id, (latest) =>
+      const pulled = await active.updateMap(mapId, (latest) =>
         latest.cloud?.pending
           ? latest
           : {
@@ -342,23 +347,27 @@ export function EpisodeScreen() {
               cloud: outcome.link,
             },
       );
-      if (!pulled || sessionRef.current !== current) return;
+      if (!pulled) return;
+      const current = opened();
       if (pulled.cloud?.pending) {
-        setClash({ revision: outcome.link.revision, map: outcome.map });
+        if (current) {
+          setClash({ revision: outcome.link.revision, map: outcome.map });
+        }
         return;
       }
+      announce(mapId);
+      if (!current) return;
       current.saver.adopt(pulled);
       setDetails(detailsOf(pulled));
       for (const listener of externalListeners.current) listener(pulled.map);
-      announce(current.id);
     },
     [announce],
   );
   const cloudQueue = React.useRef<Promise<void>>(Promise.resolve());
   const syncCloud = React.useCallback(
-    (active: EpisodeStore) => {
+    (active: EpisodeStore, mapId: string) => {
       cloudQueue.current = cloudQueue.current
-        .then(() => runCloudSync(active))
+        .then(() => runCloudSync(active, mapId))
         .catch(() => {});
       return cloudQueue.current;
     },
@@ -372,10 +381,14 @@ export function EpisodeScreen() {
         onSaved: (saved) => {
           announce(saved.id);
           if (!saved.cloud) return;
-          clearTimeout(cloudTimer.current);
-          cloudTimer.current = setTimeout(
-            () => void syncCloud(active),
-            cloudDelayMs,
+          const timers = cloudTimers.current;
+          clearTimeout(timers.get(saved.id));
+          timers.set(
+            saved.id,
+            setTimeout(() => {
+              timers.delete(saved.id);
+              void syncCloud(active, saved.id);
+            }, cloudDelayMs),
           );
         },
         onMissing: () =>
@@ -396,7 +409,7 @@ export function EpisodeScreen() {
       setClash(null);
       setCloudProblem(null);
       selectEpisode(entry.episodeId);
-      if (entry.cloud) void syncCloud(active);
+      if (entry.cloud) void syncCloud(active, entry.id);
     },
     [announce, closeSession, selectEpisode, syncCloud],
   );
@@ -406,14 +419,16 @@ export function EpisodeScreen() {
   React.useEffect(() => {
     if (!store) return;
     const resume = () => {
-      if (document.visibilityState === "visible") void syncCloud(store);
+      const open = sessionRef.current;
+      if (open && document.visibilityState === "visible") {
+        void syncCloud(store, open.id);
+      }
     };
     document.addEventListener("visibilitychange", resume);
     window.addEventListener("online", resume);
     return () => {
       document.removeEventListener("visibilitychange", resume);
       window.removeEventListener("online", resume);
-      clearTimeout(cloudTimer.current);
     };
   }, [store, syncCloud]);
 
@@ -456,7 +471,12 @@ export function EpisodeScreen() {
         await refresh(opened, wanted);
         if (stale()) return;
         if (shared) {
-          const found_ = await openShared(opened, shared, wanted);
+          const found_ = await openShared(
+            opened,
+            shared,
+            wanted,
+            currentContext().game,
+          );
           if (stale()) return;
           if (typeof found_ === "string") setMessage(found_);
           else {
@@ -940,7 +960,7 @@ export function EpisodeScreen() {
       });
       if (!saved) return "This map no longer exists.";
       announce(id);
-      if (saved.cloud && sessionRef.current?.id === id) void syncCloud(store);
+      if (saved.cloud) void syncCloud(store, id);
       if (sessionRef.current?.id === id) setDetails(detailsOf(saved));
       else await refresh(store, saved.episodeId);
       return null;
@@ -1344,7 +1364,7 @@ export function EpisodeScreen() {
               }));
               announce(session.id);
               await refresh(store, session.episodeId);
-              void syncCloud(store);
+              void syncCloud(store, session.id);
             }}
             onStop={() =>
               void attempt(async () => {
@@ -1391,9 +1411,9 @@ export function EpisodeScreen() {
                           },
                         }),
                       );
-                      if (!saved || sessionRef.current?.id !== saved.id) {
-                        return;
-                      }
+                      if (!saved) return;
+                      announce(saved.id);
+                      if (sessionRef.current?.id !== saved.id) return;
                       session.saver.adopt(saved);
                       setDetails(detailsOf(saved));
                       for (const listener of externalListeners.current) {
@@ -1418,7 +1438,7 @@ export function EpisodeScreen() {
                           pending: true,
                         },
                       }));
-                      await syncCloud(store);
+                      await syncCloud(store, session.id);
                     });
                   }}
                 >
@@ -1797,6 +1817,7 @@ async function openShared(
   store: EpisodeStore,
   target: { id: string; secret?: string },
   episodeId: string,
+  game?: GameInfo,
 ): Promise<EpisodeMap | string> {
   if (!cloudApi) return "This copy of Wadsmith has no server for online maps.";
   for (const episode of await store.listEpisodes()) {
@@ -1819,7 +1840,7 @@ async function openShared(
     return (error as Error).message;
   }
   if (!online) return "That shared map no longer exists.";
-  const [slot] = freeSlots(await store.listMaps(episodeId));
+  const [slot] = freeSlots(await store.listMaps(episodeId), undefined, game);
   if (!slot) {
     return "This episode has no free slot for the shared map. Open another episode and try the link again.";
   }

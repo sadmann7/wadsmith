@@ -11,14 +11,13 @@ export interface MapsEnv {
 
 // A map file holds at most this much, as the editor's own limit says.
 export const maxMapBytes = 5 * 1024 * 1024;
-const idLength = 16;
-const secretBytes = 24;
+
 const mapPath = /^\/maps(?:\/([a-z0-9]{16}))?$/;
 
 interface Stored {
   revision: number;
   secret: string;
-  map: string;
+  parts: number;
 }
 
 type Write =
@@ -29,13 +28,13 @@ type Write =
 class MapCopy extends DurableObject {
   async create(secret: string, map: string) {
     if (await this.ctx.storage.get<number>("revision")) return false;
-    await this.ctx.storage.put({ revision: 1, secret, map });
+    await this.ctx.storage.put({ ...partsOf(map, 0), revision: 1, secret });
     return true;
   }
 
   async read() {
-    const { revision, map } = await this.stored();
-    return revision && map ? { revision, map } : null;
+    const { revision, parts } = await this.stored();
+    return revision && parts ? { revision, map: await this.map(parts) } : null;
   }
 
   async write(secret: string, base: number, map: string): Promise<Write> {
@@ -49,11 +48,16 @@ class MapCopy extends DurableObject {
         ok: false,
         status: 409,
         revision: stored.revision,
-        map: stored.map ?? "{}",
+        map: await this.map(stored.parts ?? 0),
       };
     }
     const revision = stored.revision + 1;
-    await this.ctx.storage.put({ revision, map });
+    // Puts of up to 128 keys land together, so a reader sees all of a new
+    // version or none of it.
+    await this.ctx.storage.put({
+      ...partsOf(map, stored.parts ?? 0),
+      revision,
+    });
     return { ok: true, revision };
   }
 
@@ -61,9 +65,15 @@ class MapCopy extends DurableObject {
     const values = await this.ctx.storage.get<string | number>([
       "revision",
       "secret",
-      "map",
+      "parts",
     ]);
     return Object.fromEntries(values);
+  }
+
+  private async map(parts: number) {
+    const keys = Array.from({ length: parts }, (_, index) => `map:${index}`);
+    const values = await this.ctx.storage.get<string>(keys);
+    return keys.map((key) => values.get(key) ?? "").join("");
   }
 }
 
@@ -73,8 +83,49 @@ export async function handleMaps(
   env: MapsEnv,
   headers: Record<string, string>,
 ): Promise<Response | null> {
+  if (!mapPath.test(new URL(request.url).pathname)) return null;
+  try {
+    return await answer(request, env, headers);
+  } catch {
+    // The browser only reads an answer that carries its CORS headers.
+    return Response.json(
+      { error: "The online copy couldn't be saved. Try again soon." },
+      { status: 500, headers },
+    );
+  }
+}
+
+// A stored value has to stay under 2 MB, so a map is kept in parts of this
+// many characters, each at most 3 bytes in UTF-8.
+const partLength = 512 * 1024;
+
+// A map's parts to store, with the parts an earlier, longer version left
+// cleared so they don't linger.
+function partsOf(map: string, before: number) {
+  const parts = Math.max(1, Math.ceil(map.length / partLength));
+  const entries: Record<string, string | number> = { parts };
+  for (let index = 0; index < parts; index += 1) {
+    entries[`map:${index}`] = map.slice(
+      index * partLength,
+      (index + 1) * partLength,
+    );
+  }
+  for (let index = parts; index < before; index += 1) {
+    entries[`map:${index}`] = "";
+  }
+  return entries;
+}
+
+const idLength = 16;
+const secretBytes = 24;
+
+async function answer(
+  request: Request,
+  env: MapsEnv,
+  headers: Record<string, string>,
+): Promise<Response> {
   const match = mapPath.exec(new URL(request.url).pathname);
-  if (!match) return null;
+  if (!match) return Response.json({ error: "Not found." }, { status: 404 });
   const reply = (body: unknown, status = 200) =>
     Response.json(body, { status, headers });
   const id = match[1];
