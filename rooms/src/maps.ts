@@ -78,7 +78,7 @@ class MapCopy extends DurableObject {
 }
 
 // Answers a request under /maps, or returns null for any other path.
-export async function handleMaps(
+export async function routeMaps(
   request: Request,
   env: MapsEnv,
   headers: Record<string, string>,
