@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  diffMaps,
-  getIsEmptyPatch,
-  type MapPatch,
-  patchKeys,
-  withoutKeys,
-} from "@rooms/map-patch";
+import { diffMaps, getIsEmptyPatch, type MapPatch } from "@rooms/map-patch";
 import * as React from "react";
 
 import type { GameFiles, Skill } from "@/lib/engine/runtime";
@@ -158,8 +152,6 @@ type HomeView = "episodes" | "featured";
 
 const channelName = "wadsmith";
 const cloudDelayMs = 1500;
-// How long a dropped live link waits before trying again.
-const reconnectMs = 3000;
 const cloudUrl = cloudBase();
 const cloudApi = cloudUrl ? createCloudApi(cloudUrl) : null;
 const saveFailure = "Your browser couldn't save that change.";
@@ -234,9 +226,6 @@ export function EpisodeScreen() {
   } | null>(null);
   // A wait before each map's next sync, so a burst of edits goes as one.
   const live = React.useRef<{ mapId: string; link: LiveMap } | null>(null);
-  // Maps whose live link ended and will rebase, which keeps the whole-map
-  // sync away from them meanwhile.
-  const rebasing = React.useRef(new Set<string>());
   const remoteListeners = React.useRef(new Set<(patch: MapPatch) => void>());
   const [peers, setPeers] = React.useState<LivePeer[]>([]);
   const cloudTimers = React.useRef(
@@ -337,13 +326,7 @@ export function EpisodeScreen() {
   const runCloudSync = React.useCallback(
     async (active: EpisodeStore, mapId: string) => {
       // The live link keeps an open map in step by itself.
-      if (
-        !cloudApi ||
-        live.current?.mapId === mapId ||
-        rebasing.current.has(mapId)
-      ) {
-        return;
-      }
+      if (!cloudApi || live.current?.mapId === mapId) return;
       const opened = () =>
         sessionRef.current?.id === mapId ? sessionRef.current : null;
       await opened()?.saver.flush();
@@ -431,11 +414,14 @@ export function EpisodeScreen() {
     // the live link has nothing on its way.
     const settle = (active: EpisodeStore, mapId: string) => {
       const link = live.current?.mapId === mapId ? live.current.link : null;
-      if (!link?.idle) return;
-      const { revision, map } = link;
+      const confirmed = link?.idle ? link.confirmed : null;
+      if (!link || !confirmed) return;
+      const { revision } = link;
       void active
         .updateMap(mapId, (latest) =>
-          latest.cloud && getIsEmptyPatch(diffMaps(map, latest.map))
+          latest.cloud &&
+          latest.map.name === confirmed.name &&
+          getIsEmptyPatch(diffMaps(confirmed, latest.map))
             ? {
                 ...latest,
                 cloud: { ...latest.cloud, revision, pending: undefined },
@@ -444,8 +430,6 @@ export function EpisodeScreen() {
         )
         .catch(() => {});
     };
-    // Opens the live link for the open map once it agrees with its online
-    // copy, so the link starts from the same map the server holds.
     // Someone else's edits reach the editor, and a new name the map's entry.
     const takeRemote = (
       active: EpisodeStore,
@@ -469,15 +453,9 @@ export function EpisodeScreen() {
       }
       for (const listener of remoteListeners.current) listener(patch);
     };
-    // Opens the live link for the open map. Without a start, it waits until
-    // the map agrees with its online copy and starts from the stored map.
-    // With one, it starts from the online copy and sends what this browser
-    // has beyond it.
-    const goLive = (
-      active: EpisodeStore,
-      mapId: string,
-      start?: { map: GameMap; revision: number },
-    ) => {
+    // Opens the live link for the open map once it agrees with its online
+    // copy. From then on the link keeps it in step, reconnecting by itself.
+    const goLive = (active: EpisodeStore, mapId: string) => {
       const current = sessionRef.current;
       if (!cloudUrl || current?.id !== mapId || live.current?.mapId === mapId) {
         return;
@@ -487,7 +465,7 @@ export function EpisodeScreen() {
         if (
           !entry?.cloud ||
           !secret ||
-          (!start && entry.cloud.pending) ||
+          entry.cloud.pending ||
           sessionRef.current !== current ||
           live.current?.mapId === mapId
         ) {
@@ -498,88 +476,27 @@ export function EpisodeScreen() {
           url: liveUrl(cloudUrl, entry.cloud.id),
           secret,
           name: loadName(),
-          map: start?.map ?? entry.map,
-          onRemote: (patch) => takeRemote(active, mapId, patch),
-          onReload: () => {
-            stopLive();
-            rebasing.current.add(mapId);
-            void rebase(active, mapId, link.confirmed);
-          },
+          map: current.saver.map,
+          onChange: (patch) => takeRemote(active, mapId, patch),
           onPeers: setPeers,
           onIdle: () => settle(active, mapId),
-          onClosed: (refused) => {
+          onConnected: (connected) =>
+            setCloudProblem(
+              connected
+                ? null
+                : "Reconnecting to the online copy. Edits wait here until then.",
+            ),
+          onRefused: () => {
             if (live.current?.link !== link) return;
             live.current = null;
             setPeers([]);
-            if (refused) {
-              setCloudProblem("This link can no longer edit the map.");
-              return;
-            }
-            rebasing.current.add(mapId);
-            setTimeout(() => {
-              if (sessionRef.current === current) {
-                void rebase(active, mapId, link.confirmed);
-              }
-            }, reconnectMs);
+            setCloudProblem("This link can no longer edit the map.");
           },
         });
         live.current = { mapId, link };
-        if (start) link.send(current.saver.map);
       });
     };
-    // Brings the open map back in step after the live link ended: everyone
-    // else's edits since the map it last knew come in, except where this
-    // browser changed the same thing, and this browser's edits go out.
-    const rebase = async (
-      active: EpisodeStore,
-      mapId: string,
-      known: GameMap,
-    ) => {
-      const current = sessionRef.current;
-      if (current?.id !== mapId || !cloudApi) {
-        rebasing.current.delete(mapId);
-        return;
-      }
-      const entry = await active.getMap(mapId);
-      if (!entry?.cloud?.secret) {
-        rebasing.current.delete(mapId);
-        return;
-      }
-      let online: Awaited<ReturnType<typeof cloudApi.read>>;
-      try {
-        online = await cloudApi.read(entry.cloud.id);
-      } catch (error) {
-        if (sessionRef.current !== current) return;
-        setCloudProblem((error as Error).message);
-        setTimeout(() => void rebase(active, mapId, known), reconnectMs);
-        return;
-      }
-      rebasing.current.delete(mapId);
-      if (sessionRef.current !== current || live.current?.mapId === mapId) {
-        return;
-      }
-      if (!online) {
-        setCloudProblem("The online copy no longer exists.");
-        return;
-      }
-      setCloudProblem(null);
-      const mine = diffMaps(known, current.saver.map);
-      const theirs = withoutKeys(
-        diffMaps(known, online.map),
-        new Set(patchKeys(mine)),
-      );
-      const renamed = online.map.name !== known.name ? online.map.name : null;
-      const patch: MapPatch =
-        typeof renamed === "string"
-          ? { ...theirs, fields: { ...theirs.fields, name: renamed } }
-          : theirs;
-      if (!getIsEmptyPatch(patch)) takeRemote(active, mapId, patch);
-      goLive(active, mapId, online);
-    };
-    cloudSteps.current = {
-      goLive: (active, mapId) => goLive(active, mapId),
-      settle,
-    };
+    cloudSteps.current = { goLive, settle };
   });
 
   const startSession = React.useCallback(
@@ -593,7 +510,6 @@ export function EpisodeScreen() {
             cloudSteps.current.settle(active, saved.id);
             return;
           }
-          if (rebasing.current.has(saved.id)) return;
           const timers = cloudTimers.current;
           clearTimeout(timers.get(saved.id));
           timers.set(

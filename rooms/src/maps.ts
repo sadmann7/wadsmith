@@ -28,7 +28,14 @@ interface Editor {
   peer: number;
   name: string;
   since: number;
+  // Names one browser's link across its reconnects.
+  client?: string;
 }
+
+const clientPattern = /^[0-9a-f]{24}$/;
+// How long the last edit each browser sent is remembered, to skip it when
+// sent again after a drop.
+const seenMs = 24 * 60 * 60 * 1000;
 
 interface Stored {
   revision: number;
@@ -158,17 +165,29 @@ class MapCopy extends DurableObject<MapsEnv> {
       typeof data.name === "string"
         ? data.name.trim().slice(0, maxNameLength)
         : "";
+    const client =
+      typeof data.client === "string" && clientPattern.test(data.client)
+        ? data.client
+        : undefined;
     socket.serializeAttachment({
       peer,
       name,
       since: Date.now(),
+      client,
     } satisfies Editor);
+    // The welcome carries the map as it stands, so the link starts from what
+    // every later edit it hears lands on.
+    const { revision, map } = await this.current();
     socket.send(
       JSON.stringify({
         type: "welcome",
         peer,
-        revision: stored.revision,
-        peers: others.map((item) => item.editor),
+        revision,
+        map,
+        peers: others.map(({ editor: other }) => ({
+          peer: other.peer,
+          name: other.name,
+        })),
       }),
     );
     this.broadcast(JSON.stringify({ type: "join", peer, name }), socket);
@@ -182,8 +201,19 @@ class MapCopy extends DurableObject<MapsEnv> {
     data: Record<string, unknown>,
   ) {
     const patch = parsePatch(data.patch);
-    if (!patch) return;
+    const id = Number(data.id);
+    if (!patch || !Number.isSafeInteger(id) || id < 1) return;
     const current = await this.current();
+    const seenKey = editor.client ? `seen:${editor.client}` : null;
+    const seen = seenKey
+      ? await this.ctx.storage.get<{ id: number; at: number }>(seenKey)
+      : undefined;
+    if (seen && id <= seen.id) {
+      socket.send(
+        JSON.stringify({ type: "ack", id, revision: current.revision }),
+      );
+      return;
+    }
     const map = applyPatch(current.map, patch);
     // A map grows by at most what the patch holds, so the whole map is
     // measured again only when that could take it past the limit.
@@ -202,6 +232,7 @@ class MapCopy extends DurableObject<MapsEnv> {
     await this.ctx.storage.put({
       [logKey(revision)]: JSON.stringify(patch),
       revision,
+      ...(seenKey && { [seenKey]: { id, at: Date.now() } }),
     });
     this.cached = { revision, map };
     this.dirty = true;
@@ -213,7 +244,8 @@ class MapCopy extends DurableObject<MapsEnv> {
         patch,
         revision,
         peer: editor.peer,
-        id: data.id,
+        client: editor.client,
+        id,
       }),
     );
   }
@@ -230,8 +262,17 @@ class MapCopy extends DurableObject<MapsEnv> {
       revision,
       saved: revision,
     });
+    const now = Date.now();
+    const stale = [
+      ...(
+        await this.ctx.storage.list<{ id: number; at: number }>({
+          prefix: "seen:",
+        })
+      ).entries(),
+    ].flatMap(([key, value]) => (now - value.at > seenMs ? [key] : []));
     const logged = [
       ...(await this.ctx.storage.list({ prefix: logPrefix })).keys(),
+      ...stale,
     ];
     for (let at = 0; at < logged.length; at += 128) {
       await this.ctx.storage.delete(logged.slice(at, at + 128));
@@ -294,6 +335,7 @@ class MapCopy extends DurableObject<MapsEnv> {
         map = applyPatch(map, JSON.parse(patch) as MapPatch);
         replayed = true;
       }
+      if (replayed) this.size = byteLength(JSON.stringify(map));
       this.cached = { revision, map };
       this.dirty = replayed;
     }
@@ -308,8 +350,13 @@ class MapCopy extends DurableObject<MapsEnv> {
   }
 
   private left(socket: WebSocket) {
-    const { peer, since } = socket.deserializeAttachment() as Editor;
-    socket.serializeAttachment({ peer: 0, name: "", since } satisfies Editor);
+    const { peer, since, client } = socket.deserializeAttachment() as Editor;
+    socket.serializeAttachment({
+      peer: 0,
+      name: "",
+      since,
+      client,
+    } satisfies Editor);
     try {
       socket.close();
     } catch {
@@ -372,7 +419,13 @@ class MapCopy extends DurableObject<MapsEnv> {
     });
     this.cached = null;
     // Live editors take the whole new map from a read.
-    this.broadcast(JSON.stringify({ type: "map", revision }));
+    this.broadcast(
+      JSON.stringify({
+        type: "map",
+        revision,
+        map: JSON.parse(map) as unknown,
+      }),
+    );
     return { ok: true, revision };
   }
 

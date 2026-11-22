@@ -4,8 +4,6 @@ import {
   getIsEmptyPatch,
   type MapPatch,
   parsePatch,
-  patchKeys,
-  withoutKeys,
 } from "@rooms/map-patch";
 
 import type { GameMap, Point } from "@/lib/map/types";
@@ -17,34 +15,36 @@ export interface LivePeer {
 }
 
 export interface LiveEvents {
-  // Someone else's edit, without the things this browser still has edits of
-  // its own on the way for, which the server applies after it.
-  onRemote: (patch: MapPatch) => void;
-  // The map was saved whole elsewhere, so it has to be read again.
-  onReload: () => void;
+  // What changed in the map this browser shows because of someone else, as
+  // a patch to apply to it. It can carry a new name.
+  onChange: (patch: MapPatch) => void;
   onPeers: (peers: LivePeer[]) => void;
-  // Nothing sent is still on its way, as of the server's revision.
+  // The server has every edit this browser made, as of its revision.
   onIdle: (revision: number) => void;
-  // The link ended. It was refused when its secret no longer edits the map;
-  // otherwise this browser and the server may disagree until it reads the
-  // map again.
-  onClosed: (refused: boolean) => void;
+  // The link stopped for good, because its secret no longer edits the map.
+  onRefused: () => void;
+  // Whether the link is connected, for showing it.
+  onConnected: (connected: boolean) => void;
 }
 
 interface LiveOptions extends LiveEvents {
   url: string;
   secret: string;
   name: string;
+  // The map as this browser shows it when the link opens.
   map: GameMap;
   connect?: (url: string) => WebSocket;
 }
 
 const cursorEveryMs = 100;
+const reconnectMs = [1000, 2000, 5000, 10_000, 30_000];
 // The close code the server uses for a link whose secret it refused.
 export const refusedCode = 4003;
 
-// One browser's live link to a map's online copy. It sends each edit as the
-// things it changed, applies everyone else's, and keeps everyone's pointers.
+// One browser's live link to a map's online copy. The server orders every
+// edit, and this browser shows the map as the server confirmed it with its
+// own unconfirmed edits played on top. Others' edits, a reconnect and the map
+// sent on joining land on the confirmed map, and its own edits play again.
 export function openLiveMap({
   url,
   secret,
@@ -53,214 +53,186 @@ export function openLiveMap({
   connect = (address) => new WebSocket(address),
   ...events
 }: LiveOptions) {
-  const socket = connect(url);
-  // The map as this browser last sent it, with others' edits taken in, so the
-  // next edit is told apart from theirs.
-  let base = map;
-  // The map as the server has it, from every edit it has handed back.
-  let confirmed = map;
-  let me = 0;
+  // Names this browser to the server across reconnects, so an edit sent
+  // again after a drop isn't applied twice.
+  const client = Array.from(
+    crypto.getRandomValues(new Uint8Array(12)),
+    (byte) => byte.toString(16).padStart(2, "0"),
+  ).join("");
+  let confirmed: GameMap | null = null;
+  let shown = map;
   let revision = 0;
   let sent = 0;
-  let closed = false;
-  // What this browser has on its way for each thing, until the server hands
-  // back the last edit sent for it: the whole thing, or some of its fields.
-  const waiting = new Map<
-    string,
-    { id: number; whole: boolean; fields: Set<string> }
-  >();
-  // Someone else's edit, with what this browser's edits on their way will
-  // change after it on the server taken out, so this copy ends up as the
-  // server's will. A removal still lands under a change to a field, which
-  // the server then drops.
-  const yieldTo = (patch: MapPatch): MapPatch => {
-    const set: Record<string, Record<string, unknown>> = {};
-    const merge: Record<string, Record<string, Record<string, unknown>>> = {};
-    for (const [name, changes] of Object.entries(patch.set ?? {})) {
-      for (const [key, value] of Object.entries(changes ?? {})) {
-        const mine = waiting.get(`${name}:${key}`);
-        if (mine?.whole) continue;
-        let kept = value;
-        if (mine && value !== null) {
-          const own = entityOf(base, name, key) ?? {};
-          kept = { ...(value as Record<string, unknown>) };
-          for (const field of mine.fields) {
-            if (field in own)
-              (kept as Record<string, unknown>)[field] = own[field];
-            else delete (kept as Record<string, unknown>)[field];
-          }
-        }
-        (set[name] ??= {})[key] = kept;
-      }
-    }
-    for (const [name, changes] of Object.entries(patch.merge ?? {})) {
-      for (const [key, fields] of Object.entries(changes ?? {})) {
-        const mine = waiting.get(`${name}:${key}`);
-        if (mine?.whole) continue;
-        const kept = Object.fromEntries(
-          Object.entries(fields).filter(([field]) => !mine?.fields.has(field)),
-        );
-        if (Object.keys(kept).length > 0) (merge[name] ??= {})[key] = kept;
-      }
-    }
-    const fields = Object.fromEntries(
-      Object.entries(patch.fields ?? {}).filter(
-        ([name]) => !waiting.has(`field:${name}`),
-      ),
-    );
-    return withoutKeys(
-      {
-        ...(Object.keys(set).length > 0 && { set }),
-        ...(Object.keys(merge).length > 0 && { merge }),
-        ...(Object.keys(fields).length > 0 && { fields }),
-      },
-      new Set(),
-    );
-  };
+  const pending: { id: number; patch: MapPatch }[] = [];
   const peers = new Map<number, LivePeer>();
+  let socket: WebSocket | null = null;
+  let me = 0;
+  let welcomed = false;
+  let stopped = false;
+  let attempts = 0;
+  let retry: ReturnType<typeof setTimeout> | undefined;
   let cursorAt = 0;
   let cursorTimer: ReturnType<typeof setTimeout> | undefined;
   let nextCursor: Point | null = null;
 
-  // Edits wait until the server has taken the link's hello.
-  let welcomed = false;
-  const outbox: string[] = [];
-  const post = (message: object) => {
-    const text = JSON.stringify(message);
-    if (welcomed && socket.readyState === WebSocket.OPEN) socket.send(text);
-    else outbox.push(text);
-  };
-  const end = (refused: boolean) => {
-    if (closed) return;
-    closed = true;
-    clearTimeout(cursorTimer);
-    try {
-      socket.close();
-    } catch {
-      // It may already be closed.
-    }
-    events.onClosed(refused);
-  };
   const showPeers = () => events.onPeers([...peers.values()]);
+  const post = (message: object) => {
+    if (welcomed && socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify(message));
+    }
+  };
 
-  socket.addEventListener("open", () =>
-    socket.send(JSON.stringify({ type: "hello", secret, name })),
-  );
-  socket.addEventListener("close", (event) => end(event.code === refusedCode));
-  socket.addEventListener("message", (event) => {
-    let data: Record<string, unknown>;
-    try {
-      data = JSON.parse(String(event.data)) as Record<string, unknown>;
-    } catch {
-      return;
-    }
-    if (data.type === "welcome") {
-      me = Number(data.peer);
-      revision = Number(data.revision);
-      for (const peer of (data.peers as LivePeer[] | undefined) ?? []) {
-        peers.set(peer.peer, { peer: peer.peer, name: peer.name, at: null });
+  // Shows the confirmed map with this browser's edits on top, and hands the
+  // editor what that changed.
+  const replay = () => {
+    if (!confirmed) return;
+    let next = confirmed;
+    for (const { patch } of pending) next = applyPatch(next, patch);
+    const change = diffMaps(shown, next);
+    const renamed = next.name !== shown.name ? (next.name ?? null) : undefined;
+    shown = next;
+    const patch: MapPatch =
+      renamed === undefined
+        ? change
+        : { ...change, fields: { ...change.fields, name: renamed } };
+    if (!getIsEmptyPatch(patch)) events.onChange(patch);
+  };
+
+  const idle = () => {
+    if (pending.length === 0) events.onIdle(revision);
+  };
+
+  const open = () => {
+    const opened = connect(url);
+    socket = opened;
+    welcomed = false;
+    opened.addEventListener("open", () =>
+      opened.send(JSON.stringify({ type: "hello", secret, name, client })),
+    );
+    opened.addEventListener("close", (event) => {
+      if (socket !== opened) return;
+      socket = null;
+      welcomed = false;
+      peers.clear();
+      showPeers();
+      events.onConnected(false);
+      if (stopped) return;
+      if (event.code === refusedCode) {
+        stopped = true;
+        events.onRefused();
+        return;
       }
-      showPeers();
-      welcomed = true;
-      for (const text of outbox.splice(0)) socket.send(text);
-    } else if (data.type === "refused") {
-      // An edit the server didn't take leaves the two apart.
-      end(false);
-    } else if (data.type === "join") {
-      const peer = Number(data.peer);
-      const named = typeof data.name === "string" ? data.name : "";
-      peers.set(peer, { peer, name: named, at: null });
-      showPeers();
-    } else if (data.type === "leave") {
-      peers.delete(Number(data.peer));
-      showPeers();
-    } else if (data.type === "cursor") {
-      const known = peers.get(Number(data.peer));
-      if (!known) return;
-      known.at = (data.at as Point | null) ?? null;
-      showPeers();
-    } else if (data.type === "map") {
-      events.onReload();
-    } else if (data.type === "patch") {
-      const patch = parsePatch(data.patch);
-      if (!patch) return;
-      revision = Number(data.revision);
-      confirmed = applyPatch(confirmed, patch);
-      if (Number(data.peer) === me) {
-        for (const key of patchKeys(patch)) {
-          if (waiting.get(key)?.id === data.id) waiting.delete(key);
-        }
-      } else {
-        const theirs = yieldTo(patch);
-        if (!getIsEmptyPatch(theirs)) {
-          base = applyPatch(base, theirs);
-          events.onRemote(theirs);
-        }
+      const wait = reconnectMs[Math.min(attempts, reconnectMs.length - 1)];
+      attempts += 1;
+      retry = setTimeout(open, wait);
+    });
+    opened.addEventListener("message", (event) => {
+      if (socket !== opened) return;
+      let data: Record<string, unknown>;
+      try {
+        data = JSON.parse(String(event.data)) as Record<string, unknown>;
+      } catch {
+        return;
       }
-      if (waiting.size === 0) events.onIdle(revision);
-    }
-  });
+      if (data.type === "welcome") {
+        attempts = 0;
+        me = Number(data.peer);
+        revision = Number(data.revision);
+        confirmed = data.map as GameMap;
+        peers.clear();
+        for (const peer of (data.peers as LivePeer[] | undefined) ?? []) {
+          peers.set(peer.peer, { peer: peer.peer, name: peer.name, at: null });
+        }
+        showPeers();
+        welcomed = true;
+        events.onConnected(true);
+        replay();
+        // Edits not confirmed before a drop go again. The server skips any
+        // it already took.
+        for (const { id, patch } of pending) {
+          post({ type: "patch", id, patch });
+        }
+        idle();
+      } else if (data.type === "join") {
+        const peer = Number(data.peer);
+        const named = typeof data.name === "string" ? data.name : "";
+        peers.set(peer, { peer, name: named, at: null });
+        showPeers();
+      } else if (data.type === "leave") {
+        peers.delete(Number(data.peer));
+        showPeers();
+      } else if (data.type === "cursor") {
+        const known = peers.get(Number(data.peer));
+        if (!known) return;
+        known.at = (data.at as Point | null) ?? null;
+        showPeers();
+      } else if (data.type === "map" && confirmed) {
+        // The map was saved whole elsewhere.
+        revision = Number(data.revision);
+        confirmed = data.map as GameMap;
+        replay();
+      } else if (data.type === "patch" && confirmed) {
+        const patch = parsePatch(data.patch);
+        if (!patch) return;
+        revision = Number(data.revision);
+        confirmed = applyPatch(confirmed, patch);
+        if (Number(data.peer) === me && data.client === client) {
+          confirm(Number(data.id));
+        } else replay();
+        idle();
+      } else if (data.type === "ack") {
+        // An edit sent again that the server had already taken.
+        revision = Number(data.revision);
+        confirm(Number(data.id));
+        replay();
+        idle();
+      } else if (data.type === "refused") {
+        // The server didn't take the edit, so it comes off the map shown.
+        confirm(Number(data.id));
+        replay();
+        idle();
+      }
+    });
+  };
+
+  const confirm = (id: number) => {
+    const at = pending.findIndex((item) => item.id === id);
+    if (at >= 0) pending.splice(at, 1);
+  };
+
+  const push = (patch: MapPatch) => {
+    sent += 1;
+    pending.push({ id: sent, patch });
+    post({ type: "patch", id: sent, patch });
+  };
+
+  open();
 
   return {
-    // Renames the map for everyone. A map's name isn't part of its edits.
-    rename(next: string) {
-      sent += 1;
-      waiting.set("field:name", { id: sent, whole: true, fields: new Set() });
-      post({ type: "patch", id: sent, patch: { fields: { name: next } } });
-    },
-    // Sends what changed since the map this browser last knew. It returns
-    // false when there was nothing to send.
+    // Sends what changed from the map this browser shows. It returns false
+    // when there was nothing to send.
     send(next: GameMap) {
-      const patch = diffMaps(base, next);
-      base = next;
+      const patch = diffMaps(shown, next);
+      shown = { ...next, name: shown.name };
       if (getIsEmptyPatch(patch)) return false;
-      sent += 1;
-      for (const [name, changes] of Object.entries(patch.set ?? {})) {
-        for (const key of Object.keys(changes ?? {})) {
-          waiting.set(`${name}:${key}`, {
-            id: sent,
-            whole: true,
-            fields: new Set(),
-          });
-        }
-      }
-      for (const [name, changes] of Object.entries(patch.merge ?? {})) {
-        for (const [key, fields] of Object.entries(changes ?? {})) {
-          const earlier = waiting.get(`${name}:${key}`);
-          waiting.set(`${name}:${key}`, {
-            id: sent,
-            whole: earlier?.whole ?? false,
-            fields: new Set([
-              ...(earlier?.fields ?? []),
-              ...Object.keys(fields),
-            ]),
-          });
-        }
-      }
-      for (const name of Object.keys(patch.fields ?? {})) {
-        waiting.set(`field:${name}`, {
-          id: sent,
-          whole: true,
-          fields: new Set(),
-        });
-      }
-      post({ type: "patch", id: sent, patch });
+      push(patch);
       return true;
     },
-    get idle() {
-      return waiting.size === 0;
+    // Renames the map for everyone. A map's name isn't part of its edits.
+    rename(next: string) {
+      if (next === shown.name) return;
+      shown = { ...shown, name: next };
+      push({ fields: { name: next } });
     },
-    // The map as sent, with others' edits taken in.
-    get map() {
-      return base;
+    get idle() {
+      return pending.length === 0 && welcomed;
+    },
+    // The map as the server last confirmed it, or null before it answered.
+    get confirmed() {
+      return confirmed;
     },
     get revision() {
       return revision;
-    },
-    // The map as the server last confirmed it, without edits it hasn't
-    // handed back.
-    get confirmed() {
-      return confirmed;
     },
     // Where this browser's pointer is on the map, at most ten times a second.
     cursor(at: Point | null) {
@@ -274,12 +246,11 @@ export function openLiveMap({
       }, wait);
     },
     close() {
-      closed = true;
+      stopped = true;
+      clearTimeout(retry);
       clearTimeout(cursorTimer);
-      socket.close();
-    },
-    get closed() {
-      return closed;
+      socket?.close();
+      socket = null;
     },
   };
 }
@@ -289,16 +260,4 @@ export type LiveMap = ReturnType<typeof openLiveMap>;
 // The address of a map's live connection on the rooms server.
 export function liveUrl(roomsUrl: string, id: string) {
   return `${roomsUrl.replace(/^http/, "ws")}/maps/${id}/live`;
-}
-
-function entityOf(map: GameMap, name: string, key: string) {
-  const collection = (map as unknown as Record<string, unknown>)[name];
-  if (Array.isArray(collection)) {
-    return collection.find(
-      (item: Record<string, unknown>) => item.id === key,
-    ) as Record<string, unknown> | undefined;
-  }
-  return (collection as Record<string, Record<string, unknown>> | undefined)?.[
-    key
-  ];
 }

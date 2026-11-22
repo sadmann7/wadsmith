@@ -119,11 +119,22 @@ describe("live editing", () => {
       things: [{ id: "imp-1", kind: "imp", x: 0, y: 0, angle: 0 }],
     });
     const a = await live(id);
-    a.socket.send(JSON.stringify({ type: "hello", secret, name: "Ana" }));
+    a.socket.send(
+      JSON.stringify({
+        type: "hello",
+        secret,
+        name: "Ana",
+        client: "a".repeat(24),
+      }),
+    );
     expect(await a.next()).toEqual({
       type: "welcome",
       peer: 1,
       revision: 1,
+      map: {
+        ...map,
+        things: [{ id: "imp-1", kind: "imp", x: 0, y: 0, angle: 0 }],
+      },
       peers: [],
     });
     const b = await live(id);
@@ -142,9 +153,25 @@ describe("live editing", () => {
         patch: { set: { things: { "imp-1": moved } } },
       }),
     );
-    const echo = { type: "patch", revision: 2, peer: 1, id: 7 };
+    const echo = {
+      type: "patch",
+      revision: 2,
+      peer: 1,
+      id: 7,
+      client: "a".repeat(24),
+    };
     expect(await a.next()).toMatchObject(echo);
     expect(await b.next()).toMatchObject(echo);
+
+    // The same edit sent again after a drop is taken once.
+    a.socket.send(
+      JSON.stringify({
+        type: "patch",
+        id: 7,
+        patch: { set: { things: { "imp-1": moved } } },
+      }),
+    );
+    expect(await a.next()).toEqual({ type: "ack", id: 7, revision: 2 });
     expect(await (await send(`/maps/${id}`)).json()).toMatchObject({
       revision: 2,
       map: { things: [moved] },
@@ -159,7 +186,7 @@ describe("live editing", () => {
 
     // A whole map saved over the web tells everyone to read it again.
     expect((await put(id, secret, 2, map)).status).toBe(200);
-    expect(await a.next()).toEqual({ type: "map", revision: 3 });
+    expect(await a.next()).toEqual({ type: "map", revision: 3, map });
 
     b.socket.close();
     expect(await a.next()).toEqual({ type: "leave", peer: 2 });

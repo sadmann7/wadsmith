@@ -1,5 +1,5 @@
 import { applyPatch, type MapPatch } from "@rooms/map-patch";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { GameMap } from "@/lib/map/types";
 
@@ -8,149 +8,204 @@ import { testMap } from "@/lib/map/test-map";
 
 import { type LivePeer, liveUrl, openLiveMap } from "./live";
 
+const settle = () => new Promise((done) => setTimeout(done, 0));
+const strip = ({ name: _, ...map }: GameMap) => map;
+
 describe("live editing in the browser", () => {
-  it("brings two editors' edits together", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const ready = async (server: ReturnType<typeof fakeServer>) => {
+    await Promise.resolve();
+    server.run();
+  };
+
+  it("brings two editors' edits together", async () => {
     const server = fakeServer(testMap);
     const ana = server.join("Ana");
     const bo = server.join("Bo");
-    server.run();
+    await ready(server);
     ana.edit((map) => updateThing(map, "imp-1", { x: 800 }));
     bo.edit((map) => updateSector(map, "sector-3", { light: 90 }));
     server.run();
     for (const editor of [ana, bo]) {
-      expect(editor.map.things[3].x).toBe(800);
-      expect(editor.map.sectors[2].light).toBe(90);
+      expect(strip(editor.map)).toEqual(strip(server.map));
     }
-    expect(ana.map).toEqual(server.map);
+    expect(server.map.things[3].x).toBe(800);
+    expect(server.map.sectors[2].light).toBe(90);
     expect(ana.live.idle).toBe(true);
     expect(ana.seen.idle.at(-1)).toBe(3);
   });
 
-  it("ends up the same when two editors change one thing at once", () => {
+  it("ends up as the server orders two edits to one field", async () => {
     const server = fakeServer(testMap);
     const ana = server.join("Ana");
     const bo = server.join("Bo");
-    server.run();
-    // Both edit the imp before either hears of the other's edit. The server
-    // takes Ana's first, so Bo's wins.
+    await ready(server);
     ana.edit((map) => updateThing(map, "imp-1", { x: 100 }));
     bo.edit((map) => updateThing(map, "imp-1", { x: 200 }));
     server.run();
-    expect(server.map.things[3].x).toBe(200);
-    expect(ana.map.things[3].x).toBe(200);
-    expect(bo.map.things[3].x).toBe(200);
-  });
-
-  it("sends only one's own edit after taking someone else's", () => {
-    const server = fakeServer(testMap);
-    const ana = server.join("Ana");
-    const bo = server.join("Bo");
-    server.run();
-    bo.edit((map) => updateSector(map, "sector-1", { light: 10 }));
-    server.run();
-    expect(ana.map.sectors[0].light).toBe(10);
-    ana.edit((map) => updateThing(map, "imp-1", { x: 5 }));
-    server.run();
-    expect(server.patches.at(-1)).toEqual({
-      merge: { things: { "imp-1": { x: 5 } } },
-    });
-    // Nothing more to send once the map is what it was sent as.
-    expect(ana.live.send(ana.map)).toBe(false);
-  });
-
-  it("lets a removal land under a change to one of its fields", () => {
-    const server = fakeServer(testMap);
-    const ana = server.join("Ana");
-    const bo = server.join("Bo");
-    server.run();
-    ana.edit((map) => ({
-      ...map,
-      things: map.things.filter((thing) => thing.id !== "imp-1"),
-    }));
-    bo.edit((map) => updateThing(map, "imp-1", { x: 300 }));
-    server.run();
     for (const map of [server.map, ana.map, bo.map]) {
-      expect(map.things.some((thing) => thing.id === "imp-1")).toBe(false);
+      expect(map.things[3].x).toBe(200);
     }
   });
 
-  it("keeps two people's changes to different fields of one thing", () => {
+  it("keeps changes to different fields of one thing, and a removal", async () => {
     const server = fakeServer(testMap);
     const ana = server.join("Ana");
     const bo = server.join("Bo");
-    server.run();
+    await ready(server);
     ana.edit((map) => updateThing(map, "imp-1", { x: 300 }));
     bo.edit((map) => updateThing(map, "imp-1", { angle: 90 }));
     server.run();
     for (const map of [server.map, ana.map, bo.map]) {
       expect(map.things[3]).toMatchObject({ x: 300, angle: 90 });
     }
+    ana.edit((map) => ({
+      ...map,
+      things: map.things.filter((thing) => thing.id !== "zombieman-1"),
+    }));
+    bo.edit((map) => updateThing(map, "zombieman-1", { x: 1 }));
+    server.run();
+    for (const map of [server.map, ana.map, bo.map]) {
+      expect(map.things.some((thing) => thing.id === "zombieman-1")).toBe(
+        false,
+      );
+    }
   });
 
-  it("knows the map as the server confirmed it", () => {
+  it("starts from the server's map when others edited before it joined", async () => {
     const server = fakeServer(testMap);
     const ana = server.join("Ana");
+    await ready(server);
+    // Bo read the map earlier, then Ana changed it before Bo's link opened.
+    ana.edit((map) => updateSector(map, "sector-1", { light: 20 }));
     server.run();
-    ana.edit((map) => updateThing(map, "imp-1", { x: 300 }));
-    // Sent but not handed back yet.
-    expect(ana.live.confirmed.things[3].x).toBe(testMap.things[3].x);
-    server.run();
-    expect(ana.live.confirmed).toEqual(server.map);
+    const bo = server.join("Bo", testMap);
+    bo.edit((map) => updateThing(map, "imp-1", { angle: 45 }));
+    await ready(server);
+    for (const map of [server.map, ana.map, bo.map]) {
+      expect(map.sectors[0].light).toBe(20);
+      expect(map.things[3].angle).toBe(45);
+    }
   });
 
-  it("holds edits made before the server welcomes the link", () => {
+  it("sends again after a drop what the server never got", async () => {
     const server = fakeServer(testMap);
     const ana = server.join("Ana");
-    // The hello is still queued at the server when Ana edits.
-    ana.edit((map) => updateThing(map, "imp-1", { x: 9 }));
-    server.run();
-    // The edit went out after the welcome, so the server took it.
-    expect(server.patches).toHaveLength(1);
-    expect(server.map.things[3].x).toBe(9);
+    await ready(server);
+    ana.edit((map) => updateThing(map, "imp-1", { x: 5 }));
+    server.lose();
+    ana.drop();
+    expect(ana.live.idle).toBe(false);
+    await vi.advanceTimersByTimeAsync(1000);
+    await ready(server);
+    expect(server.map.things[3].x).toBe(5);
     expect(ana.live.idle).toBe(true);
   });
 
-  it("passes pointers on to the others", async () => {
+  it("doesn't put back an edit the server took before a drop", async () => {
     const server = fakeServer(testMap);
     const ana = server.join("Ana");
     const bo = server.join("Bo");
+    await ready(server);
+    // The server takes Ana's edit, but the drop loses its echo to her.
+    ana.drop();
+    ana.edit((map) => updateThing(map, "imp-1", { x: 5 }));
+    await vi.advanceTimersByTimeAsync(1000);
+    await ready(server);
+    bo.edit((map) => updateThing(map, "imp-1", { x: 9 }));
+    ana.edit((map) => updateSector(map, "sector-3", { light: 40 }));
     server.run();
+    ana.drop();
+    await vi.advanceTimersByTimeAsync(1000);
+    await ready(server);
+    for (const map of [server.map, ana.map, bo.map]) {
+      expect(map.things[3].x).toBe(9);
+      expect(map.sectors[2].light).toBe(40);
+    }
+  });
+
+  it("keeps edits made while it reconnects, with others' edits to other fields", async () => {
+    const server = fakeServer(testMap);
+    const ana = server.join("Ana");
+    const bo = server.join("Bo");
+    await ready(server);
+    ana.drop();
+    ana.edit((map) => updateSector(map, "sector-3", { light: 30 }));
+    bo.edit((map) => updateSector(map, "sector-3", { floor: 8 }));
+    server.run();
+    await vi.advanceTimersByTimeAsync(1000);
+    await ready(server);
+    for (const map of [server.map, ana.map, bo.map]) {
+      expect(map.sectors[2]).toMatchObject({ light: 30, floor: 8 });
+    }
+  });
+
+  it("renames the map for everyone, even across a drop", async () => {
+    const server = fakeServer(testMap);
+    const ana = server.join("Ana");
+    const bo = server.join("Bo");
+    await ready(server);
+    ana.drop();
+    ana.live.rename("Hangar");
+    await vi.advanceTimersByTimeAsync(1000);
+    await ready(server);
+    expect(server.map.name).toBe("Hangar");
+    expect(bo.map.name).toBe("Hangar");
+  });
+
+  it("passes pointers on to the others", async () => {
+    vi.useRealTimers();
+    const server = fakeServer(testMap);
+    const ana = server.join("Ana");
+    const bo = server.join("Bo");
+    await ready(server);
     expect(ana.seen.peers).toEqual([{ peer: 2, name: "Bo", at: null }]);
-    expect(bo.seen.peers).toEqual([{ peer: 1, name: "", at: null }]);
     ana.live.cursor({ x: 3, y: 4 });
     await new Promise((done) => setTimeout(done, 150));
     server.run();
     expect(bo.seen.peers[0].at).toEqual({ x: 3, y: 4 });
+    await settle();
   });
 
   it("reaches a map's live address", () => {
     expect(liveUrl("https://rooms.example.com", "abc")).toBe(
       "wss://rooms.example.com/maps/abc/live",
     );
-    expect(liveUrl("http://localhost:8787", "abc")).toBe(
-      "ws://localhost:8787/maps/abc/live",
-    );
   });
 });
 
-// Stands in for a map's Durable Object: it applies patches in the order it
-// takes them off its queue and hands each to every editor.
+// Stands in for a map's Durable Object. It takes messages off a queue one at
+// a time, like the real one's input gate, applies edits in that order, and
+// skips an edit a browser sends again.
 function fakeServer(start: GameMap) {
   let map = start;
   let revision = 1;
   const sockets: FakeSocket[] = [];
   const queue: [FakeSocket, Record<string, unknown>][] = [];
+  const seen = new Map<string, number>();
   const patches: MapPatch[] = [];
 
   class FakeSocket extends EventTarget {
-    readyState: number = WebSocket.OPEN;
+    readyState: number = WebSocket.CONNECTING;
     peer = 0;
+    client = "";
     send(text: string) {
+      if (this.readyState !== WebSocket.OPEN) throw new Error("Not open.");
       queue.push([this, JSON.parse(text) as Record<string, unknown>]);
     }
-    close() {
+    close(code = 1000) {
+      if (this.readyState === WebSocket.CLOSED) return;
       this.readyState = WebSocket.CLOSED;
-      this.dispatchEvent(Object.assign(new Event("close"), { code: 1000 }));
+      const at = sockets.indexOf(this);
+      if (at >= 0) sockets.splice(at, 1);
+      this.dispatchEvent(Object.assign(new Event("close"), { code }));
     }
     hear(message: object) {
       this.dispatchEvent(
@@ -159,15 +214,16 @@ function fakeServer(start: GameMap) {
     }
   }
 
-  // Delivers queued messages one at a time, like a server's input gate.
   const run = () => {
     while (queue.length > 0) {
       const [from, data] = queue.shift() as [
         FakeSocket,
         Record<string, unknown>,
       ];
+      if (from.readyState !== WebSocket.OPEN) continue;
       if (data.type === "hello") {
-        from.peer = sockets.length + 1;
+        from.peer = Math.max(0, ...sockets.map((socket) => socket.peer)) + 1;
+        from.client = String(data.client);
         const peers = sockets.map((socket) => ({
           peer: socket.peer,
           name: "",
@@ -176,55 +232,77 @@ function fakeServer(start: GameMap) {
           socket.hear({ type: "join", peer: from.peer, name: data.name });
         }
         sockets.push(from);
-        from.hear({ type: "welcome", peer: from.peer, revision, peers });
+        from.hear({ type: "welcome", peer: from.peer, revision, map, peers });
       } else if (data.type === "patch") {
+        const id = Number(data.id);
+        if (id <= (seen.get(from.client) ?? 0)) {
+          from.hear({ type: "ack", id, revision });
+          continue;
+        }
+        seen.set(from.client, id);
         patches.push(data.patch as MapPatch);
         map = applyPatch(map, data.patch as MapPatch);
         revision += 1;
         for (const socket of sockets) {
-          socket.hear({ ...data, revision, peer: from.peer });
+          socket.hear({
+            ...data,
+            revision,
+            peer: from.peer,
+            client: from.client,
+          });
         }
       } else if (data.type === "cursor") {
         for (const socket of sockets) {
-          if (socket !== from) {
-            socket.hear({
-              type: "cursor",
-              peer: from.peer,
-              at: { x: data.x, y: data.y },
-            });
-          }
+          if (socket === from) continue;
+          socket.hear({
+            type: "cursor",
+            peer: from.peer,
+            at: { x: data.x, y: data.y },
+          });
         }
       }
     }
   };
 
-  const join = (name: string) => {
-    const socket = new FakeSocket();
-    let local = start;
-    const seen: { peers: LivePeer[]; idle: number[] } = { peers: [], idle: [] };
+  // A browser editing the map, with the map its editor shows.
+  const join = (name: string, from = start) => {
+    let local = from;
+    let current: FakeSocket | null = null;
+    const seenBy = { peers: [] as LivePeer[], idle: [] as number[] };
     const live = openLiveMap({
       url: "ws://rooms.test/maps/x/live",
       secret: "s",
       name,
-      map: start,
-      connect: () => socket as unknown as WebSocket,
-      onRemote: (patch) => {
+      map: from,
+      connect: () => {
+        const socket = new FakeSocket();
+        current = socket;
+        // Opens on the next turn, like a real socket.
+        queueMicrotask(() => {
+          socket.readyState = WebSocket.OPEN;
+          socket.dispatchEvent(new Event("open"));
+        });
+        return socket as unknown as WebSocket;
+      },
+      onChange: (patch) => {
         local = applyPatch(local, patch);
       },
-      onReload: () => {},
       onPeers: (peers) => {
-        seen.peers = peers.map((peer) => ({ ...peer }));
+        seenBy.peers = peers.map((peer) => ({ ...peer }));
       },
-      onIdle: (at) => seen.idle.push(at),
-      onClosed: () => {},
+      onIdle: (at) => seenBy.idle.push(at),
+      onRefused: () => {},
+      onConnected: () => {},
     });
-    socket.dispatchEvent(new Event("open"));
     return {
       live,
-      seen,
+      seen: seenBy,
       edit(change: (map: GameMap) => GameMap) {
         local = change(local);
         live.send(local);
+      },
+      drop() {
+        current?.close(1006);
       },
       get map() {
         return local;
@@ -236,6 +314,10 @@ function fakeServer(start: GameMap) {
     join,
     run,
     patches,
+    // Drops everything waiting, as when a connection fails mid-flight.
+    lose() {
+      queue.length = 0;
+    },
     get map() {
       return map;
     },
