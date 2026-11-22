@@ -1,12 +1,15 @@
 import { Bot, Check, LoaderCircle, X } from "lucide-react";
 import * as React from "react";
 
-import type { AgentSessionState } from "@/lib/editor/agent-session";
 import type { GameMap } from "@/lib/map/types";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { agentRisk } from "@/lib/editor/agent-actions";
+import {
+  type AgentSessionState,
+  getHasAgentCard,
+} from "@/lib/editor/agent-session";
 
 interface AgentCardProps {
   session: AgentSessionState;
@@ -36,7 +39,7 @@ export function AgentCard({
       />
     );
   }
-  if (!request) return null;
+  if (!request || !getHasAgentCard(session)) return null;
   const working = status === "working";
   const changes = request.steps.length;
   return (
@@ -66,7 +69,12 @@ export function AgentCard({
         )}
       </header>
       {changes > 0 || working ? (
-        <ol className="grid max-h-40 gap-2.5 overflow-y-auto p-3 text-sm">
+        <ol
+          ref={(list) => {
+            if (list) list.scrollTop = list.scrollHeight;
+          }}
+          className="grid max-h-40 gap-2.5 overflow-y-auto p-3 text-sm"
+        >
           {request.steps.map((step, index) => (
             <li key={index} className="flex items-center gap-2.5">
               <Check

@@ -960,7 +960,8 @@ export const agentActions: AgentAction[] = [
   },
   {
     name: "placeThing",
-    description: "Puts a thing in the middle of a room.",
+    description:
+      "Puts a thing in a room, at its middle or the closest spot to it where the thing fits clear of walls and other things.",
     params: [
       {
         name: "kind",
@@ -972,7 +973,12 @@ export const agentActions: AgentAction[] = [
     ],
     run: (map, args) => {
       const sector = findRoom(map, args.room);
-      return placed(map, args, roomCenter(map, sector));
+      const kind = thingKind(args, "kind");
+      return placed(
+        map,
+        args,
+        freeSpot(map, sector, kind, roomCenter(map, sector)),
+      );
     },
   },
   {
@@ -1718,6 +1724,74 @@ function thingKind(args: Args, name: string) {
     );
   }
   return kind;
+}
+
+// Doom's thing radii, for the kinds bigger or smaller than an imp's 20.
+const thingRadii: Partial<Record<ThingKind, number>> = {
+  player: 16,
+  "player-2": 16,
+  "player-3": 16,
+  "player-4": 16,
+  "deathmatch-start": 16,
+  "lost-soul": 16,
+  barrel: 10,
+  "burning-barrel": 16,
+  demon: 30,
+  spectre: 30,
+  cacodemon: 31,
+  "pain-elemental": 31,
+  "hell-knight": 24,
+  "baron-of-hell": 24,
+  cyberdemon: 40,
+  mancubus: 48,
+  arachnotron: 64,
+  "spider-mastermind": 128,
+};
+const thingRadius = (kind: ThingKind) => thingRadii[kind] ?? 20;
+const spotStep = 16;
+const spotRings = 40;
+
+// The closest point to `start` where a thing of `kind` fits inside the room
+// and clear of the things there. Doom collides things as squares, and a
+// monster that starts overlapping a wall or another thing can't move.
+function freeSpot(
+  map: GameMap,
+  sector: Sector,
+  kind: ThingKind,
+  start: Point,
+): Point {
+  const radius = thingRadius(kind);
+  const fits = (point: Point) =>
+    [-1, 0, 1]
+      .flatMap((sx) => [-1, 0, 1].map((sy) => ({ sx, sy })))
+      .every(
+        ({ sx, sy }) =>
+          sectorAt(map, { x: point.x + sx * radius, y: point.y + sy * radius })
+            ?.id === sector.id,
+      ) &&
+    map.things.every((thing) => {
+      const reach = radius + thingRadius(thing.kind);
+      return (
+        Math.abs(thing.x - point.x) >= reach ||
+        Math.abs(thing.y - point.y) >= reach
+      );
+    });
+  const spots: Point[] = [];
+  for (let dx = -spotRings; dx <= spotRings; dx += 1) {
+    for (let dy = -spotRings; dy <= spotRings; dy += 1) {
+      spots.push({ x: start.x + dx * spotStep, y: start.y + dy * spotStep });
+    }
+  }
+  const distance = (point: Point) =>
+    Math.hypot(point.x - start.x, point.y - start.y);
+  spots.sort((a, b) => distance(a) - distance(b));
+  const spot = spots.find(fits);
+  if (!spot) {
+    throw new Error(
+      `No room left in ${sector.name} for a ${thingCatalog[kind].label.toLowerCase()}. Pick a bigger room, or use addThing with a point.`,
+    );
+  }
+  return spot;
 }
 
 // A thing outside every room never spawns, and a player can't start inside a
