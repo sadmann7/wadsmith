@@ -173,11 +173,11 @@ importers:
         specifier: ^5.3.0
         version: 5.3.0
       '@ui-sdk/core':
-        specifier: 0.1.0-beta.9
-        version: 0.1.0-beta.9
+        specifier: 0.1.0-beta.14
+        version: 0.1.0-beta.14
       '@ui-sdk/react':
-        specifier: 0.1.0-beta.9
-        version: 0.1.0-beta.9(@types/react@19.3.0)(@ui-sdk/core@0.1.0-beta.9)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+        specifier: 0.1.0-beta.14
+        version: 0.1.0-beta.14(@types/react@19.3.0)(@ui-sdk/core@0.1.0-beta.14)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       cn:
         specifier: ^0.5.2
         version: 0.5.2
@@ -1308,14 +1308,14 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@ui-sdk/core@0.1.0-beta.9':
-    resolution: {integrity: sha512-2gxHeWnJUfYskJOfQ97pr6bxxbxIHKWd7cnfClBKzy+ynwmNOg4np5rhFCsKFwzkOj2s7QxD2s32/jwFR6uMdA==}
+  '@ui-sdk/core@0.1.0-beta.14':
+    resolution: {integrity: sha512-SHm5qLYBqxT5+d3svaBeP5uoBMIQbETKBqcZ/6b+WhhXlz6YoeNqjtMfpmq4yGA329DFwzu+y7+xGJjw4fnTPQ==}
 
-  '@ui-sdk/react@0.1.0-beta.9':
-    resolution: {integrity: sha512-UgFiUlZWaKkBcZIW0usHiQhcyJug11M8NNluSlfs9UyaYjW/Ws18T8zWc3iAz4SSwRla6+41y3aScXh3pUDN0g==}
+  '@ui-sdk/react@0.1.0-beta.14':
+    resolution: {integrity: sha512-qfriaLQEd+Iy7+PhAK6d2j3e1Hs6A4lh50+d+6rSAADoBwkQ/jf11SGzfXV5pCuYFGps3Ekz2W4RwtiR6yryjg==}
     peerDependencies:
       '@types/react': '>=19.2.10'
-      '@ui-sdk/core': ^0.1.0-beta.9
+      '@ui-sdk/core': ^0.1.0-beta.14
       react: '>=19'
       react-dom: '>=19'
     peerDependenciesMeta:
@@ -2453,11 +2453,11 @@ snapshots:
   '@typescript/typescript-win32-x64@7.0.2':
     optional: true
 
-  '@ui-sdk/core@0.1.0-beta.9': {}
+  '@ui-sdk/core@0.1.0-beta.14': {}
 
-  '@ui-sdk/react@0.1.0-beta.9(@types/react@19.3.0)(@ui-sdk/core@0.1.0-beta.9)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
+  '@ui-sdk/react@0.1.0-beta.14(@types/react@19.3.0)(@ui-sdk/core@0.1.0-beta.14)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
     dependencies:
-      '@ui-sdk/core': 0.1.0-beta.9
+      '@ui-sdk/core': 0.1.0-beta.14
       react: 19.3.1
       react-dom: 19.3.1(react@19.3.1)
     optionalDependencies:
