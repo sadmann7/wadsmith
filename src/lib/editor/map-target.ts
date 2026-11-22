@@ -6,7 +6,6 @@ import { roomCenter, switchKeyPrefix, thingKeyPrefix } from "@/lib/map/edit";
 import {
   interiorPoint,
   sectorAt,
-  sectorEdges,
   wallKey,
   wallOwners,
 } from "@/lib/map/geometry";
@@ -124,9 +123,8 @@ export function targetExists(map: GameMap, target: MapTarget) {
   const room = map.sectors.find((sector) => sector.id === target.sector);
   if (!room || target.kind === "room") return Boolean(room);
   if (target.kind === "hole") return room.holes?.[target.index] !== undefined;
-  return sectorEdges(room).some(
-    ({ from, to }) => wallKey(from, to) === target.wall,
-  );
+  // A room also has a side on the walls of a room drawn inside it.
+  return (wallOwners(map).get(target.wall) ?? []).includes(room);
 }
 
 export function targetForSurface(

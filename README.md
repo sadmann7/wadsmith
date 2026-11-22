@@ -39,6 +39,8 @@ Maps save per browser address. The dev server now uses `localhost:3000`, so a ma
 - **Select:** Shift-click adds a corner, a thing or a whole room to the selection, and Shift-drag selects every corner and thing in a box. In sector mode, drag a selected room to move everything selected with it.
 - **Copy and paste:** copy, cut and paste the selected rooms and things with the usual keys, or from the right-click menu. A paste lands at the pointer, in this map or one in another tab, and a room keeps the rooms drawn inside it, the things standing in it and its switches. Duplicate puts a copy beside the original.
 - **Transform:** press R or Shift+R to turn the selection a quarter, Shift+H or Shift+V to flip it, or choose **Transform** in the right-click menu to resize it or turn it by any angle. The result lands on the grid.
+- **Textures:** right-click a wall and open **Texture** to carry its texture on unbroken along the room's walls, to pick it up and apply it to other walls or a whole room, or to replace it with another everywhere in the map. A room's menu replaces its floor, ceiling or wall texture everywhere the same way.
+- **Several rooms:** with more than one room selected, the inspector edits their heights, light and textures together, and shows Mixed where they differ.
 - **Prefabs:** choose **Prefabs** in the right-click menu to save the selection under a name and place it again in any map.
 - **Views:** switch between **Map**, **Split** and **3D**. Drag the divider, or press M to maximize the view under the pointer and return to Split. In Map view, the player view stays docked in the corner.
 - **Camera:** drag the camera marker on the map, double-click the map or press C to move the 3D view, and use **Find camera** to center the map on it.

@@ -59,16 +59,7 @@ export function selectedParts(
   selection: string[],
   activeSector: string | null,
 ): SelectedParts {
-  const corners = new Set(selection.filter((key) => map.vertices[key]));
-  const rooms = new Set(
-    map.sectors
-      .filter(
-        (sector) =>
-          sector.id === activeSector ||
-          (corners.size > 0 && sector.vertices.every((id) => corners.has(id))),
-      )
-      .map((sector) => sector.id),
-  );
+  const rooms = new Set(pickedRooms(map, selection, activeSector));
   const containers = sectorContainers(map);
   for (let grew = rooms.size > 0; grew;) {
     grew = false;
@@ -93,6 +84,23 @@ export function selectedParts(
       })
       .map((thing) => thing.id),
   };
+}
+
+// The rooms picked themselves: the active one, and each with every corner of
+// its outline selected. The rooms drawn inside them aren't counted.
+export function pickedRooms(
+  map: GameMap,
+  selection: string[],
+  activeSector: string | null,
+) {
+  const corners = new Set(selection.filter((key) => map.vertices[key]));
+  return map.sectors
+    .filter(
+      (sector) =>
+        sector.id === activeSector ||
+        (corners.size > 0 && sector.vertices.every((id) => corners.has(id))),
+    )
+    .map((sector) => sector.id);
 }
 
 // The selection keys of everything the parts cover, for moving them together.

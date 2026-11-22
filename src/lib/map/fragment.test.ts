@@ -16,6 +16,7 @@ import {
   parseFragment,
   partKeys,
   pasteParts,
+  pickedRooms,
   removeParts,
   selectedParts,
   serializeFragment,
@@ -79,6 +80,11 @@ describe("what a selection covers", () => {
     const [yard, stage] = islandMap.sectors;
     const parts = selectedParts(islandMap, [], yard.id);
     expect(parts.sectors).toEqual([yard.id, stage.id]);
+    // The room picked is the yard alone, which is what the inspector edits.
+    expect(pickedRooms(islandMap, [], yard.id)).toEqual([yard.id]);
+    expect(
+      pickedRooms(islandMap, [...yard.vertices, ...stage.vertices], null),
+    ).toEqual([yard.id, stage.id]);
     expect(partKeys(islandMap, parts)).toEqual(
       expect.arrayContaining([...yard.vertices, ...stage.vertices]),
     );

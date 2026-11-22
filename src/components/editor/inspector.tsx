@@ -311,6 +311,119 @@ export function SectorInspector({
   );
 }
 
+const mixed = "Mixed";
+
+type RoomNumber = "floor" | "ceiling" | "light";
+
+interface RoomsInspectorProps {
+  map: GameMap;
+  rooms: Sector[];
+  assets: SceneAssets;
+  onChange: (patch: Partial<Sector>) => void;
+  onShift: (key: RoomNumber, delta: number) => void;
+}
+
+export function RoomsInspector({
+  map,
+  rooms,
+  assets,
+  onChange,
+  onShift,
+}: RoomsInspectorProps) {
+  const [first] = rooms;
+  // What every room agrees on, or null where they differ. A door has no
+  // ceiling height of its own, so it has no say in that one.
+  const shared = (key: RoomNumber) => {
+    const having =
+      key === "ceiling" ? rooms.filter((room) => !room.door) : rooms;
+    return having.length > 0 &&
+      having.every((room) => room[key] === having[0][key])
+      ? having[0][key]
+      : null;
+  };
+  const texture = (key: "floorTexture" | "ceilingTexture" | "wallTexture") =>
+    rooms.every((room) => room[key] === first[key]) ? first[key] : mixed;
+  const context = `${rooms.length} rooms`;
+  const flats = { kind: "flat" as const, use: flatUse(map), context };
+  const light = shared("light");
+  // The field lists Mixed as a value, which choosing again changes nothing.
+  const paint =
+    (patch: (name: string) => Partial<Sector>) => (name: string) => {
+      if (name !== mixed) onChange(patch(name));
+    };
+  return (
+    <>
+      <InspectorSection title="Height" detail={context}>
+        <div className="flex items-center gap-2 [&>*]:min-w-0 [&>*]:flex-1">
+          {rooms.every((room) => room.door) ? null : (
+            <NumberSetting
+              label="Ceiling"
+              value={shared("ceiling")}
+              step={8}
+              min={-1024}
+              max={2048}
+              onChange={(ceiling) => onChange({ ceiling })}
+              onShift={(delta) => onShift("ceiling", delta)}
+            />
+          )}
+          <NumberSetting
+            label="Floor"
+            value={shared("floor")}
+            step={8}
+            min={-1024}
+            max={1024}
+            onChange={(floor) => onChange({ floor })}
+            onShift={(delta) => onShift("floor", delta)}
+          />
+        </div>
+      </InspectorSection>
+      <InspectorSection title="Surfaces">
+        <TextureField
+          picture={assets.flat}
+          assets={assets}
+          label="Floor"
+          value={texture("floorTexture")}
+          options={floorTextures}
+          browse={flats}
+          light={light ?? first.light}
+          onChange={paint((floorTexture) => ({ floorTexture }))}
+        />
+        <TextureField
+          picture={assets.flat}
+          assets={assets}
+          label="Ceiling"
+          value={texture("ceilingTexture")}
+          options={ceilingTextures}
+          browse={flats}
+          light={light ?? first.light}
+          onChange={paint((ceilingTexture) => ({ ceilingTexture }))}
+        />
+        <TextureField
+          picture={assets.texture}
+          assets={assets}
+          label="Walls"
+          value={texture("wallTexture")}
+          options={wallTextures}
+          browse={{ kind: "wall", use: wallUse(map), context }}
+          light={light ?? first.light}
+          onChange={paint((wallTexture) => ({ wallTexture }))}
+        />
+      </InspectorSection>
+      <InspectorSection title="Behaviour">
+        <NumberSetting
+          label="Light level"
+          value={light}
+          step={8}
+          min={0}
+          max={255}
+          onChange={(next) => onChange({ light: next })}
+          onShift={(delta) => onShift("light", delta)}
+        />
+      </InspectorSection>
+    </>
+  );
+}
+
 interface LineInspectorProps {
   map: GameMap;
   wall: string;
@@ -322,6 +435,8 @@ interface LineInspectorProps {
   onSideChange: (patch: LineSide) => void;
   onTargetChange: (sector: string | null) => void;
   onAddSwitch?: () => void;
+  // Unset while the walls beside this one already carry its texture on.
+  onAlign?: () => void;
 }
 
 export function LineInspector({
@@ -335,6 +450,7 @@ export function LineInspector({
   onSideChange,
   onTargetChange,
   onAddSwitch,
+  onAlign,
 }: LineInspectorProps) {
   const line = describeLine(map, wall, sector);
   const { settings, twoSided, front, back } = line;
@@ -482,6 +598,15 @@ export function LineInspector({
             }
           />
         </div>
+        {detail ? null : (
+          <Button
+            disabled={!onAlign}
+            title="Carries this wall's texture on unbroken along the walls beside it"
+            onClick={onAlign}
+          >
+            Align along the room
+          </Button>
+        )}
         {roomWall ? (
           <Button
             onClick={() => onPaint(roomWall.part, roomWall.texture, true)}
@@ -1040,11 +1165,14 @@ function TextureField({
 
 interface NumberSettingProps {
   label: string;
-  value: number;
+  // Null leaves the field empty, for rooms that don't agree on the value.
+  value: number | null;
   step: number;
   min: number;
   max: number;
   onChange: (value: number) => void;
+  // A step from an empty field, which moves each room from where it is.
+  onShift?: (delta: number) => void;
 }
 
 function NumberSetting({
@@ -1054,6 +1182,7 @@ function NumberSetting({
   min,
   max,
   onChange,
+  onShift,
 }: NumberSettingProps) {
   return (
     <FieldItem>
@@ -1061,15 +1190,36 @@ function NumberSetting({
       <NumberField
         label={label}
         value={value}
+        placeholder={value === null ? mixed : undefined}
         step={step}
         min={min}
         max={max}
-        onValueChange={(next) => {
-          if (next !== null) onChange(Math.round(next));
+        onValueChange={(next, details) => {
+          if (next === null) return;
+          const typed =
+            details.reason === "input-change" ||
+            details.reason === "input-commit";
+          // An empty field has nothing to step from, so a step moves each
+          // room from where it stands, and only a typed number sets them all.
+          if (value !== null || typed) onChange(Math.round(next));
+          else onShift?.(stepWay(details) * step);
         }}
       />
     </FieldItem>
   );
+}
+
+// Which way a step went, read from what caused it: the field counts from zero
+// when it is empty, and its limits hide the direction.
+function stepWay(details: { reason: string; event?: Event }) {
+  if (details.reason === "increment-press") return 1;
+  if (details.reason === "decrement-press") return -1;
+  const key =
+    details.reason === "step-key" && details.event instanceof KeyboardEvent
+      ? details.event.key
+      : "";
+  if (key === "ArrowUp" || key === "PageUp") return 1;
+  return key === "ArrowDown" || key === "PageDown" ? -1 : 0;
 }
 
 interface InspectorSectionProps {

@@ -71,7 +71,13 @@ import {
 import { type EditorShortcut, editorShortcuts } from "@/lib/editor/shortcuts";
 import { defaultGame, engineSlot } from "@/lib/engine/game";
 import { texturesOf } from "@/lib/engine/iwad";
-import { getIsPlayerStart, thingCatalog, thingKinds } from "@/lib/map/catalog";
+import {
+  floorTextures,
+  getIsPlayerStart,
+  thingCatalog,
+  thingKinds,
+  wallTextures,
+} from "@/lib/map/catalog";
 import { checkMap, fixIssue, issueText } from "@/lib/map/checks";
 import {
   addNote,
@@ -100,6 +106,7 @@ import {
   copyParts,
   partKeys,
   pasteParts,
+  pickedRooms,
   removeParts,
   selectedParts,
   type Transform,
@@ -127,6 +134,13 @@ import {
   parseSurface,
   surfaceKey,
 } from "@/lib/map/surfaces";
+import {
+  alignWalls,
+  countTexture,
+  replaceTexture,
+  type TextureKind,
+} from "@/lib/map/texture-tools";
+import { flatUse, wallUse } from "@/lib/map/textures";
 import { SceneCamera } from "@/lib/preview/scene-camera";
 import { createFlatAssets, readWadAssets } from "@/lib/wad/assets";
 import { compileMap } from "@/lib/wad/compile";
@@ -137,6 +151,7 @@ import { BuildDialog } from "./build-dialog";
 import { MapContextMenu } from "./context-menu";
 import {
   LineInspector,
+  RoomsInspector,
   SectorInspector,
   SwitchInspector,
   ThingInspector,
@@ -148,6 +163,7 @@ import { PrefabsDialog } from "./prefabs-dialog";
 import { type DraftSource, SceneCanvas } from "./scene-editor";
 import { ShortcutSheet } from "./shortcut-sheet";
 import { SurfacePanel } from "./surface-panel";
+import { TexturePicker } from "./texture-picker";
 import { TransformDialog } from "./transform-dialog";
 
 const modeHints: Record<EditMode, string> = {
@@ -177,6 +193,13 @@ const shapeHints: Record<Exclude<DrawShape, "outline">, string> = {
 };
 
 const noLinks: MapLink[] = [];
+
+// The same ranges the inspector's fields keep a single room within.
+const roomLimits = {
+  floor: { min: -1024, max: 1024 },
+  ceiling: { min: -1024, max: 2048 },
+  light: { min: 0, max: 255 },
+};
 
 const roomSides: RoomSide[] = ["north", "east", "south", "west"];
 
@@ -329,6 +352,11 @@ export function EditorScreen({
   // A dialog opened from a room's menu keeps what the menu worked on, which
   // the selection alone may not say once the menu has closed.
   const [transforming, setTransforming] = React.useState<string[] | null>(null);
+  const [pickedTexture, setPickedTexture] = React.useState<string | null>(null);
+  const [replacing, setReplacing] = React.useState<{
+    kind: TextureKind;
+    from: string;
+  } | null>(null);
   const [drawShape, setDrawShape] = React.useState<DrawShape>("outline");
   const [drawSides, setDrawSides] = React.useState(8);
   const [prefabsAt, setPrefabsAt] = React.useState<{
@@ -524,6 +552,13 @@ export function EditorScreen({
         ]),
       ],
     };
+  }, [map, pickedRoom, selection]);
+
+  // The rooms picked themselves, without the rooms drawn inside them, which
+  // the inspector edits together.
+  const selectedRooms = React.useMemo(() => {
+    const picked = pickedRooms(map, selection, pickedRoom);
+    return map.sectors.filter((item) => picked.includes(item.id));
   }, [map, pickedRoom, selection]);
 
   const selectPasted = (keys: string[]) => {
@@ -884,6 +919,14 @@ export function EditorScreen({
       ? describeLine(map, selectedWall.wall, selectedWall.sector)
       : null;
   const freeWall = line ? freeWallAt(map, line.wall) : null;
+  const alignedMap = line
+    ? alignWalls(
+        map,
+        line.sector.id,
+        line.wall,
+        (name) => assets.texture(name).width,
+      )
+    : map;
   const linkedWall = line?.wall;
   const links = React.useMemo(
     () =>
@@ -1839,6 +1882,9 @@ export function EditorScreen({
                 onTargetChange={(target) =>
                   commit(setLineTarget(map, line.wall, target))
                 }
+                onAlign={
+                  alignedMap === map ? undefined : () => commit(alignedMap)
+                }
               />
             ) : !selectedSwitch && (thing || placingThings) ? (
               <ThingInspector
@@ -1861,6 +1907,53 @@ export function EditorScreen({
                   setThingKind(kind);
                   setEditMode("things");
                   setTool("thing");
+                }}
+              />
+            ) : selectedRooms.length > 1 && !selectedSwitch && !thing ? (
+              <RoomsInspector
+                map={map}
+                rooms={selectedRooms}
+                assets={assets}
+                onChange={(patch) =>
+                  commit(
+                    selectedRooms.reduce(
+                      (next, room) =>
+                        patch.wallTexture
+                          ? setRoomWalls(next, room.id, patch.wallTexture)
+                          : // A door has no ceiling height of its own.
+                            updateSector(
+                              next,
+                              room.id,
+                              room.door && "ceiling" in patch ? {} : patch,
+                            ),
+                      map,
+                    ),
+                    `rooms:${selectedRooms.map((room) => room.id).join()}`,
+                  )
+                }
+                onShift={(key, delta) => {
+                  const moved = selectedRooms.flatMap((room) => {
+                    // A room already past a limit stays, and never moves
+                    // against the step.
+                    const { min, max } = roomLimits[key];
+                    const value =
+                      delta > 0
+                        ? Math.max(room[key], Math.min(max, room[key] + delta))
+                        : Math.min(room[key], Math.max(min, room[key] + delta));
+                    return (room.door && key === "ceiling") ||
+                      value === room[key]
+                      ? []
+                      : [{ id: room.id, value }];
+                  });
+                  if (moved.length === 0) return;
+                  commit(
+                    moved.reduce(
+                      (next, { id, value }) =>
+                        updateSector(next, id, { [key]: value }),
+                      map,
+                    ),
+                    `rooms:${selectedRooms.map((room) => room.id).join()}`,
+                  );
                 }}
               />
             ) : sector && !selectedSwitch && !thing ? (
@@ -2097,6 +2190,15 @@ export function EditorScreen({
           onPrefabs: (point) =>
             setPrefabsAt({ point, selected: copyParts(map, parts) }),
         }}
+        textures={{
+          picked: pickedTexture,
+          widthOf: (name) => assets.texture(name).width,
+          onPick: (name) => {
+            setPickedTexture(name);
+            setNotice(`Picked up ${name}. Right-click a wall to apply it.`);
+          },
+          onReplace: (kind, from) => setReplacing({ kind, from }),
+        }}
         onOpenChange={(open, details) => {
           const target = menuTargetRef.current;
           if (open && !target) {
@@ -2125,6 +2227,33 @@ export function EditorScreen({
       />
       {showShortcuts ? (
         <ShortcutSheet onClose={() => setShowShortcuts(false)} />
+      ) : null}
+      {replacing ? (
+        <TexturePicker
+          kind={replacing.kind}
+          title={`Replace ${replacing.from} everywhere`}
+          context={`${countTexture(map, replacing.from, replacing.kind)} in this map`}
+          value={replacing.from}
+          common={replacing.kind === "flat" ? floorTextures : wallTextures}
+          use={replacing.kind === "flat" ? flatUse(map) : wallUse(map)}
+          picture={replacing.kind === "flat" ? assets.flat : assets.texture}
+          assets={assets}
+          light={255}
+          onApply={(to) => {
+            const replaced = replaceTexture(
+              map,
+              replacing.from,
+              to,
+              replacing.kind,
+            );
+            if (replaced.count === 0) return;
+            commit(replaced.map);
+            setNotice(
+              `Replaced ${replacing.from} with ${to} in ${replaced.count} ${replaced.count === 1 ? "place" : "places"}.`,
+            );
+          }}
+          onClose={() => setReplacing(null)}
+        />
       ) : null}
       {transforming ? (
         <TransformDialog
