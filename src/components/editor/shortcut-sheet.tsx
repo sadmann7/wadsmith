@@ -121,7 +121,14 @@ function groups(): { title: string; items: Shortcut[] }[] {
         { keys: [chord("mod+c")], does: "Copy the selected rooms and things" },
         { keys: [chord("mod+x")], does: "Cut them" },
         { keys: [chord("mod+v")], does: "Paste at the pointer" },
-        { keys: [backspace], does: "Delete the selection" },
+        {
+          keys: [backspace],
+          does: "Delete the selection, or take out the selected corners",
+        },
+        {
+          keys: [key("Insert"), key("Double-click")],
+          does: "Add a corner on the wall under the pointer",
+        },
         { keys: [key("+"), key("−", "minus")], does: "Zoom in or out" },
         { keys: [key("0")], does: "Reset the zoom" },
         { keys: [key("C")], does: "Wire the focused switch to a door" },

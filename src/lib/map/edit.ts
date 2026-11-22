@@ -1182,6 +1182,25 @@ export function removeHole(map: GameMap, id: string, index: number): GameMap {
   });
 }
 
+// Corners no outline uses any more go, and so do the switches and settings
+// on the walls that went with them.
+export function pruneUnused(map: GameMap): GameMap {
+  const used = new Set(map.sectors.flatMap(sectorVertices));
+  const pruned = {
+    ...map,
+    vertices: Object.fromEntries(
+      Object.entries(map.vertices).filter(([vertex]) => used.has(vertex)),
+    ),
+  };
+  const owners = wallOwners(pruned);
+  return pruneLines({
+    ...pruned,
+    switches: map.switches.filter((item) =>
+      owners.has(wallKey(item.from, item.to)),
+    ),
+  });
+}
+
 export function nextId(prefix: string, used: Iterable<string>) {
   let highest = 0;
   for (const id of used) {
@@ -1221,25 +1240,6 @@ function pruneLines(map: GameMap, removed?: string): GameMap {
 
 function middle(a: Point, b: Point) {
   return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-}
-
-// Corners no outline uses any more go, and so do the switches and settings
-// on the walls that went with them.
-function pruneUnused(map: GameMap): GameMap {
-  const used = new Set(map.sectors.flatMap(sectorVertices));
-  const pruned = {
-    ...map,
-    vertices: Object.fromEntries(
-      Object.entries(map.vertices).filter(([vertex]) => used.has(vertex)),
-    ),
-  };
-  const owners = wallOwners(pruned);
-  return pruneLines({
-    ...pruned,
-    switches: map.switches.filter((item) =>
-      owners.has(wallKey(item.from, item.to)),
-    ),
-  });
 }
 
 // Two corners of one outline can only join when they sit side by side, or

@@ -28,7 +28,6 @@ import { checkMap, fixIssue } from "@/lib/map/checks";
 import {
   addDetail,
   addNote,
-  addRoom,
   addRoomOnSide,
   addSwitch,
   addSwitchInRoom,
@@ -66,7 +65,6 @@ import {
   wallKey,
   wallOwners,
 } from "@/lib/map/geometry";
-import { joinWalls } from "@/lib/map/join";
 import {
   describeLine,
   fitLineAction,
@@ -77,6 +75,12 @@ import {
   lineUsesTag,
   newLineAction,
 } from "@/lib/map/lines";
+import {
+  drawLines,
+  drawRoom,
+  joinRooms,
+  removeCorner,
+} from "@/lib/map/reshape";
 import { describeSurface, paintSurface } from "@/lib/map/surfaces";
 import { replaceTexture } from "@/lib/map/texture-tools";
 import {
@@ -360,7 +364,7 @@ export const agentActions: AgentAction[] = [
   {
     name: "addRoom",
     description:
-      "Draws a room from its corners, in order. Corners that land on another room's wall join it, so the two rooms open onto each other. A room drawn inside another sits in it like a platform or a pit.",
+      "Draws a room from its corners, in order. Corners that land on another room's wall join it, so the two rooms open onto each other. A room drawn inside another sits in it like a platform or a pit, and one drawn partly over another cuts it, the overlap staying part of the old room.",
     params: [
       {
         name: "corners",
@@ -372,8 +376,8 @@ export const agentActions: AgentAction[] = [
     run: (map, args) => {
       const corners = points(args, "corners");
       if (corners.length < 3) throw new Error("A room needs three corners.");
-      const added = addRoom(map, corners, looks(args), 1);
-      return { map: joinWalls(added.map, [added.id]), result: added.id };
+      const added = drawRoom(map, corners, looks(args), 1);
+      return { map: added.map, result: added.id };
     },
   },
   {
@@ -582,6 +586,64 @@ export const agentActions: AgentAction[] = [
       const split = splitWall(map, findWall(map, args.wall), pointOf(args), 1);
       if (!split) throw new Error("That point isn't on the wall.");
       return { map: split.map, result: split.id };
+    },
+  },
+  {
+    name: "splitRoom",
+    description:
+      "Draws a line across rooms. Each stretch that runs from one wall of a room to another splits that room in two, and both halves keep its heights and looks.",
+    params: [
+      {
+        name: "points",
+        type: "points",
+        description: "The line's points in order, at least two.",
+      },
+    ],
+    run: (map, args) => {
+      const drawn = drawLines(map, points(args, "points"), 1);
+      if (!drawn) throw new Error("No part of that line lies in a room.");
+      return { map: drawn.map, result: drawn.rooms };
+    },
+  },
+  {
+    name: "joinRooms",
+    description:
+      "Joins rooms that share walls into one, with the first room's heights and looks, taking out the walls between them.",
+    params: [
+      {
+        name: "rooms",
+        type: "strings",
+        description: "Two or more room ids or names, the first one kept.",
+      },
+    ],
+    run: (map, args) => {
+      const ids = strings(args, "rooms").map((item) => findRoom(map, item).id);
+      const joined = joinRooms(map, ids);
+      if (!joined) {
+        throw new Error(
+          "Only rooms side by side, sharing a wall, with the same tag and no doors, can join.",
+        );
+      }
+      return { map: joined.map, result: joined.id };
+    },
+  },
+  {
+    name: "removeCorner",
+    description:
+      "Takes a corner out of the walls that meet at it, joining the two into one. Corner ids come from listRooms.",
+    params: [
+      { name: "corner", type: "string", description: "The corner's id." },
+    ],
+    run: (map, args) => {
+      const id = text(args, "corner");
+      if (!map.vertices[id]) throw new Error(`No corner "${id}".`);
+      const removed = removeCorner(map, id);
+      if (!removed) {
+        throw new Error(
+          "Only a corner between two walls can go, with no switch or two actions on them, and only if the joined wall would cross no other wall or corner.",
+        );
+      }
+      return { map: removed };
     },
   },
   {
@@ -1132,6 +1194,8 @@ export function runAgentAction(
 
 const askFirstNames = new Set([
   "removeRoom",
+  "joinRooms",
+  "removeCorner",
   "removeDoor",
   "removeHole",
   "removeDetailLine",

@@ -141,6 +141,7 @@ import {
   type PlaytestRun,
   type SavedPlaytest,
 } from "@/lib/map/playtest";
+import { joinRooms } from "@/lib/map/reshape";
 import { type DrawShape, polygonSides } from "@/lib/map/shapes";
 import { standingSpot } from "@/lib/map/standing";
 import {
@@ -802,6 +803,29 @@ export function EditorScreen({
     editorShortcuts.flipOver.keys,
     () => transformSelection([{ kind: "mirror", axis: "vertical" }]),
     shortcut("flipOver", canTransform),
+  );
+
+  const joinSelection = () => {
+    const joined = joinRooms(
+      map,
+      selectedRooms.map((room) => room.id),
+    );
+    if (!joined) {
+      setNotice(
+        "Only rooms side by side with the same tag can join, and no doors.",
+      );
+      return;
+    }
+    setNotice("");
+    commit(joined.map);
+    setSurface(null);
+    setSelection([]);
+    setActiveSector(joined.id);
+  };
+  useShortcut(
+    editorShortcuts.joinRooms.keys,
+    joinSelection,
+    shortcut("joinRooms", () => modeKeys() && selectedRooms.length > 1),
   );
 
   // The registry skips key repeats, and holding mod+Z should keep stepping back.

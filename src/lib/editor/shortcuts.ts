@@ -4,7 +4,11 @@ export const editorShortcuts = {
   sectors: { keys: "s", description: "Edit sectors", area: "map" },
   things: { keys: "t", description: "Edit things", area: "map" },
   draw: { keys: "d", description: "Draw a room", area: "map" },
-  drawLine: { keys: "shift+d", description: "Draw a line", area: "map" },
+  drawLine: {
+    keys: "shift+d",
+    description: "Draw a line, or split a room from wall to wall",
+    area: "map",
+  },
   gridSmaller: { keys: "[", description: "Halve the grid", area: "map" },
   gridLarger: { keys: "]", description: "Double the grid", area: "map" },
   snap: { keys: "g", description: "Snap to the grid, on or off", area: "map" },
@@ -24,6 +28,11 @@ export const editorShortcuts = {
   flipAcross: {
     keys: "shift+h",
     description: "Flip the selection left to right",
+    area: "map",
+  },
+  joinRooms: {
+    keys: "j",
+    description: "Join the selected rooms into one",
     area: "map",
   },
   flipOver: {
