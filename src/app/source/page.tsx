@@ -78,9 +78,16 @@ export default function SourcePage() {
           <h1 className="m-0 text-4xl font-bold">Source and licences</h1>
           <p className="m-0 text-base text-foreground">
             Wadsmith plays maps in Woof, a Doom engine released under the GNU
-            General Public License, version 2 or later. This page has the
-            engine&apos;s source, every change Wadsmith makes to it, and the
-            licences of everything built into it.
+            General Public License, version 2 or later. Wadsmith itself is under
+            the same licence, with its source on{" "}
+            <a
+              className={linkClass}
+              href="https://github.com/sadmann7/wadsmith"
+            >
+              GitHub
+            </a>
+            . This page has the engine&apos;s source, every change Wadsmith
+            makes to it, and the licences of everything built into it.
           </p>
         </div>
         {engine ? (
