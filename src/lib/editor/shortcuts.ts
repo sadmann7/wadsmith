@@ -12,6 +12,16 @@ export const editorShortcuts = {
   gridSmaller: { keys: "[", description: "Halve the grid", area: "map" },
   gridLarger: { keys: "]", description: "Double the grid", area: "map" },
   snap: { keys: "g", description: "Snap to the grid, on or off", area: "map" },
+  selectAll: {
+    keys: "mod+a",
+    description: "Select everything the mode works on",
+    area: "map",
+  },
+  invertSelection: {
+    keys: "mod+i",
+    description: "Swap what is selected for what isn't",
+    area: "map",
+  },
   undo: { keys: "mod+z", description: "Undo" },
   redo: { keys: "mod+shift+z", description: "Redo" },
   duplicate: { keys: "mod+d", description: "Duplicate the selection" },

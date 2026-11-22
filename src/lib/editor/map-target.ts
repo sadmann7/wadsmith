@@ -2,7 +2,13 @@ import * as React from "react";
 
 import type { GameMap, Point, Sector } from "@/lib/map/types";
 
-import { roomCenter, switchKeyPrefix, thingKeyPrefix } from "@/lib/map/edit";
+import {
+  roomCenter,
+  roomKeyPrefix,
+  switchKeyPrefix,
+  thingKeyPrefix,
+  wallKeyPrefix,
+} from "@/lib/map/edit";
 import {
   interiorPoint,
   sectorAt,
@@ -85,7 +91,11 @@ export function targetForKeys(
   const things = keys.filter((key) => key.startsWith(thingKeyPrefix));
   const switches = keys.filter((key) => key.startsWith(switchKeyPrefix));
   const corners = keys.filter(
-    (key) => !things.includes(key) && !switches.includes(key),
+    (key) =>
+      !things.includes(key) &&
+      !switches.includes(key) &&
+      !key.startsWith(wallKeyPrefix) &&
+      !key.startsWith(roomKeyPrefix),
   );
   const keepSelection = keys.length > 1;
   if (things.includes(pressed)) {

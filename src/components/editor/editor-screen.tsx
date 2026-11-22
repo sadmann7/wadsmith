@@ -100,6 +100,7 @@ import {
   gridSize,
   gridSizes,
   removeNote,
+  roomKeyPrefix,
   type RoomSide,
   setDoorTexture,
   setLineTarget,
@@ -112,6 +113,7 @@ import {
   updateSector,
   updateSwitch,
   updateThings,
+  wallKeyPrefix,
   withPlayerStart,
 } from "@/lib/map/edit";
 import {
@@ -280,6 +282,7 @@ const modeNames: Record<RailMode, string> = {
 interface GridSetting {
   size: number;
   snap: boolean;
+  merge: boolean;
 }
 
 const savedGrid = createLocalStorage("wadsmith:grid");
@@ -374,7 +377,8 @@ export function EditorScreen({
       gridSetting.size as (typeof gridSizes)[number],
     );
     const next = gridSizes[at + direction];
-    if (next !== undefined) changeGrid({ size: next, snap: true });
+    if (next !== undefined)
+      changeGrid({ ...gridSetting, size: next, snap: true });
   };
   const [thingKind, setThingKind] = React.useState<ThingKind>("imp");
   const [activeSector, setActiveSector] = React.useState<string | null>(
@@ -601,8 +605,12 @@ export function EditorScreen({
         ),
       transformKeys: [
         ...new Set([
-          ...selection.filter(
-            (key) => map.vertices[key] || key.startsWith(thingKeyPrefix),
+          ...selection.flatMap((key) =>
+            key.startsWith(wallKeyPrefix)
+              ? key.slice(wallKeyPrefix.length).split("|")
+              : map.vertices[key] || key.startsWith(thingKeyPrefix)
+                ? [key]
+                : [],
           ),
           ...partKeys(map, parts),
         ]),
@@ -703,13 +711,23 @@ export function EditorScreen({
     }
     setNotice("");
     commit(next);
-    // Corners that met others on the way are gone.
+    // Corners that met others on the way are gone, and so are the walls and
+    // rooms they ended.
     setSelection(
       selection.filter(
         (key) =>
           next.vertices[key] ||
           key.startsWith(thingKeyPrefix) ||
-          key.startsWith(switchKeyPrefix),
+          key.startsWith(switchKeyPrefix) ||
+          (key.startsWith(wallKeyPrefix) &&
+            key
+              .slice(wallKeyPrefix.length)
+              .split("|")
+              .every((id) => next.vertices[id])) ||
+          (key.startsWith(roomKeyPrefix) &&
+            next.sectors.some(
+              (sector) => `${roomKeyPrefix}${sector.id}` === key,
+            )),
       ),
     );
   };
@@ -1085,11 +1103,15 @@ export function EditorScreen({
   const applyMenuSelection = ({
     keys,
     sector: nextSector,
+    wall,
   }: {
     keys?: string[];
     sector?: string | null;
+    wall?: { sector: string; wall: string };
   }) => {
-    setSurface(null);
+    setSurface(
+      wall ? surfaceKey({ kind: "wall", ...wall, part: "middle" }) : null,
+    );
     if (keys) setSelection(keys);
     if (nextSector !== undefined) setActiveSector(nextSector);
   };
@@ -1813,7 +1835,9 @@ export function EditorScreen({
                       tool={tool}
                       editMode={editMode}
                       grid={grid}
-                      onWallSelect={(wallSector, wall) =>
+                      gridSize={gridSetting.size}
+                      autoMerge={gridSetting.merge}
+                      onWallSelect={(wallSector, wall, walls) => {
                         selectSurface(
                           surfaceKey({
                             kind: "wall",
@@ -1821,8 +1845,9 @@ export function EditorScreen({
                             wall,
                             part: "middle",
                           }),
-                        )
-                      }
+                        );
+                        setSelection(walls);
+                      }}
                       onViewChange={updateViewStatus}
                       thingKind={thingKind}
                       activeSector={activeSector}
@@ -2447,7 +2472,11 @@ export function EditorScreen({
                 <MenuRadioGroup
                   value={String(gridSetting.size)}
                   onValueChange={(value) =>
-                    changeGrid({ size: Number(value), snap: true })
+                    changeGrid({
+                      ...gridSetting,
+                      size: Number(value),
+                      snap: true,
+                    })
                   }
                 >
                   {gridSizes.map((size) => (
@@ -2477,6 +2506,19 @@ export function EditorScreen({
                     <Check size={14} />
                   </MenuItemIndicator>
                 </MenuCheckboxItem>
+                <MenuCheckboxItem
+                  value="merge"
+                  checked={gridSetting.merge}
+                  onCheckedChange={(merge) =>
+                    changeGrid({ ...gridSetting, merge })
+                  }
+                  closeOnSelect
+                >
+                  Join what's dropped on a wall
+                  <MenuItemIndicator className="ml-auto text-primary">
+                    <Check size={14} />
+                  </MenuItemIndicator>
+                </MenuCheckboxItem>
               </MenuContent>
             </Menu>
             <span ref={zoomStatus}>Zoom 100%</span>
@@ -2490,6 +2532,7 @@ export function EditorScreen({
         target={menuTarget}
         thingKind={thingKind}
         grid={grid}
+        editMode={editMode}
         edit={{
           canCopy,
           canTransform: transformKeys.length > 0,
@@ -2667,9 +2710,10 @@ function loadGrid(): GridSetting {
         ? (saved.size as number)
         : gridSize,
       snap: saved?.snap !== false,
+      merge: saved?.merge !== false,
     };
   } catch {
-    return { size: gridSize, snap: true };
+    return { size: gridSize, snap: true, merge: true };
   }
 }
 

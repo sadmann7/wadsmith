@@ -8,6 +8,7 @@ import {
   positionsOf,
   removeSector,
   removeThing,
+  roomKeyPrefix,
   snap,
   snapPoint,
   thingKeyPrefix,
@@ -94,10 +95,12 @@ export function pickedRooms(
   activeSector: string | null,
 ) {
   const corners = new Set(selection.filter((key) => map.vertices[key]));
+  const picked = new Set(selection);
   return map.sectors
     .filter(
       (sector) =>
         sector.id === activeSector ||
+        picked.has(`${roomKeyPrefix}${sector.id}`) ||
         (corners.size > 0 && sector.vertices.every((id) => corners.has(id))),
     )
     .map((sector) => sector.id);

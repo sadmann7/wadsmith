@@ -85,6 +85,7 @@ import {
   removeSwitch,
   removeThings,
   roomCenter,
+  roomKeyPrefix,
   type RoomSide,
   setRoomDoor,
   setRoomWalls,
@@ -94,8 +95,14 @@ import {
   thingKeyPrefix,
   updateLine,
   updateSwitch,
+  wallKeyPrefix,
 } from "@/lib/map/edit";
-import { containerOf, sectorAt, wallOwners } from "@/lib/map/geometry";
+import {
+  containerOf,
+  sectorAt,
+  sectorVertices,
+  wallOwners,
+} from "@/lib/map/geometry";
 import {
   describeLine,
   fitLineAction,
@@ -107,6 +114,13 @@ import {
 } from "@/lib/map/lines";
 import { removeCorner } from "@/lib/map/reshape";
 import {
+  type RoomLikeness,
+  similarRooms,
+  similarThings,
+  similarWalls,
+  type WallLikeness,
+} from "@/lib/map/similar";
+import {
   describeSurface,
   paintSurface,
   parseSurface,
@@ -116,9 +130,13 @@ import {
 import { alignWalls } from "@/lib/map/texture-tools";
 import { validateMap } from "@/lib/map/validate";
 
+import type { EditMode } from "./map-editor";
+
 interface Selection {
   keys?: string[];
   sector?: string | null;
+  // The wall the inspector shows, when the keys are walls.
+  wall?: { sector: string; wall: string };
 }
 
 // Copy, paste and the transforms act on the whole selection, which the
@@ -160,6 +178,7 @@ interface MapContextMenuProps {
   onFitMap: () => void;
   onDrawRoom: (point: Point) => void;
   grid: number;
+  editMode: EditMode;
 }
 
 type BodyProps = Omit<MapContextMenuProps, "controller" | "onOpenChange">;
@@ -271,6 +290,17 @@ function ThingsMenu({ ids, ...props }: ThingsMenuProps) {
           onChange={(angle) => onCommit(faceThings(map, ids, Number(angle)))}
         />
       </SubMenu>
+      <Item
+        icon={MousePointer2}
+        onSelect={() =>
+          props.onSelect({
+            keys: similarThings(map, ids).map((id) => `${thingKeyPrefix}${id}`),
+            sector: null,
+          })
+        }
+      >
+        {sameKind ? "Select all of this type" : "Select all of these types"}
+      </Item>
       <Rule />
       {single ? (
         <>
@@ -639,6 +669,13 @@ const roomSides: { side: RoomSide; label: string }[] = [
   { side: "west", label: "West" },
 ];
 
+const roomLikeness: { by: RoomLikeness; label: string }[] = [
+  { by: "floorTexture", label: "Same floor texture" },
+  { by: "floor", label: "Same floor height" },
+  { by: "light", label: "Same light" },
+  { by: "tag", label: "Same tag" },
+];
+
 interface RoomMenuProps extends BodyProps {
   id: string;
   target: MapTarget;
@@ -741,6 +778,40 @@ function RoomMenu({ id, ...props }: RoomMenuProps) {
           </MenuItem>
         ))}
       </SubMenu>
+      <SubMenu icon={MousePointer2} label="Select similar">
+        {roomLikeness.map(({ by, label }) => (
+          <MenuItem
+            key={by}
+            className={itemClass}
+            disabled={by === "tag" && !room.tag}
+            onSelect={() => {
+              const ids = similarRooms(map, room.id, by);
+              if (ids.length === 1) {
+                props.onSelect({ keys: [], sector: ids[0] });
+                return;
+              }
+              const picked = new Set(ids);
+              props.onSelect({
+                // Corner mode picks rooms by their corners, so its handles
+                // show them.
+                keys:
+                  props.editMode === "sectors"
+                    ? ids.map((id) => `${roomKeyPrefix}${id}`)
+                    : [
+                        ...new Set(
+                          map.sectors
+                            .filter((sector) => picked.has(sector.id))
+                            .flatMap(sectorVertices),
+                        ),
+                      ],
+                sector: null,
+              });
+            }}
+          >
+            {label}
+          </MenuItem>
+        ))}
+      </SubMenu>
       <Rule />
       <EditItems edit={props.edit} point={point} />
       <Rule />
@@ -833,6 +904,11 @@ function SwitchMenu({ id, ...props }: SwitchMenuProps) {
     </>
   );
 }
+
+const wallLikeness: { by: WallLikeness; label: string }[] = [
+  { by: "texture", label: "Same texture" },
+  { by: "action", label: "Same action" },
+];
 
 interface WallMenuProps extends BodyProps {
   sector: string;
@@ -1045,6 +1121,26 @@ function WallMenu({ sector, wall, ...props }: WallMenuProps) {
           </MenuItem>
         </SubMenu>
       )}
+      <SubMenu icon={MousePointer2} label="Select similar">
+        {wallLikeness.map(({ by, label }) => (
+          <MenuItem
+            key={by}
+            className={itemClass}
+            disabled={by === "action" && !action && !raw && !line.wiredSwitch}
+            onSelect={() =>
+              props.onSelect({
+                keys: similarWalls(map, wall, sector, by).map(
+                  (item) => `${wallKeyPrefix}${item}`,
+                ),
+                sector: null,
+                wall: { sector, wall },
+              })
+            }
+          >
+            {label}
+          </MenuItem>
+        ))}
+      </SubMenu>
       <Rule />
       <ShowItem {...props} />
       {detail ? (

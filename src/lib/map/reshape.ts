@@ -441,35 +441,68 @@ export function removeCorner(map: GameMap, id: string): GameMap | null {
   });
 }
 
-// Corners dropped on the middle of a wall become corners of that wall, so the
-// walls on either side join it.
+// Corners dropped on the middle of a wall become corners of that wall, and
+// corners a moved wall now runs over become corners of the moved wall, so
+// walls laid along each other join.
 export function joinCornersToWalls(map: GameMap, ids: string[]): GameMap {
   let next = map;
+  const moved = new Set(ids);
+  // Puts a corner into a wall, unless a room along the wall already runs
+  // through that corner, which would visit it twice.
+  const place = (corner: string, wall: string) => {
+    const point = next.vertices[corner];
+    const alongside = next.sectors.some(
+      (sector) =>
+        sectorEdges(sector).some(
+          (edge) => wallKey(edge.from, edge.to) === wall,
+        ) &&
+        [...sectorLoops(sector), ...(sector.details ?? [])].some((loop) =>
+          loop.includes(corner),
+        ),
+    );
+    if (alongside) return false;
+    const split = splitWall(next, wall, point, 1, true);
+    if (!split || split.id !== corner) return false;
+    next = split.map;
+    return true;
+  };
   for (const id of ids) {
     const point = next.vertices[id];
     if (!point) continue;
     for (const [key, { from, to }] of allWalls(next)) {
       if (from === id || to === id) continue;
-      if (!getIsWithin(next.vertices[from], next.vertices[to], point)) {
-        continue;
+      if (
+        getIsWithin(next.vertices[from], next.vertices[to], point) &&
+        place(id, key)
+      ) {
+        break;
       }
-      const alongside = next.sectors.some(
-        (sector) =>
-          sectorEdges(sector).some(
-            (edge) => wallKey(edge.from, edge.to) === key,
-          ) &&
-          [...sectorLoops(sector), ...(sector.details ?? [])].some((loop) =>
-            loop.includes(id),
-          ),
-      );
-      if (alongside) continue;
-      const split = splitWall(next, key, point, 1, true);
-      if (split && split.id === id) next = split.map;
-      break;
     }
+  }
+  for (let round = 0; round < mostJoins; round += 1) {
+    let joined = false;
+    for (const [key, { from, to }] of allWalls(next)) {
+      if (!moved.has(from) && !moved.has(to)) continue;
+      const a = next.vertices[from];
+      const b = next.vertices[to];
+      const corner = Object.keys(next.vertices).find(
+        (other) =>
+          other !== from &&
+          other !== to &&
+          getIsWithin(a, b, next.vertices[other]) &&
+          place(other, key),
+      );
+      if (corner) {
+        joined = true;
+        break;
+      }
+    }
+    if (!joined) break;
   }
   return next;
 }
+
+const mostJoins = 64;
 
 // Where a drawn polyline meets the walls already there, in order along it:
 // corners it passes through, and points where it crosses a wall.

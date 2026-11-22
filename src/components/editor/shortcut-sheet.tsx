@@ -112,12 +112,17 @@ function groups(): { title: string; items: Shortcut[] }[] {
         },
         {
           keys: [key("Shift-click")],
-          does: "Add a corner, a thing or a room to the selection",
+          does: "Add a corner, a wall, a thing or a room to the selection",
         },
         {
-          keys: [key("Shift-drag")],
-          does: "Select every corner and thing in a box",
+          keys: [key("Drag")],
+          does: "Select what a box holds, with Shift to add and Ctrl or ⌘ to take away",
         },
+        {
+          keys: [key("Space-drag"), key("Middle-drag")],
+          does: "Pan the map",
+        },
+        { keys: [key("Esc")], does: "Clear the selection" },
         { keys: [chord("mod+c")], does: "Copy the selected rooms and things" },
         { keys: [chord("mod+x")], does: "Cut them" },
         { keys: [chord("mod+v")], does: "Paste at the pointer" },
