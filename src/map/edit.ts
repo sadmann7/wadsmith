@@ -24,6 +24,7 @@ import type {
 } from "./types";
 
 const gridSize = 8;
+const gridSizes = [1, 2, 4, 8, 16, 32, 64] as const;
 const thingKeyPrefix = "thing:";
 const switchKeyPrefix = "switch:";
 const doorKeyPrefix = "door:";
@@ -35,12 +36,12 @@ const defaultDoor: DoorSettings = {
   texture: "BIGDOOR2",
 };
 
-function snap(value: number) {
-  return Math.round(value / gridSize) * gridSize;
+function snap(value: number, grid = gridSize) {
+  return Math.round(value / grid) * grid;
 }
 
-function snapPoint(point: Point): Point {
-  return { x: snap(point.x), y: snap(point.y) };
+function snapPoint(point: Point, grid = gridSize): Point {
+  return { x: snap(point.x, grid), y: snap(point.y, grid) };
 }
 
 function nextId(prefix: string, used: Iterable<string>) {
@@ -166,8 +167,9 @@ function addThing(
   kind: ThingKind,
   point: Point,
   angle = 0,
+  grid = gridSize,
 ): { map: GameMap; id: string } {
-  const at = snapPoint(point);
+  const at = snapPoint(point, grid);
   const things = isPlayerStart(kind)
     ? map.things.filter((thing) => thing.kind !== kind)
     : map.things;
@@ -353,7 +355,13 @@ function duplicateThings(map: GameMap, ids: string[]) {
   for (const id of ids) {
     const thing = map.things.find((item) => item.id === id);
     if (!thing || isPlayerStart(thing.kind)) continue;
-    const added = addThing(next, thing.kind, copySpot(map, thing), thing.angle);
+    const added = addThing(
+      next,
+      thing.kind,
+      copySpot(map, thing),
+      thing.angle,
+      1,
+    );
     next = updateThing(added.map, added.id, {
       skills: thing.skills,
       ambush: thing.ambush,
@@ -363,10 +371,10 @@ function duplicateThings(map: GameMap, ids: string[]) {
   return { map: next, ids: copies };
 }
 
-function snapCorners(map: GameMap, ids: string[]): GameMap {
+function snapCorners(map: GameMap, ids: string[], grid = gridSize): GameMap {
   const vertices = { ...map.vertices };
   for (const id of ids) {
-    if (vertices[id]) vertices[id] = snapPoint(vertices[id]);
+    if (vertices[id]) vertices[id] = snapPoint(vertices[id], grid);
   }
   return { ...map, vertices };
 }
@@ -519,6 +527,7 @@ function addSwitch(
   wall: FreeWall,
   point: Point,
   door: string | null = null,
+  grid = gridSize,
 ): { map: GameMap; id: string } {
   const a = map.vertices[wall.from];
   const b = map.vertices[wall.to];
@@ -547,8 +556,13 @@ function addSwitch(
       (point.x - a.x) * unit.x + (point.y - a.y) * unit.y,
     ),
   );
+  // The cut stays within the switch's margins, which a coarse grid would
+  // carry it past.
   const cornerAt = (distance: number) =>
-    snapPoint({ x: a.x + unit.x * distance, y: a.y + unit.y * distance });
+    snapPoint(
+      { x: a.x + unit.x * distance, y: a.y + unit.y * distance },
+      Math.min(grid, gridSize),
+    );
   const vertices = { ...map.vertices };
   const first = nextId("v", Object.keys(vertices));
   vertices[first] = cornerAt(along - switchWidth / 2);
@@ -653,10 +667,11 @@ function addRoom(
   map: GameMap,
   corners: Point[],
   patch: Partial<Omit<Sector, "id" | "vertices">> = {},
+  grid = gridSize,
 ): { map: GameMap; id: string } {
   const vertices = { ...map.vertices };
   const loop = corners.map((corner) => {
-    const point = snapPoint(corner);
+    const point = snapPoint(corner, grid);
     const existing = findVertexAt({ ...map, vertices }, point);
     if (existing) return existing;
     const id = nextId("v", Object.keys(vertices));
@@ -874,9 +889,10 @@ function withDetails(sector: Sector, details: string[][]): Sector {
 function addDetail(
   map: GameMap,
   points: Point[],
+  grid = gridSize,
 ): { map: GameMap; id: string } | null {
   const chain = points
-    .map(snapPoint)
+    .map((point) => snapPoint(point, grid))
     .filter(
       (point, index, list) =>
         index === 0 ||
@@ -1009,6 +1025,7 @@ export {
   freeWallAt,
   freeWallNear,
   gridSize,
+  gridSizes,
   makePillar,
   positionsOf,
   removeDetailLine,

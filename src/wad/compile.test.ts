@@ -23,6 +23,7 @@ import {
   removeThings,
   setLineTarget,
   snapCorners,
+  snapPoint,
   setRoomDoor,
   updateLine,
   updateLineSide,
@@ -744,6 +745,99 @@ describe("lines inside rooms", () => {
       ],
     };
     expect(() => parseMapFile(serializeMap(broken))).toThrow("corners");
+  });
+});
+
+describe("grid sizes", () => {
+  it("snaps to the chosen grid, down to single units", () => {
+    expect(snapPoint({ x: 13, y: 19 }, 16)).toEqual({ x: 16, y: 16 });
+    expect(snapPoint({ x: 13, y: 19 }, 1)).toEqual({ x: 13, y: 19 });
+    expect(snapPoint({ x: 13, y: 19 })).toEqual({ x: 16, y: 16 });
+  });
+
+  it("keeps rooms, lines, things and switches on the chosen grid", () => {
+    const room = addRoom(
+      islandMap,
+      [
+        { x: 34, y: 402 },
+        { x: 98, y: 402 },
+        { x: 98, y: 466 },
+        { x: 34, y: 466 },
+      ],
+      {},
+      2,
+    );
+    expect(room.map.vertices[room.map.sectors[2].vertices[0]]).toEqual({
+      x: 34,
+      y: 402,
+    });
+    expect(validateMap(room.map)).toEqual([]);
+    const line = addDetail(
+      islandMap,
+      [
+        { x: 129, y: 401 },
+        { x: 385, y: 401 },
+      ],
+      1,
+    )!;
+    expect(line.map.vertices.v1).toEqual({ x: 129, y: 401 });
+    const thing = addThing(islandMap, "imp", { x: 65, y: 67 }, 0, 4);
+    expect(thing.map.things.at(-1)).toMatchObject({ x: 64, y: 68 });
+    const pillar = makePillar(islandMap, "stage")!;
+    const pressed = addSwitch(
+      pillar,
+      freeWallAt(pillar, wallKey("e", "f"))!,
+      { x: 250, y: 192 },
+      null,
+      1,
+    );
+    expect(
+      pressed.map.sectors[0].holes?.[0].map(
+        (id) => pillar.vertices[id] ?? pressed.map.vertices[id],
+      ),
+    ).toContainEqual({ x: 218, y: 192 });
+  });
+
+  it("keeps already placed points where they are", () => {
+    const fine: GameMap = {
+      ...islandMap,
+      things: [
+        ...islandMap.things,
+        { id: "imp-1", kind: "imp", x: 13, y: 19, angle: 0 },
+      ],
+    };
+    const copies = duplicateThings(fine, ["imp-1"]);
+    expect(copies.map.things.at(-1)).toMatchObject({ x: 29, y: 35 });
+    const narrow: GameMap = {
+      ...lShape,
+      vertices: {
+        a: { x: 0, y: 0 },
+        b: { x: 120, y: 0 },
+        c: { x: 120, y: 120 },
+        d: { x: 0, y: 120 },
+      },
+      sectors: [{ ...lShape.sectors[0], vertices: ["a", "b", "c", "d"] }],
+    };
+    const wide = addSwitch(
+      narrow,
+      freeWallAt(narrow, wallKey("a", "b"))!,
+      { x: 80, y: 0 },
+      null,
+      64,
+    );
+    expect(validateMap({ ...wide.map, switches: [] })).toEqual([]);
+    expect(
+      Object.values(wide.map.vertices).every(({ x }) => x >= 0 && x <= 120),
+    ).toBe(true);
+  });
+
+  it("snaps corners to the chosen grid", () => {
+    const off = {
+      ...islandMap,
+      vertices: { ...islandMap.vertices, e: { x: 195, y: 190 } },
+    };
+    expect(snapCorners(off, ["e"], 16).vertices.e).toEqual({ x: 192, y: 192 });
+    expect(snapCorners(off, ["e"], 1).vertices.e).toEqual({ x: 195, y: 190 });
   });
 });
 

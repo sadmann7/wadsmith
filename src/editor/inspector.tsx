@@ -1074,9 +1074,11 @@ type ThingChange = (thing: Thing) => Partial<Omit<Thing, "id">>;
 
 function ThingFields({
   things,
+  grid,
   onChange,
 }: {
   things: Thing[];
+  grid: number;
   onChange: (change: ThingChange) => void;
 }) {
   const [first] = things;
@@ -1112,7 +1114,7 @@ function ThingFields({
                 value={single.x}
                 min={-coordinateLimit}
                 max={coordinateLimit}
-                step={gridSize}
+                step={grid}
                 onChange={(x) => onChange(() => ({ x }))}
               />
               <CompactNumber
@@ -1120,7 +1122,7 @@ function ThingFields({
                 value={0 - single.y}
                 min={-coordinateLimit}
                 max={coordinateLimit}
-                step={gridSize}
+                step={grid}
                 onChange={(y) => onChange(() => ({ y: 0 - y }))}
               />
             </>
@@ -1190,12 +1192,14 @@ function ThingInspector({
   map,
   things,
   placing,
+  grid = gridSize,
   onChange,
   onPlace,
 }: {
   map: GameMap;
   things: Thing[];
   placing: ThingKind;
+  grid?: number;
   onChange: (change: ThingChange) => void;
   onPlace: (kind: ThingKind) => void;
 }) {
@@ -1205,6 +1209,7 @@ function ThingInspector({
         <ThingFields
           key={things.map((thing) => thing.id).join()}
           things={things}
+          grid={grid}
           onChange={onChange}
         />
       ) : null}
