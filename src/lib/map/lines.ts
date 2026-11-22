@@ -17,6 +17,12 @@ interface Specials {
   repeat?: number;
 }
 
+// What lies behind a line, which decides the triggers it can take.
+export interface LineSides {
+  twoSided: boolean;
+  doorBehind: boolean;
+}
+
 type ActionGroup =
   | "Doors"
   | "Floors"
@@ -433,24 +439,44 @@ export function getCanRepeatChoice(action: LineAction) {
   return specials?.once !== undefined && specials.repeat !== undefined;
 }
 
-// The engine stops on a press-to-open door with no sector behind it.
-export function triggersFor(kind: LineActionKind, twoSided: boolean) {
+// A press-to-open door moves the sector behind its line, so it suits a line
+// with a door behind it, and the engine stops on one with no sector there.
+export function triggersFor(
+  kind: LineActionKind,
+  { twoSided, doorBehind }: LineSides,
+) {
   return lineTriggers.filter(
     (trigger) =>
       lineActions[kind].triggers[trigger] &&
-      (twoSided || (trigger !== "door" && trigger !== "walk")),
+      (trigger === "door" ? doorBehind : trigger !== "walk" || twoSided),
   );
+}
+
+// An action keeps a trigger its line no longer suits until someone changes
+// it, so the choices list it as well.
+export function triggerChoices(action: LineAction, sides: LineSides) {
+  const triggers = triggersFor(action.kind, sides);
+  return triggers.includes(action.trigger)
+    ? triggers
+    : [action.trigger, ...triggers];
 }
 
 export function keysFor(kind: LineActionKind, trigger: LineTrigger) {
   return lineActions[kind].keys?.[trigger] ? keyColors : [];
 }
 
+// A trigger the action already had stays allowed, so changing its key or how
+// often it works leaves a trigger its line no longer suits as it was.
 export function fitLineAction(
   action: LineAction,
-  twoSided: boolean,
+  sides: LineSides,
+  kept?: LineTrigger,
 ): LineAction {
-  const triggers = triggersFor(action.kind, twoSided);
+  const suited = triggersFor(action.kind, sides);
+  const triggers =
+    kept && lineActions[action.kind].triggers[kept] && !suited.includes(kept)
+      ? [kept, ...suited]
+      : suited;
   // With no trigger the line allows, the action keeps one of its own, so it
   // still saves and the map check can point at it.
   const trigger = triggers.includes(action.trigger)
@@ -508,13 +534,10 @@ export function switchDoorSpecial(door: DoorSettings) {
 }
 
 export function newLineAction(
-  twoSided: boolean,
+  sides: LineSides,
   kind: LineActionKind,
 ): LineAction {
-  return fitLineAction(
-    { kind, trigger: "door", repeat: true, tag: 0 },
-    twoSided,
-  );
+  return fitLineAction({ kind, trigger: "door", repeat: true, tag: 0 }, sides);
 }
 
 export function describeLine(
@@ -536,6 +559,7 @@ export function describeLine(
     number: entries.findIndex(([key]) => key === wall) + 1,
     length: Math.round(Math.hypot(to.x - from.x, to.y - from.y)),
     twoSided: back !== null,
+    doorBehind: back !== null && back !== front && Boolean(back.door),
     front,
     back,
     isBack: back !== front && back?.id === sectorId,

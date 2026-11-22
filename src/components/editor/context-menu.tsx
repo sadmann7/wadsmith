@@ -674,8 +674,8 @@ function WallMenu({ sector, wall, ...props }: WallMenuProps) {
     onCommit(
       updateLine(map, wall, {
         action: action
-          ? fitLineAction({ ...action, kind }, line.twoSided)
-          : newLineAction(line.twoSided, kind),
+          ? fitLineAction({ ...action, kind }, line)
+          : newLineAction(line, kind),
         scrolls: undefined,
         raw: undefined,
         shut: undefined,
@@ -726,8 +726,7 @@ function WallMenu({ sector, wall, ...props }: WallMenuProps) {
         {lineActionGroups(
           lineActionKinds.filter(
             (value) =>
-              value === action?.kind ||
-              triggersFor(value, line.twoSided).length > 0,
+              value === action?.kind || triggersFor(value, line).length > 0,
           ),
         ).map((group) => (
           <MenuGroup key={group.label}>

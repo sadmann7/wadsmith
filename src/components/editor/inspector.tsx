@@ -59,6 +59,7 @@ import {
   generalizedKind,
   generalizedKinds,
   generalizedTrigger,
+  getIsDoorClass,
   newGeneralized,
   sectorBases,
   type SectorBits,
@@ -88,8 +89,10 @@ import {
   lineActionGroups,
   lineActionKinds,
   lineActions,
+  type LineSides,
   lineUsesTag,
   newLineAction,
+  triggerChoices,
   triggerLabels,
   triggersFor,
   usedFromFront,
@@ -379,7 +382,11 @@ export function LineInspector({
   const changeAction = (patch: Partial<NonNullable<typeof action>>) => {
     if (action) {
       onLineChange({
-        action: fitLineAction({ ...action, ...patch }, twoSided),
+        action: fitLineAction(
+          { ...action, ...patch },
+          line,
+          patch.kind === undefined ? action.trigger : undefined,
+        ),
       });
     }
   };
@@ -515,7 +522,7 @@ export function LineInspector({
                   lineActionKinds.filter(
                     (value) =>
                       value === action?.kind ||
-                      triggersFor(value, twoSided).length > 0,
+                      triggersFor(value, line).length > 0,
                   ),
                 ),
                 ...(boomOffered
@@ -541,7 +548,7 @@ export function LineInspector({
                     scrolls: undefined,
                     shut: undefined,
                     raw: {
-                      special: newGeneralized(boom, twoSided),
+                      special: newGeneralized(boom, line),
                       tag: settings.raw?.tag ?? 0,
                     },
                   });
@@ -554,7 +561,7 @@ export function LineInspector({
                   changeAction({ kind });
                 } else {
                   onLineChange({
-                    action: newLineAction(twoSided, kind),
+                    action: newLineAction(line, kind),
                     scrolls: undefined,
                     shut: undefined,
                     raw: undefined,
@@ -581,7 +588,7 @@ export function LineInspector({
                 map={map}
                 special={raw.special}
                 tag={raw.tag}
-                twoSided={twoSided}
+                sides={line}
                 onChange={(special) =>
                   onLineChange({
                     raw: { special, tag: raw.tag },
@@ -595,10 +602,7 @@ export function LineInspector({
                   <ChoiceField
                     label="Trigger"
                     value={action.trigger}
-                    items={(triggersFor(action.kind, twoSided).length > 0
-                      ? triggersFor(action.kind, twoSided)
-                      : [action.trigger]
-                    ).map((value) => ({
+                    items={triggerChoices(action, line).map((value) => ({
                       value,
                       label: triggerLabels[value],
                     }))}
@@ -1255,7 +1259,7 @@ interface BoomLineFieldsProps {
   map: GameMap;
   special: number;
   tag: number;
-  twoSided: boolean;
+  sides: LineSides;
   onChange: (special: number) => void;
   onTargetChange: (sector: string | null) => void;
 }
@@ -1266,7 +1270,7 @@ function BoomLineFields({
   map,
   special,
   tag,
-  twoSided,
+  sides,
   onChange,
   onTargetChange,
 }: BoomLineFieldsProps) {
@@ -1291,12 +1295,15 @@ function BoomLineFields({
           );
         }
         // Nothing walks over or presses the back of a wall with nothing
-        // behind it.
+        // behind it, and a pressed door opens whatever is behind its line. A
+        // trigger already set stays, once or repeating.
         const items = field.options.flatMap((label, option) =>
           field.id !== "trigger" ||
-          twoSided ||
-          option === value ||
-          (option >= 2 && option <= 5)
+          option >> 1 === value >> 1 ||
+          (option >= 2 && option <= 5) ||
+          (option >= 6 && getIsDoorClass(kind)
+            ? sides.doorBehind
+            : sides.twoSided)
             ? [{ value: String(option), label }]
             : [],
         );

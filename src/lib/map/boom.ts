@@ -1,3 +1,4 @@
+import type { LineSides } from "./lines";
 import type { LineTrigger, Sector, SectorEffect } from "./types";
 
 import { sectorEffects } from "./catalog";
@@ -270,10 +271,25 @@ export function generalizedTrigger(special: number) {
   return triggerKinds[fieldValue(special, trigger)];
 }
 
+// A pressed line of these classes opens the sector behind it as a door.
+export function getIsDoorClass(kind: GeneralizedKind) {
+  return kind.class === "door" || kind.class === "locked";
+}
+
 // Nothing walks over or presses the back of a wall with nothing behind it,
-// so a new special there starts as a switch.
-export function newGeneralized(kind: GeneralizedKind, twoSided: boolean) {
-  return twoSided ? kind.start : withField(kind.start, trigger, 2);
+// and a pressed door opens whatever is behind its line, so a new special
+// starts as a switch where it would have nothing to cross or no door to open.
+export function newGeneralized(
+  kind: GeneralizedKind,
+  { twoSided, doorBehind }: LineSides,
+) {
+  if (!twoSided) return withField(kind.start, trigger, 2);
+  const option = fieldValue(kind.start, trigger);
+  return getIsDoorClass(kind) &&
+    triggerKinds[option].trigger === "door" &&
+    !doorBehind
+    ? withField(kind.start, trigger, 2 | (option & 1))
+    : kind.start;
 }
 
 export function generalizedFields(special: number) {
