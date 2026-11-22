@@ -729,8 +729,9 @@
   }
 
   .map-thing[data-selected] {
-    box-shadow: 0 0 0 2px
-      color-mix(in oklab, var(--color-primary) 65%, transparent);
+    box-shadow:
+      0 0 0 2px var(--color-map-bg),
+      0 0 0 3.5px var(--thing-color);
   }
 
   .map[data-mode="lines"] .map-vertex,
