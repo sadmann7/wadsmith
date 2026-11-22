@@ -344,7 +344,7 @@ const saveLabels: Record<AppProps["saveStatus"], string> = {
   session: "Browser storage is off: saved for this session only",
 };
 
-function App({
+function Editor({
   initialMap,
   mapName,
   slot,
@@ -1974,4 +1974,4 @@ function App({
   );
 }
 
-export { App };
+export { Editor };

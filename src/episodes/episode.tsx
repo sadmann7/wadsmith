@@ -3,7 +3,7 @@
 import * as React from "react";
 
 import { wadFileName } from "@/editor/build-dialog";
-import { App } from "@/editor/editor-app";
+import { Editor } from "@/editor/editor";
 import { PlayTogether, type HostedGame } from "@/engine/play-together";
 import { GameView, type Level } from "@/engine/play-panel";
 import { loadIwad } from "@/engine/iwad";
@@ -1042,7 +1042,7 @@ function EpisodeApp() {
     const current = maps.find((entry) => entry.id === session.id);
     return (
       <>
-        <App
+        <Editor
           key={session.id}
           initialMap={session.initialMap}
           mapName={details.name}

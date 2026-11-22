@@ -2,7 +2,7 @@ import { usePathname } from "next/navigation";
 
 import { CoopJoin } from "@/engine/join-room";
 import { parseRoomCode } from "@/engine/room";
-import { EpisodeApp } from "@/episodes/episode-app";
+import { EpisodeApp } from "@/episodes/episode";
 import { DeviceNotice } from "./device-notice";
 
 function AppRoot() {
