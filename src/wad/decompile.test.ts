@@ -563,6 +563,15 @@ describe("decompileMap", () => {
       tag: 0,
     });
     expect(map.lines?.[wallKey("v1", "v2")]).toBeUndefined();
+    // Another game's names decide what the importer keeps.
+    const bare = decompileMap(build.map, {
+      walls: [],
+      flats: [],
+      middles: [],
+      textures: [],
+    });
+    expect(bare.report.replacedTextures).toContain("STARTAN3");
+    expect(bare.report.replacedTextures).toContain("FLOOR4_8");
     expect(map.things.find((thing) => thing.kind === "imp")).toMatchObject({
       multiplayer: true,
     });
@@ -692,6 +701,14 @@ describe("readMaps", () => {
     expect(maps[1].things).toHaveLength(testMap.things.length);
   });
 
+  it("reads Doom 1 maps too", () => {
+    const maps = readMaps([
+      { name: "d.wad", data: compileMap(testMap, "E1M1") },
+    ]);
+    expect(maps.map((map) => map.slot)).toEqual(["E1M1"]);
+    expect(maps[0].things).toHaveLength(testMap.things.length);
+  });
+
   it("names maps after the titles a patch or UMAPINFO gives them", () => {
     const lump = (name: string, body: string) => {
       const data = new TextEncoder().encode(body);
@@ -738,8 +755,8 @@ describe("readMaps", () => {
       );
       return directory;
     };
-    expect(() => readMaps([{ name: "a.wad", data: wad(["E1M1"]) }])).toThrow(
-      /Doom 1 maps/,
+    expect(readMaps([{ name: "a.wad", data: wad(["E1M1"]) }])[0].slot).toBe(
+      "E1M1",
     );
     expect(() =>
       readMaps([{ name: "a.wad", data: wad(["MAP01", "TEXTMAP"]) }]),

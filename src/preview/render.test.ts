@@ -295,6 +295,17 @@ describe.skipIf(!existsSync(wadPath))("readWadAssets", () => {
       expect(wad.sprite(kind) === null, kind).toBe(unseen.includes(kind));
     }
     expect(wad.shades[256 * 31 + 100]).not.toBe(wad.shades[100]);
+    expect(wad.names.walls).toContain("STARTAN3");
+    expect(wad.names.walls).not.toContain("-");
+    expect(wad.names.flats).toContain("FLOOR4_8");
+    expect(wad.names.flats).not.toContain("F_START");
+    expect(wad.names.middles).toContain("MIDGRATE");
+    expect(wad.names.middles).toContain("STARTAN3");
+    expect(wad.names.middles.indexOf("MIDGRATE")).toBeLessThan(
+      wad.names.middles.indexOf("STARTAN3"),
+    );
+    expect(wad.names.walls).not.toContain("MIDGRATE");
+    expect(wad.names.textures).toContain("MIDGRATE");
   });
 });
 

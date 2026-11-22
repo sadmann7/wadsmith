@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { games } from "@/engine/game";
 import { checkMap } from "@/map/checks";
 import { starterMap } from "@/map/starter-map";
 import { serializeMap } from "@/map/storage";
@@ -280,6 +281,10 @@ describe("episode maps", () => {
     expect(freeSlots(maps)[0]).toBe("MAP02");
     expect(freeSlots(maps, "MAP01")[0]).toBe("MAP01");
     expect(freeSlots(maps)).toHaveLength(31);
+    expect(freeSlots(maps, undefined, games.doom)).toHaveLength(35);
+    expect(
+      freeSlots(maps, undefined, { ...games.doom, episodes: 3 }),
+    ).toHaveLength(26);
   });
 
   it("creates valid templates without sharing data", () => {

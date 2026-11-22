@@ -61,6 +61,7 @@ import {
   newLineAction,
   triggersFor,
 } from "@/map/lines";
+import { games } from "@/engine/game";
 import { mapBalance } from "@/map/balance";
 import {
   generalizedClass,
@@ -85,8 +86,14 @@ import { islandMap, testMap } from "@/map/test-map";
 import { parseMapFile, serializeMap } from "@/map/storage";
 import type { GameMap, LineAction } from "@/map/types";
 import { inspectMap, validateMap } from "@/map/validate";
-import { buildLevel, compileLumps, compileMap, toDoom } from "./compile";
-import { inspectWads } from "./inspect";
+import {
+  buildLevel,
+  compileEpisode,
+  compileLumps,
+  compileMap,
+  toDoom,
+} from "./compile";
+import { inspectWads, readLumps } from "./inspect";
 import { buildNodes, subsectorFlag } from "./nodes";
 
 const lShape: GameMap = {
@@ -2402,5 +2409,96 @@ describe("doors line by line", () => {
       `line-door:${outerWall}`,
     ]);
     expect(setLineTarget(aimed, wall, null).lines?.[wall]?.raw?.tag).toBe(0);
+  });
+});
+
+describe("the game's own things and textures", () => {
+  const doom = games.doom;
+  const names = {
+    walls: ["STARTAN3", "BROWN1", "METAL", "BIGDOOR2", "SW1STRTN"],
+    flats: [
+      "FLOOR4_8",
+      "FLAT5_4",
+      "FLOOR5_1",
+      "CEIL3_5",
+      "CEIL5_1",
+      "TLITE6_4",
+    ],
+    middles: [],
+    textures: ["STARTAN3", "BROWN1", "METAL", "BIGDOOR2", "SW1STRTN"],
+  };
+
+  it("chains a Doom 1 episode's maps past the eighth with UMAPINFO", () => {
+    const lumpNames = (wad: Uint8Array) =>
+      readLumps({ name: "e.wad", data: wad }).map((lump) => lump.name);
+    const doomOne = compileEpisode([
+      { slot: "E1M7", map: testMap },
+      { slot: "E1M9", map: testMap },
+      { slot: "E2M1", map: testMap },
+    ]);
+    const info = readLumps({ name: "e.wad", data: doomOne }).find(
+      (lump) => lump.name === "UMAPINFO",
+    )!;
+    // A gap plays the game's own level, which then carries on to the next
+    // slot like any other.
+    expect(new TextDecoder().decode(info.data)).toBe(
+      [
+        'MAP E1M7\n{\n  next = "E1M8"\n}\n',
+        'MAP E1M8\n{\n  next = "E1M9"\n}\n',
+        'MAP E1M9\n{\n  next = "E2M1"\n}\n',
+      ].join("\n"),
+    );
+    expect(lumpNames(doomOne).at(-1)).toBe("COMPLVL");
+    const doomTwo = compileEpisode([
+      { slot: "MAP01", map: testMap },
+      { slot: "MAP02", map: testMap },
+    ]);
+    expect(lumpNames(doomTwo)).not.toContain("UMAPINFO");
+  });
+
+  it("flags Doom II's things in a Doom 1 game", () => {
+    const revenant: GameMap = {
+      ...testMap,
+      things: [
+        ...testMap.things,
+        { id: "revenant-1", kind: "revenant", x: 704, y: 200, angle: 0 },
+      ],
+    };
+    expect(validateMap(revenant)).toEqual([]);
+    expect(validateMap(revenant, { game: games.doom2 })).toEqual([]);
+    expect(
+      validateMap(revenant, { game: doom }).map((issue) => issue.id),
+    ).toEqual(["thing-game:revenant-1"]);
+    expect(validateMap(revenant, { game: doom })[0].message).toMatch(
+      /Revenant isn't in The Ultimate Doom/,
+    );
+  });
+
+  it("flags textures the game doesn't have", () => {
+    expect(validateMap(testMap, { names })).toEqual([]);
+    const painted: GameMap = {
+      ...testMap,
+      sectors: testMap.sectors.map((sector) =>
+        sector.id === "sector-3"
+          ? { ...sector, wallTexture: "AQF001" }
+          : sector,
+      ),
+      lines: {
+        [wallKey("v3", "v4")]: { sides: { "sector-2": { lower: "ZIMMER8" } } },
+      },
+    };
+    expect(
+      validateMap(painted, { names, game: doom }).map((issue) => issue.id),
+    ).toEqual([
+      "texture-missing:sector-3",
+      `texture-missing:${wallKey("v3", "v4")}`,
+    ]);
+    expect(validateMap(painted, { names, game: doom })[0].message).toBe(
+      "Arena: The Ultimate Doom has no texture called AQF001.",
+    );
+    const groups = buildChecks(painted, { names }).find(
+      (group) => group.name === "Compatibility",
+    )!;
+    expect(groups.issues).toHaveLength(2);
   });
 });

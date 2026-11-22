@@ -6,6 +6,7 @@ import {
   thingLevel,
 } from "@/map/complevel";
 import type { Complevel } from "@/map/types";
+import { lumpSlotIndex, type GameInfo } from "@/engine/game";
 
 interface GameFile {
   name: string;
@@ -20,15 +21,16 @@ interface Lump {
 interface WadSummary {
   wads: Uint8Array[];
   dehacked: Uint8Array[];
+  // Map numbers in MAP01 to MAP32 order; a Doom 1 WAD's E2M1 is 10.
   maps: number[];
+  episodes: boolean;
   complevel: Complevel;
   declared: boolean;
 }
 
 class WadFileError extends Error {}
 
-const mapLump = /^MAP(\d\d)$/;
-const doomOneLump = /^E\dM\d$/;
+const episodeLump = /^E\dM\d$/;
 const mapParts = new Set([
   "THINGS",
   "LINEDEFS",
@@ -145,7 +147,8 @@ function patchLevel(patch: string): Complevel {
   return "vanilla";
 }
 
-function inspectWads(files: GameFile[]): WadSummary {
+// Maps for the other kind of Doom can't play on the game's IWAD.
+function inspectWads(files: GameFile[], game?: GameInfo): WadSummary {
   const sorted = files.toSorted((a, b) => a.name.localeCompare(b.name));
   const wads = sorted.filter((file) => isWad(file.data));
   const patches = sorted.filter((file) => !isWad(file.data));
@@ -161,7 +164,7 @@ function inspectWads(files: GameFile[]): WadSummary {
   const maps = new Set<number>();
   const levels: Complevel[] = [];
   let declared: Complevel | null = null;
-  let doomOne = false;
+  let episodes = false;
   for (const file of wads) {
     const lumps = readLumps(file);
     for (const [index, lump] of lumps.entries()) {
@@ -174,11 +177,10 @@ function inspectWads(files: GameFile[]): WadSummary {
         levels.push(patchLevel(text.decode(lump.data)));
       } else if (lump.name === "ANIMATED" || lump.name === "SWITCHES") {
         levels.push("boom");
-      } else if (doomOneLump.test(lump.name)) {
-        doomOne = true;
       }
-      const slot = mapLump.exec(lump.name);
-      if (!slot) continue;
+      const slot = lumpSlotIndex(lump.name);
+      if (slot === null) continue;
+      if (episodeLump.test(lump.name)) episodes = true;
       const rest = lumps.slice(index + 1);
       const next = rest.findIndex((entry) => !mapParts.has(entry.name));
       const parts = next < 0 ? rest : rest.slice(0, next);
@@ -192,17 +194,20 @@ function inspectWads(files: GameFile[]): WadSummary {
           `${file.name} uses Hexen-format maps, which need ZDoom or a similar port.`,
         );
       }
-      maps.add(Number(slot[1]));
+      maps.add(slot);
       levels.push(mapLevel(parts));
     }
   }
   for (const file of patches) levels.push(patchLevel(text.decode(file.data)));
 
   if (maps.size === 0) {
+    throw new WadFileError("None of these WADs has a map.");
+  }
+  if (game && episodes !== game.episodes > 0) {
     throw new WadFileError(
-      doomOne
-        ? "These are Doom 1 maps. Wadsmith plays Doom II maps (MAP01 to MAP32)."
-        : "None of these WADs has a map.",
+      episodes
+        ? `These are Doom 1 maps, and the game is ${game.label}. Bring doom.wad to play them.`
+        : `These are Doom II maps, and the game is ${game.label}. Bring doom2.wad to play them.`,
     );
   }
   const detected = levels.reduce<Complevel>(
@@ -214,6 +219,7 @@ function inspectWads(files: GameFile[]): WadSummary {
     wads: wads.map((file) => file.data),
     dehacked: patches.map((file) => file.data),
     maps: [...maps].toSorted((a, b) => a - b),
+    episodes,
     complevel: declared ?? detected,
     declared: declared !== null,
   };

@@ -2,6 +2,8 @@ import { CircleCheck, CircleX, Loader, TriangleAlert } from "lucide-react";
 import * as React from "react";
 
 import { wadFileName } from "@/editor/build-dialog";
+import { engineSlot, type GameInfo } from "@/engine/game";
+import type { CheckContext } from "@/map/validate";
 import { knownBuildProblem, useBuildChecks } from "./build-checks";
 import { mapName, mapSlots, mapStatus, type EpisodeMap } from "./episode-data";
 import { Button } from "@/components/ui/button";
@@ -31,12 +33,16 @@ const statusIcons = {
 function EpisodeBuildDialog({
   name,
   maps,
+  game,
+  context,
   onBuild,
   onOpenMap,
   onClose,
 }: {
   name: string;
   maps: EpisodeMap[];
+  game: GameInfo;
+  context: CheckContext;
   onBuild: (fileName: string) => string | null;
   onOpenMap: (entry: EpisodeMap) => void;
   onClose: () => void;
@@ -48,7 +54,7 @@ function EpisodeBuildDialog({
   useBuildChecks(maps);
   const rows = maps.map((entry) => ({
     entry,
-    status: mapStatus(entry, knownBuildProblem(entry)),
+    status: mapStatus(entry, knownBuildProblem(entry), context),
   }));
   const blocked = rows.filter((row) => row.status.kind === "error");
   const checking = rows.some((row) => row.status.kind === "checking");
@@ -140,9 +146,10 @@ function EpisodeBuildDialog({
             </ul>
             {gaps.length > 0 ? (
               <p className="m-0 text-sm text-muted-foreground">
-                {gaps.join(", ")} {gaps.length === 1 ? "has" : "have"} no map,
-                so the game uses Freedoom&apos;s own{" "}
-                {gaps.length === 1 ? "level" : "levels"} there.
+                {gaps.map((slot) => engineSlot(slot, game)).join(", ")}{" "}
+                {gaps.length === 1 ? "has" : "have"} no map, so the game uses{" "}
+                {game.label}&apos;s own {gaps.length === 1 ? "level" : "levels"}{" "}
+                there.
               </p>
             ) : null}
           </section>

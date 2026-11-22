@@ -19,6 +19,7 @@ registerHooks({
 
 const { startDoom } = await import("./runtime");
 const { NetInbox } = await import("./net-inbox");
+const { defaultGame } = await import("./game");
 
 interface Setup {
   role: "host" | "guest";
@@ -42,7 +43,10 @@ const { default: createDoom } = await import(
 );
 const game = await startDoom({
   createDoom,
-  iwad: readFileSync(resolve(setup.engineDirectory, "freedoom2.wad")),
+  iwad: {
+    game: defaultGame,
+    data: readFileSync(resolve(setup.engineDirectory, "freedoom2.wad")),
+  },
   base: readFileSync(resolve(setup.engineDirectory, "woof.pk3")),
   wads: [setup.map],
   options: { print: () => {}, printErr: () => {} },

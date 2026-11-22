@@ -1,8 +1,7 @@
 import { Search } from "lucide-react";
 import * as React from "react";
 
-import { freedoomFlats, freedoomWalls } from "@/map/freedoom-textures";
-import type { TextureUse } from "@/map/textures";
+import type { TextureNames, TextureUse } from "@/map/textures";
 import { TextureSwatch } from "@/preview/surface-panel";
 import type { Picture, SceneAssets } from "@/wad/assets";
 import { TextureGrid, TextureTile } from "./texture-grid";
@@ -48,9 +47,9 @@ function categoriesFor(
   kind: TextureKind,
   common: readonly string[],
   use: TextureUse,
+  available: TextureNames,
 ): Category[] {
-  const names: readonly string[] =
-    kind === "flat" ? freedoomFlats : freedoomWalls;
+  const names = kind === "flat" ? available.flats : available.walls;
   const groups = kind === "flat" ? flatGroups : wallGroups;
   return [
     { id: "all", label: "All", names },
@@ -94,8 +93,8 @@ function TexturePicker({
   onClose: () => void;
 }) {
   const categories = React.useMemo(
-    () => categoriesFor(kind, common, use),
-    [common, kind, use],
+    () => categoriesFor(kind, common, use, assets.names),
+    [assets.names, common, kind, use],
   );
   const [category, setCategory] = React.useState("all");
   const [query, setQuery] = React.useState("");
@@ -275,10 +274,7 @@ function TexturePicker({
                 whole={kind === "wall"}
                 className="aspect-square w-full [image-rendering:pixelated]"
               />
-              <div>
-                <div className="font-mono text-base break-all">{chosen}</div>
-                <div className="text-muted-foreground">Freedoom</div>
-              </div>
+              <div className="font-mono text-base break-all">{chosen}</div>
               <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1.5 text-muted-foreground">
                 <dt>Size</dt>
                 <dd className="m-0 font-mono text-xs text-foreground">

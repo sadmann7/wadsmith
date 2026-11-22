@@ -1,4 +1,5 @@
 import { FramePacer } from "./frame-pacer";
+import { warpArgs, type GameInfo } from "./game";
 import type { NetInbox } from "./net-inbox";
 
 interface DoomModule {
@@ -25,6 +26,7 @@ interface DoomModule {
   _wadsmith_game_state(): number;
   _wadsmith_game_tic(): number;
   _wadsmith_game_map(): number;
+  _wadsmith_game_episode(): number;
   _wadsmith_health(): number;
   _wadsmith_kills(): number;
   _wadsmith_frags(): number;
@@ -88,6 +90,12 @@ interface GameFiles {
   warp: number;
 }
 
+// The IWAD the engine starts on, named as the engine knows the game.
+interface EngineIwad {
+  game: GameInfo;
+  data: Uint8Array;
+}
+
 // Doom's numbers for "Hey, not too rough", "Hurt me plenty" and "Ultra-Violence".
 const skillLevels: Record<Skill, number> = { easy: 2, medium: 3, hard: 4 };
 
@@ -113,6 +121,7 @@ interface GameEvents {
 
 interface GameStatus {
   inLevel: boolean;
+  episode: number;
   map: number;
   health: number;
   kills: number;
@@ -442,6 +451,7 @@ class DoomGame {
     const { module } = this;
     return {
       inLevel: module._wadsmith_game_state() === levelState,
+      episode: module._wadsmith_game_episode(),
       map: module._wadsmith_game_map(),
       health: module._wadsmith_health(),
       kills: module._wadsmith_kills(),
@@ -485,7 +495,7 @@ async function startDoom({
   network,
 }: {
   createDoom: CreateDoom;
-  iwad: Uint8Array;
+  iwad: EngineIwad;
   base: Uint8Array;
   wads: Uint8Array[];
   dehacked?: Uint8Array[];
@@ -518,7 +528,8 @@ async function startDoom({
       },
     }),
   });
-  doomModule.FS.writeFile("/freedoom2.wad", iwad);
+  const iwadPath = `/${iwad.game.file}`;
+  doomModule.FS.writeFile(iwadPath, iwad.data);
   doomModule.FS.writeFile("/woof.pk3", base);
   const wadPaths = wads.map((wad, index) => {
     const path = `/file${index}.wad`;
@@ -538,11 +549,10 @@ async function startDoom({
   try {
     doomModule.callMain([
       "-iwad",
-      "/freedoom2.wad",
+      iwadPath,
       ...(wadPaths.length > 0 ? ["-file", ...wadPaths] : []),
       ...(patchPaths.length > 0 ? ["-deh", ...patchPaths] : []),
-      "-warp",
-      String(warp),
+      ...warpArgs(iwad.game, warp),
       "-skill",
       String(skillLevels[skill]),
       "-complevel",
@@ -596,6 +606,7 @@ export {
   type Complevel,
   type CreateDoom,
   type GameEvents,
+  type EngineIwad,
   type GameFiles,
   type GameStatus,
   type NetworkMode,

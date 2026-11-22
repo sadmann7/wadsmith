@@ -6,6 +6,7 @@ import { setRoomDoor, updateThing } from "@/map/edit";
 import { testMap } from "@/map/test-map";
 import type { GameMap } from "@/map/types";
 import { compileMap } from "@/wad/compile";
+import { defaultGame } from "./game";
 import {
   doomKeys,
   keysByCode,
@@ -40,7 +41,10 @@ export async function launch(
   };
   const game = await startDoom({
     createDoom,
-    iwad: readFileSync(resolve(engineDirectory, "freedoom2.wad")),
+    iwad: {
+      game: defaultGame,
+      data: readFileSync(resolve(engineDirectory, "freedoom2.wad")),
+    },
     base: readFileSync(resolve(engineDirectory, "woof.pk3")),
     ...("wads" in map
       ? map

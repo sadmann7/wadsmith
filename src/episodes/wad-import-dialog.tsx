@@ -1,5 +1,6 @@
 import * as React from "react";
 
+import type { GameInfo } from "@/engine/game";
 import type { GameMap } from "@/map/types";
 import type { ImportReport } from "@/wad/decompile";
 import { Button } from "@/components/ui/button";
@@ -38,7 +39,7 @@ function sum(reports: ImportReport[], pick: (report: ImportReport) => number) {
   return reports.reduce((total, report) => total + pick(report), 0);
 }
 
-function losses(reports: ImportReport[]) {
+function losses(reports: ImportReport[], gameLabel: string) {
   const things = tally(reports.map((report) => report.droppedThings));
   const actions = tally(reports.map((report) => report.droppedActions));
   const textures = [
@@ -73,7 +74,7 @@ function losses(reports: ImportReport[]) {
   if (textures.length > 0) {
     rows.push({
       label: plural(textures.length, "texture"),
-      detail: `Not in Freedoom's editable set, so replaced: ${textures.join(", ")}.`,
+      detail: `Not in ${gameLabel}, so replaced: ${textures.join(", ")}.`,
     });
   }
   const effects = sum(reports, (report) => report.droppedEffects);
@@ -123,12 +124,14 @@ function WadImportDialog({
   fileName,
   maps,
   slots,
+  game,
   onImport,
   onClose,
 }: {
   fileName: string;
   maps: ImportedMap[];
   slots: string[];
+  game: GameInfo;
   onImport: (picked: { map: GameMap; slot: string }[]) => void;
   onClose: () => void;
 }) {
@@ -136,7 +139,10 @@ function WadImportDialog({
     maps.slice(0, slots.length).map((entry) => entry.slot),
   );
   const chosen = maps.filter((entry) => picked.includes(entry.slot));
-  const rows = losses(chosen.map((entry) => entry.report));
+  const rows = losses(
+    chosen.map((entry) => entry.report),
+    game.label,
+  );
   const split = sum(
     chosen.map((entry) => entry.report),
     (report) => report.splitSectors,

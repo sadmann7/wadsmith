@@ -7,6 +7,7 @@ import type {
 import { engineBase } from "./iwad";
 import { NetInbox } from "./net-inbox";
 import type {
+  EngineIwad,
   GameFiles,
   GameStatus,
   NetworkMode,
@@ -15,7 +16,7 @@ import type {
 } from "./runtime";
 
 interface GameClientOptions {
-  iwad: Uint8Array;
+  iwad: EngineIwad;
   files: GameFiles;
   sound: SoundLevel;
   screen: Screen;

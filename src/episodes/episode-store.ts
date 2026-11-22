@@ -6,7 +6,13 @@ import {
 } from "./episode-data";
 
 const databaseName = "wadsmith";
-const databaseVersion = 1;
+const databaseVersion = 2;
+
+interface StoredFile {
+  key: string;
+  name: string;
+  data: Uint8Array;
+}
 
 type SavedMap = Omit<EpisodeMap, "episodeId"> & { projectId: string };
 
@@ -34,19 +40,25 @@ function finished(transaction: IDBTransaction) {
   });
 }
 
+// Version 2 added the files store, which holds the game IWAD a person brings.
 function openDatabase() {
   return new Promise<IDBDatabase>((resolve, reject) => {
     const request = indexedDB.open(databaseName, databaseVersion);
     request.addEventListener("upgradeneeded", () => {
       const database = request.result;
-      database.createObjectStore("projects", { keyPath: "id" });
-      database
-        .createObjectStore("maps", { keyPath: "id" })
-        .createIndex("projectId", "projectId");
-      request.transaction
-        ?.objectStore("maps")
-        .createIndex("slot", ["projectId", "slot"], { unique: true });
-      database.createObjectStore("settings", { keyPath: "key" });
+      if (!database.objectStoreNames.contains("projects")) {
+        database.createObjectStore("projects", { keyPath: "id" });
+        database
+          .createObjectStore("maps", { keyPath: "id" })
+          .createIndex("projectId", "projectId");
+        request.transaction
+          ?.objectStore("maps")
+          .createIndex("slot", ["projectId", "slot"], { unique: true });
+        database.createObjectStore("settings", { keyPath: "key" });
+      }
+      if (!database.objectStoreNames.contains("files")) {
+        database.createObjectStore("files", { keyPath: "key" });
+      }
     });
     request.addEventListener("success", () => {
       const database = request.result;
@@ -58,6 +70,44 @@ function openDatabase() {
       reject(new Error("The database is in use.")),
     );
   });
+}
+
+// Files open their own short connection, so the engine can read the IWAD
+// without the episode store.
+async function withFiles<T>(
+  mode: IDBTransactionMode,
+  run: (files: IDBObjectStore) => IDBRequest,
+) {
+  const database = await openDatabase();
+  try {
+    const transaction = database.transaction(["files"], mode);
+    const result = (await requested(
+      run(transaction.objectStore("files")),
+    )) as T;
+    await finished(transaction);
+    return result;
+  } finally {
+    database.close();
+  }
+}
+
+async function readStoredFile(key: string): Promise<StoredFile | null> {
+  if (typeof indexedDB === "undefined") return null;
+  try {
+    return (
+      (await withFiles<StoredFile | undefined>("readonly", (files) =>
+        files.get(key),
+      )) ?? null
+    );
+  } catch {
+    return null;
+  }
+}
+
+async function writeStoredFile(key: string, file: StoredFile | null) {
+  await withFiles<unknown>("readwrite", (files) =>
+    file ? files.put({ ...file, key }) : files.delete(key),
+  );
 }
 
 async function openEpisodeStore(): Promise<EpisodeStore> {
@@ -276,4 +326,10 @@ function createMemoryStore(): EpisodeStore {
   };
 }
 
-export { createMemoryStore, openEpisodeStore };
+export {
+  createMemoryStore,
+  openEpisodeStore,
+  readStoredFile,
+  writeStoredFile,
+  type StoredFile,
+};

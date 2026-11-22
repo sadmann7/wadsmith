@@ -6,8 +6,10 @@ import {
 } from "lucide-react";
 import * as React from "react";
 
+import { engineSlot, type GameInfo } from "@/engine/game";
 import { buildChecks, issueText, type CheckedIssue } from "@/map/checks";
 import type { GameMap } from "@/map/types";
+import type { CheckContext } from "@/map/validate";
 import { Button } from "@/components/ui/button";
 import { Field, FieldItem, FieldLabel, Label } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -52,6 +54,8 @@ function BuildDialog({
   map,
   name,
   slot,
+  game,
+  context,
   onBuild,
   onShow,
   onClose,
@@ -59,13 +63,15 @@ function BuildDialog({
   map: GameMap;
   name: string;
   slot: string;
+  game: GameInfo;
+  context: CheckContext;
   onBuild: (fileName: string) => string | null;
   onShow: (issue: CheckedIssue) => void;
   onClose: () => void;
 }) {
   const [fileName, setFileName] = React.useState(() => defaultFileName(name));
   const [buildError, setBuildError] = React.useState<string | null>(null);
-  const checks = buildChecks(map);
+  const checks = buildChecks(map, context);
   const issues = checks.flatMap((check) => check.issues);
   const errors = issues.filter((issue) => issue.severity === "error");
   const warnings = issues.length - errors.length;
@@ -94,7 +100,7 @@ function BuildDialog({
           <div className="flex min-w-0 items-baseline gap-2.5">
             <DialogTitle>Build WAD</DialogTitle>
             <DialogDescription>
-              {slot} {name}
+              {engineSlot(slot, game)} {name}
             </DialogDescription>
           </div>
           <DialogCloseButton />
@@ -107,7 +113,9 @@ function BuildDialog({
             </Field>
             <FieldItem>
               <Label>Format</Label>
-              <div className="flex min-h-[30px] items-center">Classic Doom</div>
+              <div className="flex min-h-[30px] items-center">
+                {game.episodes > 0 ? "Doom" : "Doom II"}
+              </div>
             </FieldItem>
           </div>
           <section aria-label="Build checks" className="grid gap-2">

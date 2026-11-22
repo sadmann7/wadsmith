@@ -28,9 +28,17 @@ import {
   linePassUse,
   sectorLevel,
 } from "./complevel";
+import type { GameInfo } from "@/engine/game";
 import { generalizedKind, generalizedTrigger, isGeneralized } from "./boom";
 import { describeLine, lineUsesTag, movesSector, opensDoor } from "./lines";
+import type { TextureNames } from "./textures";
 import type { Complevel, GameMap, Point, Sector, ThingSkill } from "./types";
+
+// What the browser plays on, which a map can outgrow after it was saved.
+interface CheckContext {
+  game?: GameInfo;
+  names?: TextureNames;
+}
 
 interface MapIssue {
   id: string;
@@ -691,8 +699,77 @@ function validateLevels(map: GameMap, issues: MapIssue[], whole: boolean) {
   }
 }
 
+// The engine stops on a texture or thing the game's IWAD doesn't have.
+function validateGame(
+  map: GameMap,
+  issues: MapIssue[],
+  { game, names }: CheckContext,
+) {
+  if (names) {
+    const walls = new Set(names.textures);
+    const flats = new Set(names.flats);
+    const where = game ? game.label : "the game";
+    const missing = (
+      id: string,
+      name: string,
+      texture: string,
+      target: string,
+    ) =>
+      issues.push({
+        id,
+        message: `${name}: ${where} has no texture called ${texture}.`,
+        target,
+      });
+    for (const sector of map.sectors) {
+      const flat = [sector.floorTexture, sector.ceilingTexture].find(
+        (texture) => !flats.has(texture),
+      );
+      const wall = [
+        sector.wallTexture,
+        ...Object.values(sector.wallOverrides ?? {}),
+        ...(sector.door ? [sector.door.texture] : []),
+      ].find((texture) => !walls.has(texture));
+      const texture = flat ?? wall;
+      if (texture) {
+        missing(
+          `texture-missing:${sector.id}`,
+          sector.name,
+          texture,
+          sector.id,
+        );
+      }
+    }
+    for (const [wall, line] of Object.entries(map.lines ?? {})) {
+      const texture = Object.values(line.sides ?? {})
+        .flatMap((side) => [side.upper, side.lower, side.middle])
+        .find((name) => name !== undefined && !walls.has(name));
+      if (texture) missing(`texture-missing:${wall}`, "A line", texture, wall);
+    }
+    for (const item of map.switches) {
+      if (!walls.has(item.texture)) {
+        missing(
+          `texture-missing:${item.id}`,
+          `Switch ${item.id}`,
+          item.texture,
+          item.id,
+        );
+      }
+    }
+  }
+  if (game && !game.doom2) {
+    for (const thing of map.things) {
+      if (!thingCatalog[thing.kind].doom2) continue;
+      issues.push({
+        id: `thing-game:${thing.id}`,
+        message: `${thingCatalog[thing.kind].label} isn't in ${game.label}.`,
+        target: thing.id,
+      });
+    }
+  }
+}
+
 // Warnings are legal in Doom but likely mistakes, so they don't block a build.
-function inspectMap(map: GameMap) {
+function inspectMap(map: GameMap, context: CheckContext = {}) {
   const issues: MapIssue[] = [];
   const warnings: MapIssue[] = [];
   if (map.sectors.length === 0) {
@@ -723,6 +800,7 @@ function inspectMap(map: GameMap) {
     validateLines(map, issues, lineActions());
   }
   validateLevels(map, issues, issues.length === 0);
+  validateGame(map, issues, context);
   for (const [id, point] of Object.entries(map.vertices)) {
     if (
       Math.abs(point.x) > coordinateLimit ||
@@ -771,8 +849,14 @@ function inspectMap(map: GameMap) {
   return { errors: issues, warnings };
 }
 
-function validateMap(map: GameMap): MapIssue[] {
-  return inspectMap(map).errors;
+function validateMap(map: GameMap, context?: CheckContext): MapIssue[] {
+  return inspectMap(map, context).errors;
 }
 
-export { activeLineActions, inspectMap, validateMap, type MapIssue };
+export {
+  activeLineActions,
+  inspectMap,
+  validateMap,
+  type CheckContext,
+  type MapIssue,
+};

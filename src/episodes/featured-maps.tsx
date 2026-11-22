@@ -1,7 +1,8 @@
-import { Copy, FolderOpen, Play, Users } from "lucide-react";
+import { Copy, FolderOpen, HardDrive, Play, Undo2, Users } from "lucide-react";
 import * as React from "react";
 
 import { MapPlan } from "@/components/map-plan";
+import { slotCount, type GameInfo } from "@/engine/game";
 import { fragLimit } from "@/engine/runtime";
 import { thingCatalog } from "@/map/catalog";
 import {
@@ -80,8 +81,12 @@ function FeaturedMaps({
   onPlayTogether,
   onOpenCopy,
   onPlayWad,
-  onPlayFreedoom,
-  onOpenFreedoom,
+  onPlayGame,
+  onOpenGame,
+  game,
+  ownIwad,
+  onUseIwad,
+  onUseBundledIwad,
   selectedId,
   onSelect,
 }: {
@@ -93,11 +98,16 @@ function FeaturedMaps({
   onPlayTogether: (entry: FeaturedMap) => void;
   onOpenCopy: (entry: FeaturedMap) => void;
   onPlayWad: (files: File[]) => void;
-  onPlayFreedoom: () => void;
-  onOpenFreedoom: () => void;
+  onPlayGame: () => void;
+  onOpenGame: () => void;
+  game: GameInfo;
+  ownIwad: boolean;
+  onUseIwad: (file: File) => void;
+  onUseBundledIwad: () => void;
 }) {
   const [filter, setFilter] = React.useState<Filter>("all");
   const wadInput = React.useRef<HTMLInputElement>(null);
+  const iwadInput = React.useRef<HTMLInputElement>(null);
   const shown = featuredMaps.filter(
     (entry) => filter === "all" || entry.mode === filter,
   );
@@ -236,26 +246,49 @@ function FeaturedMaps({
           ))}
         </ul>
         <section
-          aria-label="Freedoom: Phase 2"
+          aria-label={game.label}
           className="flex flex-wrap items-center justify-between gap-5 rounded-[6px] border border-border bg-card p-6 max-[760px]:p-5"
         >
           <div className="grid max-w-[640px] min-w-0 gap-2">
             <div className="font-mono text-xs tracking-wide text-foreground uppercase">
-              Freedoom · 32 levels
+              The game · {slotCount(game)} levels
             </div>
-            <h2 className="m-0 text-2xl font-bold">Freedoom: Phase 2</h2>
+            <h2 className="m-0 text-2xl font-bold">{game.label}</h2>
             <p className="m-0 text-base text-muted-foreground">
-              The free Doom II replacement Wadsmith plays on, made by the
-              Freedoom project. Play it through, or open it as an episode to see
-              how each level is built.
+              {ownIwad
+                ? "Your own IWAD, kept in this browser and never uploaded. Its textures, sprites and levels stand in for Freedoom's everywhere."
+                : "The free Doom II replacement Wadsmith plays on, made by the Freedoom project. Bring doom.wad, doom2.wad, plutonia.wad or tnt.wad to play with the real thing instead."}{" "}
+              Play it through, or open it as an episode to see how each level is
+              built.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button onClick={onOpenFreedoom}>
+            {ownIwad ? (
+              <Button onClick={onUseBundledIwad}>
+                <Undo2 size={14} aria-hidden="true" />
+                Back to Freedoom
+              </Button>
+            ) : null}
+            <Button onClick={() => iwadInput.current?.click()}>
+              <HardDrive size={14} aria-hidden="true" />
+              {ownIwad ? "Change IWAD" : "Use your own IWAD"}
+            </Button>
+            <input
+              ref={iwadInput}
+              type="file"
+              hidden
+              accept=".wad"
+              onChange={(event) => {
+                const [file] = event.currentTarget.files ?? [];
+                event.currentTarget.value = "";
+                if (file) onUseIwad(file);
+              }}
+            />
+            <Button onClick={onOpenGame}>
               <Copy size={14} aria-hidden="true" />
               Open as an episode
             </Button>
-            <Button variant="primary" onClick={onPlayFreedoom}>
+            <Button variant="primary" onClick={onPlayGame}>
               <Play size={14} aria-hidden="true" />
               Play
             </Button>

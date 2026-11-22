@@ -1,35 +1,13 @@
 import { describe, expect, it } from "vitest";
 
+import { games } from "@/engine/game";
 import { starterMap } from "@/map/starter-map";
 import { compileLumps, compileMap } from "./compile";
 import { WadFileError, inspectWads, readLumps } from "./inspect";
+import { packTestWad as pack } from "./test-wad";
 import { isZip, unzip } from "./zip";
 
-interface Lump {
-  name: string;
-  data: Uint8Array;
-}
-
 const encode = (value: string) => new TextEncoder().encode(value);
-
-function pack(lumps: Lump[], magic = "PWAD") {
-  const size = lumps.reduce((total, lump) => total + lump.data.length, 0);
-  const wad = new Uint8Array(12 + size + lumps.length * 16);
-  const view = new DataView(wad.buffer);
-  wad.set(encode(magic));
-  view.setInt32(4, lumps.length, true);
-  view.setInt32(8, 12 + size, true);
-  let offset = 12;
-  lumps.forEach((lump, index) => {
-    const entry = 12 + size + index * 16;
-    wad.set(lump.data, offset);
-    view.setInt32(entry, offset, true);
-    view.setInt32(entry + 4, lump.data.length, true);
-    wad.set(encode(lump.name), entry + 8);
-    offset += lump.data.length;
-  });
-  return wad;
-}
 
 function withLine(special: number, flags = 0) {
   const lumps = compileLumps(starterMap, "MAP03");
@@ -158,9 +136,6 @@ describe("inspectWads", () => {
     };
     expect(fails("notes.txt", encode("hello"))).toMatch(/isn't a WAD/);
     expect(
-      fails("doom1.wad", pack([{ name: "E1M1", data: new Uint8Array() }])),
-    ).toMatch(/Doom 1 maps/);
-    expect(
       fails(
         "udmf.wad",
         pack([
@@ -170,6 +145,32 @@ describe("inspectWads", () => {
       ),
     ).toMatch(/UDMF/);
     expect(fails("empty.wad", pack([]))).toMatch(/has a map/);
+  });
+});
+
+describe("inspectWads with a game", () => {
+  it("numbers Doom 1 maps by episode and refuses the other kind of game", () => {
+    const doomOne = pack([
+      ...compileLumps(starterMap, "E1M1"),
+      ...compileLumps(starterMap, "E2M3"),
+    ]);
+    expect(inspectWads([{ name: "d.wad", data: doomOne }])).toMatchObject({
+      maps: [1, 12],
+      episodes: true,
+    });
+    expect(
+      inspectWads([{ name: "d.wad", data: doomOne }], games.doom).maps,
+    ).toEqual([1, 12]);
+    expect(() =>
+      inspectWads([{ name: "d.wad", data: doomOne }], games.doom2),
+    ).toThrow(/Doom 1 maps.*Freedoom|Doom 1 maps.*Doom II/);
+    const doomTwo = compileMap(starterMap);
+    expect(
+      inspectWads([{ name: "d.wad", data: doomTwo }], games.doom2).episodes,
+    ).toBe(false);
+    expect(() =>
+      inspectWads([{ name: "d.wad", data: doomTwo }], games.doom),
+    ).toThrow(/Doom II maps/);
   });
 });
 

@@ -6,8 +6,23 @@ import { wadFileName } from "@/editor/build-dialog";
 import { EditorScreen } from "@/editor/editor-screen";
 import { PlayTogether, type HostedGame } from "@/engine/play-together";
 import { GameView, type Level } from "@/engine/play-panel";
-import { loadIwad } from "@/engine/iwad";
+import {
+  defaultGame,
+  engineSlot,
+  indexSlot,
+  lumpSlotIndex,
+  slotCount,
+  slotName,
+} from "@/engine/game";
+import {
+  identifyIwad,
+  loadIwad,
+  useBundledIwad,
+  useOwnIwad,
+  type Iwad,
+} from "@/engine/iwad";
 import type { GameFiles, Skill } from "@/engine/runtime";
+import { useIwad } from "@/engine/use-iwad";
 import { featuredMaps, type FeaturedMap } from "@/map/featured";
 import {
   MapFileError,
@@ -16,7 +31,8 @@ import {
   serializeMap,
 } from "@/map/storage";
 import type { GameMap } from "@/map/types";
-import { validateMap } from "@/map/validate";
+import { validateMap, type CheckContext } from "@/map/validate";
+import { readWadAssets } from "@/wad/assets";
 import { compileEpisode, compileMap } from "@/wad/compile";
 import { decompileMap } from "@/wad/decompile";
 import {
@@ -41,6 +57,7 @@ import {
   lastEpisodeKey,
   mapFromTemplate,
   mapName,
+  mapSlots,
   mapStatus,
   maxBackupBytes,
   parseEpisodeBackup,
@@ -126,10 +143,12 @@ function download(name: string, data: BlobPart, type: string) {
 function blockedOf(
   ordered: EpisodeMap[],
   problems: (string | null | undefined)[],
+  context: CheckContext,
 ) {
   return ordered
     .filter(
-      (entry, index) => mapStatus(entry, problems[index]).kind === "error",
+      (entry, index) =>
+        mapStatus(entry, problems[index], context).kind === "error",
     )
     .map((entry) => entry.slot);
 }
@@ -144,13 +163,13 @@ function levelsOf(ordered: EpisodeMap[]): Level[] {
   }));
 }
 
-async function episodeGame(list: EpisodeMap[]) {
+async function episodeGame(list: EpisodeMap[], context: CheckContext) {
   const ordered = bySlot(list);
   if (ordered.length === 0) return null;
   const problems = await Promise.all(
     ordered.map((entry) => (entry.broken ? null : checkBuild(entry))),
   );
-  const blocked = blockedOf(ordered, problems);
+  const blocked = blockedOf(ordered, problems, context);
   return blocked.length > 0
     ? { problem: `Fix ${blocked.join(", ")} before playing.`, levels: [] }
     : { problem: null, levels: levelsOf(ordered) };
@@ -212,6 +231,23 @@ function EpisodeScreen() {
   const [details, setDetails] = React.useState<SessionDetails | null>(null);
   const [saveStatus, setSaveStatus] = React.useState<SaveStatus>("saved");
   const [message, setMessage] = React.useState<string | null>(null);
+  const iwad = useIwad();
+  const game = iwad?.game ?? defaultGame;
+  // The game's own texture names, so the checks and the importer know what
+  // it has.
+  const names = React.useMemo(
+    () => (iwad ? readWadAssets(iwad.data).names : undefined),
+    [iwad],
+  );
+  const context = React.useMemo<CheckContext>(
+    () => ({ game: iwad?.game, names }),
+    [iwad, names],
+  );
+  // The route effect runs once, so it reads the context of the moment.
+  const contextRef = React.useRef(context);
+  React.useEffect(() => {
+    contextRef.current = context;
+  }, [context]);
   const [mapDialog, setMapDialog] = React.useState<"new" | "settings" | null>(
     null,
   );
@@ -380,7 +416,9 @@ function EpisodeScreen() {
             "That episode isn't in this browser. Episodes are saved per browser, so import its backup to bring it here.",
           );
         } else if (route.kind === "home" && badSlot) {
-          setMessage("That isn't a map slot. Slots run from MAP01 to MAP32.");
+          setMessage(
+            `That isn't a map slot. Slots run from MAP01 to ${mapSlots.at(-1)}.`,
+          );
         } else if (
           route.kind === "home" &&
           location.pathname.startsWith("/join/")
@@ -400,7 +438,10 @@ function EpisodeScreen() {
             if (play && playable(entry.map)) setMapPlaying(true);
           } else setMessage(`${route.slot} isn't in this episode.`);
         } else if (route.kind === "episode" && play) {
-          const started = await episodeGame(await opened.listMaps(route.id));
+          const started = await episodeGame(
+            await opened.listMaps(route.id),
+            contextRef.current,
+          );
           if (stale() || !started) return;
           if (started.problem) setMessage(started.problem);
           else setEpisodePlay(started.levels);
@@ -499,7 +540,7 @@ function EpisodeScreen() {
     if (list.some((entry) => knownBuildProblem(entry) === undefined)) {
       setMessage(checking);
     }
-    const started = await episodeGame(list);
+    const started = await episodeGame(list, context);
     if (!started) return;
     if (
       run !== routeRun.current ||
@@ -726,13 +767,14 @@ function EpisodeScreen() {
           ? { kind: "featured" }
           : { kind: "episode", id: episode.id },
     durable: store.durable,
+    game,
     onNavigate: (route) => void routeTo(route),
     onCreateEpisode: (name, start) => {
       const created = createEpisode(name);
       void attempt(async () => {
         const maps =
           start === "freedoom"
-            ? await freedoomMaps(created.id)
+            ? await gameMaps(created.id)
             : episodeMaps(created.id, start);
         if (!maps) return;
         await store.addEpisode(created, maps);
@@ -742,30 +784,39 @@ function EpisodeScreen() {
     },
   };
 
-  const freedoomMaps = async (episodeId: string) => {
+  const gameMaps = async (episodeId: string) => {
     const run = ++importRun.current;
-    setMessage("Loading Freedoom…");
-    let data: Uint8Array;
+    setMessage(`Loading ${game.label}…`);
+    let loaded: Iwad;
     try {
-      data = await loadIwad();
+      loaded = await loadIwad();
     } catch {
       if (run === importRun.current) {
         setMessage(
-          "Couldn't load Freedoom. Check your connection and try again.",
+          `Couldn't load ${game.label}. Check your connection and try again.`,
         );
       }
       return null;
     }
-    const found = readMaps([{ name: "freedoom2.wad", data }]);
+    const found = readMaps([{ name: loaded.game.file, data: loaded.data }]);
     const maps: EpisodeMap[] = [];
     for (const [index, doom] of found.entries()) {
       setMessage(`Reading ${doom.slot}, ${index + 1} of ${found.length}…`);
       await new Promise((done) => setTimeout(done));
       if (run !== importRun.current) return null;
+      // A Doom 1 game's E2M1 takes the editor's tenth slot, and maps past
+      // the game's last slot have nowhere to go.
+      const slot = lumpSlotIndex(doom.slot) ?? index + 1;
+      if (slot > slotCount(loaded.game)) continue;
       maps.push(
-        createMapEntry(episodeId, doom.slot, decompileMap(doom).map, {
-          description: "A level from Freedoom: Phase 2.",
-        }),
+        createMapEntry(
+          episodeId,
+          indexSlot(slot),
+          decompileMap(doom, names).map,
+          {
+            description: `A level from ${loaded.game.label}.`,
+          },
+        ),
       );
     }
     setMessage(null);
@@ -774,10 +825,14 @@ function EpisodeScreen() {
 
   const openCopy = (featured: FeaturedMap) =>
     void attempt(async () => {
-      const slots = freeSlots(await store.listMaps(episode.id));
+      const slots = freeSlots(
+        await store.listMaps(episode.id),
+        undefined,
+        game,
+      );
       const slot = slots.includes(featured.slot) ? featured.slot : slots[0];
       if (!slot) {
-        setMessage("All 32 map slots are in use.");
+        setMessage(`All ${slotCount(game)} map slots are in use.`);
         return;
       }
       const entry = createMapEntry(
@@ -834,8 +889,50 @@ function EpisodeScreen() {
     }
   };
 
+  // A game IWAD becomes the game rather than something to play or import.
+  const isIwad = async (file: File) => {
+    if (!/\.wad$/i.test(file.name)) return false;
+    try {
+      identifyIwad(file.name, new Uint8Array(await file.arrayBuffer()));
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const adoptIwad = async (file: File) => {
+    try {
+      const next = await useOwnIwad(
+        file.name,
+        new Uint8Array(await file.arrayBuffer()),
+      );
+      setMessage(
+        `${next.label} is the game now. Its textures, sprites and levels stand in for Freedoom's, and the file stays in this browser.`,
+      );
+    } catch (error) {
+      setMessage(
+        error instanceof WadFileError
+          ? `Couldn't use ${file.name}. ${error.message}`
+          : `Couldn't read ${file.name}.`,
+      );
+    }
+  };
+
+  const dropIwad = async () => {
+    try {
+      await useBundledIwad();
+      setMessage("Freedoom is the game again.");
+    } catch {
+      setMessage("Couldn't put your IWAD away.");
+    }
+  };
+
   const openWads = async (picked: File[]) => {
     const run = ++wadRun.current;
+    if (picked.length === 1 && (await isIwad(picked[0]))) {
+      await adoptIwad(picked[0]);
+      return;
+    }
     try {
       const files = await readGameFiles(picked);
       if (run !== wadRun.current) return;
@@ -844,7 +941,7 @@ function EpisodeScreen() {
         title: (
           picked.find((file) => !/\.(deh|bex)$/i.test(file.name)) ?? picked[0]
         ).name.replace(/\.[^.]+$/, ""),
-        summary: inspectWads(files),
+        summary: inspectWads(files, game),
       });
     } catch (error) {
       if (run !== wadRun.current) return;
@@ -856,10 +953,16 @@ function EpisodeScreen() {
     }
   };
 
-  const playFreedoom = () =>
+  // Freedoom's levels lean on Boom; the original games were made for vanilla.
+  const playGame = () =>
     setWadPlay({
-      title: "Freedoom: Phase 2",
-      files: { wads: [], dehacked: [], complevel: "boom", warp: 1 },
+      title: game.label,
+      files: {
+        wads: [],
+        dehacked: [],
+        complevel: game.id.startsWith("freedoom") ? "boom" : "vanilla",
+        warp: 1,
+      },
       skill: "medium",
     });
 
@@ -881,12 +984,12 @@ function EpisodeScreen() {
         // Big WADs take a while, so the page gets a frame between maps.
         await new Promise((done) => setTimeout(done));
         if (run !== importRun.current) return;
-        converted.push({ slot: doom.slot, ...decompileMap(doom) });
+        converted.push({ slot: doom.slot, ...decompileMap(doom, names) });
       }
-      const slots = freeSlots(await store.listMaps(episodeAt));
+      const slots = freeSlots(await store.listMaps(episodeAt), undefined, game);
       if (run !== importRun.current) return;
       if (slots.length === 0) {
-        setMessage("All 32 map slots are in use.");
+        setMessage(`All ${slotCount(game)} map slots are in use.`);
         return;
       }
       setMessage(null);
@@ -942,7 +1045,12 @@ function EpisodeScreen() {
   const importFiles = async (picked: File[]) => {
     const maps = picked.filter((file) => /\.json$/i.test(file.name));
     for (const file of maps) await importMap(file);
-    const rest = picked.filter((file) => !maps.includes(file));
+    const rest: File[] = [];
+    for (const file of picked) {
+      if (maps.includes(file)) continue;
+      if (await isIwad(file)) await adoptIwad(file);
+      else rest.push(file);
+    }
     if (rest.length > 0) await importWadMaps(rest);
   };
 
@@ -953,8 +1061,9 @@ function EpisodeScreen() {
       }
       const map = parseMapFile(await file.text());
       const latest = await store.listMaps(episode.id);
-      const slot = freeSlots(latest)[0];
-      if (!slot) throw new MapFileError("All 32 map slots are in use.");
+      const slot = freeSlots(latest, undefined, game)[0];
+      if (!slot)
+        throw new MapFileError(`All ${slotCount(game)} map slots are in use.`);
       const entry = createMapEntry(episode.id, slot, {
         ...map,
         name: map.name ?? file.name.replace(/\.json$/i, ""),
@@ -1001,13 +1110,17 @@ function EpisodeScreen() {
   const buildEpisode = (fileName: string) => {
     const ordered = bySlot(maps);
     const problems = ordered.map((entry) => knownBuildProblem(entry));
-    if (blockedOf(ordered, problems).length > 0)
+    if (blockedOf(ordered, problems, context).length > 0)
       return "Fix the maps listed above first.";
     try {
       download(
         fileName,
         compileEpisode(
-          ordered.map((entry) => ({ ...entry, lumps: knownLumps(entry) })),
+          ordered.map((entry) => ({
+            ...entry,
+            slot: engineSlot(entry.slot, game),
+            lumps: knownLumps(entry),
+          })),
         ).slice().buffer,
         "application/octet-stream",
       );
@@ -1071,10 +1184,10 @@ function EpisodeScreen() {
               id: entry.id,
               slot: entry.slot,
               name: mapName(entry),
-              health: mapStatus(entry, knownBuildProblem(entry)).kind,
+              health: mapStatus(entry, knownBuildProblem(entry), context).kind,
             })),
             currentId: session.id,
-            canAddMap: freeSlots(maps).length > 0,
+            canAddMap: freeSlots(maps, undefined, game).length > 0,
             onOpenMap: (id) => {
               const entry = maps.find((item) => item.id === id);
               if (entry) void whenSaved(() => void openMap(entry));
@@ -1084,6 +1197,7 @@ function EpisodeScreen() {
         {mapDialog === "new" ? (
           <MapDialog
             maps={maps}
+            game={game}
             onClose={() => setMapDialog(null)}
             onSubmit={createMap}
           />
@@ -1092,6 +1206,7 @@ function EpisodeScreen() {
           <MapDialog
             maps={maps}
             entry={current}
+            game={game}
             onClose={() => setMapDialog(null)}
             onSubmit={(form) => updateMap(session.id, form)}
           />
@@ -1168,7 +1283,7 @@ function EpisodeScreen() {
         map={null}
         files={wadPlay.files}
         title={wadPlay.title}
-        slot={`MAP${String(wadPlay.files.warp).padStart(2, "0")}`}
+        slot={slotName(wadPlay.files.warp, game.episodes > 0)}
         par={null}
         skill={wadPlay.skill}
         exit="maps"
@@ -1205,10 +1320,12 @@ function EpisodeScreen() {
           onPlayTogether={setLobby}
           onOpenCopy={openCopy}
           onPlayWad={(files) => void openWads(files)}
-          onPlayFreedoom={playFreedoom}
-          onOpenFreedoom={() =>
-            sidebar.onCreateEpisode?.("Freedoom", "freedoom")
-          }
+          onPlayGame={playGame}
+          onOpenGame={() => sidebar.onCreateEpisode?.(game.label, "freedoom")}
+          game={game}
+          ownIwad={iwad?.own ?? false}
+          onUseIwad={(file) => void adoptIwad(file)}
+          onUseBundledIwad={() => void dropIwad()}
           selectedId={featuredId}
           onSelect={setFeaturedId}
         />
@@ -1216,6 +1333,7 @@ function EpisodeScreen() {
           <WadPlayDialog
             title={wadPick.title}
             summary={wadPick.summary}
+            game={game}
             onPlay={(files, skill) => {
               setWadPlay({ title: wadPick.title, files, skill });
               setWadPick(null);
@@ -1249,6 +1367,7 @@ function EpisodeScreen() {
           fileName={wadImport.fileName}
           maps={wadImport.maps}
           slots={wadImport.slots}
+          game={game}
           onImport={(picked) => void saveImported(wadImport.fileName, picked)}
           onClose={() => setWadImport(null)}
         />
@@ -1257,6 +1376,8 @@ function EpisodeScreen() {
         <EpisodeBuildDialog
           name={episode.name}
           maps={bySlot(maps)}
+          game={game}
+          context={context}
           onBuild={buildEpisode}
           onOpenMap={(entry) => {
             setBuildingEpisode(null);
@@ -1269,6 +1390,8 @@ function EpisodeScreen() {
         sidebar={sidebar}
         episode={episode}
         maps={maps}
+        game={game}
+        context={context}
         message={message}
         onRenameEpisode={(name) =>
           void attempt(async () => {
@@ -1296,9 +1419,9 @@ function EpisodeScreen() {
         onDuplicateMap={(entry) =>
           void attempt(async () => {
             const latest = await store.listMaps(entry.episodeId);
-            const slot = freeSlots(latest)[0];
+            const slot = freeSlots(latest, undefined, game)[0];
             if (!slot) {
-              setMessage("All 32 map slots are in use.");
+              setMessage(`All ${slotCount(game)} map slots are in use.`);
               return;
             }
             await store.putMap(

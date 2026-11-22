@@ -2,6 +2,8 @@
 
 import * as React from "react";
 
+import { defaultGame } from "@/engine/game";
+import { useIwad } from "@/engine/use-iwad";
 import { AppShell } from "./app-sidebar";
 import type { Episode } from "./episode-data";
 import { openEpisodeStore } from "./episode-store";
@@ -10,6 +12,7 @@ function StandaloneShell({ children }: { children: React.ReactNode }) {
   const [episodes, setEpisodes] = React.useState<Episode[]>([]);
   const [counts, setCounts] = React.useState<Record<string, number>>({});
   const [durable, setDurable] = React.useState(true);
+  const iwad = useIwad();
 
   React.useEffect(() => {
     let cancelled = false;
@@ -38,7 +41,15 @@ function StandaloneShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AppShell sidebar={{ episodes, counts, current: null, durable }}>
+    <AppShell
+      sidebar={{
+        episodes,
+        counts,
+        current: null,
+        durable,
+        game: iwad?.game ?? defaultGame,
+      }}
+    >
       {children}
     </AppShell>
   );
