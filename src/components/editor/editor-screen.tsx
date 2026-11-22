@@ -300,6 +300,7 @@ interface AppProps {
   onNewMap: () => void;
   onMapSettings: () => void;
   onShare?: () => void;
+  onPublish?: () => void;
   onParChange: (par: number) => void;
   playing: boolean;
   onPlayingChange: (playing: boolean, coop: boolean) => void;
@@ -345,6 +346,7 @@ export function EditorScreen({
   onNewMap,
   onMapSettings,
   onShare,
+  onPublish,
   onParChange,
   playing,
   onPlayingChange,
@@ -1400,6 +1402,7 @@ export function EditorScreen({
     else if (action === "episodes") onOpenEpisodes();
     else if (action === "settings") onMapSettings();
     else if (action === "share") onShare?.();
+    else if (action === "publish") onPublish?.();
     else if (action === "open") fileInput.current?.click();
     else if (action === "save") {
       downloadFile(
@@ -1474,6 +1477,9 @@ export function EditorScreen({
                 <MenuItem value="save">Save map file</MenuItem>
                 <MenuSeparator />
                 <MenuItem value="wad">Build WAD…</MenuItem>
+                {onPublish ? (
+                  <MenuItem value="publish">Publish…</MenuItem>
+                ) : null}
               </MenuContent>
             </Menu>
             <Menu onAction={(action) => (action === "undo" ? undo() : redo())}>

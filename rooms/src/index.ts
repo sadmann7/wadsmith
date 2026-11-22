@@ -8,8 +8,9 @@ import { DurableObject } from "cloudflare:workers";
 import { ConnectionLimits } from "./limits";
 import { MapCopy, type MapsEnv, routeMaps } from "./maps";
 import { allowedOrigin } from "./origin";
+import { Gallery, type PublishEnv, routePublished } from "./publish";
 
-interface Env extends MapsEnv {
+interface Env extends MapsEnv, PublishEnv {
   ROOMS: DurableObjectNamespace<Room>;
   ALLOWED_ORIGINS: string;
   ROOM_IDLE_SECONDS?: string;
@@ -158,20 +159,19 @@ export default {
   async fetch(request, env) {
     const origin = request.headers.get("Origin") ?? "";
     const allowed = allowedOrigin(origin, env.ALLOWED_ORIGINS);
-    const maps = await routeMaps(
-      request,
-      env,
-      allowed
-        ? {
-            "Access-Control-Allow-Origin": origin,
-            "Access-Control-Allow-Methods": "GET, POST, PUT, OPTIONS",
-            "Access-Control-Allow-Headers": "Authorization, Content-Type",
-            "Access-Control-Max-Age": "86400",
-            Vary: "Origin",
-          }
-        : { Vary: "Origin" },
-    );
+    const headers: Record<string, string> = allowed
+      ? {
+          "Access-Control-Allow-Origin": origin,
+          "Access-Control-Allow-Methods": "GET, POST, PUT, OPTIONS",
+          "Access-Control-Allow-Headers": "Authorization, Content-Type",
+          "Access-Control-Max-Age": "86400",
+          Vary: "Origin",
+        }
+      : { Vary: "Origin" };
+    const maps = await routeMaps(request, env, headers);
     if (maps) return maps;
+    const published = await routePublished(request, env, headers);
+    if (published) return published;
     const match = roomPath.exec(new URL(request.url).pathname);
     if (!match) return new Response("Not found.", { status: 404 });
     if (request.headers.get("Upgrade") !== "websocket") {
@@ -194,4 +194,4 @@ function identifiedPeer(message: string) {
   }
 }
 
-export { MapCopy, Room };
+export { Gallery, MapCopy, Room };

@@ -7,12 +7,14 @@ import {
   Undo2,
   Users,
 } from "lucide-react";
+import Link from "next/link";
 import * as React from "react";
 
 import { AppShell, type SidebarProps } from "@/components/app-sidebar";
 import { MapPlan } from "@/components/map-plan";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { useGallery } from "@/hooks/use-gallery";
 import { type GameInfo, slotCount } from "@/lib/engine/game";
 import { fragLimit } from "@/lib/engine/runtime";
 import { formatPar } from "@/lib/episodes/episode-data";
@@ -83,6 +85,7 @@ export function FeaturedMaps({
   onSelect,
 }: FeaturedMapsProps) {
   const [filter, setFilter] = React.useState<Filter>("all");
+  const published = useGallery();
   const wadInput = React.useRef<HTMLInputElement>(null);
   const iwadInput = React.useRef<HTMLInputElement>(null);
   const shown = featuredMaps.filter(
@@ -222,6 +225,38 @@ export function FeaturedMaps({
             </li>
           ))}
         </ul>
+        {published && published.length > 0 ? (
+          <section aria-labelledby="published-title" className="grid gap-3">
+            <h2 id="published-title" className="m-0 text-xl font-bold">
+              Published
+            </h2>
+            <ul className="m-0 grid list-none grid-cols-3 gap-4 p-0 max-[900px]:grid-cols-2 max-[600px]:grid-cols-1">
+              {published.map((entry) => (
+                <li key={entry.id}>
+                  <Link
+                    href={`/play/${entry.id}`}
+                    className="grid gap-1 rounded-[6px] border border-input bg-card px-4 py-3 text-foreground no-underline hover:border-primary"
+                  >
+                    <span className="truncate text-base font-semibold">
+                      {entry.title}
+                    </span>
+                    <span className="truncate font-mono text-xs text-muted-foreground uppercase">
+                      {[
+                        entry.author ? `By ${entry.author}` : null,
+                        entry.kind === "episode"
+                          ? `${entry.maps} maps`
+                          : "1 map",
+                        new Date(entry.publishedAt).toLocaleDateString(),
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
         <section
           aria-label={game.label}
           className="flex flex-wrap items-center justify-between gap-5 rounded-[6px] border border-border bg-card p-6 max-[760px]:p-5"

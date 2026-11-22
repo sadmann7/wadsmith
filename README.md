@@ -51,6 +51,8 @@ Maps save per browser address. The dev server now uses `localhost:3000`, so a ma
 
 Your map saves in this browser as you edit. Use **File** to start a new map, save a map file, open one again, or download a WAD. **File**, then **Keep online**, also keeps a copy on the room server, so it survives clearing the browser: its edit link opens the map to keep editing on another device, and its view link gives someone their own copy. Everyone who opens the edit link edits the map together: each sees the others' edits as they land and their pointers with their names, and undo takes back your own edits, leaving others' in place. Your IWAD never leaves the browser.
 
+**File**, then **Publish…**, or **Publish** on an episode's page, puts a frozen copy behind a link that opens the game with no editor. The link always plays that version, and publishing again after changes makes a new one. Published maps whose authors chose to list them show under **Published** on the maps page. Textures added from files travel inside the published WAD, so publishing asks first.
+
 ## Agents
 
 An agent can build a whole map. Its actions cover rooms, pillars, doors, corners, lines and their actions, flags and sides, textures, things with their flags, switches and notes. Read actions describe the map, list its rooms and things, and return its errors, warnings and balance. An edit that would break the map is refused and changes nothing, a problem with a known fix is fixed on the way, and each edit answers with what the map still needs.

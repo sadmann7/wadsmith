@@ -105,6 +105,9 @@ interface GameViewProps {
   episode?: Level[] | null;
   exit?: GameExit;
   skill?: Skill;
+  // With loaded files, the level the game ends after, as the engine numbers
+  // it, so it doesn't run on into the game's own levels.
+  lastLevel?: number;
 }
 
 export function GameView({
@@ -124,6 +127,7 @@ export function GameView({
   episode = null,
   exit = "editor",
   skill = "medium",
+  lastLevel,
 }: GameViewProps) {
   const stageRef = React.useRef<HTMLElement>(null);
   const [run, setRun] = React.useState(0);
@@ -182,6 +186,7 @@ export function GameView({
         coop={coop}
         exit={exit}
         skill={skill}
+        lastLevel={lastLevel}
       />
     </section>
   );
@@ -268,6 +273,7 @@ type GameSessionProps = Omit<Level, "map"> & {
   coop: CoopSession | null;
   exit: GameExit;
   skill: Skill;
+  lastLevel?: number;
 };
 
 function GameSession({
@@ -294,6 +300,7 @@ function GameSession({
   coop,
   exit,
   skill,
+  lastLevel,
 }: GameSessionProps) {
   const canEdit = !coop && !episode && Boolean(map && onAddNote && onEditSpot);
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
@@ -449,7 +456,8 @@ function GameSession({
               total < slotCount(iwad.game) &&
               !endsGame(engineSlot(indexSlot(total), iwad.game));
             if (next.inLevel && netStarted) {
-              if (!files && reached > total) {
+              const limit = files ? lastLevel : total;
+              if (limit !== undefined && reached > limit) {
                 client?.stop();
                 setFinished(true);
                 return;
@@ -563,6 +571,7 @@ function GameSession({
     height,
     coop,
     skill,
+    lastLevel,
     par,
     music,
     sky,
