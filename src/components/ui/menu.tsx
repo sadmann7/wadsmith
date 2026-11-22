@@ -68,7 +68,7 @@ function MenuSeparator({
 }: React.ComponentProps<typeof MenuPrimitive.MenuSeparator>) {
   return (
     <MenuPrimitive.MenuSeparator
-      className={cn("my-1 h-px bg-input/30", className)}
+      className={cn("my-1 h-px bg-border", className)}
       {...props}
     />
   );
