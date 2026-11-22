@@ -19,6 +19,7 @@ function flatUse(map: GameMap) {
 function wallUse(map: GameMap) {
   const use: TextureUse = new Map();
   for (const [wall, owners] of wallOwners(map)) {
+    if (owners.length === 2 && owners[0] === owners[1]) continue;
     const parts =
       owners.length > 1 ? (["upper", "lower"] as const) : (["middle"] as const);
     for (const sector of owners) {

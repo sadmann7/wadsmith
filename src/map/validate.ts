@@ -3,9 +3,11 @@ import {
   containerOf,
   loopEdges,
   loopPolygon,
+  onSegment,
   pointInPolygon,
   pointInSector,
   sectorAt,
+  sectorDetails,
   sectorEdges,
   sectorHoles,
   sectorLoops,
@@ -20,7 +22,7 @@ import {
 import { appearsOn } from "./balance";
 import { isPlayerStart, keyThings, thingCatalog, thingKinds } from "./catalog";
 import { describeLine, lineUsesTag, movesSector, opensDoor } from "./lines";
-import type { GameMap, Sector, ThingSkill } from "./types";
+import type { GameMap, Point, Sector, ThingSkill } from "./types";
 
 type MapIssue = {
   id: string;
@@ -95,9 +97,31 @@ function edgeKey(a: string, b: string) {
   return a < b ? `${a}|${b}` : `${b}|${a}`;
 }
 
-function sharesCorner(a: { from: string; to: string }, b: typeof a) {
+type Wall = { from: string; to: string };
+
+function sharesCorner(a: Wall, b: Wall) {
   return (
     a.from === b.from || a.from === b.to || a.to === b.from || a.to === b.to
+  );
+}
+
+// Two walls from one corner can still run along each other, which a crossing
+// test on their other corners misses.
+function wallsMeet(map: GameMap, a: Wall, b: Wall) {
+  if (!sharesCorner(a, b)) {
+    return segmentsIntersect(
+      map.vertices[a.from],
+      map.vertices[a.to],
+      map.vertices[b.from],
+      map.vertices[b.to],
+    );
+  }
+  const shared = a.from === b.from || a.from === b.to ? a.from : a.to;
+  const free = (wall: Wall) =>
+    map.vertices[wall.from === shared ? wall.to : wall.from];
+  return (
+    onSegment(map.vertices[b.from], map.vertices[b.to], free(a)) ||
+    onSegment(map.vertices[a.from], map.vertices[a.to], free(b))
   );
 }
 
@@ -149,26 +173,45 @@ function validateSector(
     add("height-range", "floor and ceiling must be whole numbers in range.");
   }
   const edges = sectorEdges(sector);
+  const lines = new Set(
+    sectorDetails(sector).map(({ from, to }) => edgeKey(from, to)),
+  );
   for (let i = 0; i < edges.length; i += 1) {
     for (let j = i + 1; j < edges.length; j += 1) {
-      if (sharesCorner(edges[i], edges[j])) continue;
-      if (
-        segmentsIntersect(
-          map.vertices[edges[i].from],
-          map.vertices[edges[i].to],
-          map.vertices[edges[j].from],
-          map.vertices[edges[j].to],
-        )
-      ) {
-        add("twist", "has walls that cross each other.");
+      const keys = [edges[i], edges[j]].map(({ from, to }) =>
+        edgeKey(from, to),
+      );
+      if (keys[0] === keys[1] || !wallsMeet(map, edges[i], edges[j])) continue;
+      const line = keys.find((key) => lines.has(key));
+      if (line && !lines.has(keys[0] === line ? keys[1] : keys[0])) {
+        issues.push({
+          id: `line-wall:${line}`,
+          message: `${sector.name} has a line running along one of its walls.`,
+          target: line,
+        });
         return;
       }
+      add("twist", "has walls that cross or run along each other.");
+      return;
     }
   }
 
   const holes = sectorHoles(map, sector);
   if (holes.some((hole) => Math.abs(signedArea(hole)) < 1)) {
     add("pillar-area", "has a pillar with no area.");
+  }
+  const details = sector.details ?? [];
+  if (details.length > 0 && sector.door) {
+    add("line-door-room", "a door can't hold a line.");
+    return;
+  }
+  if (details.some((chain) => chain.length < 2)) {
+    add("line-short", "has a line with only one end.");
+    return;
+  }
+  if (sectorDetails(sector).some(({ from, to }) => from === to)) {
+    add("line-length", "has a line with no length.");
+    return;
   }
   const outerWalls = new Set(
     loopEdges(sector.vertices).map(({ from, to }) => edgeKey(from, to)),
@@ -237,23 +280,73 @@ function validateNeighbors(map: GameMap, issues: MapIssue[]) {
       if (j <= i) continue;
       const a = walls[i];
       const b = walls[j];
-      if (sharesCorner(a, b)) continue;
-      if (
-        segmentsIntersect(
-          map.vertices[a.from],
-          map.vertices[a.to],
-          map.vertices[b.from],
-          map.vertices[b.to],
-        )
-      ) {
+      if (wallsMeet(map, a, b)) {
         const sector = usage.get(a.key)![0];
         issues.push({
           id: `cross:${a.key}:${b.key}`,
-          message: `${sector.name}: a wall touches or crosses another wall without sharing its corners.`,
+          message: `${sector.name}: a wall touches, crosses or runs along another wall.`,
           target: sector.id,
         });
       }
     }
+  }
+
+  // A line drawn inside a room lies on no wall and stays inside its room. It
+  // may end on a corner of the room, of a pillar or of a room drawn inside.
+  const loopWalls = new Map<string, Sector>();
+  const nestedCorners = new Map<string, Set<string>>();
+  for (const sector of map.sectors) {
+    for (const { from, to } of sectorLoops(sector).flatMap(loopEdges)) {
+      loopWalls.set(edgeKey(from, to), sector);
+    }
+    const container = containerOf(map, sector);
+    if (!container) continue;
+    const corners = nestedCorners.get(container.id) ?? new Set<string>();
+    for (const id of sector.vertices) corners.add(id);
+    nestedCorners.set(container.id, corners);
+  }
+  const detailOwners = new Map<string, Sector[]>();
+  for (const sector of map.sectors) {
+    const corners = new Set(sectorLoops(sector).flat());
+    const inside = (id: string, point: Point) =>
+      corners.has(id) ||
+      nestedCorners.get(sector.id)?.has(id) ||
+      sectorAt(map, point) === sector;
+    for (const { from, to } of sectorDetails(sector)) {
+      const key = edgeKey(from, to);
+      detailOwners.set(key, [...(detailOwners.get(key) ?? []), sector]);
+      const other = loopWalls.get(key);
+      if (other) {
+        issues.push({
+          id: `line-wall:${key}`,
+          message: `${sector.name} has a line on a wall of ${other.name}.`,
+          target: key,
+        });
+        continue;
+      }
+      const a = map.vertices[from];
+      const b = map.vertices[to];
+      const middle = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      if (
+        !inside(from, a) ||
+        !inside(to, b) ||
+        sectorAt(map, middle) !== sector
+      ) {
+        issues.push({
+          id: `line-outside:${key}`,
+          message: `${sector.name} has a line outside its walls.`,
+          target: key,
+        });
+      }
+    }
+  }
+  for (const [key, owners] of detailOwners) {
+    if (owners.length < 2) continue;
+    issues.push({
+      id: `line-shared:${key}`,
+      message: `${owners.map((sector) => sector.name).join(", ")} all draw the same line.`,
+      target: key,
+    });
   }
 
   // Two rooms on the same side of one wall both claim the floor beside it,

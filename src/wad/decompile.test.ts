@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { thingCatalog } from "../map/catalog";
-import { sectorAt } from "../map/geometry";
+import { sectorAt, wallKey } from "../map/geometry";
 import { starterMap } from "../map/starter-map";
 import { parseMapFile, serializeMap } from "../map/storage";
 import { testMap } from "../map/test-map";
@@ -204,6 +204,38 @@ describe("decompileMap", () => {
         (line) => line.action?.kind === "floor-lower",
       ),
     ).toHaveLength(4);
+  });
+
+  it("keeps a line inside a room with its walk-over action", () => {
+    const build = doomMap();
+    const room = build.sector();
+    const pit = build.sector({ floor: -32, tag: 5 });
+    box(build, room, [0, 0, 512, 256]);
+    const inner = [
+      build.vertex(384, 96),
+      build.vertex(448, 96),
+      build.vertex(448, 160),
+      build.vertex(384, 160),
+    ];
+    inner.forEach((corner, index) =>
+      build.line(corner, inner[(index + 1) % 4], room, pit),
+    );
+    const a = build.vertex(128, 32);
+    const b = build.vertex(128, 224);
+    build.line(a, b, room, room, { special: 82, tag: 5, middle: "MIDGRATE" });
+    build.map.things.push({ x: 32, y: 128, angle: 0, type: 1, flags: 7 });
+
+    const { map, report } = decompileMap(build.map);
+    expect(report.innerLines).toBe(0);
+    expect(map.sectors).toHaveLength(2);
+    expect(map.sectors[0].details).toEqual([["v8", "v9"]]);
+    expect(map.lines?.[wallKey("v8", "v9")]).toMatchObject({
+      action: { kind: "floor-lower", trigger: "walk", repeat: true, tag: 5 },
+      sides: { s0: { middle: "MIDGRATE" } },
+    });
+    expect(validateMap(map)).toEqual([]);
+    expect(() => compileMap(map)).not.toThrow();
+    expect(parseMapFile(serializeMap(map))).toEqual(map);
   });
 
   it("turns a closed sector inside a room into a pillar", () => {
@@ -566,6 +598,7 @@ describe.skipIf(!existsSync(freedoom))("Freedoom's maps", () => {
       const { map, report } = decompileMap(doom);
       pillars += map.sectors.filter((sector) => sector.holes).length;
       expect(validateMap(map), doom.slot).toEqual([]);
+      expect(report.innerLines, doom.slot).toBe(0);
       // A teleporter that only lands on a multiplayer-only spot has nowhere to go.
       expect(
         Object.keys(report.droppedActions).filter(

@@ -54,7 +54,13 @@ function thingLook(kind: ThingKind) {
 function wallsOf(map: GameMap) {
   return [...wallOwners(map)].map(([key, owners]) => {
     const [from, to] = key.split("|");
-    return { key, from, to, shared: owners.length > 1 };
+    return {
+      key,
+      from,
+      to,
+      shared: owners.length > 1,
+      detail: owners.length === 2 && owners[0] === owners[1],
+    };
   });
 }
 
@@ -202,6 +208,7 @@ function MapCanvas({
             to={wall.to}
             className="map-wall"
             data-portal={wall.shared ? "" : undefined}
+            data-detail={wall.detail ? "" : undefined}
           />
         ))}
         {map.switches.flatMap((item) =>

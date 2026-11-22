@@ -489,7 +489,9 @@ function describeLine(
 ) {
   const owners = entries.find(([key]) => key === wall)?.[1] ?? [];
   const front = frontOwner(owners, map.lines?.[wall]?.front);
-  const back = owners.find((sector) => sector !== front) ?? null;
+  const back =
+    owners.find((sector) => sector !== front) ??
+    (owners.length > 1 ? front : null);
   const [from, to] = wall.split("|").map((id) => map.vertices[id]);
   const mapSwitch =
     map.switches.find((item) => wallKey(item.from, item.to) === wall) ?? null;
@@ -500,7 +502,7 @@ function describeLine(
     twoSided: back !== null,
     front,
     back,
-    isBack: back?.id === sectorId,
+    isBack: back !== front && back?.id === sectorId,
     sector: owners.find((sector) => sector.id === sectorId) ?? front,
     settings: map.lines?.[wall] ?? {},
     mapSwitch,

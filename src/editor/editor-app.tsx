@@ -19,6 +19,7 @@ import {
   Ellipsis,
   Pentagon,
   PenLine,
+  Route,
   Play,
   Redo2,
   StickyNote,
@@ -97,7 +98,13 @@ import {
   parseSurface,
   surfaceKey,
 } from "../map/surfaces";
-import { sectorAt, sectorEdges, wallKey, wallOwners } from "../map/geometry";
+import {
+  loopEdges,
+  sectorAt,
+  sectorLoops,
+  wallKey,
+  wallOwners,
+} from "../map/geometry";
 import { createFlatAssets, readWadAssets } from "../wad/assets";
 import { compileMap } from "../wad/compile";
 import { Button, buttonVariants } from "../components/ui/button";
@@ -127,6 +134,7 @@ const modeHints: Record<EditMode, string> = {
 
 const toolHints: Record<Exclude<MapTool, "select">, string> = {
   draw: "Click corners, then click the first one or press Enter. Reuse a wall's corners to connect rooms.",
+  line: "Click points inside a room, then click the last one again or press Enter. A line can hold a middle texture or a walk-over action.",
   thing:
     "Click a floor to place it, or press Enter in 3D to place it ahead. Esc stops placing.",
   switch:
@@ -152,7 +160,7 @@ const savedWelcome = createLocalStorage("wadsmith:welcomed");
 const narrowQuery = "(max-width: 1100px)";
 const defaultSplit = [50, 50];
 
-type RailMode = EditMode | "draw";
+type RailMode = EditMode | "draw" | "line";
 
 const railModes: {
   value: RailMode;
@@ -165,6 +173,7 @@ const railModes: {
   { value: "sectors", label: "Sector", shortcut: "sectors", icon: Pentagon },
   { value: "things", label: "Thing", shortcut: "things", icon: CircleDot },
   { value: "draw", label: "Draw", shortcut: "draw", icon: PenLine },
+  { value: "line", label: "Draw line", shortcut: "drawLine", icon: Route },
 ];
 
 const modeNames: Record<RailMode, string> = {
@@ -173,6 +182,7 @@ const modeNames: Record<RailMode, string> = {
   sectors: "Sectors",
   things: "Things",
   draw: "Draw",
+  line: "Draw line",
 };
 
 function loadLayout() {
@@ -551,7 +561,9 @@ function App({
       saveLayout(next, splitSizes.current, showDock);
       if (next === "scene") {
         setTool((current) =>
-          current === "draw" || current === "switch" ? "select" : current,
+          current === "draw" || current === "line" || current === "switch"
+            ? "select"
+            : current,
         );
       }
     },
@@ -560,8 +572,8 @@ function App({
 
   const chooseMode = React.useCallback(
     (mode: RailMode) => {
-      if (mode === "draw") {
-        if (visibleLayout !== "scene") setTool("draw");
+      if (mode === "draw" || mode === "line") {
+        if (visibleLayout !== "scene") setTool(mode);
         return;
       }
       setEditMode(mode);
@@ -602,6 +614,11 @@ function App({
     editorShortcuts.draw.keys,
     () => chooseMode("draw"),
     shortcut("draw", modeKeys),
+  );
+  useShortcut(
+    editorShortcuts.drawLine.keys,
+    () => chooseMode("line"),
+    shortcut("drawLine", modeKeys),
   );
   useShortcut(
     editorShortcuts.look.keys,
@@ -885,8 +902,8 @@ function App({
     else runAgent("addConnectedRoom", [sector.name, action, 192]);
   };
   const railMode: RailMode =
-    tool === "draw"
-      ? "draw"
+    tool === "draw" || tool === "line"
+      ? tool
       : tool === "thing"
         ? "things"
         : tool === "switch"
@@ -918,13 +935,19 @@ function App({
             ? `Placing ${thingCatalog[thingKind].label}`
             : "Pick a thing to place"
           : line
-            ? `${line.back ? "Two-sided" : "One-sided"} · ${line.length} long · ${
-                line.back
+            ? `${
+                line.back === line.front
+                  ? "Inside a room"
+                  : line.back
+                    ? "Two-sided"
+                    : "One-sided"
+              } · ${line.length} long · ${
+                line.back && line.back !== line.front
                   ? `${line.front.name} to ${line.back.name}`
                   : line.front.name
               }`
             : sector
-              ? `${sector.door ? "Door" : "Sector"} · ${sectorEdges(sector).length} walls`
+              ? `${sector.door ? "Door" : "Sector"} · ${sectorLoops(sector).flatMap(loopEdges).length} walls`
               : "Click a room, line or thing on the map";
 
   const play = () => {
@@ -1232,7 +1255,10 @@ function App({
                 value={value}
                 aria-keyshortcuts={editorShortcuts[key].keys}
                 title={`${modeNames[value]} (${editorShortcuts[key].keys.toUpperCase()})`}
-                disabled={visibleLayout === "scene" && value === "draw"}
+                disabled={
+                  visibleLayout === "scene" &&
+                  (value === "draw" || value === "line")
+                }
               >
                 <Icon size={18} aria-hidden="true" />
                 <span>{label}</span>

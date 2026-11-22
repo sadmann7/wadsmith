@@ -19,6 +19,7 @@ import * as React from "react";
 
 import { thingKinds } from "../map/catalog";
 import {
+  addDetail,
   addRoom,
   addRoomOnSide,
   addSwitch,
@@ -63,7 +64,7 @@ import type {
   ThingKind,
 } from "../map/types";
 
-type MapTool = "select" | "draw" | "thing" | "switch";
+type MapTool = "select" | "draw" | "line" | "thing" | "switch";
 type EditMode = "vertices" | "lines" | "sectors" | "things";
 type MapViewStatus = {
   pointer: Point | null;
@@ -634,6 +635,30 @@ const mapEditor = definePrimitive({
       change("tool", "select", { reason: "draw" });
     };
 
+    // A line that no room can hold stays as a draft to adjust or throw away.
+    const finishLine = () => {
+      const { drawing, map } = store.get();
+      const added = drawing.length >= 2 ? addDetail(map, drawing) : null;
+      if (!added) return;
+      store.set({ drawing: [], cursor: null });
+      change("map", added.map, { reason: "draw" });
+      select([], added.id);
+      change("tool", "select", { reason: "draw" });
+    };
+
+    const clickLine = (point: Point) => {
+      const { drawing } = store.get();
+      const last = drawing.at(-1);
+      if (last && last.x === point.x && last.y === point.y) {
+        finishLine();
+        return;
+      }
+      if (drawing.some((item) => item.x === point.x && item.y === point.y)) {
+        return;
+      }
+      store.set({ drawing: [...drawing, point] });
+    };
+
     const clickDraw = (point: Point) => {
       const { drawing } = store.get();
       const first = drawing[0];
@@ -895,7 +920,7 @@ const mapEditor = definePrimitive({
       fitMap,
       contextmenu(event: MouseEvent) {
         const { tool, drawing } = store.get();
-        if (tool === "draw" && !isKeyboardMenu(event)) {
+        if ((tool === "draw" || tool === "line") && !isKeyboardMenu(event)) {
           store.set({ drawing: drawing.slice(0, -1) });
         }
         context.options().onContextTarget?.(targetAt(event));
@@ -1010,7 +1035,8 @@ const mapEditor = definePrimitive({
           context.options().onContextTarget?.(null);
         }
         reportPointer?.(pointFromEvent(event));
-        if (store.get().tool === "draw") {
+        const { tool } = store.get();
+        if (tool === "draw" || tool === "line") {
           store.set({ cursor: pointFromEvent(event) });
         }
       },
@@ -1033,6 +1059,8 @@ const mapEditor = definePrimitive({
         const point = (key && positions[key]) || pointFromEvent(event);
         if (tool === "draw") {
           clickDraw(point);
+        } else if (tool === "line") {
+          clickLine(point);
         } else if (tool === "thing") {
           const placed = addThing(map, thingKind, point);
           change("map", placed.map, { reason: "place" });
@@ -1065,9 +1093,11 @@ const mapEditor = definePrimitive({
       keydown(event: KeyboardEvent) {
         if (event.defaultPrevented || openMenuFromKey(event)) return;
         const { tool, drawing } = store.get();
-        if (tool === "draw") {
-          if (event.key === "Enter") finishRoom();
-          else if (event.key === "Escape") {
+        if (tool === "draw" || tool === "line") {
+          if (event.key === "Enter") {
+            if (tool === "draw") finishRoom();
+            else finishLine();
+          } else if (event.key === "Escape") {
             store.set({ drawing: [], cursor: null });
           } else if (event.key === "Backspace") {
             store.set({ drawing: drawing.slice(0, -1) });

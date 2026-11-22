@@ -561,7 +561,13 @@ function LineInspector({
   const { settings, twoSided, front, back } = line;
   const side = settings.sides?.[line.sector.id];
   const { action } = settings;
-  const parts: WallPart[] = twoSided ? ["upper", "lower"] : ["middle"];
+  // A line inside a room has only a middle texture, chosen below.
+  const detail = back !== null && back === front;
+  const parts: WallPart[] = detail
+    ? []
+    : twoSided
+      ? ["upper", "lower"]
+      : ["middle"];
   const fields = parts.flatMap((part) => {
     const info = describeSurface(
       map,
@@ -589,7 +595,7 @@ function LineInspector({
   return (
     <>
       <InspectorSection title="Wall textures">
-        {back ? (
+        {back && !detail ? (
           <SegmentedControl
             aria-label="Line side"
             className="self-start"
@@ -784,7 +790,17 @@ function LineInspector({
                     onChange={(repeat) => changeAction({ repeat })}
                   />
                 ) : null}
-                {back && !front.door && !back.door && usedFromFront(action) ? (
+                {detail && usedFromFront(action) ? (
+                  <p className="text-muted-foreground">
+                    Works from the right-hand side of the direction it was drawn
+                    in. Flip line in its menu turns it around.
+                  </p>
+                ) : null}
+                {back &&
+                !detail &&
+                !front.door &&
+                !back.door &&
+                usedFromFront(action) ? (
                   <ChoiceField
                     label="Works from"
                     value={front.id}
@@ -805,7 +821,17 @@ function LineInspector({
                     onLineChange({ scrolls: checked || undefined })
                   }
                 />
-                {settings.scrolls && back && !front.door && !back.door ? (
+                {settings.scrolls && detail ? (
+                  <p className="text-muted-foreground">
+                    Scrolls on the right-hand side of the direction it was drawn
+                    in. Flip line in its menu turns it around.
+                  </p>
+                ) : null}
+                {settings.scrolls &&
+                back &&
+                !detail &&
+                !front.door &&
+                !back.door ? (
                   <ChoiceField
                     label="Scrolls on"
                     value={front.id}

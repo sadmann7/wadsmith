@@ -143,12 +143,12 @@ const buildGroups: {
   {
     name: "Closed sectors",
     passed: "Every room is closed",
-    ids: /^(empty|repeat|corners|missing|area|height|twist)(:|$)/,
+    ids: /^(empty|repeat|corners|missing|area|height|twist|pillar-area|pillar-wall|pillar-outside|pillar-overlap|line-door-room|line-short|line-length)(:|$)/,
   },
   {
     name: "Wall sides",
     passed: "Walls connect cleanly",
-    ids: /^(shared|cross|overlap|line-door|line-walk|line-target|line-tag)(:|$)/,
+    ids: /^(shared|cross|overlap|same-side|pillar-inside|line-wall|line-outside|line-shared|line-door|line-walk|line-target|line-tag)(:|$)/,
     needsValidRooms: true,
   },
   {

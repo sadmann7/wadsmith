@@ -25,6 +25,7 @@ import {
   Copy,
   Cuboid,
   DoorOpen,
+  FlipHorizontal2,
   EyeOff,
   Grid3x3,
   Link,
@@ -56,9 +57,11 @@ import {
   duplicateThings,
   faceThings,
   fillHole,
+  flipDetailLine,
   freeWallAt,
   gridSize,
   makePillar,
+  removeDetailLine,
   removeHole,
   removeSector,
   removeSwitch,
@@ -571,6 +574,9 @@ function WallMenu({
   const line = describeLine(map, wall, sector);
   const { action, blocksEnemies, hidden } = line.settings;
   const free = freeWallAt(map, wall);
+  const detail =
+    (wallOwners(map).get(wall) ?? []).filter((item) => item.id === sector)
+      .length > 1;
   const chooseAction = (kind: string) => {
     if (!isLineActionKind(kind)) {
       onCommit(updateLine(map, wall, { action: undefined }));
@@ -588,7 +594,9 @@ function WallMenu({
 
   return (
     <>
-      <Heading>Wall · {line.sector.name}</Heading>
+      <Heading>
+        {detail ? "Line" : "Wall"} · {line.sector.name}
+      </Heading>
       <Item
         icon={ToggleRight}
         disabled={!free}
@@ -658,6 +666,29 @@ function WallMenu({
       </CheckItem>
       <Rule />
       <ShowItem {...props} />
+      {detail ? (
+        <>
+          <Rule />
+          <Item
+            icon={FlipHorizontal2}
+            onSelect={() => onCommit(flipDetailLine(map, sector, wall))}
+          >
+            Flip line
+          </Item>
+          <Item
+            icon={Trash2}
+            destructive
+            onSelect={() =>
+              onCommit(removeDetailLine(map, sector, wall), {
+                keys: [],
+                sector: null,
+              })
+            }
+          >
+            Delete line
+          </Item>
+        </>
+      ) : null}
     </>
   );
 }
