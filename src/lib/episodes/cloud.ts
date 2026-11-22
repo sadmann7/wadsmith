@@ -108,7 +108,6 @@ export function viewLink(origin: string, link: CloudLink) {
   return `${origin}/shared/${link.id}`;
 }
 
-// The online copy a page's address opens, if it names one.
 export function sharedTarget(pathname: string, hash: string) {
   const id = sharedPath.exec(pathname)?.[1];
   if (!id) return null;

@@ -52,7 +52,6 @@ describe("online map copies", () => {
       map: named,
     });
 
-    // A device that last saw revision 1 gets the newer copy back instead.
     const stale = await put(id, secret, 1, { ...map, name: "Old" });
     expect(stale.status).toBe(409);
     expect(await stale.json()).toEqual({ revision: 2, map: named });
@@ -73,7 +72,6 @@ describe("online map copies", () => {
       revision: 1,
       map: big,
     });
-    // A shorter version leaves no part of the longer one behind.
     expect((await put(id, secret, 1, map)).status).toBe(200);
     expect(await (await send(`/maps/${id}`)).json()).toEqual({
       revision: 2,

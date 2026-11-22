@@ -295,7 +295,6 @@ interface AppProps {
   navigation: React.ReactNode;
   onNewMap: () => void;
   onMapSettings: () => void;
-  // Opens the online copy's links, when this site has a server for them.
   onShare?: () => void;
   onParChange: (par: number) => void;
   playing: boolean;
