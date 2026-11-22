@@ -21,8 +21,10 @@ import {
   Box,
   Check,
   ChevronRight,
+  ClipboardPaste,
   Compass,
   Copy,
+  CopyPlus,
   Cuboid,
   DoorOpen,
   EyeOff,
@@ -36,6 +38,9 @@ import {
   PenLine,
   Plus,
   Replace,
+  RotateCw,
+  Scissors,
+  Shapes,
   Shield,
   Square,
   ToggleRight,
@@ -46,6 +51,7 @@ import {
 } from "lucide-react";
 import * as React from "react";
 
+import type { Transform } from "@/lib/map/fragment";
 import type { GameMap, Point, Thing, ThingKind } from "@/lib/map/types";
 
 import {
@@ -55,9 +61,10 @@ import {
   viewOfTarget,
   wallMiddle,
 } from "@/lib/editor/map-target";
+import { type EditorShortcut, editorShortcuts } from "@/lib/editor/shortcuts";
 import { thingIcons } from "@/lib/editor/thing-icons";
 import { getIsGeneralized } from "@/lib/map/boom";
-import { getIsPlayerStart, thingCatalog, thingKinds } from "@/lib/map/catalog";
+import { thingCatalog, thingKinds } from "@/lib/map/catalog";
 import {
   addRoomOnSide,
   addSwitch,
@@ -65,7 +72,6 @@ import {
   changeThings,
   connectedCorners,
   defaultDoor,
-  duplicateThings,
   faceThings,
   fillHole,
   flipDetailLine,
@@ -103,11 +109,26 @@ interface Selection {
   sector?: string | null;
 }
 
+// Copy, paste and the transforms act on the whole selection, which the
+// screen holds, so the menu only asks for them.
+interface EditActions {
+  canCopy: boolean;
+  canTransform: boolean;
+  onCopy: () => void;
+  onCut: () => void;
+  onPaste: (point: Point | null) => void;
+  onDuplicate: () => void;
+  onTransform: (transform: Transform) => void;
+  onTransformBy: () => void;
+  onPrefabs: (point: Point | null) => void;
+}
+
 interface MapContextMenuProps {
   controller: MenuController;
   map: GameMap;
   target: MapTarget | null;
   thingKind: ThingKind;
+  edit: EditActions;
   onOpenChange: MenuProps["onOpenChange"];
   onCommit: (map: GameMap, selection?: Selection) => void;
   onSelect: (selection: Selection) => void;
@@ -236,20 +257,8 @@ function ThingsMenu({ ids, ...props }: ThingsMenuProps) {
           <Rule />
         </>
       ) : null}
-      <Item
-        icon={Copy}
-        hint={formatShortcut("mod+d")}
-        disabled={things.every((thing) => getIsPlayerStart(thing.kind))}
-        onSelect={() => {
-          const copies = duplicateThings(map, ids);
-          onCommit(copies.map, {
-            keys: copies.ids.map((id) => `${thingKeyPrefix}${id}`),
-            sector: null,
-          });
-        }}
-      >
-        Duplicate
-      </Item>
+      <EditItems edit={props.edit} point={{ x: first.x, y: first.y }} />
+      <Rule />
       <Item
         icon={Trash2}
         hint="⌫"
@@ -373,10 +382,11 @@ function ShowItem({ map, target, onShow }: ShowItemProps) {
   );
 }
 
-const destructiveIconClass =
-  "flex w-3.5 shrink-0 justify-center text-destructive";
 const hintClass = "ml-auto font-mono text-xs text-muted-foreground";
 const destructiveHintClass = "ml-auto font-mono text-xs text-destructive";
+
+const destructiveIconClass =
+  "flex w-3.5 shrink-0 justify-center text-destructive";
 
 interface ItemProps {
   icon: LucideIcon;
@@ -410,6 +420,123 @@ function Item({
         </span>
       ) : null}
     </MenuItem>
+  );
+}
+
+interface EditItemsProps {
+  edit: EditActions;
+  point: Point | null;
+}
+
+function EditItems({ edit, point }: EditItemsProps) {
+  return (
+    <>
+      <Item
+        icon={Scissors}
+        hint={formatShortcut("mod+x")}
+        disabled={!edit.canCopy}
+        onSelect={edit.onCut}
+      >
+        Cut
+      </Item>
+      <Item
+        icon={Copy}
+        hint={formatShortcut("mod+c")}
+        disabled={!edit.canCopy}
+        onSelect={edit.onCopy}
+      >
+        Copy
+      </Item>
+      <PasteItem edit={edit} point={point} />
+      <Item
+        icon={CopyPlus}
+        hint={formatShortcut(editorShortcuts.duplicate.keys)}
+        disabled={!edit.canCopy}
+        onSelect={edit.onDuplicate}
+      >
+        Duplicate
+      </Item>
+      <TransformMenu edit={edit} />
+      <PrefabsItem edit={edit} point={point} />
+    </>
+  );
+}
+
+function PrefabsItem({ edit, point }: EditItemsProps) {
+  return (
+    <Item icon={Shapes} onSelect={() => edit.onPrefabs(point)}>
+      Prefabs…
+    </Item>
+  );
+}
+
+function PasteItem({ edit, point }: EditItemsProps) {
+  return (
+    <Item
+      icon={ClipboardPaste}
+      hint={formatShortcut("mod+v")}
+      onSelect={() => edit.onPaste(point)}
+    >
+      Paste here
+    </Item>
+  );
+}
+
+interface TransformMenuProps {
+  edit: EditActions;
+}
+
+const transforms: {
+  label: string;
+  shortcut?: EditorShortcut;
+  transform: Transform;
+}[] = [
+  {
+    label: "Turn a quarter right",
+    shortcut: "rotateRight",
+    transform: { kind: "rotate", degrees: 90 },
+  },
+  {
+    label: "Turn a quarter left",
+    shortcut: "rotateLeft",
+    transform: { kind: "rotate", degrees: -90 },
+  },
+  {
+    label: "Flip left to right",
+    shortcut: "flipAcross",
+    transform: { kind: "mirror", axis: "horizontal" },
+  },
+  {
+    label: "Flip top to bottom",
+    shortcut: "flipOver",
+    transform: { kind: "mirror", axis: "vertical" },
+  },
+  { label: "Double the size", transform: { kind: "scale", factor: 2 } },
+  { label: "Halve the size", transform: { kind: "scale", factor: 0.5 } },
+];
+
+function TransformMenu({ edit }: TransformMenuProps) {
+  return (
+    <SubMenu icon={RotateCw} label="Transform" disabled={!edit.canTransform}>
+      {transforms.map(({ label, shortcut, transform }) => (
+        <MenuItem
+          key={label}
+          className={itemClass}
+          onSelect={() => edit.onTransform(transform)}
+        >
+          {label}
+          {shortcut ? (
+            <span className={hintClass}>
+              {formatShortcut(editorShortcuts[shortcut].keys)}
+            </span>
+          ) : null}
+        </MenuItem>
+      ))}
+      <Rule />
+      <MenuItem className={itemClass} onSelect={edit.onTransformBy}>
+        Turn or resize by…
+      </MenuItem>
+    </SubMenu>
   );
 }
 
@@ -465,6 +592,7 @@ function CornersMenu({ ids, ...props }: CornersMenuProps) {
       >
         Select connected rooms
       </Item>
+      <TransformMenu edit={props.edit} />
       <Rule />
       <CameraItem {...props} point={target.point ?? corners[0]} />
     </>
@@ -550,6 +678,8 @@ function RoomMenu({ id, ...props }: RoomMenuProps) {
       >
         Make pillar
       </Item>
+      <Rule />
+      <EditItems edit={props.edit} point={point} />
       <Rule />
       <ShowItem {...props} />
       <CameraItem {...props} point={point} />
@@ -882,6 +1012,8 @@ function EmptyMenu(props: EmptyMenuProps) {
         Draw room here
       </Item>
       <PlaceItem {...props} point={point} />
+      <PasteItem edit={props.edit} point={point} />
+      <PrefabsItem edit={props.edit} point={point} />
       <Rule />
       <CameraItem {...props} point={point} />
       <Item icon={LocateFixed} onSelect={onFindCamera}>

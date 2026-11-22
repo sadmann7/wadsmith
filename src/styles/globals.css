@@ -681,6 +681,10 @@
     fill-rule: evenodd;
   }
 
+  .map-sector[data-selected] {
+    fill: color-mix(in oklab, var(--color-primary) 14%, transparent);
+  }
+
   .map-sector[data-active] {
     fill: color-mix(in oklab, var(--color-primary) 24%, transparent);
   }
@@ -708,6 +712,11 @@
   .map-draft {
     fill: color-mix(in oklab, var(--color-primary) 10%, transparent);
     stroke: var(--color-primary);
+  }
+
+  .map-marquee {
+    border: calc(1px / var(--canvas-zoom, 1)) solid var(--color-primary);
+    background: color-mix(in oklab, var(--color-primary) 10%, transparent);
   }
 
   .map-vertex {

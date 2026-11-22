@@ -57,6 +57,7 @@ import {
 } from "@/components/ui/segmented-control";
 import { useIwad } from "@/hooks/use-iwad";
 import { agent } from "@/lib/editor/agent";
+import { heldFragment, holdFragment } from "@/lib/editor/clipboard";
 import {
   type MapTarget,
   normalizeControlClick,
@@ -70,7 +71,7 @@ import {
 import { type EditorShortcut, editorShortcuts } from "@/lib/editor/shortcuts";
 import { defaultGame, engineSlot } from "@/lib/engine/game";
 import { texturesOf } from "@/lib/engine/iwad";
-import { thingCatalog, thingKinds } from "@/lib/map/catalog";
+import { getIsPlayerStart, thingCatalog, thingKinds } from "@/lib/map/catalog";
 import { checkMap, fixIssue, issueText } from "@/lib/map/checks";
 import {
   addNote,
@@ -94,6 +95,16 @@ import {
   updateSwitch,
   updateThings,
 } from "@/lib/map/edit";
+import {
+  type CopiedPiece,
+  copyParts,
+  partKeys,
+  pasteParts,
+  removeParts,
+  selectedParts,
+  type Transform,
+  transformParts,
+} from "@/lib/map/fragment";
 import {
   loopEdges,
   sectorAt,
@@ -131,15 +142,18 @@ import {
 import { MapCanvas } from "./map-canvas";
 import { type EpisodeEntry, type MapHealth, MapSwitcher } from "./map-switcher";
 import { NewMapPanel } from "./new-map-panel";
+import { PrefabsDialog } from "./prefabs-dialog";
 import { type DraftSource, SceneCanvas } from "./scene-editor";
 import { ShortcutSheet } from "./shortcut-sheet";
 import { SurfacePanel } from "./surface-panel";
+import { TransformDialog } from "./transform-dialog";
 
 const modeHints: Record<EditMode, string> = {
   vertices:
     "Drag corners to reshape rooms, or nudge them with the arrow keys. Shift-click adds to the selection.",
   lines: "Click a wall to change its textures or what it does.",
-  sectors: "Click a room to select it. Drag its corners to reshape it.",
+  sectors:
+    "Click a room to select it, and drag it to move it. Shift-click adds a room, and Shift-drag selects a box.",
   things:
     "Click a thing to select it, or pick one in the inspector to place it.",
 };
@@ -300,7 +314,12 @@ export function EditorScreen({
   const [welcomed, setWelcomed] = React.useState(loadWelcomed);
   const playButton = React.useRef<HTMLButtonElement>(null);
   const fileInput = React.useRef<HTMLInputElement>(null);
-  const [agentLog, setAgentLog] = React.useState("");
+  const [notice, setNotice] = React.useState("");
+  const [transforming, setTransforming] = React.useState(false);
+  const [prefabsAt, setPrefabsAt] = React.useState<{
+    point: Point | null;
+  } | null>(null);
+  const viewStatus = React.useRef<MapViewStatus | null>(null);
   const [initialLayout] = React.useState(loadLayout);
   const [layout, setLayout] = React.useState(initialLayout.view);
   const [findCameraRequest, setFindCameraRequest] = React.useState(0);
@@ -459,22 +478,207 @@ export function EditorScreen({
     .filter((key) => key.startsWith(thingKeyPrefix))
     .map((key) => key.slice(thingKeyPrefix.length));
 
+  // The rooms and things the selection stands for, which copy, cut, paste
+  // and the transforms work on.
+  // A selected wall isn't its room, and a room left active in another mode
+  // isn't what that mode works on.
+  const pickedRoom =
+    (editMode === "vertices" || editMode === "sectors") &&
+    (surface ? parseSurface(surface)?.kind !== "wall" : true)
+      ? activeSector
+      : null;
+  const { parts, canCopy, transformKeys } = React.useMemo(() => {
+    const parts = selectedParts(map, selection, pickedRoom);
+    const picked = new Set(parts.things);
+    return {
+      parts,
+      canCopy:
+        parts.sectors.length > 0 ||
+        map.things.some(
+          (item) => picked.has(item.id) && !getIsPlayerStart(item.kind),
+        ),
+      transformKeys: [
+        ...new Set([
+          ...selection.filter(
+            (key) => map.vertices[key] || key.startsWith(thingKeyPrefix),
+          ),
+          ...partKeys(map, parts),
+        ]),
+      ],
+    };
+  }, [map, pickedRoom, selection]);
+
+  const selectPasted = (keys: string[]) => {
+    setSurface(null);
+    setActiveSector(null);
+    setSelection(keys);
+  };
+
+  const pasteFragment = (piece: CopiedPiece | null, at: Point | null) => {
+    const pasted =
+      piece &&
+      pasteParts(
+        map,
+        piece.fragment,
+        at,
+        grid,
+        piece.origin === episode.currentId,
+      );
+    if (!pasted) {
+      setNotice("There is nothing to paste. Copy a room or a thing first.");
+      return;
+    }
+    setNotice("");
+    commit(pasted.map);
+    selectPasted(pasted.keys);
+  };
+
+  // Under the pointer when it is over the map, and in the middle of the view
+  // otherwise.
+  const pastePoint = () => {
+    const status = viewStatus.current;
+    if (!status) return null;
+    return (
+      status.pointer ?? {
+        x: (status.view.left + status.view.right) / 2,
+        y: (status.view.top + status.view.bottom) / 2,
+      }
+    );
+  };
+
+  const cutFragment = (fragment: GameMap) => {
+    commit(
+      removeParts(map, {
+        sectors: parts.sectors,
+        things: fragment.things.map((item) => item.id),
+      }),
+    );
+    selectPasted([]);
+  };
+
+  const copySelection = (cut: boolean) => {
+    const fragment = copyParts(map, parts);
+    if (!fragment) return;
+    const text = holdFragment(fragment, episode.currentId);
+    void navigator.clipboard?.writeText(text).catch(() => undefined);
+    if (cut) cutFragment(fragment);
+  };
+
   const duplicateSelection = () => {
+    const fragment = parts.sectors.length > 0 ? copyParts(map, parts) : null;
+    if (fragment) {
+      pasteFragment({ fragment, origin: episode.currentId }, null);
+      return;
+    }
     const copies = duplicateThings(map, selectedThingIds);
     if (copies.ids.length === 0) return;
     history.record(copies.map);
     showMap(copies.map);
-    setSurface(null);
-    setActiveSector(null);
-    setSelection(copies.ids.map((id) => `${thingKeyPrefix}${id}`));
+    selectPasted(copies.ids.map((id) => `${thingKeyPrefix}${id}`));
   };
+
+  const transformSelection = (steps: Transform[]) => {
+    if (transformKeys.length === 0 || steps.length === 0) return;
+    let next = map;
+    for (const step of steps) {
+      const turned = transformParts(next, transformKeys, step, grid);
+      if (!turned) {
+        setNotice(
+          "That would press two corners of a room together, or change nothing.",
+        );
+        return;
+      }
+      next = turned;
+    }
+    setNotice("");
+    commit(next);
+    // Corners that met others on the way are gone.
+    setSelection(
+      selection.filter(
+        (key) =>
+          next.vertices[key] ||
+          key.startsWith(thingKeyPrefix) ||
+          key.startsWith(switchKeyPrefix),
+      ),
+    );
+  };
+
+  // Copy and cut go through the browser's own events, so the piece lands on
+  // the system clipboard without asking, and text selected on the page still
+  // copies as text.
+  const onClipboard = React.useEffectEvent((event: ClipboardEvent) => {
+    if (
+      !notTyping() ||
+      document.activeElement?.closest('[role="dialog"]') ||
+      document.querySelector(".game-stage")
+    ) {
+      return;
+    }
+    if (event.type === "paste") {
+      const fragment = heldFragment(event.clipboardData?.getData("text/plain"));
+      if (!fragment) return;
+      event.preventDefault();
+      pasteFragment(fragment, pastePoint());
+      return;
+    }
+    // Text selected elsewhere on the page copies as text, unless the map is
+    // what has the focus.
+    if (
+      window.getSelection()?.toString() &&
+      !document.activeElement?.closest('[aria-roledescription="map editor"]')
+    ) {
+      return;
+    }
+    const fragment = copyParts(map, parts);
+    if (!fragment) return;
+    event.preventDefault();
+    event.clipboardData?.setData(
+      "text/plain",
+      holdFragment(fragment, episode.currentId),
+    );
+    if (event.type === "cut") cutFragment(fragment);
+  });
+
+  React.useEffect(() => {
+    const kinds = ["copy", "cut", "paste"] as const;
+    for (const kind of kinds) window.addEventListener(kind, onClipboard);
+    return () => {
+      for (const kind of kinds) window.removeEventListener(kind, onClipboard);
+    };
+  }, []);
 
   useShortcut(editorShortcuts.undo.keys, undo, shortcut("undo", notTyping));
   useShortcut(editorShortcuts.redo.keys, redo, shortcut("redo", notTyping));
   useShortcut(
     editorShortcuts.duplicate.keys,
     duplicateSelection,
-    shortcut("duplicate", () => notTyping() && selectedThingIds.length > 0),
+    shortcut(
+      "duplicate",
+      () =>
+        notTyping() &&
+        (selectedThingIds.length > 0 || parts.sectors.length > 0),
+    ),
+  );
+  const canTransform = () => modeKeys() && transformKeys.length > 0;
+  useShortcut(
+    editorShortcuts.rotateRight.keys,
+    () => transformSelection([{ kind: "rotate", degrees: 90 }]),
+    shortcut("rotateRight", canTransform),
+  );
+  useShortcut(
+    editorShortcuts.rotateLeft.keys,
+    () => transformSelection([{ kind: "rotate", degrees: -90 }]),
+    shortcut("rotateLeft", canTransform),
+  );
+  useShortcut(
+    editorShortcuts.flipAcross.keys,
+    () => transformSelection([{ kind: "mirror", axis: "horizontal" }]),
+    shortcut("flipAcross", canTransform),
+  );
+  useShortcut(
+    editorShortcuts.flipOver.keys,
+    () => transformSelection([{ kind: "mirror", axis: "vertical" }]),
+    shortcut("flipOver", canTransform),
   );
 
   // The registry skips key repeats, and holding mod+Z should keep stepping back.
@@ -828,7 +1032,9 @@ export function EditorScreen({
     mapCheck.current?.focus();
   };
 
-  const updateViewStatus = ({ pointer, zoom }: MapViewStatus) => {
+  const updateViewStatus = (status: MapViewStatus) => {
+    const { pointer, zoom } = status;
+    viewStatus.current = status;
     if (pointerStatus.current) {
       pointerStatus.current.textContent = pointer
         ? `X ${pointer.x}  Y ${-pointer.y}`
@@ -1021,7 +1227,7 @@ export function EditorScreen({
     });
     const failure =
       typeof result.error === "string" ? result.error : result.error?.message;
-    setAgentLog(
+    setNotice(
       result.ok
         ? `${action} ran through the agent bridge.`
         : (failure ?? `${action} was refused.`),
@@ -1523,9 +1729,9 @@ export function EditorScreen({
                 </Menu>
               ) : null}
             </header>
-            {agentLog ? (
+            {notice ? (
               <p className="agent-log" role="status">
-                {agentLog}
+                {notice}
               </p>
             ) : null}
             {fileError ? (
@@ -1804,6 +2010,17 @@ export function EditorScreen({
         target={menuTarget}
         thingKind={thingKind}
         grid={grid}
+        edit={{
+          canCopy,
+          canTransform: transformKeys.length > 0,
+          onCopy: () => copySelection(false),
+          onCut: () => copySelection(true),
+          onPaste: (point) => pasteFragment(heldFragment(), point),
+          onDuplicate: duplicateSelection,
+          onTransform: (transform) => transformSelection([transform]),
+          onTransformBy: () => setTransforming(true),
+          onPrefabs: (point) => setPrefabsAt({ point }),
+        }}
         onOpenChange={(open, details) => {
           const target = menuTargetRef.current;
           if (open && !target) {
@@ -1832,6 +2049,28 @@ export function EditorScreen({
       />
       {showShortcuts ? (
         <ShortcutSheet onClose={() => setShowShortcuts(false)} />
+      ) : null}
+      {transforming ? (
+        <TransformDialog
+          onApply={transformSelection}
+          onClose={() => setTransforming(false)}
+        />
+      ) : null}
+      {prefabsAt ? (
+        <PrefabsDialog
+          selected={copyParts(map, parts)}
+          suggestedName={
+            map.sectors.find((item) => item.id === parts.sectors[0])?.name ??
+            "Prefab"
+          }
+          onPlace={(fragment) =>
+            pasteFragment(
+              { fragment, origin: null },
+              prefabsAt.point ?? pastePoint(),
+            )
+          }
+          onClose={() => setPrefabsAt(null)}
+        />
       ) : null}
       {building ? (
         <BuildDialog

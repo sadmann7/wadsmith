@@ -925,18 +925,26 @@ export function splitWall(
   };
 }
 
+// Joins each of these corners to a corner it sits on. The corners that stay
+// put are filed by their spot once, so a big selection costs a lookup a corner
+// and not a pass over the map.
 export function mergeCorners(map: GameMap, ids: string[]): GameMap {
+  const moved = new Set(ids);
+  const spots = new Map<string, string[]>();
+  for (const [id, point] of Object.entries(map.vertices)) {
+    if (moved.has(id)) continue;
+    const spot = `${point.x},${point.y}`;
+    const held = spots.get(spot);
+    if (held) held.push(id);
+    else spots.set(spot, [id]);
+  }
   let next = map;
   for (const id of ids) {
     const point = next.vertices[id];
     if (!point) continue;
-    const target = Object.keys(next.vertices).find(
-      (other) =>
-        other !== id &&
-        !ids.includes(other) &&
-        next.vertices[other].x === point.x &&
-        next.vertices[other].y === point.y,
-    );
+    const target = spots
+      .get(`${point.x},${point.y}`)
+      ?.find((other) => next.vertices[other]);
     if (target && getCanJoin(next, id, target)) {
       next = replaceCorner(next, id, target);
     }
@@ -1137,7 +1145,7 @@ export function removeHole(map: GameMap, id: string, index: number): GameMap {
   });
 }
 
-function nextId(prefix: string, used: Iterable<string>) {
+export function nextId(prefix: string, used: Iterable<string>) {
   let highest = 0;
   for (const id of used) {
     if (id.startsWith(prefix)) {
