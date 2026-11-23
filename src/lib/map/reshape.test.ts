@@ -179,6 +179,32 @@ describe("drawing a line across a room", () => {
     ).toBeNull();
   });
 
+  it("closes a piece off with a line drawn earlier from wall to wall", () => {
+    const island = drawRoom(hall.map, box(192, 64, 320, 192), {}, 1);
+    const first = defined(
+      drawLines(
+        island.map,
+        [
+          { x: 0, y: 112 },
+          { x: 192, y: 112 },
+        ],
+        1,
+      ),
+    );
+    const spoke = [
+      { x: 0, y: 144 },
+      { x: 192, y: 144 },
+    ];
+    for (const mode of ["draw", "split"] as const) {
+      const second = defined(drawLines(first.map, spoke, 1, mode));
+      expect(second.map.sectors).toHaveLength(3);
+      expect(second.map.sectors.every((sector) => !sector.details)).toBe(true);
+      const strip = defined(sectorAt(second.map, { x: 96, y: 128 }));
+      expect(strip).not.toBe(sectorAt(second.map, { x: 96, y: 32 }));
+      expect(problems(second.map)).toEqual([]);
+    }
+  });
+
   it("splits a room around a pillar, which goes to the half it's in", () => {
     const pillar = addRoom(hall.map, box(64, 64, 128, 128), {}, 1);
     const holed = {

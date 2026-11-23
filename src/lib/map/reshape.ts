@@ -157,13 +157,23 @@ export function drawLines(
     );
     let lines = list;
     if (cuts.length > 0) {
-      const rebuilt = rebuildRooms(next, [room.id], {
-        add: cuts.flatMap(({ corners }) =>
-          corners.slice(1).map((to, index) => ({ from: corners[index], to })),
-        ),
-        keep: inside.map((sector) => sector.id),
-      });
-      if (rebuilt && rebuilt.rooms.length > 1) {
+      const split = (chains: string[][]) => {
+        const rebuilt = rebuildRooms(next, [room.id], {
+          add: chains.flatMap((chain) =>
+            chain.slice(1).map((to, index) => ({ from: chain[index], to })),
+          ),
+          keep: inside.map((sector) => sector.id),
+        });
+        return rebuilt && rebuilt.rooms.length > 1 ? rebuilt : null;
+      };
+      const drawn = cuts.map(({ corners }) => corners);
+      // A line drawn earlier from wall to wall may close a piece off with it.
+      const spokes = (room.details ?? []).filter(
+        (chain) => ends.has(chain[0]) && ends.has(defined(chain.at(-1))),
+      );
+      const rebuilt =
+        (spokes.length > 0 && split([...drawn, ...spokes])) || split(drawn);
+      if (rebuilt) {
         next = rebuilt.map;
         touched.push(...rebuilt.rooms.map((item) => item.id));
         changed = true;
