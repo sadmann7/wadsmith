@@ -107,6 +107,7 @@ import {
 import { describeWalls, type LineFlag } from "@/lib/map/many-lines";
 import { describeSurface, surfaceKey, type WallPart } from "@/lib/map/surfaces";
 import { flatUse, type TextureUse, wallUse } from "@/lib/map/textures";
+import { rankByQuery } from "@/lib/search";
 
 import { TextureSwatch } from "./surface-panel";
 import { type TextureKind, TexturePicker } from "./texture-picker";
@@ -1110,11 +1111,11 @@ type ThingChange = (thing: Thing) => Partial<Omit<Thing, "id">>;
 interface ThingInspectorProps {
   map: GameMap;
   things: Thing[];
-  placing: ThingKind;
+  placing: ThingKind | null;
   kinds?: readonly ThingKind[];
   grid?: number;
   onChange: (change: ThingChange) => void;
-  onPlace: (kind: ThingKind) => void;
+  onPlace: (kind: ThingKind | null) => void;
 }
 
 export function ThingInspector({
@@ -1940,20 +1941,20 @@ const thingTabs: { value: ThingTab; label: string }[] = [
 ];
 
 interface PlaceThingsProps {
-  kind: ThingKind;
+  kind: ThingKind | null;
   kinds: readonly ThingKind[];
-  onPick: (kind: ThingKind) => void;
+  onPick: (kind: ThingKind | null) => void;
 }
 
 function PlaceThings({ kind, kinds, onPick }: PlaceThingsProps) {
-  const [tab, setTab] = React.useState(() => tabOf(kind));
+  const [tab, setTab] = React.useState(() => (kind ? tabOf(kind) : "enemy"));
   const [query, setQuery] = React.useState("");
-  const search = query.trim().toLowerCase();
-  const shown = kinds.filter((item) =>
-    search
-      ? thingCatalog[item].label.toLowerCase().includes(search)
-      : tabOf(item) === tab,
-  );
+  const shown = query.trim()
+    ? rankByQuery(kinds, query, (item) => [
+        thingCatalog[item].label,
+        thingTabs.find((entry) => entry.value === tabOf(item))?.label ?? "",
+      ])
+    : kinds.filter((item) => tabOf(item) === tab);
   return (
     <InspectorSection title="Place a thing">
       <InputGroup className="h-8">
@@ -1993,7 +1994,7 @@ function PlaceThings({ kind, kinds, onPick }: PlaceThingsProps) {
                 aria-pressed={active}
                 title={thingCatalog[item].label}
                 className="grid h-[58px] min-w-0 content-center justify-items-center gap-1 rounded-[2px] border-0 bg-muted px-1 text-xs text-muted-foreground hover:text-foreground aria-pressed:bg-primary/15 aria-pressed:text-foreground"
-                onClick={() => onPick(item)}
+                onClick={() => onPick(active ? null : item)}
               >
                 <Icon
                   size={18}

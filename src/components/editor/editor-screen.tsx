@@ -256,7 +256,7 @@ const toolHints: Record<Exclude<MapTool, "select">, string> = {
   draw: "Click corners, then click the first one or press Enter. A room drawn against a wall shares corners with it.",
   line: "Click points inside a room, then click the last one again or press Enter. A line can hold a middle texture or a walk-over action.",
   thing:
-    "Click a floor to place it, or press Enter in 3D to place it ahead. Esc stops placing.",
+    "Click a floor to place it, or press Enter in 3D to place it ahead. Esc, or picking the thing again, stops placing.",
   switch:
     "Click a solid wall to add a switch, then drag from it to a door. Esc cancels.",
 };
@@ -1037,6 +1037,27 @@ export function EditorScreen({
       event.preventDefault();
     }
   });
+
+  // Esc stops placing things from wherever the focus is, such as the
+  // button that picked the thing.
+  const onPlacingEscape = React.useEffectEvent((event: KeyboardEvent) => {
+    if (
+      event.key !== "Escape" ||
+      event.defaultPrevented ||
+      tool !== "thing" ||
+      !notTyping() ||
+      document.activeElement?.closest('[role="dialog"]') ||
+      !mapKeys()
+    ) {
+      return;
+    }
+    event.preventDefault();
+    setTool("select");
+  });
+  React.useEffect(() => {
+    window.addEventListener("keydown", onPlacingEscape);
+    return () => window.removeEventListener("keydown", onPlacingEscape);
+  }, []);
 
   React.useEffect(() => {
     window.addEventListener("keydown", onHeldKey);
@@ -2639,7 +2660,7 @@ export function EditorScreen({
               <ThingInspector
                 map={map}
                 things={selectedThings}
-                placing={thingKind}
+                placing={tool === "thing" ? thingKind : null}
                 kinds={placeable}
                 grid={grid}
                 onChange={(patch) =>
@@ -2653,6 +2674,10 @@ export function EditorScreen({
                   )
                 }
                 onPlace={(kind) => {
+                  if (!kind) {
+                    setTool("select");
+                    return;
+                  }
                   setThingKind(kind);
                   setEditMode("things");
                   setTool("thing");
