@@ -11,6 +11,7 @@ import * as React from "react";
 import type { LivePeer } from "@/lib/episodes/live";
 import type { MapLink } from "@/lib/map/links";
 import type { PlaytestRun, RunMark } from "@/lib/map/playtest";
+import type { SoundReach } from "@/lib/map/sound";
 import type { GameMap, Point, Sector, ThingKind } from "@/lib/map/types";
 
 import { buttonVariants } from "@/components/ui/button";
@@ -71,10 +72,13 @@ interface MapCanvasProps extends React.ComponentProps<typeof MapEditor> {
   agentAt?: Point | null;
   // The grid's spacing, drawn whether or not snapping is on.
   gridSize?: number;
+  // Where a shot is heard, or null to leave the rooms as they are.
+  sound?: SoundReach | null;
 }
 
 export function MapCanvas({
   map,
+  sound = null,
   callouts,
   links,
   trail,
@@ -113,6 +117,9 @@ export function MapCanvas({
           holes={sector.holes}
           door={!!sector.door}
           className="map-sector"
+          data-sound={
+            sound ? (sound.rooms.get(sector.id) ?? "silent") : undefined
+          }
         />
       ))}
       {wallsOf(map).map((wall) => (
@@ -216,6 +223,13 @@ export function MapCanvas({
           key={thing.id}
           value={`${thingKeyPrefix}${thing.id}`}
           className="map-thing"
+          data-sound={
+            sound?.woken.includes(thing.id)
+              ? "woken"
+              : sound?.deaf.includes(thing.id)
+                ? "deaf"
+                : undefined
+          }
           aria-label={label}
           title={label}
           style={style}
