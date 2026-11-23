@@ -47,7 +47,7 @@ export function fitView(
     getIsOverlapping(overlay, whole),
   );
   let best: FitView | null = null;
-  for (const area of clearAreas(whole, covering)) {
+  for (const area of clearAreas(whole, covering, options.padding)) {
     if (!getHasRoom(area, options.padding)) continue;
     const view = fitInto(rect, area, options);
     const isCovered = parts.some((part) => {
@@ -65,27 +65,28 @@ export function fitView(
   return best ?? fitInto(rect, whole, options);
 }
 
+const gap = 16;
 const sides: Side[] = [null, "left", "top", "right", "bottom"];
 
-function clearAreas(whole: Box, overlays: Box[]): Box[] {
+function clearAreas(whole: Box, overlays: Box[], padding: number): Box[] {
   let areas: Box[] = [whole];
   for (const overlay of overlays) {
     areas = areas.flatMap((area) =>
-      sides.map((side) => beside(area, overlay, side)),
+      sides.map((side) => beside(area, overlay, side, padding - gap)),
     );
   }
   return areas;
 }
 
-function beside(area: Box, overlay: Box, side: Side): Box {
+function beside(area: Box, overlay: Box, side: Side, reach: number): Box {
   if (side === "left")
-    return { ...area, left: Math.max(area.left, overlay.right) };
+    return { ...area, left: Math.max(area.left, overlay.right - reach) };
   if (side === "top")
-    return { ...area, top: Math.max(area.top, overlay.bottom) };
+    return { ...area, top: Math.max(area.top, overlay.bottom - reach) };
   if (side === "right")
-    return { ...area, right: Math.min(area.right, overlay.left) };
+    return { ...area, right: Math.min(area.right, overlay.left + reach) };
   if (side === "bottom")
-    return { ...area, bottom: Math.min(area.bottom, overlay.top) };
+    return { ...area, bottom: Math.min(area.bottom, overlay.top + reach) };
   return area;
 }
 

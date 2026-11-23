@@ -22,7 +22,7 @@ describe("fitView", () => {
 
     const view = fitView(rect, surface, options, [card]);
     expect(getIsClear(onScreen(rect, view), card)).toBe(true);
-    expect(view.zoom).toBeCloseTo((633 - 112) / 1000);
+    expect(view.zoom).toBeCloseTo((633 - 56 - 16) / 1000);
   });
 
   it("keeps clear of a card and a dock in both bottom corners", () => {

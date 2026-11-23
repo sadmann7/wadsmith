@@ -1966,7 +1966,8 @@ export function EditorScreen({
     agentSession.getSnapshot,
     () => idleAgentSession,
   );
-  const showWelcome = !welcomed && !getHasAgentCard(agentState);
+  const hasAgentCard = getHasAgentCard(agentState);
+  const showWelcome = !welcomed && !hasAgentCard;
   const showMapDock = visibleLayout === "map" && showDock && !narrow;
   const agentAsk = agentState.question
     ? agentStepSummary(
@@ -2423,6 +2424,7 @@ export function EditorScreen({
                       fitSelectionRequest={fitSelectionRequest}
                       fitAround={[
                         showWelcome && "#welcome-card",
+                        hasAgentCard && "[data-agent-card]",
                         showMapDock && ".player-dock",
                       ]
                         .filter(Boolean)
