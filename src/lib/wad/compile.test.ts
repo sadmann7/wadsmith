@@ -2064,6 +2064,7 @@ describe("thing settings", () => {
       ammo: 1,
       keys: 1,
       keysNeeded: 1,
+      keysMissing: 1,
       healthShort: 0,
       ammoShort: 0,
     });
@@ -2078,6 +2079,43 @@ describe("thing settings", () => {
     expect(mapBalance(crowded, "medium")).toMatchObject({
       healthShort: 8,
       ammoShort: 31,
+    });
+  });
+
+  it("counts the keys locked lines ask for apart from missing ones", () => {
+    const lock = (key: "blue" | "red") => ({
+      kind: "door-raise" as const,
+      trigger: "door" as const,
+      repeat: true,
+      key,
+      tag: 0,
+    });
+    const locked = updateLine(
+      updateLine(
+        {
+          ...testMap,
+          things: [
+            ...testMap.things,
+            { id: "k", kind: "blue-key", x: 192, y: 64, angle: 0 },
+          ],
+        },
+        wallKey("v3", "v4"),
+        { action: lock("blue") },
+      ),
+      wallKey("v13", "v14"),
+      { action: lock("blue") },
+    );
+    expect(mapBalance(locked, "medium")).toMatchObject({
+      keys: 1,
+      keysNeeded: 1,
+      keysMissing: 0,
+    });
+    const both = updateLine(locked, wallKey("v13", "v14"), {
+      action: lock("red"),
+    });
+    expect(mapBalance(both, "medium")).toMatchObject({
+      keysNeeded: 2,
+      keysMissing: 1,
     });
   });
 });

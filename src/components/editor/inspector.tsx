@@ -2185,13 +2185,13 @@ interface BalancePanelProps {
 
 function BalancePanel({ map }: BalancePanelProps) {
   const balance = mapBalance(map, playtestSkill);
-  const { enemies, health, ammo, keys, keysNeeded, healthShort, ammoShort } =
+  const { enemies, health, ammo, keys, keysMissing, healthShort, ammoShort } =
     balance;
   const advice = [
     ammoShort > 0 ? `about ${ammoShort} more ammo` : null,
     healthShort > 0 ? `about ${healthShort} more health` : null,
-    keysNeeded > 0
-      ? `${keysNeeded} missing ${keysNeeded === 1 ? "key" : "keys"}`
+    keysMissing > 0
+      ? `${keysMissing} missing ${keysMissing === 1 ? "key" : "keys"}`
       : null,
   ].filter(Boolean);
   return (
@@ -2217,7 +2217,7 @@ function BalancePanel({ map }: BalancePanelProps) {
       <Meter
         label="Keys"
         value={keys}
-        fill={keys / (keys + keysNeeded || 1)}
+        fill={keys / (keys + keysMissing || 1)}
         color="var(--color-key-yellow)"
       />
       {advice.length > 0 ? (
