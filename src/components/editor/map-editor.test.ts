@@ -381,6 +381,42 @@ describe("map editor parts", () => {
     expect(picked).toEqual([`thing:${placed?.id}`]);
   });
 
+  it("draw a room with one drag of the draw tool", () => {
+    let result = null as GameMap | null;
+    const instance = mapEditor({
+      id,
+      map: testMap,
+      tool: "draw",
+      drawShape: "rectangle",
+      onMapChange: (next) => {
+        result = next;
+      },
+    });
+    instance.api.pointerdown(pointer(2000, 2000));
+    instance.api.pointermove(pointer(2256, 2128));
+    instance.api.click(pointer(2256, 2128));
+    expect(defined(result).sectors).toHaveLength(testMap.sectors.length + 1);
+  });
+
+  it("start a room on a click of the draw tool and finish it on the next", () => {
+    let result = null as GameMap | null;
+    const instance = mapEditor({
+      id,
+      map: testMap,
+      tool: "draw",
+      drawShape: "rectangle",
+      onMapChange: (next) => {
+        result = next;
+      },
+    });
+    instance.api.pointerdown(pointer(2000, 2000));
+    instance.api.click(pointer(2000, 2000));
+    expect(result).toBeNull();
+    instance.api.pointerdown(pointer(2256, 2128));
+    instance.api.click(pointer(2256, 2128));
+    expect(defined(result).sectors).toHaveLength(testMap.sectors.length + 1);
+  });
+
   it("clear the selection with Escape", () => {
     let picked: string[] | null = null;
     const instance = mapEditor({
@@ -480,6 +516,23 @@ function listen(instance: Instance) {
   hear("port", { value: "door:sector-4" });
   hear("label", { value: corridor.id, corners: corridor.vertices });
   return { heard: () => heard.splice(0).toSorted() };
+}
+
+function pointer(clientX: number, clientY: number) {
+  return {
+    clientX,
+    clientY,
+    button: 0,
+    buttons: 1,
+    isPrimary: true,
+    pointerType: "mouse",
+    ctrlKey: false,
+    metaKey: false,
+    shiftKey: false,
+    altKey: false,
+    target: { closest: () => null },
+    preventDefault: () => {},
+  } as unknown as PointerEvent;
 }
 
 function press(key: string, keys: Partial<KeyboardEvent> = {}) {
