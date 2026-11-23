@@ -1,0 +1,91 @@
+/* Nuked OPL3
+ *
+ * Copyright (C) 2013-2020 Nuke.YKT
+ * Copyright (C) 2026 Tony Gies (Nuked-OPL3-fast modifications)
+ *
+ * This file is part of Nuked OPL3.
+ *
+ * Nuked OPL3 is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation, either version 2.1
+ * of the License, or (at your option) any later version.
+ *
+ * Nuked OPL3 is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with Nuked OPL3. If not, see <https://www.gnu.org/licenses/>.
+ *
+ *  Nuked OPL3 emulator.
+ *  Thanks:
+ *      MAME Development Team(Jarek Burczynski, Tatsuyuki Satoh):
+ *          Feedback and Rhythm part calculation information.
+ *      forums.submarine.org.uk(carbon14, opl3):
+ *          Tremolo and phase generator calculation information.
+ *      OPLx decapsulated(Matthew Gambrell, Olli Niemitalo):
+ *          OPL2 ROMs.
+ *      siliconpr0n.org(John McMaster, digshadow):
+ *          YMF262 and VRC VII decaps and die shots.
+ *
+ * Upstream version: 1.8 (commit cfedb09)
+ * Fork version:    1.8-fast.3
+ * Fork home:       https://github.com/tgies/Nuked-OPL3-fast
+ *
+ * Nuked-OPL3-fast is a bit-exact performance-optimized fork of Nuked-OPL3.
+ * Audio output is identical to upstream for the same register stream.
+ *
+ * Modifications vs. upstream:
+ *
+ *   - Replaced 8 runtime waveform math functions with a unified 8x1024
+ *     logsin lookup table (logsin_wf, in wf_rom.h). With
+ *     OPL_WF_TABLE_RUNTIME=1 the table is instead built from the base
+ *     logsinrom[256] at the first OPL3_Reset and wf_rom.h is not used.
+ *   - Pre-shifted the exprom table at compile time to eliminate a runtime
+ *     shift in OPL3_SlotGenerate.
+ *   - Hoisted per-sample envelope rate resolution out of OPL3_EnvelopeCalc
+ *     into OPL3_EnvelopeUpdateRate (eg_rate_hi[4], eg_rate_lo[4]).
+ *   - Added write-time caches on opl3_slot: eg_tl_ksl (TL + KSL sum),
+ *     eg_ks (envelope key-scale shift), pg_inc (non-vibrato phase
+ *     increment).
+ *   - Added fast paths in OPL3_ProcessSlot for fully-attenuated key-off
+ *     non-rhythm slots, permanently-dead uninitialized slots, and
+ *     sustain-with-rate-zero slots.
+ *   - Added OPL3_SlotGenerateSilent: when eg_out >= 0x180 the exprom
+ *     result is provably zero, so output reduces to the waveform sign bit.
+ *     Used by the key-off fast path.
+ *   - Unrolled both 18-channel mix loops in OPL3_Generate4Ch using a
+ *     per-channel out_cnt, skipping dummy reads for muted/2-op voices.
+ *   - All 36 slots are processed (channel-grouped modulator/carrier pairs,
+ *     with channel->fb loaded once per pair) before either mix pass; the
+ *     CHANNELSAMPLEDELAY snapshots come from per-channel out_left/out_right
+ *     pointer lists that read delayed slots through prout, and the right
+ *     mix is its own function (OPL3_MixRight).
+ *   - Fused the rhythm-mode special cases in OPL3_PhaseGenerate into a
+ *     single switch indexed by slot_num for jump-table dispatch.
+ *   - Reordered opl3_slot to put hot per-sample fields in the first cache
+ *     line; struct size reduced from 96 to 88 bytes.
+ *   - Per-slot pg_inc_vib[8] (phase increment per vibrato position) replaces
+ *     the per-sample vibrato recomputation; rebuilt on the writes that affect
+ *     it (f_num/block/mult/vibshift).
+ *   - Hoisted the noise LFSR out of slot processing into a word-parallel
+ *     36-step advance at the top of OPL3_Generate4Ch.
+ *   - Minor: __builtin_ctz for the envelope timer on GCC/Clang with a
+ *     portable fallback; replaced the tremolo-position modulo with an
+ *     explicit wrap.
+ *   - Compile-time rhythm specialization: OPL3_ProcessSlot and
+ *     OPL3_PhaseGenerate are cloned on a maybe_rhythm flag; only channels
+ *     7 and 8 (slots 13/16/17) take the rhythm-aware clone; every other
+ *     channel's clone omits the slot_num checks and the rhythm switch.
+ *   - Mix-eligibility lists: the per-sample mix passes iterate precomputed
+ *     lists of channels with active outputs routed to that side, rebuilt
+ *     (mix_dirty) only when register writes change routing or algorithms.
+ *   - Dormant-slot generation gate: a slot proven inert (fully attenuated,
+ *     key off, zero phase/output state, mod/trem frozen) is tagged with the
+ *     chip's write generation and skipped with a single compare per sample
+ *     until the next register write.
+ *   - Compatibility switches OPL_COMPAT_OLD_EG (pre-2024 envelope stepping)
+ *     and OPL_COMPAT_DEFERRED_4OP_ALG (pre-Nov-2022 4-op routing update),
+ *     both default-off; see opl3.h.
+ */
