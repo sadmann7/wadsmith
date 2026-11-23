@@ -115,6 +115,8 @@ interface MapEditorOptions {
   onWallSelect?: (sector: string, wall: string, selection: string[]) => void;
   onViewChange?: (status: MapViewStatus) => void;
   thingKind?: ThingKind;
+  // The editor number a custom thing is placed with.
+  thingType?: number;
   activeSector?: string | null;
   selection?: string[];
   onMapChange?: (map: GameMap, details: ChangeDetails<MapChangeReason>) => void;
@@ -268,6 +270,7 @@ export const mapEditor = definePrimitive({
     onWallSelect: "callback",
     onViewChange: "callback",
     thingKind: "string",
+    thingType: "value",
     activeSector: "value",
     selection: "value",
     onMapChange: "callback",
@@ -791,7 +794,14 @@ export const mapEditor = definePrimitive({
     const insertThing = (point: Point) => {
       const { map, editMode, tool, thingKind } = store.get();
       if (editMode !== "things" && tool !== "thing") return false;
-      const placed = addThing(map, thingKind, snapPoint(point, grid()), 0, 1);
+      const placed = addThing(
+        map,
+        thingKind,
+        snapPoint(point, grid()),
+        0,
+        1,
+        context.options().thingType,
+      );
       change("map", placed.map, { reason: "place" });
       select([`${thingKeyPrefix}${placed.id}`]);
       return true;
@@ -1422,7 +1432,14 @@ export const mapEditor = definePrimitive({
         } else if (tool === "line") {
           clickLine(point);
         } else if (tool === "thing") {
-          const placed = addThing(map, thingKind, point, 0, 1);
+          const placed = addThing(
+            map,
+            thingKind,
+            point,
+            0,
+            1,
+            context.options().thingType,
+          );
           change("map", placed.map, { reason: "place" });
           select([`${thingKeyPrefix}${placed.id}`]);
         } else if (tool === "switch") {

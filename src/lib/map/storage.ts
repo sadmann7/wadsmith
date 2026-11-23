@@ -333,8 +333,18 @@ const thingSkills: ThingSkill[] = ["easy", "medium", "hard"];
 function parseThing(value: unknown): Thing {
   const thing = record(value, "A thing");
   const thingId = id(thing.id, "A thing");
-  if (!thingKinds.includes(thing.kind as ThingKind)) {
+  const isCustom = thing.kind === "custom";
+  if (!isCustom && !thingKinds.includes(thing.kind as ThingKind)) {
     fail(`Thing ${thingId} has an unknown kind.`);
+  }
+  if (isCustom && thing.type === undefined) {
+    fail(`Thing ${thingId} is custom but has no type.`);
+  }
+  const type = isCustom
+    ? integer(thing.type, 32767, `Thing ${thingId}`)
+    : undefined;
+  if (type !== undefined && type <= 0) {
+    fail(`Thing ${thingId} has an invalid type.`);
   }
   const angle = integer(thing.angle, 359, `Thing ${thingId}`);
   if (angle < 0) fail(`Thing ${thingId} has an invalid angle.`);
@@ -358,6 +368,7 @@ function parseThing(value: unknown): Thing {
   return {
     id: thingId,
     kind: thing.kind as ThingKind,
+    ...(type === undefined ? {} : { type }),
     angle,
     ...parsePoint(thing, `Thing ${thingId}`),
     ...(skills ? { skills } : {}),

@@ -98,6 +98,10 @@ interface SceneOptions {
   ) => void;
   contextMenuOpen?: boolean;
   placing?: ThingKind | null;
+  // The editor number a custom thing is placed with.
+  placingType?: number;
+  // The sprite frame each custom thing's editor number shows.
+  customSprites?: ReadonlyMap<number, string | null>;
   sky?: string | null;
   // The look last copied from a surface, to paste, paint and flood with.
   look?: SurfaceLook | null;
@@ -181,6 +185,8 @@ const sceneEditor = definePrimitive({
     onContextSurface: "callback",
     contextMenuOpen: "boolean",
     placing: "value",
+    placingType: "value",
+    customSprites: "value",
     sky: "value",
     look: "value",
     pasteLook: "boolean",
@@ -330,12 +336,16 @@ const sceneEditor = definePrimitive({
           assets,
           hovered: placing ? null : hovered,
           selected: selected ?? linked,
-          ghost: placing && ghost ? { ...ghost, kind: placing } : null,
+          ghost:
+            placing && ghost
+              ? { ...ghost, kind: placing, type: context.options().placingType }
+              : null,
           sky,
           picked,
           opened,
           fullbright: shown.fullbright,
           things: shown.things,
+          customSprites: context.options().customSprites,
         },
       );
       output.putImageData(image, 0, 0);
@@ -440,7 +450,14 @@ const sceneEditor = definePrimitive({
           ? view.position.angle
           : view.position.angle + 180;
       const facing = (((Math.round(angle / 45) * 45) % 360) + 360) % 360;
-      const added = addThing(map, placing, point, facing, 1);
+      const added = addThing(
+        map,
+        placing,
+        point,
+        facing,
+        1,
+        context.options().placingType,
+      );
       // A new player start must not pull the camera away from the person placing it.
       view.walked = true;
       change("map", added.map, { reason: "place", event });

@@ -498,7 +498,7 @@ describe("decompileMap", () => {
 
     const { map, report } = decompileMap(build.map);
     expect(report).toMatchObject({
-      droppedThings: { "Other things": 1 },
+      droppedThings: {},
       multiplayerThings: 0,
       outsideThings: 1,
       droppedActions: {},
@@ -506,7 +506,10 @@ describe("decompileMap", () => {
       seeThroughWalls: 1,
       replacedTextures: ["BTSXFLAT", "BTSXWALL"],
     });
-    expect(kinds(map)).toEqual(["imp", "player", "red-skull-key"]);
+    expect(kinds(map)).toEqual(["custom", "imp", "player", "red-skull-key"]);
+    expect(map.things.find((thing) => thing.kind === "custom")?.type).toBe(
+      32000,
+    );
     expect(map.complevel).toBe("boom");
     expect(map.sectors[0].rawEffect).toBe(65);
     expect(map.lines?.[wallKey("v2", "v3")]?.raw).toEqual({

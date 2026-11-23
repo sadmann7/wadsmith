@@ -14,6 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { customThingsOf } from "@/lib/wad/custom-things";
 import { readWadTextures } from "@/lib/wad/resources";
 
 interface ResourcesDialogProps {
@@ -41,7 +42,7 @@ export function ResourcesDialog({
       <DialogContent className="w-[560px]">
         <DialogHeader>
           <div className="flex min-w-0 items-baseline gap-2.5">
-            <DialogTitle>Textures</DialogTitle>
+            <DialogTitle>Textures and things</DialogTitle>
             <DialogDescription>
               {resources.length === 0
                 ? "None added"
@@ -55,7 +56,9 @@ export function ResourcesDialog({
             Add a texture WAD, or images to turn into textures. Images take the
             game&apos;s palette and their file&apos;s name, and one of 64 by 64
             is a floor and ceiling flat as well. A built WAD carries only the
-            ones its maps use.
+            ones its maps use. A mod&apos;s WAD or a DEHACKED patch adds its
+            numbered things to place, and a map that uses one carries the patch
+            with the mod&apos;s sprites and sounds.
           </p>
           {resources.length > 0 ? (
             <ul className="m-0 grid list-none gap-1.5 p-0">
@@ -88,14 +91,14 @@ export function ResourcesDialog({
           </p>
           <Button variant="primary" onClick={() => input.current?.click()}>
             <ImagePlus size={14} aria-hidden="true" />
-            Add textures
+            Add files
           </Button>
           <input
             ref={input}
             type="file"
             multiple
             hidden
-            accept=".wad,image/*"
+            accept=".wad,.deh,.bex,image/*"
             onChange={(event) => {
               const files = [...(event.currentTarget.files ?? [])];
               event.currentTarget.value = "";
@@ -111,7 +114,12 @@ export function ResourcesDialog({
 function contentsOf(resource: Resource) {
   try {
     const { definitions, flats } = readWadTextures(resource.data);
-    return `${counted(definitions.size, "texture")} · ${counted(flats.size, "flat")}`;
+    const things = customThingsOf([resource.data]).size;
+    return [
+      counted(definitions.size, "texture"),
+      counted(flats.size, "flat"),
+      ...(things > 0 ? [counted(things, "custom thing")] : []),
+    ].join(" · ");
   } catch {
     return "Can't be read";
   }

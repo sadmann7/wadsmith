@@ -205,6 +205,11 @@ import {
 import { SceneCamera } from "@/lib/preview/scene-camera";
 import { createFlatAssets, readWadAssets } from "@/lib/wad/assets";
 import { compileMap } from "@/lib/wad/compile";
+import {
+  customThingsOf,
+  customThingWarnings,
+  thingLabel,
+} from "@/lib/wad/custom-things";
 
 import type {
   AgentReport,
@@ -430,6 +435,7 @@ export function EditorScreen({
       changeGrid({ ...gridSetting, size: next, snap: true });
   };
   const [thingKind, setThingKind] = React.useState<ThingKind>("imp");
+  const [thingType, setThingType] = React.useState<number | undefined>();
   const [activeSector, setActiveSector] = React.useState<string | null>(
     "sector-3",
   );
@@ -556,6 +562,24 @@ export function EditorScreen({
     }
   }, [iwad]);
   const iwadGame = iwad?.game ?? defaultGame;
+  const customThings = React.useMemo(
+    () => customThingsOf(iwad ? texturesOf(iwad).resources : []),
+    [iwad],
+  );
+  const customList = React.useMemo(
+    () => [...customThings.values()].toSorted((a, b) => a.type - b.type),
+    [customThings],
+  );
+  const customSprites = React.useMemo(
+    () =>
+      new Map([...customThings].map(([type, thing]) => [type, thing.sprite])),
+    [customThings],
+  );
+  const placingType = thingKind === "custom" ? thingType : undefined;
+  const placingLabel = thingLabel(
+    { kind: thingKind, type: placingType },
+    customThings,
+  );
   const context = React.useMemo(
     () => ({ game: iwad?.game, names: iwad ? assets.names : undefined }),
     [assets, iwad],
@@ -567,8 +591,12 @@ export function EditorScreen({
   const limits = useVanillaLimits(map);
   const limitIssues = limits.issues;
   const checks = React.useMemo(
-    () => [...checkMap(map, context), ...limitIssues],
-    [context, limitIssues, map],
+    () => [
+      ...checkMap(map, context),
+      ...customThingWarnings(map, customThings),
+      ...limitIssues,
+    ],
+    [context, customThings, limitIssues, map],
   );
   const issues = checks.filter((issue) => issue.severity === "error");
   const canPlay = issues.length === 0;
@@ -1558,6 +1586,8 @@ export function EditorScreen({
         selected={surfaceInfo ? surface : null}
         linked={sceneInfo ? sceneSelection : null}
         placing={tool === "thing" ? thingKind : null}
+        placingType={placingType}
+        customSprites={customSprites}
         sky={sky ?? defaultSky(slot, iwadGame)}
         grid={grid}
         renderWidth={640}
@@ -1610,7 +1640,7 @@ export function EditorScreen({
       {pickedSurfaces.length > 1
         ? `${pickedSurfaces.length} surfaces picked. Shift-click adds or removes one.`
         : sceneInfo
-          ? `${sceneInfo.label}${sceneInfo.texture ? ` · ${sceneInfo.texture}` : ""}${sceneInfo.height !== null ? ` · height ${sceneInfo.height}` : ""}`
+          ? `${sceneInfo.thing ? thingLabel(sceneInfo.thing, customThings) : sceneInfo.label}${sceneInfo.texture ? ` · ${sceneInfo.texture}` : ""}${sceneInfo.height !== null ? ` · height ${sceneInfo.height}` : ""}`
           : "Click a floor, ceiling, wall or thing. Drag a wall to move its texture."}
     </p>
   );
@@ -1713,7 +1743,11 @@ export function EditorScreen({
   const thingMeta = thing
     ? [
         `Thing ${String(map.things.indexOf(thing) + 1).padStart(2, "0")}`,
-        thingCategoryLabels[thingCatalog[thing.kind].category],
+        thingCategoryLabels[
+          thing.kind === "custom"
+            ? (customThings.get(thing.type ?? 0)?.category ?? "decor")
+            : thingCatalog[thing.kind].category
+        ],
         ...(thingRoom ? [thingRoom.name] : []),
       ].join(" · ")
     : "";
@@ -1745,7 +1779,7 @@ export function EditorScreen({
     : selectedThings.length > 1
       ? `${selectedThings.length} things`
       : thing
-        ? thingCatalog[thing.kind].label
+        ? thingLabel(thing, customThings)
         : line
           ? `Line ${line.number}`
           : surfaceInfo && !surfaceInfo.thing
@@ -1763,7 +1797,7 @@ export function EditorScreen({
         ? thingMeta
         : placingThings
           ? tool === "thing"
-            ? `Placing ${thingCatalog[thingKind].label}`
+            ? `Placing ${placingLabel}`
             : "Pick a thing to place"
           : line
             ? `${
@@ -2298,6 +2332,8 @@ export function EditorScreen({
                       }}
                       onViewChange={updateViewStatus}
                       thingKind={thingKind}
+                      thingType={placingType}
+                      customThings={customThings}
                       activeSector={activeSector}
                       selection={selection}
                       onMapChange={(next, details) => {
@@ -2703,8 +2739,13 @@ export function EditorScreen({
               <ThingInspector
                 map={map}
                 things={selectedThings}
-                placing={tool === "thing" ? thingKind : null}
+                placing={
+                  tool === "thing"
+                    ? { kind: thingKind, type: placingType }
+                    : null
+                }
                 kinds={placeable}
+                custom={customList}
                 grid={grid}
                 onChange={(patch) =>
                   commit(
@@ -2716,12 +2757,13 @@ export function EditorScreen({
                     `thing:${selectedThings.map((item) => item.id).join()}`,
                   )
                 }
-                onPlace={(kind) => {
-                  if (!kind) {
+                onPlace={(pick) => {
+                  if (!pick) {
                     setTool("select");
                     return;
                   }
-                  setThingKind(kind);
+                  setThingKind(pick.kind);
+                  setThingType(pick.type);
                   setEditMode("things");
                   setTool("thing");
                 }}
@@ -2917,7 +2959,7 @@ export function EditorScreen({
             {tool === "select"
               ? modeHints[editMode]
               : tool === "thing"
-                ? `Placing ${thingCatalog[thingKind].label}. ${toolHints.thing}`
+                ? `Placing ${placingLabel}. ${toolHints.thing}`
                 : tool === "draw" && drawShape !== "outline"
                   ? shapeHints[drawShape]
                   : toolHints[tool]}
@@ -3059,6 +3101,8 @@ export function EditorScreen({
         map={map}
         target={menuTarget}
         thingKind={thingKind}
+        thingType={placingType}
+        thingLabel={placingLabel}
         grid={grid}
         editMode={editMode}
         edit={{

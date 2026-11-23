@@ -16,9 +16,9 @@ import type { GameMap, Point, Sector, ThingKind } from "@/lib/map/types";
 
 import { buttonVariants } from "@/components/ui/button";
 import { thingIcons } from "@/lib/editor/thing-icons";
-import { thingCatalog } from "@/lib/map/catalog";
 import { doorKeyPrefix, switchKeyPrefix, thingKeyPrefix } from "@/lib/map/edit";
 import { paintOrder, wallOwners } from "@/lib/map/geometry";
+import { type CustomThings, thingLabel } from "@/lib/wad/custom-things";
 
 import {
   MapCamera,
@@ -74,11 +74,14 @@ interface MapCanvasProps extends React.ComponentProps<typeof MapEditor> {
   gridSize?: number;
   // Where a shot is heard, or null to leave the rooms as they are.
   sound?: SoundReach | null;
+  // The things the added DEHACKED patches number, to name custom things by.
+  customThings?: CustomThings;
 }
 
 export function MapCanvas({
   map,
   sound = null,
+  customThings = noCustomThings,
   callouts,
   links,
   trail,
@@ -215,7 +218,7 @@ export function MapCanvas({
         selection.includes(`${thingKeyPrefix}${thing.id}`),
     )
     .map((thing) => {
-      const { label } = thingCatalog[thing.kind];
+      const label = thingLabel(thing, customThings);
       const { style, icon } = thingLook(thing.kind);
       const startNumber = /^player-(\d)$/.exec(thing.kind)?.[1];
       return (
@@ -610,3 +613,5 @@ function sameArea(a: Area | null, b: Area) {
     a.bottom === b.bottom
   );
 }
+
+const noCustomThings: CustomThings = new Map();

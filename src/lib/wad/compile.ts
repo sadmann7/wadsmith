@@ -34,6 +34,7 @@ import {
 import { doorSpecial, lineSpecial, switchDoorSpecial } from "@/lib/map/lines";
 
 import { buildBlockmap } from "./blockmap";
+import { getUsesCustomThings, modLumps } from "./custom-things";
 import { type Box, buildNodes, type NodeLine } from "./nodes";
 import { packWad } from "./pack";
 import { textureLumps, type TextureSource } from "./resources";
@@ -233,7 +234,11 @@ export function compileLumps(map: GameMap, slot = mapLumpName): Lump[] {
       .int16(at.x)
       .int16(at.y)
       .int16(thing.angle)
-      .int16(thingCatalog[thing.kind].doomType)
+      .int16(
+        thing.kind === "custom"
+          ? (thing.type ?? 0)
+          : thingCatalog[thing.kind].doomType,
+      )
       .int16(thingFlags(thing));
   }
 
@@ -433,6 +438,7 @@ export function compileMap(
   return packWad([
     ...lumps,
     ...customLumps(lumps, [level], textures),
+    ...customThingLumps([map], textures),
     ...umapinfoLump([{ slot, map, ...level }], defaultGame),
     complevelLump([map]),
   ]);
@@ -453,6 +459,10 @@ export function compileEpisode(
   return packWad([
     ...lumps,
     ...customLumps(lumps, maps, textures),
+    ...customThingLumps(
+      maps.map(({ map }) => map),
+      textures,
+    ),
     ...umapinfoLump(maps, game),
     complevelLump(maps.map(({ map }) => map)),
   ]);
@@ -471,6 +481,14 @@ function customLumps(
   );
 }
 
+function customThingLumps(
+  maps: GameMap[],
+  textures: TextureSource | undefined,
+) {
+  if (!textures || !getUsesCustomThings(maps)) return [];
+  return modLumps(textures.resources);
+}
+
 const thingSkillFlags: Record<ThingSkill, number> = {
   easy: 0x0001,
   medium: 0x0002,
@@ -487,7 +505,8 @@ function thingFlags(thing: Thing) {
   const skills = thing.skills
     ? thing.skills.reduce((flags, skill) => flags | thingSkillFlags[skill], 0)
     : thingOnAllSkills;
-  const enemy = thingCatalog[thing.kind].category === "enemy";
+  const enemy =
+    thing.kind === "custom" || thingCatalog[thing.kind].category === "enemy";
   return (
     skills |
     (enemy && thing.ambush ? thingAmbush : 0) |

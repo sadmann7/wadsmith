@@ -1,5 +1,6 @@
 import { decodeImage } from "@/lib/wad/image";
 import { getIsWad, WadFileError } from "@/lib/wad/inspect";
+import { packWad } from "@/lib/wad/pack";
 import {
   buildTextureWad,
   flatSize,
@@ -22,10 +23,13 @@ export interface AddedTextures {
   textures: string[];
   flats: string[];
   holed: string[];
+  // DEHACKED patches, added as WADs that hold them.
+  patches: string[];
   skipped: { name: string; reason: string }[];
 }
 
 const paletteBytes = 768;
+const patchFile = /\.(deh|bex)$/i;
 
 // Texture WADs are kept as they are. Images are matched to the game's palette
 // and packed into one WAD, each under a name of its own made from its file's.
@@ -36,6 +40,7 @@ export async function addTextureFiles(files: File[]): Promise<AddedTextures> {
     textures: [],
     flats: [],
     holed: [],
+    patches: [],
     skipped: [],
   };
   const iwad = await loadIwad();
@@ -43,6 +48,23 @@ export async function addTextureFiles(files: File[]): Promise<AddedTextures> {
   const pictures: File[] = [];
   for (const file of files) {
     const data = new Uint8Array(await file.arrayBuffer());
+    if (patchFile.test(file.name)) {
+      try {
+        const wad = packWad([{ name: "DEHACKED", data }]);
+        await addResource(file.name, wad);
+        source.resources.push(wad);
+        result.patches.push(file.name);
+      } catch (error) {
+        result.skipped.push({
+          name: file.name,
+          reason:
+            error instanceof WadFileError
+              ? error.message
+              : "It couldn't be read.",
+        });
+      }
+      continue;
+    }
     if (!getIsWad(data)) {
       pictures.push(file);
       continue;
