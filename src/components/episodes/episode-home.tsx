@@ -45,7 +45,7 @@ import {
   MenuSeparator,
   MenuTrigger,
 } from "@/components/ui/menu";
-import { useBuildProblem } from "@/hooks/use-build-checks";
+import { useBuildResult } from "@/hooks/use-build-checks";
 import { useNow } from "@/hooks/use-now";
 import { engineSlot, type GameInfo, slotCount } from "@/lib/engine/game";
 import {
@@ -105,8 +105,8 @@ const MapRow = React.memo(function MapRow({
   onAction,
 }: MapRowProps) {
   const onOpen = () => onAction("open", entry);
-  const problem = useBuildProblem(entry);
-  const status = mapStatus(entry, problem, context);
+  const { problem, vanilla } = useBuildResult(entry);
+  const status = mapStatus(entry, problem, context, vanilla);
   const name = mapName(entry);
   return (
     <MapOrderRow

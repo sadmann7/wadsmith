@@ -69,6 +69,44 @@ describe("agent actions", () => {
     expect(check.balance.enemies).toBe(1);
   });
 
+  it("warns where a vanilla map would overflow the original game", () => {
+    const size = 14;
+    const vertices: GameMap["vertices"] = {};
+    for (let row = 0; row <= size; row += 1) {
+      for (let column = 0; column <= size; column += 1) {
+        vertices[`v${column}-${row}`] = { x: column * 48, y: row * 48 };
+      }
+    }
+    const sectors = Array.from({ length: size * size }, (_, at) => {
+      const column = at % size;
+      const row = Math.floor(at / size);
+      return {
+        ...testMap.sectors[0],
+        id: `cell-${at}`,
+        vertices: [
+          `v${column}-${row}`,
+          `v${column + 1}-${row}`,
+          `v${column + 1}-${row + 1}`,
+          `v${column}-${row + 1}`,
+        ],
+        floor: (at % 24) - 12,
+        ceiling: 256,
+        light: 96 + ((column + row) % 8) * 16,
+      };
+    });
+    const map: GameMap = { vertices, sectors, things: [], switches: [] };
+    const warningsOf = (checked: GameMap) =>
+      (
+        runAgentAction(checked, "checkMap", []).result as {
+          warnings: { id: string }[];
+        }
+      ).warnings.map((warning) => warning.id.split(":")[0]);
+    expect(warningsOf(map)).toContain("vanilla-visplanes");
+    expect(warningsOf({ ...map, complevel: "boom" })).not.toContain(
+      "vanilla-visplanes",
+    );
+  });
+
   it("refuses an edit that would break the map and changes nothing", () => {
     // A room whose walls cross each other.
     expect(() =>

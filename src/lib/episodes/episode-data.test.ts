@@ -242,6 +242,18 @@ describe("episode order", () => {
     ).toBe(true);
   });
 
+  it("counts the warnings only vanilla Doom would show", () => {
+    const entry = episodeMaps("p", "one")[0];
+    const warning = {
+      id: "vanilla-save",
+      severity: "warning" as const,
+      message: "Too big to save in vanilla Doom",
+    };
+    expect(mapStatus(entry, null, undefined, [warning]).label).toBe(
+      "2 warnings",
+    );
+  });
+
   it("names a map with no exit", () => {
     expect(mapStatus(episodeMaps("p", "one")[0], null).label).toBe(
       "No exit yet",

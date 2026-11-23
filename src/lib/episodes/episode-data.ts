@@ -1,3 +1,4 @@
+import type { CheckedIssue } from "@/lib/map/checks";
 import type { Complevel, GameMap } from "@/lib/map/types";
 import type { CheckContext } from "@/lib/map/validate";
 
@@ -14,6 +15,7 @@ import { featuredMaps } from "@/lib/map/featured";
 import { blankMap, starterMap } from "@/lib/map/starter-map";
 import { loadSavedMap, MapFileError, parseMap } from "@/lib/map/storage";
 import { compileLumps } from "@/lib/wad/compile";
+import { vanillaWarnings } from "@/lib/wad/vanilla-check";
 
 export interface Episode {
   id: string;
@@ -135,6 +137,16 @@ export function buildMap(map: GameMap) {
   }
 }
 
+// A build with the warnings only vanilla Doom would show, which the episode's
+// build workers check while they have the map built.
+export function buildAndCheck(map: GameMap) {
+  const build = buildMap(map);
+  return {
+    ...build,
+    vanilla: build.lumps ? vanillaWarnings(map, build.lumps) : [],
+  };
+}
+
 export function buildProblem(map: GameMap) {
   return buildMap(map).problem;
 }
@@ -144,9 +156,10 @@ export function mapStatus(
   entry: EpisodeMap,
   problem?: string | null,
   context?: CheckContext,
+  vanilla: CheckedIssue[] = [],
 ) {
   if (entry.broken) return { kind: "error" as const, label: "Can't open" };
-  const checks = checksOf(entry, context);
+  const checks = [...checksOf(entry, context), ...vanilla];
   const errors = checks.filter((issue) => issue.severity === "error").length;
   const warnings = checks.length - errors;
   if (errors > 0) {

@@ -88,6 +88,8 @@ import {
   inspectMap,
   type MapIssue,
 } from "@/lib/map/validate";
+import { compileLumps } from "@/lib/wad/compile";
+import { vanillaWarnings } from "@/lib/wad/vanilla-check";
 
 type ParamType = "string" | "number" | "boolean" | "points" | "strings";
 
@@ -396,7 +398,7 @@ export const agentActions: AgentAction[] = [
   {
     name: "checkMap",
     description:
-      "The map's errors and warnings, and how its health, ammo and keys balance against its monsters on a difficulty.",
+      "The map's errors and warnings, including where a Vanilla map would overflow the original game's limits, and how its health, ammo and keys balance against its monsters on a difficulty.",
     reads: true,
     params: [
       optional({
@@ -407,11 +409,16 @@ export const agentActions: AgentAction[] = [
       }),
     ],
     run: (map, args, context) => {
-      const issues = checkMap(map, context);
+      const issues = [...checkMap(map, context), ...builtWarnings(map)];
       const of = (severity: "error" | "warning") =>
         issues
           .filter((issue) => issue.severity === severity)
-          .map(({ id, message, target }) => ({ id, message, target }));
+          .map(({ id, message, detail, target }) => ({
+            id,
+            message,
+            ...(detail ? { detail } : {}),
+            target,
+          }));
       return {
         result: {
           errors: of("error"),
@@ -2106,4 +2113,13 @@ function propertyOf({ type, description, choices }: AgentParam) {
     };
   }
   return { type, description, ...picked };
+}
+
+// A map that won't build has its own error, so it adds no warnings here.
+function builtWarnings(map: GameMap) {
+  try {
+    return vanillaWarnings(map, compileLumps(map));
+  } catch {
+    return [];
+  }
 }
