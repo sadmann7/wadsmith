@@ -173,6 +173,7 @@ import {
 } from "@/lib/map/playtest";
 import { joinRooms } from "@/lib/map/reshape";
 import { type DrawShape, polygonSides } from "@/lib/map/shapes";
+import { soundReach } from "@/lib/map/sound";
 import { standingSpot } from "@/lib/map/standing";
 import {
   MapFileError,
@@ -238,6 +239,7 @@ import {
 } from "./scene-editor";
 import { CurveDialog, StairsDialog } from "./shape-dialogs";
 import { ShortcutSheet } from "./shortcut-sheet";
+import { SoundPanel } from "./sound-panel";
 import { SurfacePanel } from "./surface-panel";
 import { TexturePicker } from "./texture-picker";
 import { TransformDialog } from "./transform-dialog";
@@ -459,6 +461,7 @@ export function EditorScreen({
   const [mapVersion, setMapVersion] = React.useState(0);
   const [fileError, setFileError] = React.useState<string | null>(null);
   const [welcomed, setWelcomed] = React.useState(loadWelcomed);
+  const [sound, setSound] = React.useState<{ doorsOpen: boolean } | null>(null);
   const playButton = React.useRef<HTMLButtonElement>(null);
   const fileInput = React.useRef<HTMLInputElement>(null);
   const [notice, setNotice] = React.useState("");
@@ -1687,7 +1690,9 @@ export function EditorScreen({
     if (action === "shortcuts") setShowShortcuts(true);
     else if (action === "dock") toggleDock();
     else if (action === "camera") findCameraOnMap();
-    else changeLayout(action as ViewLayout);
+    else if (action === "sound") {
+      setSound((current) => (current ? null : { doorsOpen: false }));
+    } else changeLayout(action as ViewLayout);
   };
 
   const runMapAction = (action: string) => {
@@ -1695,6 +1700,14 @@ export function EditorScreen({
     else if (action === "play") play();
     else if (action === "coop") openCoop();
   };
+
+  // A shot is heard from the selected room, or else from the player start.
+  const playerStart = map.things.find((item) => item.kind === "player");
+  const soundRoom =
+    map.sectors.find((room) => room.id === activeSector) ??
+    (playerStart ? sectorAt(map, playerStart) : undefined);
+  const soundReached =
+    sound && soundRoom ? soundReach(map, soundRoom.id, sound) : null;
 
   const thingRoom = thing ? sectorAt(map, thing) : null;
   const thingMeta = thing
@@ -2058,6 +2071,9 @@ export function EditorScreen({
                   {showDock ? "Hide player view" : "Show player view"}
                 </MenuItem>
                 <MenuItem value="camera">Find camera on map</MenuItem>
+                <MenuItem value="sound">
+                  {sound ? "Hide sound" : "Show sound"}
+                </MenuItem>
                 <MenuSeparator />
                 <MenuItem value="shortcuts" shortcut={shortcutKeys.help}>
                   Keyboard shortcuts
@@ -2334,8 +2350,18 @@ export function EditorScreen({
                       onContextTarget={reportMenuTarget}
                       onDrawingChange={setDraftCorners}
                       contextMenuOpen={contextMenuOpen}
+                      sound={soundReached}
                     />
                   </MenuContextTrigger>
+                  {sound && soundRoom && soundReached ? (
+                    <SoundPanel
+                      reach={soundReached}
+                      source={soundRoom.name}
+                      doorsOpen={sound.doorsOpen}
+                      onDoorsOpenChange={(doorsOpen) => setSound({ doorsOpen })}
+                      onClose={() => setSound(null)}
+                    />
+                  ) : null}
                   <AgentCard
                     session={agentState}
                     map={map}
