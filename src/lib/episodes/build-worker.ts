@@ -1,7 +1,8 @@
+import type { CheckedIssue } from "@/lib/map/checks";
 import type { GameMap } from "@/lib/map/types";
 import type { Lump } from "@/lib/wad/compile";
 
-import { buildMap } from "./episode-data";
+import { buildAndCheck } from "./episode-data";
 
 interface BuildCheckRequest {
   id: number;
@@ -11,6 +12,7 @@ interface BuildCheckResult {
   id: number;
   problem: string | null;
   lumps: Lump[] | null;
+  vanilla: CheckedIssue[];
 }
 
 const scope = self as unknown as Worker;
@@ -18,7 +20,10 @@ const scope = self as unknown as Worker;
 scope.addEventListener(
   "message",
   ({ data }: MessageEvent<BuildCheckRequest>) => {
-    const result: BuildCheckResult = { id: data.id, ...buildMap(data.map) };
+    const result: BuildCheckResult = {
+      id: data.id,
+      ...buildAndCheck(data.map),
+    };
     scope.postMessage(
       result,
       result.lumps

@@ -1,3 +1,4 @@
+import type { CheckedIssue } from "@/lib/map/checks";
 import type { GameMap } from "@/lib/map/types";
 import type { Lump } from "@/lib/wad/compile";
 
@@ -5,9 +6,9 @@ import { defined } from "@/lib/defined";
 
 import type { BuildCheckRequest, BuildCheckResult } from "./build-worker";
 
-import { buildMap, type EpisodeMap } from "./episode-data";
+import { buildAndCheck, type EpisodeMap } from "./episode-data";
 
-type Build = Pick<BuildCheckResult, "problem" | "lumps">;
+type Build = Pick<BuildCheckResult, "problem" | "lumps" | "vanilla">;
 
 interface Check {
   revision: number;
@@ -38,6 +39,7 @@ const queue: Job[] = [];
 const builders: Builder[] = [];
 const listeners = new Set<() => void>();
 let nextId = 0;
+const noVanilla: CheckedIssue[] = [];
 let results: ReadonlyMap<string, Result> = new Map();
 let snapshot = readChecks(results);
 
@@ -69,7 +71,7 @@ function startBuilder() {
     runQueue();
     if (!job) return;
     await new Promise((next) => setTimeout(next));
-    job.done(buildMap(job.map));
+    job.done(buildAndCheck(job.map));
   });
   builders.push(builder);
   return builder;
@@ -94,7 +96,7 @@ function runQueue() {
 export function buildInBackground(map: GameMap, signal?: AbortSignal) {
   return new Promise<Build>((resolve) => {
     if (typeof Worker === "undefined") {
-      resolve(buildMap(map));
+      resolve(buildAndCheck(map));
       return;
     }
     const job: Job = { id: nextId++, map, done: resolve };
@@ -103,7 +105,7 @@ export function buildInBackground(map: GameMap, signal?: AbortSignal) {
       const at = queue.indexOf(job);
       if (at < 0) return;
       queue.splice(at, 1);
-      resolve({ problem: null, lumps: null });
+      resolve({ problem: null, lumps: null, vanilla: [] });
     });
     runQueue();
   });
@@ -140,6 +142,7 @@ export function knownLumps(entry: EpisodeMap): Lump[] | null {
 export interface BuildChecks {
   problem: (entry: EpisodeMap) => string | null | undefined;
   lumps: (entry: EpisodeMap) => Lump[] | null;
+  vanilla: (entry: EpisodeMap) => CheckedIssue[];
 }
 
 export const noBuildChecks = readChecks(new Map());
@@ -167,6 +170,7 @@ function readChecks(from: ReadonlyMap<string, Result>): BuildChecks {
   return {
     problem: (entry) => build(entry)?.problem,
     lumps: (entry) => build(entry)?.lumps ?? null,
+    vanilla: (entry) => build(entry)?.vanilla ?? noVanilla,
   };
 }
 

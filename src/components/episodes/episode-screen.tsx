@@ -1558,7 +1558,12 @@ export function EpisodeScreen() {
               id: entry.id,
               slot: entry.slot,
               name: mapName(entry),
-              health: mapStatus(entry, checks.problem(entry), context).kind,
+              health: mapStatus(
+                entry,
+                checks.problem(entry),
+                context,
+                checks.vanilla(entry),
+              ).kind,
             })),
             currentId: session.id,
             canAddMap: freeSlots(maps, undefined, game).length > 0,

@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import type { EpisodeMap } from "@/lib/episodes/episode-data";
+import type { CheckedIssue } from "@/lib/map/checks";
 
 import {
   buildCheckResult,
@@ -16,16 +17,17 @@ export function useBuildChecks(entries: EpisodeMap[]) {
   return React.useSyncExternalStore(subscribeBuildChecks, read, read);
 }
 
-export function useBuildProblem(entry: EpisodeMap) {
+const noVanilla: CheckedIssue[] = [];
+
+export function useBuildResult(entry: EpisodeMap) {
   useStartChecks([entry]);
   const result = React.useSyncExternalStore(
     subscribeBuildChecks,
     () => buildCheckResult(entry.id),
     () => undefined,
   );
-  return result?.revision === entry.mapRevision
-    ? result.build.problem
-    : undefined;
+  const build = result?.revision === entry.mapRevision ? result.build : null;
+  return { problem: build?.problem, vanilla: build?.vanilla ?? noVanilla };
 }
 
 function useStartChecks(entries: EpisodeMap[]) {

@@ -62,7 +62,12 @@ export function EpisodeBuildDialog({
   const checks = useBuildChecks(maps);
   const rows = maps.map((entry) => ({
     entry,
-    status: mapStatus(entry, checks.problem(entry), context),
+    status: mapStatus(
+      entry,
+      checks.problem(entry),
+      context,
+      checks.vanilla(entry),
+    ),
   }));
   const blocked = rows.filter((row) => row.status.kind === "error");
   const checking = rows.some((row) => row.status.kind === "checking");
