@@ -494,7 +494,7 @@ function validateNeighbors(map: GameMap, issues: MapIssue[]) {
     if (covered(a, b) || covered(b, a)) continue;
     issues.push({
       id: `same-side:${key}`,
-      message: `${a.sector.name} and ${b.sector.name} are on the same side of one wall.`,
+      message: `${a.sector.name} and ${b.sector.name} are on the same side of one wall. Move one off that wall, or remove it and draw it again so it cuts the other room in two.`,
       target: b.sector.id,
     });
   }

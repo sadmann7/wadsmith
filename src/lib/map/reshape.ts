@@ -196,55 +196,21 @@ export function drawLines(
   };
 }
 
-// Draws a room over the map, sharing corners with the walls it meets. Where
-// it lies over part of another room the two cut each other up, the overlap
-// staying the old room. The id is the new room's, or if old rooms cover it
-// all, the one covering most of it.
+// Draws a room over the map, sharing corners with the walls it meets. It cuts
+// up a room it lies partly over, the overlap staying the old room, and one
+// it lies inside against the outer wall. The id is the new room's, or if old
+// rooms cover it all, the one covering most of it.
 export function drawRoom(
   map: GameMap,
   corners: Point[],
   patch: Partial<Omit<Sector, "id" | "vertices">> = {},
   grid = gridSize,
 ): { map: GameMap; id: string } {
-  const added = addRoom(map, corners, patch, grid);
-  const joined = joinWalls(added.map, [added.id]);
-  const drawn = joined.sectors.find((sector) => sector.id === added.id);
-  if (!drawn) return { map: joined, id: added.id };
-  const crossed = joined.sectors.filter(
-    (sector) => sector !== drawn && getIsCrossing(joined, drawn, sector),
-  );
-  if (
-    crossed.length === 0 ||
-    crossed.some(
-      (sector) => sector.door || getIsOverPillar(joined, drawn, sector),
-    )
-  ) {
-    return { map: joined, id: added.id };
-  }
-  const outline = sectorPolygon(joined, drawn);
-  const covered = joined.sectors.filter(
-    (sector) =>
-      sector !== drawn &&
-      !crossed.includes(sector) &&
-      loopEdges(sector.vertices).some(({ from, to }) =>
-        pointInPolygon(
-          midpoint(joined.vertices[from], joined.vertices[to]),
-          outline,
-        ),
-      ),
-  );
-  const rebuilt = rebuildRooms(
-    joined,
-    [drawn.id, ...crossed.map((sector) => sector.id)],
-    { weak: drawn.id, keep: covered.map((sector) => sector.id) },
-  );
-  if (!rebuilt) return { map: joined, id: added.id };
-  const covering =
-    rebuilt.rooms.find((room) => room.id === drawn.id) ??
-    rebuilt.rooms
-      .filter((room) => pointInPolygon(room.point, outline))
-      .toSorted((a, b) => b.area - a.area)[0];
-  return { map: pruneUnused(rebuilt.map), id: covering?.id ?? added.id };
+  const drawn = drawOver(map, corners, patch, grid);
+  return {
+    map: pruneUnused(cutAround(drawn.map, drawn.pieces)),
+    id: drawn.id,
+  };
 }
 
 // Joins rooms that share walls into one with the first room's floor,
@@ -498,6 +464,91 @@ export function joinCornersToWalls(map: GameMap, ids: string[]): GameMap {
       }
     }
     if (!joined) break;
+  }
+  return next;
+}
+
+function drawOver(
+  map: GameMap,
+  corners: Point[],
+  patch: Partial<Omit<Sector, "id" | "vertices">>,
+  grid: number,
+): { map: GameMap; id: string; pieces: string[] } {
+  const added = addRoom(map, corners, patch, grid);
+  const joined = joinWalls(added.map, [added.id]);
+  const unchanged = { map: joined, id: added.id, pieces: [added.id] };
+  const drawn = joined.sectors.find((sector) => sector.id === added.id);
+  if (!drawn) return unchanged;
+  const crossed = joined.sectors.filter(
+    (sector) => sector !== drawn && getIsCrossing(joined, drawn, sector),
+  );
+  if (
+    crossed.length === 0 ||
+    crossed.some(
+      (sector) => sector.door || getIsOverPillar(joined, drawn, sector),
+    )
+  ) {
+    return unchanged;
+  }
+  const outline = sectorPolygon(joined, drawn);
+  const own = new Set(
+    loopEdges(drawn.vertices).map(({ from, to }) => wallKey(from, to)),
+  );
+  const covered = joined.sectors.filter(
+    (sector) =>
+      sector !== drawn &&
+      !crossed.includes(sector) &&
+      loopEdges(sector.vertices).some(
+        ({ from, to }) =>
+          !own.has(wallKey(from, to)) &&
+          pointInPolygon(
+            midpoint(joined.vertices[from], joined.vertices[to]),
+            outline,
+          ),
+      ),
+  );
+  const rebuilt = rebuildRooms(
+    joined,
+    [drawn.id, ...crossed.map((sector) => sector.id)],
+    { weak: drawn.id, keep: covered.map((sector) => sector.id) },
+  );
+  if (!rebuilt) return unchanged;
+  const covering =
+    rebuilt.rooms.find((room) => room.id === drawn.id) ??
+    rebuilt.rooms
+      .filter((room) => pointInPolygon(room.point, outline))
+      .toSorted((a, b) => b.area - a.area)[0];
+  return {
+    map: rebuilt.map,
+    id: covering?.id ?? added.id,
+    pieces: rebuilt.rooms
+      .filter((room) => room.source === drawn.id)
+      .map((room) => room.id),
+  };
+}
+
+// A room inside another that runs along its outer wall would share that wall
+// on the same side, so the outer room is rebuilt round it instead.
+function cutAround(map: GameMap, ids: string[]): GameMap {
+  const inner = new Map<string, string[]>();
+  for (const id of ids) {
+    const room = map.sectors.find((sector) => sector.id === id);
+    const outer = room && containerOf(map, room);
+    if (!room || !outer || outer.door) continue;
+    const outline = new Set(
+      loopEdges(outer.vertices).map(({ from, to }) => wallKey(from, to)),
+    );
+    if (
+      loopEdges(room.vertices).some(({ from, to }) =>
+        outline.has(wallKey(from, to)),
+      )
+    ) {
+      inner.set(outer.id, [...(inner.get(outer.id) ?? []), id]);
+    }
+  }
+  let next = map;
+  for (const [outer, keep] of inner) {
+    next = rebuildRooms(next, [outer], { keep })?.map ?? next;
   }
   return next;
 }
