@@ -3078,10 +3078,12 @@ export function EditorScreen({
               </Menu>
             ) : null}
             <span className="max-2xl:hidden">
-              {Object.keys(map.vertices).length} vertices · {lineCount} lines
+              {countOf(Object.keys(map.vertices).length, "vertex", "vertices")}{" "}
+              · {countOf(lineCount, "line", "lines")}
             </span>
             <span>
-              {map.sectors.length} sectors · {map.things.length} things
+              {countOf(map.sectors.length, "sector", "sectors")} ·{" "}
+              {countOf(map.things.length, "thing", "things")}
             </span>
             <span ref={pointerStatus}>X - Y -</span>
             <Menu>
@@ -3623,4 +3625,8 @@ function downloadFile(name: string, data: BlobPart, type: string) {
   link.download = name;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+function countOf(count: number, one: string, many: string) {
+  return `${count} ${count === 1 ? one : many}`;
 }
