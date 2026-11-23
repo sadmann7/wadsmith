@@ -1254,6 +1254,15 @@ export function EditorScreen({
     shortcut("placePrefab", () => modeKeys() && visibleLayout !== "scene"),
   );
 
+  // An editor that opens on the 3D view takes the keys at once, so WASD walks
+  // without a click first.
+  const focusOpeningScene = React.useEffectEvent(() => {
+    if (visibleLayout === "scene" && document.activeElement === document.body) {
+      focusPane("scene");
+    }
+  });
+  React.useEffect(() => focusOpeningScene(), []);
+
   // The 3D view goes back to the map layout it came from, and from the map
   // it starts where the pointer is, as switching to visual mode does in UDB.
   const leftLayout = React.useRef<ViewLayout>("map");
@@ -2203,7 +2212,12 @@ export function EditorScreen({
               data-agent-hidden
               className="absolute top-3 right-3 z-5"
               value={visibleLayout}
-              onValueChange={(next) => changeLayout(next as ViewLayout)}
+              onValueChange={(next, details) => {
+                changeLayout(next as ViewLayout);
+                if (next === "scene" && details.source !== "keyboard") {
+                  focusPane("scene");
+                }
+              }}
             >
               <SegmentedControlItem value="map">Map</SegmentedControlItem>
               <SegmentedControlItem value="split" disabled={narrow}>

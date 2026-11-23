@@ -26,6 +26,17 @@ import type { SceneAssets } from "@/lib/wad/assets";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Combobox,
+  ComboboxCheck,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxLabel,
+  ComboboxList,
+  ComboboxTrigger,
+} from "@/components/ui/combobox";
 import { FieldItem, Label } from "@/components/ui/field";
 import { InputGroup, InputGroupInput } from "@/components/ui/input";
 import { NumberField } from "@/components/ui/number-field";
@@ -1309,37 +1320,23 @@ function TextureField({
       ) : (
         swatch
       )}
-      <Select
+      <TextureCombobox
+        label={label}
         value={value}
-        items={[...items]}
-        onValueChange={(next) => {
-          if (next) onChange(next);
-        }}
-      >
-        <FieldItem>
-          <SelectLabel>{label}</SelectLabel>
-          <SelectTrigger>
-            <SelectValue />
-            <span aria-hidden="true">▾</span>
-          </SelectTrigger>
-        </FieldItem>
-        <SelectContent>
-          {items.map((option) => (
-            <SelectItem key={option} value={option}>
-              <TextureSwatch
-                name={option}
-                picture={picture(option)}
-                assets={assets}
-                light={light}
-                whole={whole}
-                className="size-8 shrink-0 rounded-xs [image-rendering:pixelated]"
-              />
-              {option}
-              <SelectCheck />
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+        common={items}
+        all={
+          browse?.kind === "flat"
+            ? assets.names.flats
+            : browse
+              ? assets.names.textures
+              : items
+        }
+        picture={picture}
+        assets={assets}
+        light={light}
+        whole={whole}
+        onChange={onChange}
+      />
       {browse && browsing ? (
         <TexturePicker
           kind={browse.kind}
@@ -1359,6 +1356,91 @@ function TextureField({
         />
       ) : null}
     </div>
+  );
+}
+
+interface TextureComboboxProps {
+  label: string;
+  value: string;
+  common: readonly string[];
+  all: readonly string[];
+  picture: SceneAssets["texture"];
+  assets: SceneAssets;
+  light: number;
+  whole?: boolean;
+  onChange: (value: string) => void;
+}
+
+const textureMatches = 60;
+
+function TextureCombobox({
+  label,
+  value,
+  common,
+  all,
+  picture,
+  assets,
+  light,
+  whole,
+  onChange,
+}: TextureComboboxProps) {
+  const [query, setQuery] = React.useState(value);
+  const [shownValue, setShownValue] = React.useState(value);
+  if (value !== shownValue) {
+    setShownValue(value);
+    setQuery(value);
+  }
+  const isSearching = query.trim() !== "" && query !== value;
+  const shown = isSearching
+    ? rankByQuery(all, query, (name) => [name]).slice(0, textureMatches)
+    : common;
+  return (
+    <Combobox
+      value={value}
+      query={query}
+      filter={false}
+      autoHighlight
+      onQueryChange={setQuery}
+      onValueChange={(next) => {
+        if (typeof next === "string" && next) onChange(next);
+      }}
+      onOpenChange={(open) => {
+        if (!open) setQuery(value);
+      }}
+    >
+      <FieldItem>
+        <ComboboxLabel>{label}</ComboboxLabel>
+        <div className="relative">
+          <ComboboxInput
+            spellCheck={false}
+            className="font-mono uppercase"
+            onFocus={(event) => event.currentTarget.select()}
+          />
+          <ComboboxTrigger aria-label={`Show ${label.toLowerCase()} textures`}>
+            <span aria-hidden="true">▾</span>
+          </ComboboxTrigger>
+        </div>
+      </FieldItem>
+      <ComboboxContent>
+        <ComboboxEmpty>No textures match.</ComboboxEmpty>
+        <ComboboxList>
+          {shown.map((option) => (
+            <ComboboxItem key={option} value={option} label={option}>
+              <TextureSwatch
+                name={option}
+                picture={picture(option)}
+                assets={assets}
+                light={light}
+                whole={whole}
+                className="size-8 shrink-0 rounded-xs [image-rendering:pixelated]"
+              />
+              {option}
+              <ComboboxCheck />
+            </ComboboxItem>
+          ))}
+        </ComboboxList>
+      </ComboboxContent>
+    </Combobox>
   );
 }
 
