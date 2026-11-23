@@ -494,6 +494,7 @@ export const mapEditor = definePrimitive({
     let fitted = false;
     let fittedView: Viewport | null = null;
     let reportPointer: ((point: Point | null) => void) | undefined;
+    let watchOverlays: (() => void) | undefined;
     let findAfterFit = false;
     let focusAfterFit: Point | null = null;
     let stopCameraDrag: (() => void) | undefined;
@@ -553,6 +554,7 @@ export const mapEditor = definePrimitive({
       const around = options.fitAround ?? "";
       if (around === fitAround) return;
       fitAround = around;
+      watchOverlays?.();
       if (fitted && getIsFitView()) fitMap();
     });
     context.onOptions(({ contextMenuOpen }) => {
@@ -1287,9 +1289,11 @@ export const mapEditor = definePrimitive({
           reportView();
         };
         const stopView = store.subscribe(reportView);
+        let overlays: Element[] = [];
         // A hidden pane has no size to fit until it is first shown. After
         // that, the map is fitted again until the view is panned or zoomed.
         const observer = new ResizeObserver(() => {
+          watchOverlays?.();
           reportView();
           if (element.clientWidth === 0 || element.clientHeight === 0) return;
           if (fitted) {
@@ -1301,10 +1305,23 @@ export const mapEditor = definePrimitive({
           if (findAfterFit) findCamera();
           if (focusAfterFit) centerOn(focusAfterFit);
         });
+        watchOverlays = () => {
+          const around = context.options().fitAround;
+          const next = around ? [...document.querySelectorAll(around)] : [];
+          for (const overlay of overlays) {
+            if (!next.includes(overlay)) observer.unobserve(overlay);
+          }
+          for (const overlay of next) {
+            if (!overlays.includes(overlay)) observer.observe(overlay);
+          }
+          overlays = next;
+        };
         observer.observe(element);
+        watchOverlays();
         return () => {
           stopCamera?.();
           stopView();
+          watchOverlays = undefined;
           observer.disconnect();
         };
       },
