@@ -11,6 +11,7 @@ import type {
   ThingSkill,
 } from "@/lib/map/types";
 
+import { defined } from "@/lib/defined";
 import { mapBalance } from "@/lib/map/balance";
 import { sectorSpecialPatch } from "@/lib/map/boom";
 import {
@@ -1118,20 +1119,20 @@ export const agentActions: AgentAction[] = [
   {
     name: "addDoorSwitch",
     description:
-      "Puts a switch on a room's longest free wall and wires it to a door.",
+      "Puts a switch on a room's longest free wall and wires it to a door. Answers with the switch's id and its wall.",
     params: [room("The room the switch goes in."), doorParam()],
     run: (map, args) => {
       const source = findRoom(map, args.room);
       const target = findDoor(map, args.door);
       const added = addSwitchInRoom(map, source.id, target.id);
       if (!added) throw new Error(`${source.name} has no free wall.`);
-      return { map: added.map, result: added.id };
+      return { map: added.map, result: placedSwitch(added.map, added.id) };
     },
   },
   {
     name: "addSwitch",
     description:
-      "Puts a switch on a solid wall, wired to a door or left for a line action on that wall.",
+      "Puts a switch on a solid wall, wired to a door or left for a line action on its own wall. The switch splits the wall, so it answers with the switch's id and the wall it now has, which setLineAction takes.",
     params: [
       wall,
       optional(doorParam()),
@@ -1164,7 +1165,7 @@ export const agentActions: AgentAction[] = [
             : updateSwitch(added.map, added.id, {
                 texture: choice(args, "texture", switchTextures),
               }),
-        result: added.id,
+        result: placedSwitch(added.map, added.id),
       };
     },
   },
@@ -1800,6 +1801,11 @@ function findSwitch(map: GameMap, value: unknown) {
   const found = map.switches.find((item) => item.id === value);
   if (!found) throw new Error(`No switch "${label(value)}".`);
   return found.id;
+}
+
+function placedSwitch(map: GameMap, id: string) {
+  const placed = defined(map.switches.find((item) => item.id === id));
+  return { switch: id, wall: wallKey(placed.from, placed.to) };
 }
 
 // A wall named by its corners in either order.

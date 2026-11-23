@@ -10,6 +10,7 @@ import {
   waitForPlay,
 } from "@/lib/engine/test-engine";
 import { checkMap } from "@/lib/map/checks";
+import { wallKey } from "@/lib/map/geometry";
 import { testMap } from "@/lib/map/test-map";
 import { compileMap } from "@/lib/wad/compile";
 
@@ -161,7 +162,11 @@ describe("agent actions", () => {
     ]);
     expect(wired.todo).toEqual([]);
     expect(wired.map.switches).toHaveLength(1);
-    expect(wired.result).toBe(wired.map.switches[0].id);
+    const placed = wired.map.switches[0];
+    expect(wired.result).toEqual({
+      switch: placed.id,
+      wall: wallKey(placed.from, placed.to),
+    });
   });
 
   it("names rooms, walls and choices it doesn't know", () => {
@@ -257,6 +262,27 @@ describe("agent actions", () => {
       "Start room",
     ]);
     expect(keyed.todo.join(" ")).not.toMatch(/blue key/);
+  });
+
+  it("answers with the wall a switch splits off, which takes its action", () => {
+    const added = runAgentAction(testMap, "addSwitch", ["v1|v6"]);
+    const { switch: id, wall } = added.result as {
+      switch: string;
+      wall: string;
+    };
+    const placed = defined(added.map.switches.find((item) => item.id === id));
+    expect(wall).toBe(wallKey(placed.from, placed.to));
+    expect(wall).not.toBe("v1|v6");
+    const raised = runAgentAction(added.map, "setLineAction", [
+      wall,
+      "floor-raise-next",
+      "switch",
+      "Corridor",
+    ]);
+    expect(raised.map.lines?.[wall]?.action).toMatchObject({
+      kind: "floor-raise-next",
+      trigger: "switch",
+    });
   });
 
   it("sets flags, a front side and a raw special on a wall", () => {
