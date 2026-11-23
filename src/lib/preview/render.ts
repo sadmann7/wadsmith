@@ -12,12 +12,16 @@ import type {
 import { defined } from "@/lib/defined";
 import { doorTrackTexture, thingCatalog } from "@/lib/map/catalog";
 import {
+  boxOf,
+  interiorPoint,
   loopEdges,
   loopPolygon,
+  pointInSector,
   sectorAt,
   sectorDetails,
   sectorEdges,
   sectorLoops,
+  sectorPolygon,
   signedArea,
   wallKey,
   wallOwners,
@@ -660,8 +664,29 @@ export function renderScene(
 export function startCamera(map: GameMap): Camera {
   const player = map.things.find((thing) => thing.kind === "player");
   if (player) return { x: player.x, y: player.y, angle: player.angle };
-  const first = Object.values(map.vertices)[0] ?? { x: 0, y: 0 };
-  return { ...first, angle: 0 };
+  const room = map.sectors.find((sector) => !sector.door);
+  if (!room) {
+    const first = Object.values(map.vertices)[0] ?? { x: 0, y: 0 };
+    return { ...first, angle: 0 };
+  }
+  const polygon = sectorPolygon(map, room);
+  const box = boxOf(polygon);
+  const middle = {
+    x: (box.left + box.right) / 2,
+    y: (box.top + box.bottom) / 2,
+  };
+  const at = pointInSector(map, room, middle) ? middle : interiorPoint(polygon);
+  const [from, to] = loopEdges(room.vertices)
+    .map(({ from, to }) => [map.vertices[from], map.vertices[to]])
+    .toSorted(
+      ([a, b], [c, d]) =>
+        Math.hypot(d.x - c.x, d.y - c.y) - Math.hypot(b.x - a.x, b.y - a.y),
+    )[0];
+  const side = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
+  return {
+    ...at,
+    angle: (Math.atan2(at.y - side.y, side.x - at.x) * 180) / Math.PI,
+  };
 }
 
 const eyeHeight = 41;

@@ -48,6 +48,34 @@ const stripes = {
   opaque: new Uint8Array(64 * 64).fill(1),
 };
 
+describe("startCamera", () => {
+  it("stands on the player start", () => {
+    const player = defined(testMap.things.find((t) => t.kind === "player"));
+    expect(startCamera(testMap)).toEqual({
+      x: player.x,
+      y: player.y,
+      angle: player.angle,
+    });
+  });
+
+  it("stands in the middle of the first room facing its longest wall", () => {
+    const map: GameMap = {
+      ...testMap,
+      vertices: {
+        a: { x: 0, y: 0 },
+        b: { x: 512, y: 0 },
+        c: { x: 512, y: 256 },
+        d: { x: 0, y: 256 },
+      },
+      sectors: [{ ...testMap.sectors[0], vertices: ["a", "b", "c", "d"] }],
+      things: [],
+      lines: {},
+      switches: [],
+    };
+    expect(startCamera(map)).toEqual({ x: 256, y: 128, angle: 90 });
+  });
+});
+
 describe("renderScene", () => {
   it("runs wall textures from the viewer's left in either winding", () => {
     expect(columnAhead(["a", "b", "c", "d"])).toBe(40);
