@@ -2482,8 +2482,10 @@ export function EditorScreen({
                       </h2>
                       <p className="text-sm text-muted-foreground">
                         Build Doom maps in your browser and play them on the
-                        spot. This starter map is ready, so play it, then change
-                        anything and play again.
+                        spot.{" "}
+                        {canPlay
+                          ? "This starter map is ready, so play it, then change anything and play again."
+                          : "Draw a room to start, place a player start in it, then play it."}
                       </p>
                       <div className="flex gap-2">
                         <Button
