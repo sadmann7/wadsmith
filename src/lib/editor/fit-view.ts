@@ -17,9 +17,17 @@ interface FitViewOptions {
   maxZoom: number;
 }
 
+export function boundsOf(points: { x: number; y: number }[]): Box {
+  return {
+    left: Math.min(...points.map((point) => point.x)),
+    top: Math.min(...points.map((point) => point.y)),
+    right: Math.max(...points.map((point) => point.x)),
+    bottom: Math.max(...points.map((point) => point.y)),
+  };
+}
+
 type Side = "left" | "top" | "right" | "bottom" | null;
 
-const sides: Side[] = [null, "left", "top", "right", "bottom"];
 const clearance = 8;
 
 export function fitView(
@@ -27,6 +35,7 @@ export function fitView(
   surface: { width: number; height: number },
   options: FitViewOptions,
   overlays: Box[] = [],
+  parts: Box[] = [rect],
 ): FitView {
   const whole = {
     left: 0,
@@ -41,17 +50,22 @@ export function fitView(
   for (const area of clearAreas(whole, covering)) {
     if (!getHasRoom(area, options.padding)) continue;
     const view = fitInto(rect, area, options);
-    const shown = {
-      left: view.x + rect.left * view.zoom - clearance,
-      top: view.y + rect.top * view.zoom - clearance,
-      right: view.x + rect.right * view.zoom + clearance,
-      bottom: view.y + rect.bottom * view.zoom + clearance,
-    };
-    if (covering.some((overlay) => getIsOverlapping(overlay, shown))) continue;
+    const isCovered = parts.some((part) => {
+      const shown = {
+        left: view.x + part.left * view.zoom - clearance,
+        top: view.y + part.top * view.zoom - clearance,
+        right: view.x + part.right * view.zoom + clearance,
+        bottom: view.y + part.bottom * view.zoom + clearance,
+      };
+      return covering.some((overlay) => getIsOverlapping(overlay, shown));
+    });
+    if (isCovered) continue;
     if (!best || view.zoom > best.zoom) best = view;
   }
   return best ?? fitInto(rect, whole, options);
 }
+
+const sides: Side[] = [null, "left", "top", "right", "bottom"];
 
 function clearAreas(whole: Box, overlays: Box[]): Box[] {
   let areas: Box[] = [whole];

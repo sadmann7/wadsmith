@@ -29,7 +29,7 @@ import {
   type AgentOutcome,
   runAgentAction,
 } from "@/lib/editor/agent-actions";
-import { fitView } from "@/lib/editor/fit-view";
+import { boundsOf, fitView } from "@/lib/editor/fit-view";
 import { currentKeys } from "@/lib/editor/keymap";
 import {
   getIsDragging,
@@ -1062,7 +1062,11 @@ export const mapEditor = definePrimitive({
       );
     };
 
-    const fitPoints = (points: Point[], maxZoom: number) => {
+    const fitPoints = (
+      points: Point[],
+      maxZoom: number,
+      parts: Point[][] = [points],
+    ) => {
       const surface = root();
       if (points.length === 0 || !surface) return;
       const box = surface.getBoundingClientRect();
@@ -1081,22 +1085,27 @@ export const mapEditor = definePrimitive({
         : [];
       viewport.setViewport(
         fitView(
-          {
-            left: Math.min(...points.map((point) => point.x)),
-            top: Math.min(...points.map((point) => point.y)),
-            right: Math.max(...points.map((point) => point.x)),
-            bottom: Math.max(...points.map((point) => point.y)),
-          },
+          boundsOf(points),
           box,
           { padding: 56, minZoom: 0.1, maxZoom },
           overlays,
+          parts.map(boundsOf),
         ),
       );
     };
     const fitMap = () => {
-      const points = Object.values(store.get().positions);
+      const { map, positions } = store.get();
+      const points = Object.values(positions);
       if (points.length === 0) return;
-      fitPoints(points, 1.25);
+      const rooms = map.sectors.map(sectorVertices);
+      const inRooms = new Set(rooms.flat());
+      const parts = [
+        ...rooms.map((room) => room.flatMap((key) => positions[key] ?? [])),
+        ...Object.keys(positions)
+          .filter((key) => !inRooms.has(key))
+          .map((key) => [positions[key]]),
+      ].filter((part) => part.length > 0);
+      fitPoints(points, 1.25, parts);
       fittedView = store.get().viewport;
     };
     const getIsFitView = () => {
