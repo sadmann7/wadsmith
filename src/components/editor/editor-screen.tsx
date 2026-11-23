@@ -3087,7 +3087,9 @@ export function EditorScreen({
               {countOf(map.sectors.length, "sector", "sectors")} ·{" "}
               {countOf(map.things.length, "thing", "things")}
             </span>
-            <span ref={pointerStatus}>X - Y -</span>
+            <span ref={pointerStatus} title="Doom coordinates, Y grows north">
+              X - Y -
+            </span>
             <Menu>
               <MenuTrigger
                 className={buttonVariants({
