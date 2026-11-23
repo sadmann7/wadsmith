@@ -482,6 +482,7 @@ export const mapEditor = definePrimitive({
 
     let press: { x: number; y: number } | null = null;
     let fitted = false;
+    let fittedView: Viewport | null = null;
     let reportPointer: ((point: Point | null) => void) | undefined;
     let findAfterFit = false;
     let focusAfterFit: Point | null = null;
@@ -1042,7 +1043,19 @@ export const mapEditor = definePrimitive({
         { padding: 56, maxZoom },
       );
     };
-    const fitMap = () => fitPoints(Object.values(store.get().positions), 1.25);
+    const fitMap = () => {
+      fitPoints(Object.values(store.get().positions), 1.25);
+      fittedView = store.get().viewport;
+    };
+    const getIsFitView = () => {
+      const { x, y, zoom } = store.get().viewport;
+      return (
+        fittedView !== null &&
+        fittedView.x === x &&
+        fittedView.y === y &&
+        fittedView.zoom === zoom
+      );
+    };
     const fitSelection = () => {
       const { map, positions, selection } = store.get();
       const { sectors, things } = pickedParts();
@@ -1213,13 +1226,16 @@ export const mapEditor = definePrimitive({
           reportView();
         };
         const stopView = store.subscribe(reportView);
-        const resized = new ResizeObserver(reportView);
-        resized.observe(element);
-        // A hidden pane has no size to fit until it is first shown.
+        // A hidden pane has no size to fit until it is first shown. After
+        // that, the map is fitted again until the view is panned or zoomed.
         const observer = new ResizeObserver(() => {
+          reportView();
           if (element.clientWidth === 0 || element.clientHeight === 0) return;
-          observer.disconnect();
-          this.fitMap();
+          if (fitted) {
+            if (getIsFitView()) fitMap();
+            return;
+          }
+          fitMap();
           fitted = true;
           if (findAfterFit) findCamera();
           if (focusAfterFit) centerOn(focusAfterFit);
@@ -1228,7 +1244,6 @@ export const mapEditor = definePrimitive({
         return () => {
           stopCamera?.();
           stopView();
-          resized.disconnect();
           observer.disconnect();
         };
       },
