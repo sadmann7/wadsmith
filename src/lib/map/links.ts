@@ -2,7 +2,7 @@ import type { GameMap, LineSettings, Point, Sector } from "./types";
 
 import { roomCenter } from "./edit";
 import { sectorAt } from "./geometry";
-import { lineUsesTag } from "./lines";
+import { getIsTeleport, lineUsesTag } from "./lines";
 
 // A line and something it acts on at a distance: the middle of a room it
 // moves, or the spot a teleporter lands on.
@@ -48,14 +48,12 @@ function landing(
   sector: Sector,
   line: LineSettings | undefined,
 ): Point {
-  const kind = line?.action?.kind;
-  const spot =
-    kind === "teleport" || kind === "teleport-monsters"
-      ? map.things.find(
-          (thing) =>
-            thing.kind === "teleport-destination" &&
-            sectorAt(map, thing) === sector,
-        )
-      : undefined;
+  const spot = getIsTeleport(line?.action?.kind)
+    ? map.things.find(
+        (thing) =>
+          thing.kind === "teleport-destination" &&
+          sectorAt(map, thing) === sector,
+      )
+    : undefined;
   return spot ? { x: spot.x, y: spot.y } : roomCenter(map, sector);
 }

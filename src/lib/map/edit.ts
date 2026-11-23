@@ -28,6 +28,7 @@ import {
   wallOwners,
   wallStart,
 } from "./geometry";
+import { getIsTeleport } from "./lines";
 
 export const gridSize = 8;
 export const gridSizes = [1, 2, 4, 8, 16, 32, 64] as const;
@@ -234,11 +235,30 @@ export function setLineTarget(
   const sector = map.sectors.find((item) => item.id === sectorId);
   const tag = sector ? sector.tag || freeTag(map) : 0;
   const tagged = sector ? updateSector(map, sector.id, { tag }) : map;
-  return updateLine(
+  const aimed = updateLine(
     tagged,
     wall,
     action ? { action: { ...action, tag } } : { raw: { ...defined(raw), tag } },
   );
+  return landTeleport(aimed, wall);
+}
+
+// A teleporter lands on a destination thing in its room, so aiming one places
+// a destination there unless a room with its tag already has one.
+export function landTeleport(map: GameMap, wall: string): GameMap {
+  const action = map.lines?.[wall]?.action;
+  if (!action?.tag || !getIsTeleport(action.kind)) return map;
+  const rooms = map.sectors.filter((sector) => sector.tag === action.tag);
+  const landed = map.things.some(
+    (thing) =>
+      thing.kind === "teleport-destination" &&
+      rooms.includes(sectorAt(map, thing) as Sector),
+  );
+  if (landed || rooms.length === 0) return map;
+  const at = roomCenter(map, rooms[0]);
+  return sectorAt(map, at) === rooms[0]
+    ? addThing(map, "teleport-destination", at).map
+    : map;
 }
 
 // The lowest tag no room or line action uses yet.

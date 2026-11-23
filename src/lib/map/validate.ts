@@ -46,7 +46,13 @@ import {
   wallKey,
   wallOwners,
 } from "./geometry";
-import { describeLine, lineUsesTag, movesSector, opensDoor } from "./lines";
+import {
+  describeLine,
+  getIsTeleport,
+  lineUsesTag,
+  movesSector,
+  opensDoor,
+} from "./lines";
 
 // What the browser plays on, which a map can outgrow after it was saved.
 export interface CheckContext {
@@ -760,14 +766,14 @@ function validateLines(
     if (!action.tag) {
       add(
         "line-target",
-        action.kind === "teleport" || action.kind === "teleport-monsters"
+        getIsTeleport(action.kind)
           ? "choose where it teleports to."
           : "choose the sector this action moves.",
       );
     } else if (!map.sectors.some((sector) => sector.tag === action.tag)) {
       add("line-tag", "the sector this action moves no longer has its tag.");
     } else if (
-      (action.kind === "teleport" || action.kind === "teleport-monsters") &&
+      getIsTeleport(action.kind) &&
       !map.sectors.some(
         (sector) =>
           sector.tag === action.tag &&

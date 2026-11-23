@@ -118,6 +118,7 @@ import {
   freeWallAt,
   gridSize,
   gridSizes,
+  landTeleport,
   removeNote,
   roomKeyPrefix,
   type RoomSide,
@@ -155,7 +156,7 @@ import {
   wallKey,
   wallOwners,
 } from "@/lib/map/geometry";
-import { describeLine } from "@/lib/map/lines";
+import { describeLine, getIsTeleport } from "@/lib/map/lines";
 import { lineLinks, type MapLink, sectorLinks } from "@/lib/map/links";
 import { gradient, gradientEnds, type SurfaceLook } from "@/lib/map/look";
 import {
@@ -2719,9 +2720,15 @@ export function EditorScreen({
                     ),
                   )
                 }
-                onLineChange={(patch) =>
-                  commit(updateLine(map, line.wall, patch), `line:${line.wall}`)
-                }
+                onLineChange={(patch) => {
+                  const next = updateLine(map, line.wall, patch);
+                  commit(
+                    getIsTeleport(line.settings.action?.kind)
+                      ? next
+                      : landTeleport(next, line.wall),
+                    `line:${line.wall}`,
+                  );
+                }}
                 onSideChange={(patch) =>
                   commit(
                     updateLineSide(map, line.wall, line.sector.id, patch),

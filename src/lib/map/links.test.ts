@@ -1,8 +1,16 @@
 import { describe, expect, it } from "vitest";
 
+import { defined } from "@/lib/defined";
+
 import type { LineAction } from "./types";
 
-import { roomCenter, setLineTarget, updateLine } from "./edit";
+import {
+  addThing,
+  landTeleport,
+  roomCenter,
+  setLineTarget,
+  updateLine,
+} from "./edit";
 import { wallKey } from "./geometry";
 import { lineLinks, sectorLinks } from "./links";
 import { testMap } from "./test-map";
@@ -49,6 +57,47 @@ describe("links from a line to what it acts on", () => {
       ],
     };
     expect(lineLinks(map, openWall)[0].to).toEqual({ x: 896, y: 320 });
+  });
+
+  it("places a teleport destination in the room a teleporter aims at", () => {
+    const map = aimed("teleport");
+    const spots = map.things.filter(
+      (thing) => thing.kind === "teleport-destination",
+    );
+    expect(spots).toEqual([
+      expect.objectContaining(roomCenter(map, map.sectors[2])),
+    ]);
+    expect(setLineTarget(map, openWall, "sector-3").things).toEqual(map.things);
+    expect(aimed("floor-lower").things).toEqual(testMap.things);
+  });
+
+  it("keeps the destination a room already has", () => {
+    const placed = addThing(testMap, "teleport-destination", {
+      x: 864,
+      y: 32,
+    }).map;
+    const map = setLineTarget(
+      updateLine(placed, openWall, { action: action("teleport-monsters") }),
+      openWall,
+      "sector-3",
+    );
+    expect(map.things).toEqual(placed.things);
+  });
+
+  it("lands a line that becomes a teleporter on a room it already aims at", () => {
+    const lift = aimed("floor-lower");
+    const map = landTeleport(
+      updateLine(lift, openWall, {
+        action: {
+          ...defined(lift.lines?.[openWall]?.action),
+          kind: "teleport",
+        },
+      }),
+      openWall,
+    );
+    expect(
+      map.things.filter((thing) => thing.kind === "teleport-destination"),
+    ).toHaveLength(1);
   });
 
   it("draws nothing for a door pressed open, which acts on what is behind it", () => {
