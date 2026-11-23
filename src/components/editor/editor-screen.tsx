@@ -215,7 +215,7 @@ import type {
 
 import { AgentCard } from "./agent-card";
 import { BuildDialog } from "./build-dialog";
-import { MapContextMenu } from "./context-menu";
+import { MapContextMenu, selectionTransforms } from "./context-menu";
 import { FindDialog } from "./find-dialog";
 import { GradientPanel } from "./gradient-panel";
 import {
@@ -496,6 +496,7 @@ export function EditorScreen({
   const [findCameraRequest, setFindCameraRequest] = React.useState(0);
   const [fitRequest, setFitRequest] = React.useState(0);
   const [fitSelectionRequest, setFitSelectionRequest] = React.useState(0);
+  const [selectAllRequest, setSelectAllRequest] = React.useState(0);
   const [groups, setGroups] = React.useState<Record<string, SelectionGroup>>(
     {},
   );
@@ -1695,6 +1696,21 @@ export function EditorScreen({
     } else changeLayout(action as ViewLayout);
   };
 
+  const runEditAction = (action: string) => {
+    const step = selectionTransforms.find((item) => item.value === action);
+    if (step) transformSelection([step.transform]);
+    else if (action === "undo") undo();
+    else if (action === "redo") redo();
+    else if (action === "cut") copySelection(true);
+    else if (action === "copy") copySelection(false);
+    else if (action === "paste") pasteFragment(heldFragment(), pastePoint());
+    else if (action === "duplicate") duplicateSelection();
+    else if (action === "transform") setTransforming(transformKeys);
+    else if (action === "selectAll")
+      setSelectAllRequest((request) => request + 1);
+    else if (action === "find") setFinding(true);
+  };
+
   const runMapAction = (action: string) => {
     if (action === "check") showMapCheck();
     else if (action === "play") play();
@@ -2013,15 +2029,7 @@ export function EditorScreen({
                 ) : null}
               </MenuContent>
             </Menu>
-            <Menu
-              onAction={(action) =>
-                action === "find"
-                  ? setFinding(true)
-                  : action === "undo"
-                    ? undo()
-                    : redo()
-              }
-            >
+            <Menu onAction={(action) => runEditAction(action)}>
               <MenuTrigger
                 className={buttonVariants({
                   variant: "text",
@@ -2046,6 +2054,47 @@ export function EditorScreen({
                   Redo
                 </MenuItem>
                 <MenuSeparator />
+                <MenuItem value="cut" shortcut="mod+x" disabled={!canCopy}>
+                  Cut
+                </MenuItem>
+                <MenuItem value="copy" shortcut="mod+c" disabled={!canCopy}>
+                  Copy
+                </MenuItem>
+                <MenuItem value="paste" shortcut="mod+v">
+                  Paste
+                </MenuItem>
+                <MenuItem
+                  value="duplicate"
+                  shortcut={shortcutKeys.duplicate}
+                  disabled={!canCopy}
+                >
+                  Duplicate
+                </MenuItem>
+                <MenuSeparator />
+                {selectionTransforms.map(({ value, label, shortcut }) => (
+                  <MenuItem
+                    key={value}
+                    value={value}
+                    shortcut={shortcut ? shortcutKeys[shortcut] : undefined}
+                    disabled={transformKeys.length === 0}
+                  >
+                    {label}
+                  </MenuItem>
+                ))}
+                <MenuItem
+                  value="transform"
+                  disabled={transformKeys.length === 0}
+                >
+                  Turn or resize by…
+                </MenuItem>
+                <MenuSeparator />
+                <MenuItem
+                  value="selectAll"
+                  shortcut={shortcutKeys.selectAll}
+                  disabled={layout === "scene" || tool !== "select"}
+                >
+                  Select all
+                </MenuItem>
                 <MenuItem value="find" shortcut={shortcutKeys.find}>
                   Find and select…
                 </MenuItem>
@@ -2333,6 +2382,7 @@ export function EditorScreen({
                       findCameraRequest={findCameraRequest}
                       fitRequest={fitRequest}
                       fitSelectionRequest={fitSelectionRequest}
+                      selectAllRequest={selectAllRequest}
                       focusRequest={focusRequest}
                       callouts={callouts}
                       links={links}

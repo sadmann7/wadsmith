@@ -505,7 +505,11 @@ function EditItems({ edit, point }: EditItemsProps) {
       >
         Duplicate
       </Item>
-      <TransformMenu edit={edit} />
+      <TransformMenu
+        disabled={!edit.canTransform}
+        onTransform={edit.onTransform}
+        onTransformBy={edit.onTransformBy}
+      />
       <PrefabsItem edit={edit} point={point} />
     </>
   );
@@ -531,47 +535,66 @@ function PasteItem({ edit, point }: EditItemsProps) {
   );
 }
 
-interface TransformMenuProps {
-  edit: EditActions;
-}
-
-const transforms: {
+export const selectionTransforms: {
+  value: string;
   label: string;
   shortcut?: EditorShortcut;
   transform: Transform;
 }[] = [
   {
+    value: "rotate-right",
     label: "Turn a quarter right",
     shortcut: "rotateRight",
     transform: { kind: "rotate", degrees: 90 },
   },
   {
+    value: "rotate-left",
     label: "Turn a quarter left",
     shortcut: "rotateLeft",
     transform: { kind: "rotate", degrees: -90 },
   },
   {
+    value: "flip-across",
     label: "Flip left to right",
     shortcut: "flipAcross",
     transform: { kind: "mirror", axis: "horizontal" },
   },
   {
+    value: "flip-over",
     label: "Flip top to bottom",
     shortcut: "flipOver",
     transform: { kind: "mirror", axis: "vertical" },
   },
-  { label: "Double the size", transform: { kind: "scale", factor: 2 } },
-  { label: "Halve the size", transform: { kind: "scale", factor: 0.5 } },
+  {
+    value: "double",
+    label: "Double the size",
+    transform: { kind: "scale", factor: 2 },
+  },
+  {
+    value: "halve",
+    label: "Halve the size",
+    transform: { kind: "scale", factor: 0.5 },
+  },
 ];
 
-function TransformMenu({ edit }: TransformMenuProps) {
+interface TransformMenuProps {
+  disabled?: boolean;
+  onTransform: (transform: Transform) => void;
+  onTransformBy: () => void;
+}
+
+function TransformMenu({
+  disabled,
+  onTransform,
+  onTransformBy,
+}: TransformMenuProps) {
   return (
-    <SubMenu icon={RotateCw} label="Transform" disabled={!edit.canTransform}>
-      {transforms.map(({ label, shortcut, transform }) => (
+    <SubMenu icon={RotateCw} label="Transform" disabled={disabled}>
+      {selectionTransforms.map(({ value, label, shortcut, transform }) => (
         <MenuItem
-          key={label}
+          key={value}
           className={itemClass}
-          onSelect={() => edit.onTransform(transform)}
+          onSelect={() => onTransform(transform)}
         >
           {label}
           {shortcut ? (
@@ -582,7 +605,7 @@ function TransformMenu({ edit }: TransformMenuProps) {
         </MenuItem>
       ))}
       <Rule />
-      <MenuItem className={itemClass} onSelect={edit.onTransformBy}>
+      <MenuItem className={itemClass} onSelect={onTransformBy}>
         Turn or resize by…
       </MenuItem>
     </SubMenu>
@@ -652,7 +675,11 @@ function CornersMenu({ ids, ...props }: CornersMenuProps) {
       >
         {corners.length === 1 ? "Delete corner" : "Delete corners"}
       </Item>
-      <TransformMenu edit={props.edit} />
+      <TransformMenu
+        disabled={!props.edit.canTransform}
+        onTransform={props.edit.onTransform}
+        onTransformBy={props.edit.onTransformBy}
+      />
       <Rule />
       <CameraItem {...props} point={target.point ?? corners[0]} />
     </>
@@ -1026,6 +1053,12 @@ function WallMenu({ sector, wall, ...props }: WallMenuProps) {
       <Item icon={Shapes} onSelect={() => props.edit.onCurve(wall)}>
         Curve…
       </Item>
+      {props.edit.canTransform ? (
+        <TransformMenu
+          onTransform={props.edit.onTransform}
+          onTransformBy={props.edit.onTransformBy}
+        />
+      ) : null}
       {line.back && !detail && !line.front.door && !line.back.door ? (
         <>
           <Item
