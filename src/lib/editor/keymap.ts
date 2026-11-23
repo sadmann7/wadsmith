@@ -1,6 +1,11 @@
 import { createLocalStorage } from "@ui-sdk/core";
 
-import { type EditorShortcut, editorShortcuts } from "./shortcuts";
+import {
+  type EditorShortcut,
+  editorShortcuts,
+  getIsScopeShared,
+  scopeOf,
+} from "./shortcuts";
 
 export type KeyPreset = "wadsmith" | "udb";
 
@@ -107,7 +112,11 @@ export function parseSavedKeys(text: string | null): SavedKeys {
 export function bindKeys(saved: SavedKeys, name: EditorShortcut, keys: string) {
   const current = resolveKeys(saved);
   const taken = (Object.keys(current) as EditorShortcut[]).filter(
-    (other) => other !== name && keys !== "" && current[other] === keys,
+    (other) =>
+      other !== name &&
+      keys !== "" &&
+      current[other] === keys &&
+      getIsScopeShared(scopeOf(name), scopeOf(other)),
   );
   const next: SavedKeys = {
     preset: saved.preset,
@@ -115,6 +124,15 @@ export function bindKeys(saved: SavedKeys, name: EditorShortcut, keys: string) {
   };
   for (const other of taken) next.keys[other] = "";
   return { saved: next, taken };
+}
+
+// Walking and flying go by key position, so the 3D view keeps those keys.
+const walkingKeys = new Set(["w", "a", "s", "d", "c", "space"]);
+
+export function bindingProblem(name: EditorShortcut, keys: string) {
+  const scope = scopeOf(name);
+  if (scope === "map" || !walkingKeys.has(keys)) return null;
+  return "The 3D view walks and flies with that key.";
 }
 
 // The shortcut a key press makes, or a reason it can't be one. A shortcut

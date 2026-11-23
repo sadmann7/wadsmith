@@ -1,17 +1,32 @@
 import { describe, expect, it } from "vitest";
 
 import { keyPresets, resolveKeys } from "./keymap";
-import { editorShortcuts } from "./shortcuts";
+import {
+  type EditorShortcut,
+  editorShortcuts,
+  getIsScopeShared,
+  scopeOf,
+} from "./shortcuts";
 
 describe("editor shortcuts", () => {
   it("gives every shortcut its own keys in every preset", () => {
     for (const preset of Object.keys(
       keyPresets,
     ) as (keyof typeof keyPresets)[]) {
-      const keys = Object.values(resolveKeys({ preset, keys: {} })).filter(
-        Boolean,
+      const keys = resolveKeys({ preset, keys: {} });
+      const names = Object.keys(keys) as EditorShortcut[];
+      const clashes = names.flatMap((name, at) =>
+        names
+          .slice(at + 1)
+          .filter(
+            (other) =>
+              keys[name] !== "" &&
+              keys[name] === keys[other] &&
+              getIsScopeShared(scopeOf(name), scopeOf(other)),
+          )
+          .map((other) => `${name} and ${other}: ${keys[name]}`),
       );
-      expect(new Set(keys).size, preset).toBe(keys.length);
+      expect(clashes, preset).toEqual([]);
     }
   });
 

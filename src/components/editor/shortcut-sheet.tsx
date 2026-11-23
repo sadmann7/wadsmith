@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { useEditorKeys } from "@/hooks/use-editor-keys";
 import {
+  bindingProblem,
   bindKeys,
   getSavedKeys,
   type Keymap,
@@ -86,6 +87,11 @@ export function ShortcutSheet({ onClose }: ShortcutSheetProps) {
       setStatus(pressed.problem);
       return;
     }
+    const problem = bindingProblem(name, pressed.keys);
+    if (problem) {
+      setStatus(problem);
+      return;
+    }
     const { saved, taken } = bindKeys(getSavedKeys(), name, pressed.keys);
     saveKeys(saved);
     setBinding(null);
@@ -148,7 +154,7 @@ export function ShortcutSheet({ onClose }: ShortcutSheetProps) {
             className="m-0 min-h-5 basis-full text-xs text-muted-foreground"
           >
             {status ||
-              "Click a key in the Editor or Map list to change it, then press the new key."}
+              "Click a key in the Editor, Map or 3D view list to change it, then press the new key."}
           </p>
         </div>
         <div className="relative grid min-h-0 grid-cols-2 gap-x-8 gap-y-6 overflow-y-auto p-5 max-[640px]:grid-cols-1">
@@ -191,9 +197,7 @@ export function ShortcutSheet({ onClose }: ShortcutSheetProps) {
           ))}
         </div>
         <footer className="grid gap-1 border-t border-border px-5 py-3 text-xs text-muted-foreground">
-          <p>
-            Walking and the N and P keys go by position, as on a US keyboard.
-          </p>
+          <p>Walking and flying go by key position, as on a US keyboard.</p>
           <p>
             In a browser with WebMCP, such as ChatGPT's, its built-in agent can
             edit this map. It asks before removing anything.
@@ -300,7 +304,7 @@ function groups(keymap: Keymap): { title: string; items: Shortcut[] }[] {
     {
       title: "Map",
       items: [
-        ...tableRows(keymap, (item) => "area" in item),
+        ...tableRows(keymap, (item) => "area" in item && item.area === "map"),
         {
           keys: [key("Arrows")],
           does: "Nudge the selection, with Shift for 8 steps",
@@ -366,6 +370,7 @@ function groups(keymap: Keymap): { title: string; items: Shortcut[] }[] {
     {
       title: "3D view",
       items: [
+        ...tableRows(keymap, (item) => "area" in item && item.area === "scene"),
         { keys: [key("W"), key("S")], does: "Walk forward or back" },
         { keys: [key("A"), key("D")], does: "Step sideways" },
         {
@@ -376,30 +381,14 @@ function groups(keymap: Keymap): { title: string; items: Shortcut[] }[] {
           keys: [key("↑", "up"), key("↓", "down")],
           does: "Walk, or move the selected walls' texture, by 1, 8 with Shift or the grid with Ctrl or ⌘",
         },
-        {
-          keys: [key("G")],
-          does: "Switch between walking, which stops at walls and climbs steps, and flying through them",
-        },
         { keys: [key("Space"), key("C")], does: "Fly up or down" },
         {
           keys: [key("Right-drag")],
           does: "Look around, while a right-click still opens the menu",
         },
         {
-          keys: [key("Z")],
-          does: "Look with the mouse until pressed again, and act on what the crosshair is over",
-        },
-        {
-          keys: [key("N"), key("P")],
-          does: "Select the next or previous surface",
-        },
-        {
           keys: [key("Page Up"), key("Page Down")],
           does: "Raise or lower the selected surfaces by the grid, with Shift to the next height beside them and Alt for light",
-        },
-        {
-          keys: [key("O")],
-          does: "Open or shut the door or lift under the pointer",
         },
         {
           keys: [chord("mod+c"), chord("mod+v")],
@@ -411,15 +400,11 @@ function groups(keymap: Keymap): { title: string; items: Shortcut[] }[] {
         },
         {
           keys: [key("Shift+Middle-click")],
-          does: "Flood the copied texture along joined walls",
+          does: "Flood the copied texture along joined walls from the one clicked",
         },
         {
           keys: [key("Shift")],
           does: "While dragging a wall's texture, align the walls beside it",
-        },
-        {
-          keys: [key("F")],
-          does: "Flood the copied texture along joined walls",
         },
         {
           keys: [key("Shift-click")],
@@ -429,21 +414,6 @@ function groups(keymap: Keymap): { title: string; items: Shortcut[] }[] {
           keys: [key("Wheel")],
           does: "Raise or lower a floor or ceiling by the grid, by 1 with Shift, or change its light with Alt",
         },
-        {
-          keys: [key("Shift+A")],
-          does: "Align the texture along the walls beside the one aimed at",
-        },
-        {
-          keys: [key("Alt+A")],
-          does: "Line up the texture's rows on the walls beside it",
-        },
-        {
-          keys: [key("U"), key("L")],
-          does: "Peg the upper or lower texture of the walls, or unpeg them",
-        },
-        { keys: [key("Shift+R")], does: "Reset the walls' texture offsets" },
-        { keys: [key("B")], does: "Show everything at full light, or not" },
-        { keys: [key("T")], does: "Hide things, or show them again" },
         {
           keys: [key(","), key(".")],
           does: "Turn the selected thing left or right",
