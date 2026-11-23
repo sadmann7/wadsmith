@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { defined } from "@/lib/defined";
 import { addRoom, updateSector, updateThing } from "@/lib/map/edit";
 import { testMap } from "@/lib/map/test-map";
+import type { GameMap } from "@/lib/map/types";
 
 import { createEditHistory } from "./edit-history";
 
@@ -95,8 +96,8 @@ describe("an edit history", () => {
     const history = createEditHistory(options);
     const a = updateThing(testMap, "imp-1", { x: 1 });
     const b = updateThing(a, "imp-1", { x: 2 });
-    history.record(testMap, a, "drag");
-    history.record(a, b, "drag");
+    history.record(testMap, a, { group: "drag" });
+    history.record(a, b, { group: "drag" });
     expect(history.undo(b)).toEqual(testMap);
     expect(history.canUndo()).toBe(false);
 
@@ -115,19 +116,79 @@ describe("an edit history", () => {
     expect(fresh.canUndo()).toBe(false);
   });
 
-  it("undoes one group's steps however long it ran", () => {
-    const history = createEditHistory({ limit: 10, groupDelay: 0 });
+  it("undoes a batch's steps one at a time or all together", () => {
+    const history = createEditHistory({ limit: 10, groupDelay: 60_000 });
+    const batch = { batch: "agent-1" };
     const first = updateThing(testMap, "imp-1", { x: 800 });
-    history.record(testMap, first, "agent-1", Infinity);
+    history.record(testMap, first, batch);
     const second = updateSector(first, "sector-3", { light: 90 });
-    history.record(first, second, "agent-1", Infinity);
+    history.record(first, second, batch);
     const mine = updateThing(second, "player-1", { x: 120 });
     history.record(second, mine);
-    const undone = defined(history.undoGroup("agent-1", mine));
-    expect(undone.things.find((thing) => thing.id === "imp-1")?.x).toBe(832);
+    const third = updateThing(mine, "imp-1", { x: 900 });
+    history.record(mine, third, batch);
+
+    const back = defined(history.undo(third));
+    expect(imp(back)).toBe(800);
+    expect(back.sectors[2].light).toBe(90);
+    expect(history.redo(back)).toEqual(third);
+
+    const undone = defined(history.undoBatch("agent-1", third));
+    expect(imp(undone)).toBe(imp(testMap));
     expect(undone.sectors[2].light).toBe(testMap.sectors[2].light);
-    expect(undone.things.find((thing) => thing.id === "player-1")?.x).toBe(120);
-    expect(history.undoGroup("agent-1", undone)).toBeUndefined();
-    expect(history.canUndo()).toBe(true);
+    expect(player(undone)).toBe(120);
+    expect(history.canRedo()).toBe(false);
+    expect(history.undo(undone)).toEqual(
+      updateThing(undone, "player-1", { x: player(testMap) }),
+    );
+    expect(history.canUndo()).toBe(false);
+  });
+
+  it("undoes the rest of a batch after some steps were undone by hand", () => {
+    const history = createEditHistory({ limit: 10, groupDelay: 60_000 });
+    const batch = { batch: "agent-1" };
+    const first = updateThing(testMap, "imp-1", { x: 800 });
+    history.record(testMap, first, batch);
+    const second = updateSector(first, "sector-3", { light: 90 });
+    history.record(first, second, batch);
+
+    const partly = defined(history.undo(second));
+    expect(history.undoBatch("agent-1", partly)).toEqual(testMap);
+    expect(history.canRedo()).toBe(false);
+
+    history.record(testMap, first, batch);
+    const all = defined(history.undo(first));
+    expect(history.undoBatch("agent-1", all)).toBe(all);
+    expect(history.canRedo()).toBe(false);
+  });
+
+  it("keeps a redone step in its batch", () => {
+    const history = createEditHistory({ limit: 10, groupDelay: 60_000 });
+    const first = updateThing(testMap, "imp-1", { x: 800 });
+    history.record(testMap, first, { batch: "agent-1" });
+    const back = defined(history.undo(first));
+    const again = defined(history.redo(back));
+    expect(history.undoBatch("agent-1", again)).toEqual(testMap);
+  });
+
+  it("keeps a batch whole when its oldest steps pass the limit", () => {
+    const history = createEditHistory({ limit: 3, groupDelay: 60_000 });
+    let map = testMap;
+    for (let x = 10; x < 16; x += 1) {
+      const next = updateThing(map, "imp-1", { x });
+      history.record(map, next, { batch: "agent-1" });
+      map = next;
+    }
+    const back = defined(history.undo(map));
+    expect(imp(back)).toBe(14);
+    expect(history.undoBatch("agent-1", back)).toEqual(testMap);
   });
 });
+
+function imp(map: GameMap) {
+  return map.things.find((thing) => thing.id === "imp-1")?.x;
+}
+
+function player(map: GameMap) {
+  return map.things.find((thing) => thing.id === "player-1")?.x;
+}

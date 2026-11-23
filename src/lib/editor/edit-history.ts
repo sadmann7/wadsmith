@@ -14,7 +14,13 @@ interface Step {
   undo: MapPatch;
   redo: MapPatch;
   group?: string;
+  batch?: string;
   at: number;
+}
+
+interface RecordOptions {
+  group?: string;
+  batch?: string;
 }
 
 interface EditHistoryOptions {
@@ -30,11 +36,12 @@ export function createEditHistory({ limit, groupDelay }: EditHistoryOptions) {
   const undone: Step[] = [];
   return {
     // Edits of one group close together join one step, like a drag's moves.
+    // Edits of one batch stay separate steps that can still be undone
+    // together.
     record(
       before: GameMap,
       after: GameMap,
-      group?: string,
-      delay = groupDelay,
+      { group, batch }: RecordOptions = {},
     ) {
       const redo = diffMaps(before, after);
       if (getIsEmptyPatch(redo)) return;
@@ -42,14 +49,28 @@ export function createEditHistory({ limit, groupDelay }: EditHistoryOptions) {
       const now = Date.now();
       const last = done.at(-1);
       undone.length = 0;
-      if (group && last?.group === group && now - last.at < delay) {
+      if (
+        group &&
+        last?.group === group &&
+        last.batch === batch &&
+        now - last.at < groupDelay
+      ) {
         last.redo = combinePatches(last.redo, redo);
         last.undo = combinePatches(undo, last.undo);
         last.at = now;
         return;
       }
-      done.push({ undo, redo, group, at: now });
-      if (done.length > limit) done.shift();
+      done.push({ undo, redo, group, batch, at: now });
+      if (done.length > limit) {
+        const oldest = done.shift();
+        const next = done[0];
+        // A batch's oldest step joins the next one rather than drop out of
+        // what undoing the batch takes back.
+        if (oldest?.batch && next?.batch === oldest.batch) {
+          next.redo = combinePatches(oldest.redo, next.redo);
+          next.undo = combinePatches(next.undo, oldest.undo);
+        }
+      }
     },
     undo(current: GameMap) {
       const step = done.pop();
@@ -69,11 +90,15 @@ export function createEditHistory({ limit, groupDelay }: EditHistoryOptions) {
       done.push({ ...step, group: undefined });
       return next;
     },
-    // Takes back every step of one group, wherever it sits in the history.
+    // Takes back every step of one batch, wherever it sits in the history.
     // Nothing changes if that would bring a room back on lost corners.
-    undoGroup(group: string, current: GameMap) {
-      const steps = done.filter((step) => step.group === group).toReversed();
-      if (steps.length === 0) return undefined;
+    undoBatch(batch: string, current: GameMap) {
+      const steps = done.filter((step) => step.batch === batch).toReversed();
+      if (steps.length === 0) {
+        const kept = undone.filter((step) => step.batch !== batch);
+        undone.splice(0, undone.length, ...kept);
+        return current;
+      }
       const next = steps.reduce(
         (map, step) => keepCorners(map, applyPatch(map, step.undo)),
         current,

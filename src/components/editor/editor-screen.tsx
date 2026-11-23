@@ -657,10 +657,10 @@ export function EditorScreen({
     syncUndoable();
   };
 
-  const commit = (next: GameMap, group?: string, delay?: number) => {
+  const commit = (next: GameMap, group?: string) => {
     // The person's own edit ends what a browser agent was doing.
-    if (!group?.startsWith("agent-")) agentSession.endRequest();
-    history.record(mapRef.current, next, group, delay);
+    agentSession.endRequest();
+    history.record(mapRef.current, next, { group });
     showMap(next);
   };
 
@@ -1975,18 +1975,20 @@ export function EditorScreen({
         null,
       )
     : null;
-  // A browser agent's request is one undo step however long it runs.
+  // Each of a browser agent's edits is its own undo step, and Undo all takes
+  // back its whole request.
   const commitAgentEdit = (next: GameMap) => {
     const request = agentSession.currentRequest();
-    if (request === null) commit(next);
-    else commit(next, `agent-${request}`, Infinity);
+    if (request === null) return commit(next);
+    history.record(mapRef.current, next, { batch: `agent-${request}` });
+    showMap(next);
   };
   const undoAgentRequest = () => {
     const request = agentState.request;
     if (!request) return;
     const working = agentSession.getIsCalling();
     agentSession.stop();
-    const next = history.undoGroup(`agent-${request.id}`, mapRef.current);
+    const next = history.undoBatch(`agent-${request.id}`, mapRef.current);
     restore(next);
     // A request stopped mid-way stays, so the rest of its calls are refused.
     if (next && working) agentSession.clearTrail();
