@@ -9,6 +9,7 @@ import {
 import { createParts } from "@ui-sdk/react/primitive";
 
 import type { GameMap, Point, ThingKind } from "@/lib/map/types";
+import type { Camera } from "@/lib/preview/render";
 import type { SceneCamera } from "@/lib/preview/scene-camera";
 import type { SceneAssets } from "@/lib/wad/assets";
 
@@ -24,19 +25,22 @@ import {
   gridSize,
   removeThing,
   snapPoint,
+  updateLine,
   updateLineSide,
   updateSector,
   updateThing,
 } from "@/lib/map/edit";
-import { sectorAt } from "@/lib/map/geometry";
+import { sectorAt, wallKey, wallOwners } from "@/lib/map/geometry";
 import {
   applyLook,
   floodWalls,
   lookOf,
   type SurfaceLook,
 } from "@/lib/map/look";
+import { walkStep } from "@/lib/map/standing";
 import {
   describeSurface,
+  heightBeside,
   moveSurfaceHeight,
   parseSurface,
 } from "@/lib/map/surfaces";
@@ -60,12 +64,22 @@ type SceneChangeReason =
   | "height-drag"
   | "height-key"
   | "offset-drag"
+  | "offset-key"
+  | "peg-key"
   | "paint"
   | "wheel"
   | "place"
   | "thing-drag"
   | "thing-key"
   | "delete";
+
+// How the view moves and draws: walking into walls and up steps as a player
+// would, or flying through them, at full light or not, with things or not.
+export interface SceneView {
+  flying: boolean;
+  fullbright: boolean;
+  things: boolean;
+}
 
 interface SceneOptions {
   map?: GameMap;
@@ -102,6 +116,9 @@ interface SceneOptions {
     selected: string | null,
     details: ChangeDetails<"press" | "key">,
   ) => void;
+  // How the view moves and draws, kept by the page so it outlasts the view.
+  view?: SceneView;
+  onViewChange?: (view: SceneView) => void;
 }
 
 interface SceneState {
@@ -123,6 +140,7 @@ interface SceneState {
   // The pointer is locked to the view, which looks where the mouse goes and
   // acts on what the crosshair is over.
   looking: boolean;
+  view: SceneView;
 }
 
 const touchSlop = 4;
@@ -140,6 +158,11 @@ const mostTilt = 0.5;
 const thingTurn = 45;
 const placeDistances = [128, 96, 64, 32];
 const walkKeys = /^(Arrow(Up|Down|Left|Right)|Key[WASDC]|Space)$/;
+export const startView: SceneView = {
+  flying: false,
+  fullbright: false,
+  things: true,
+};
 
 const sceneEditor = definePrimitive({
   name: "scene-editor",
@@ -164,6 +187,8 @@ const sceneEditor = definePrimitive({
     grid: "number",
     onMapChange: "callback",
     onSelectedChange: "callback",
+    view: "value",
+    onViewChange: "callback",
   },
   controlled: ["map", "selected"],
   state: (options: SceneOptions): SceneState => ({
@@ -182,6 +207,7 @@ const sceneEditor = definePrimitive({
     width: options.renderWidth ?? 320,
     height: options.renderHeight ?? 200,
     looking: false,
+    view: options.view ?? startView,
   }),
   sync: (options) => ({
     ...(options.map ? { map: options.map } : {}),
@@ -191,6 +217,7 @@ const sceneEditor = definePrimitive({
     placing: options.placing ?? null,
     sky: options.sky ?? null,
     picked: options.picked ?? noSurfaces,
+    ...(options.view ? { view: options.view } : {}),
     ...(options.placing ? {} : { ghost: null }),
   }),
   live: ["hovered", "looking"],
@@ -238,10 +265,20 @@ const sceneEditor = definePrimitive({
       const view = cameraState();
       if (!view) return null;
       const { position } = view;
-      return {
-        ...position,
-        lift: liftWithin(map, position, position.lift ?? 0),
-      };
+      return { ...position, lift: liftOf(map, position) };
+    };
+
+    // Walking keeps the eye at standing height, and flying keeps it where it
+    // was flown to, inside the room it is in.
+    const liftOf = (map: GameMap, position: Camera) =>
+      store.get().view.flying
+        ? liftWithin(map, position, position.lift ?? 0)
+        : 0;
+
+    const changeView = (next: Partial<SceneView>) => {
+      const view = { ...store.get().view, ...next };
+      store.set({ view });
+      context.options().onViewChange?.(view);
     };
     const grid = () => context.options().grid ?? gridSize;
 
@@ -260,6 +297,7 @@ const sceneEditor = definePrimitive({
         sky,
         picked,
         opened,
+        view: shown,
       } = store.get();
       const view = cameraState();
       const output = canvas?.getContext("2d");
@@ -280,6 +318,8 @@ const sceneEditor = definePrimitive({
           sky,
           picked,
           opened,
+          fullbright: shown.fullbright,
+          things: shown.things,
         },
       );
       output.putImageData(image, 0, 0);
@@ -535,12 +575,142 @@ const sceneEditor = definePrimitive({
       return hovered ?? selected;
     };
 
-    const paste = (key: string | null, event: Event) => {
+    // A press on a picked surface acts on every one picked, and a press
+    // anywhere else on that surface alone.
+    const pressTargets = (key: string) => {
+      const { picked } = store.get();
+      return picked.includes(key) ? picked : [key];
+    };
+
+    // A key acts on the surfaces picked, or else on the one given.
+    const keyTargets = (key: string | null) => {
+      const { picked } = store.get();
+      if (picked.length > 0) return picked;
+      return key ? [key] : [];
+    };
+
+    const paste = (keys: string[], event: Event) => {
       const { map } = store.get();
       const { look } = context.options();
       if (!map || !look) return;
-      const painted = applyLook(map, key, look);
+      const painted = keys.reduce(
+        (next, key) => applyLook(next, key, look),
+        map,
+      );
       if (painted !== map) change("map", painted, { reason: "paint", event });
+    };
+
+    const flood = (key: string | null, event: Event) => {
+      const { map } = store.get();
+      const { look } = context.options();
+      if (!map || look?.kind !== "wall") return false;
+      const flooded = floodWalls(map, key, look.texture);
+      if (flooded === map) return false;
+      change("map", flooded, { reason: "paint", event });
+      return true;
+    };
+
+    // Arrows move a texture the way they point: a step, 8 with Shift and the
+    // grid with Ctrl or ⌘.
+    const moveTextures = (event: KeyboardEvent) => {
+      const { map, picked, selected } = store.get();
+      const direction = {
+        ArrowLeft: { x: 1, y: 0 },
+        ArrowRight: { x: -1, y: 0 },
+        ArrowUp: { x: 0, y: 1 },
+        ArrowDown: { x: 0, y: -1 },
+      }[event.key];
+      if (!map || !direction || event.altKey) return false;
+      const sides = wallSides(
+        map,
+        picked.length > 0 ? picked : selected ? [selected] : [],
+      );
+      if (sides.length === 0) return false;
+      event.preventDefault();
+      const step =
+        event.metaKey || event.ctrlKey ? grid() : event.shiftKey ? 8 : 1;
+      const moved = sides.reduce((next, { wall, sector }) => {
+        const side = next.lines?.[wall]?.sides?.[sector];
+        const offsetX = clampOffset((side?.offsetX ?? 0) + direction.x * step);
+        const offsetY = clampOffset((side?.offsetY ?? 0) + direction.y * step);
+        if (
+          offsetX === (side?.offsetX ?? 0) &&
+          offsetY === (side?.offsetY ?? 0)
+        ) {
+          return next;
+        }
+        return updateLineSide(next, wall, sector, {
+          offsetX: offsetX || undefined,
+          offsetY: offsetY || undefined,
+        });
+      }, map);
+      if (moved !== map) change("map", moved, { reason: "offset-key", event });
+      return true;
+    };
+
+    // U and L turn upper and lower pegging on for the walls, or off when
+    // every one has it already.
+    const togglePegging = (
+      event: KeyboardEvent,
+      flag: "upperFixed" | "lowerFixed",
+    ) => {
+      const { map } = store.get();
+      if (!map) return;
+      const walls = [
+        ...new Set(wallSides(map, keyTargets(aimed())).map((s) => s.wall)),
+      ];
+      if (walls.length === 0) return;
+      event.preventDefault();
+      // Door tracks and switches are pegged to the floor unless a line says
+      // otherwise, so their flag is left unset while it matches that.
+      const byDefault = (wall: string) =>
+        flag === "lowerFixed" && getIsPeggedByDefault(map, wall);
+      const isPegged = (wall: string) =>
+        map.lines?.[wall]?.[flag] ?? byDefault(wall);
+      const value = !walls.every(isPegged);
+      const pegged = walls.reduce((next, wall) => {
+        if (isPegged(wall) === value) return next;
+        const flagValue = value === byDefault(wall) ? undefined : value;
+        return updateLine(next, wall, { [flag]: flagValue });
+      }, map);
+      if (pegged !== map) change("map", pegged, { reason: "peg-key", event });
+    };
+
+    const resetOffsets = (event: KeyboardEvent) => {
+      const { map } = store.get();
+      if (!map) return;
+      const sides = wallSides(map, keyTargets(aimed()));
+      if (sides.length === 0) return;
+      event.preventDefault();
+      const reset = sides.reduce((next, { wall, sector }) => {
+        const side = next.lines?.[wall]?.sides?.[sector];
+        return side?.offsetX || side?.offsetY
+          ? updateLineSide(next, wall, sector, {
+              offsetX: undefined,
+              offsetY: undefined,
+            })
+          : next;
+      }, map);
+      if (reset !== map) change("map", reset, { reason: "offset-key", event });
+    };
+
+    const alignAimed = (event: KeyboardEvent, axis: "x" | "y") => {
+      const { map, assets } = store.get();
+      if (!map) return;
+      event.preventDefault();
+      const info = describeSurface(map, aimed());
+      if (info?.surface.kind !== "wall" || !info.sector) return;
+      const aligned = alignWalls(
+        map,
+        info.sector.id,
+        info.surface.wall,
+        (name) => {
+          const picture = assets?.texture(name);
+          return (axis === "x" ? picture?.width : picture?.height) ?? 1;
+        },
+        axis,
+      );
+      if (aligned !== map) change("map", aligned, { reason: "paint", event });
     };
 
     // A wall's texture follows the pointer: a drag to the right or down moves
@@ -624,27 +794,40 @@ const sceneEditor = definePrimitive({
       );
     };
 
-    // Page Up and Page Down move the selected floor or ceiling a grid step,
-    // three with Shift, and with Alt change its room's light, as in the map.
-    const nudge = (event: KeyboardEvent, direction: number) => {
+    // Page Up and Page Down move the selected floors and ceilings a grid
+    // step, or with Shift to the next height of a room beside each, and with
+    // Alt change their rooms' light, as in the map.
+    const nudge = (event: KeyboardEvent, direction: 1 | -1) => {
       const { map, selected } = store.get();
-      if (!map || !selected) return;
+      const keys = keyTargets(selected);
+      if (!map || keys.length === 0) return;
       if (event.altKey) {
-        const sector = describeSurface(map, selected)?.sector;
-        if (!sector) return;
-        const light = lightOf(sector.light + direction * lightStep);
-        if (light !== sector.light) {
-          change("map", updateSector(map, sector.id, { light }), {
-            reason: "height-key",
-            event,
-          });
-        }
+        const sectors = new Set(
+          keys.flatMap((key) => describeSurface(map, key)?.sector?.id ?? []),
+        );
+        const lit = [...sectors].reduce((next, id) => {
+          const sector = next.sectors.find((item) => item.id === id);
+          if (!sector) return next;
+          const light = lightOf(sector.light + direction * lightStep);
+          return light === sector.light
+            ? next
+            : updateSector(next, id, { light });
+        }, map);
+        if (lit !== map) change("map", lit, { reason: "height-key", event });
         return;
       }
-      if (!getCanMoveHeight(selected)) return;
-      const step = grid() * (event.shiftKey ? 3 : 1);
-      const next = moveSurfaceHeight(map, selected, direction * step);
-      if (next !== map) change("map", next, { reason: "height-key", event });
+      const moved = keys.reduce((next, key) => {
+        if (!getCanMoveHeight(key)) return next;
+        if (!event.shiftKey) {
+          return moveSurfaceHeight(next, key, direction * grid());
+        }
+        const level = heightBeside(next, key, direction);
+        const height = describeSurface(next, key)?.height;
+        return level === null || height == null
+          ? next
+          : moveSurfaceHeight(next, key, level - height);
+      }, map);
+      if (moved !== map) change("map", moved, { reason: "height-key", event });
     };
 
     const cycle = (direction: number) => {
@@ -691,15 +874,25 @@ const sceneEditor = definePrimitive({
             view.position.y +
             (forward.y * advance + forward.x * strafe) * distance,
         };
-        const spot = sectorAt(map, next) ? next : view.position;
+        // Flying up or down leaves the floor behind.
+        if (rise !== 0 && !store.get().view.flying) {
+          changeView({ flying: true });
+        }
+        const { flying } = store.get().view;
+        const from = { x: view.position.x, y: view.position.y };
+        const spot = flying
+          ? sectorAt(map, next)
+            ? next
+            : from
+          : walkStep(map, from, next);
         view.position = {
           ...view.position,
           ...spot,
           angle,
-          // The height flown to is kept as it is while walking, so a low
+          // The height flown to is kept as it is while flying on, so a low
           // room on the way doesn't bring the eye down for good.
           lift:
-            rise === 0
+            !flying || rise === 0
               ? view.position.lift
               : liftWithin(
                   map,
@@ -827,6 +1020,17 @@ const sceneEditor = definePrimitive({
           touchPress = { x: event.clientX, y: event.clientY };
           reportContext(event);
         }
+        // The middle button pastes the copied look, and with Shift floods it
+        // along joined walls.
+        if (event.button === 1 && canvas) {
+          event.preventDefault();
+          canvas.focus({ preventScroll: true });
+          const key = surfaceAt(event)?.key ?? null;
+          if (!key) return;
+          if (event.shiftKey) flood(key, event);
+          else paste(pressTargets(key), event);
+          return;
+        }
         if (event.button !== 0 || getIsSecondaryPress(event)) return;
         if (!canvas || !target) return;
         canvas.focus({ preventScroll: true });
@@ -839,7 +1043,7 @@ const sceneEditor = definePrimitive({
           if (store.get().placing && surface?.kind !== "thing") {
             const point = floorPointAt(event);
             if (point) place(point, "press", event);
-          } else if (key && event.altKey) paste(key, event);
+          } else if (key && event.altKey) paste(pressTargets(key), event);
           else if (key && event.shiftKey) pick(key);
           else select(key, "press");
           return;
@@ -853,7 +1057,7 @@ const sceneEditor = definePrimitive({
           // Alt paints the copied look on. Shift picks several surfaces with
           // a click, and aligns the walls beside one with a drag.
           if (event.altKey) {
-            paste(key, event);
+            paste(pressTargets(key), event);
             return;
           }
           if (event.shiftKey) {
@@ -878,10 +1082,7 @@ const sceneEditor = definePrimitive({
         const view = cameraState();
         const shown = viewMap();
         const owner = view && shown ? sectorAt(shown, view.position) : null;
-        const flown =
-          shown && view
-            ? liftWithin(shown, view.position, view.position.lift ?? 0)
-            : 0;
+        const flown = shown && view ? liftOf(shown, view.position) : 0;
         const startY = event.clientY;
         const { focal, height } = target;
         const rowsPerPixel = height / canvas.getBoundingClientRect().height;
@@ -938,16 +1139,29 @@ const sceneEditor = definePrimitive({
         if (notches === 0) return;
         // The wheel moves a floor or ceiling a grid step a notch, or one
         // unit with Shift, and with Alt it makes the surface's room a step
-        // brighter or darker.
-        const light = lightOf(info.sector.light - notches * lightStep);
+        // brighter or darker. Over a picked surface it moves every one picked.
+        const keys = pressTargets(hovered);
         let next = map;
         if (event.altKey) {
-          if (light !== info.sector.light) {
-            next = updateSector(map, info.sector.id, { light });
+          const sectors = new Set(
+            keys.flatMap((key) => describeSurface(map, key)?.sector?.id ?? []),
+          );
+          for (const id of sectors) {
+            const sector = next.sectors.find((item) => item.id === id);
+            const light = sector
+              ? lightOf(sector.light - notches * lightStep)
+              : null;
+            if (sector && light !== null && light !== sector.light) {
+              next = updateSector(next, id, { light });
+            }
           }
-        } else if (getCanMoveHeight(hovered)) {
+        } else {
           const step = event.shiftKey ? 1 : grid();
-          next = moveSurfaceHeight(map, hovered, -notches * step);
+          for (const key of keys) {
+            if (getCanMoveHeight(key)) {
+              next = moveSurfaceHeight(next, key, -notches * step);
+            }
+          }
         }
         if (next !== map) change("map", next, { reason: "wheel", event });
       },
@@ -976,14 +1190,47 @@ const sceneEditor = definePrimitive({
         // older piece is kept out even where the look doesn't fit.
         if (command && look && pasteLook && letter === "v") {
           event.preventDefault();
-          if (!event.repeat) paste(aimed(), event);
+          if (!event.repeat) paste(keyTargets(aimed()), event);
           return;
         }
         if (!command && event.code === "KeyF" && map && look?.kind === "wall") {
-          const flooded = floodWalls(map, aimed(), look.texture);
-          if (flooded === map) return;
-          event.preventDefault();
-          change("map", flooded, { reason: "paint", event });
+          if (flood(aimed(), event)) event.preventDefault();
+          return;
+        }
+        if (moveTextures(event)) return;
+        const plain = !command && !event.altKey && !event.shiftKey;
+        if (plain && !event.repeat) {
+          const { view } = store.get();
+          if (event.code === "KeyG") {
+            event.preventDefault();
+            changeView({ flying: !view.flying });
+            return;
+          }
+          if (event.code === "KeyB") {
+            event.preventDefault();
+            changeView({ fullbright: !view.fullbright });
+            return;
+          }
+          if (event.code === "KeyT") {
+            event.preventDefault();
+            changeView({ things: !view.things });
+            return;
+          }
+          if (event.code === "KeyU") {
+            togglePegging(event, "upperFixed");
+            return;
+          }
+          if (event.code === "KeyL") {
+            togglePegging(event, "lowerFixed");
+            return;
+          }
+        }
+        if (!command && event.shiftKey && event.code === "KeyR") {
+          resetOffsets(event);
+          return;
+        }
+        if (!command && event.altKey && event.code === "KeyA") {
+          alignAimed(event, "y");
           return;
         }
         if (!command && event.code === "KeyZ" && !event.repeat && canvas) {
@@ -993,20 +1240,10 @@ const sceneEditor = definePrimitive({
           return;
         }
         // Shift and A carries the aimed wall's texture on along the walls
-        // beside it, as Align along the room does.
+        // beside it, as Align along the room does, and Alt and A lines up its
+        // rows.
         if (!command && event.shiftKey && event.code === "KeyA" && map) {
-          event.preventDefault();
-          const info = describeSurface(map, aimed());
-          if (info?.surface.kind !== "wall" || !info.sector) return;
-          const aligned = alignWalls(
-            map,
-            info.sector.id,
-            info.surface.wall,
-            (name) => store.get().assets?.texture(name).width ?? 1,
-          );
-          if (aligned !== map) {
-            change("map", aligned, { reason: "paint", event });
-          }
+          alignAimed(event, "x");
           return;
         }
         if (thing && map && (event.key === "," || event.key === ".")) {
@@ -1100,6 +1337,10 @@ const sceneEditor = definePrimitive({
         pointermove: (event, { api }) => api.pointermove(event),
         pointerleave: (_event, { api }) => api.pointerleave(),
         pointerdown: (event, { api }) => api.pointerdown(event),
+        // A press of the middle button pastes rather than scrolling the page.
+        mousedown: (event) => {
+          if (event.button === 1) event.preventDefault();
+        },
         wheel: (event, { api }) => api.wheel(event),
         contextmenu: (event, { api }) => api.contextmenu(event),
         keydown: (event, { api }) => api.keydown(event),
@@ -1117,6 +1358,29 @@ function letterOf(event: KeyboardEvent) {
   return /^[a-z]$/i.test(event.key)
     ? event.key.toLowerCase()
     : event.code.slice(3).toLowerCase();
+}
+
+// A switch's wall and a door's track are pegged to the floor when the line
+// leaves it unset, as the compiler writes them.
+function getIsPeggedByDefault(map: GameMap, wall: string) {
+  const owners = wallOwners(map).get(wall) ?? [];
+  if (owners.length !== 1) return false;
+  return (
+    Boolean(owners[0].door) ||
+    map.switches.some((item) => wallKey(item.from, item.to) === wall)
+  );
+}
+
+// The room sides of the walls among `keys`, once each.
+function wallSides(map: GameMap, keys: string[]) {
+  const sides = new Map<string, { wall: string; sector: string }>();
+  for (const key of keys) {
+    const surface = parseSurface(key);
+    if (surface?.kind !== "wall") continue;
+    if (!map.sectors.some((item) => item.id === surface.sector)) continue;
+    sides.set(`${surface.sector}:${surface.wall}`, surface);
+  }
+  return [...sides.values()];
 }
 
 // A side's offsets serve its upper, lower and middle parts at once, each with

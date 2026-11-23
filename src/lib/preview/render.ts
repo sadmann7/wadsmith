@@ -69,6 +69,10 @@ interface SceneOptions {
   opened?: readonly string[];
   // Surfaces picked along with the selected one, outlined the same way.
   picked?: readonly string[];
+  // Every surface drawn at full light, near or far.
+  fullbright?: boolean;
+  // False leaves things out, all but the one being placed.
+  things?: boolean;
 }
 
 // A see-through texture on an open line, kept until what lies behind it in
@@ -189,6 +193,8 @@ export function renderScene(
     sky,
     opened = noMovers,
     picked = noMovers,
+    fullbright = false,
+    things = true,
   }: SceneOptions,
 ) {
   const { width, height, colors, pick, extent, reach, focal } = target;
@@ -282,7 +288,8 @@ export function renderScene(
         const v = wrap(-(camera.y + ray.y * distance), size);
         const color = picture.pixels[u * size + v];
         const index = y * width + x;
-        colors[index] = shades[gameFlatShade(light, distance) * 256 + color];
+        const level = fullbright ? 0 : gameFlatShade(light, distance);
+        colors[index] = shades[level * 256 + color];
         depths[index] = distance;
         pick[index] = id;
       }
@@ -353,7 +360,9 @@ export function renderScene(
 
       const contrast =
         wall.a.x === wall.b.x ? 1 : wall.a.y === wall.b.y ? -1 : 0;
-      const level = gameWallShade(current.light, distance, contrast);
+      const level = fullbright
+        ? 0
+        : gameWallShade(current.light, distance, contrast);
       const paintWall = (
         from: number,
         to: number,
@@ -511,7 +520,9 @@ export function renderScene(
     }
   }
 
-  const placed = map.things.map((thing) => ({ thing, isGhost: false }));
+  const placed = things
+    ? map.things.map((thing) => ({ thing, isGhost: false }))
+    : [];
   const sprites = (
     ghost
       ? [...placed, { thing: { ...ghost, id: "", angle: 0 }, isGhost: true }]
@@ -542,7 +553,9 @@ export function renderScene(
     const scale = focal / distance;
     const left = width / 2 + side * scale - picture.leftOffset * scale;
     const peak = horizon - (base + picture.topOffset - eye) * scale;
-    const level = gameWallShade(owner?.light ?? start.light, distance);
+    const level = fullbright
+      ? 0
+      : gameWallShade(owner?.light ?? start.light, distance);
     const id = isGhost
       ? 0
       : idOf(surfaceKey({ kind: "thing", thing: thing.id }));

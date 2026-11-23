@@ -165,7 +165,18 @@ function groups(): { title: string; items: Shortcut[] }[] {
       items: [
         { keys: [key("W"), key("S")], does: "Walk forward or back" },
         { keys: [key("A"), key("D")], does: "Step sideways" },
-        { keys: [key("←", "left"), key("→", "right")], does: "Turn" },
+        {
+          keys: [key("←", "left"), key("→", "right")],
+          does: "Turn, or move the selected walls' texture when a wall is selected",
+        },
+        {
+          keys: [key("↑", "up"), key("↓", "down")],
+          does: "Walk, or move the selected walls' texture, by 1, 8 with Shift or the grid with Ctrl or ⌘",
+        },
+        {
+          keys: [key("G")],
+          does: "Switch between walking, which stops at walls and climbs steps, and flying through them",
+        },
         { keys: [key("Space"), key("C")], does: "Fly up or down" },
         {
           keys: [key("Z")],
@@ -177,7 +188,7 @@ function groups(): { title: string; items: Shortcut[] }[] {
         },
         {
           keys: [key("Page Up"), key("Page Down")],
-          does: "Raise or lower the selected surface by the grid, with Shift for 3 steps and Alt for light",
+          does: "Raise or lower the selected surfaces by the grid, with Shift to the next height beside them and Alt for light",
         },
         {
           keys: [key("O")],
@@ -187,7 +198,14 @@ function groups(): { title: string; items: Shortcut[] }[] {
           keys: [chord("mod+c"), chord("mod+v")],
           does: "Copy a surface's look, and paste it on another",
         },
-        { keys: [key("Alt-click")], does: "Paint the copied look on" },
+        {
+          keys: [key("Alt-click"), key("Middle-click")],
+          does: "Paint the copied look on, or on every picked surface when one of them is clicked",
+        },
+        {
+          keys: [key("Shift+Middle-click")],
+          does: "Flood the copied texture along joined walls",
+        },
         {
           keys: [key("Shift")],
           does: "While dragging a wall's texture, align the walls beside it",
@@ -198,7 +216,7 @@ function groups(): { title: string; items: Shortcut[] }[] {
         },
         {
           keys: [key("Shift-click")],
-          does: "Pick several surfaces, for a gradient",
+          does: "Pick several surfaces, which the keys and the wheel then change together",
         },
         {
           keys: [key("Wheel")],
@@ -208,6 +226,17 @@ function groups(): { title: string; items: Shortcut[] }[] {
           keys: [key("Shift+A")],
           does: "Align the texture along the walls beside the one aimed at",
         },
+        {
+          keys: [key("Alt+A")],
+          does: "Line up the texture's rows on the walls beside it",
+        },
+        {
+          keys: [key("U"), key("L")],
+          does: "Peg the upper or lower texture of the walls, or unpeg them",
+        },
+        { keys: [key("Shift+R")], does: "Reset the walls' texture offsets" },
+        { keys: [key("B")], does: "Show everything at full light, or not" },
+        { keys: [key("T")], does: "Hide things, or show them again" },
         {
           keys: [key(","), key(".")],
           does: "Turn the selected thing left or right",

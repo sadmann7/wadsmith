@@ -69,6 +69,11 @@ export const editorShortcuts = {
     description: "Maximise the pane under the pointer, or split again",
   },
   look: { keys: "c", description: "Point the 3D camera at the pointer" },
+  play: { keys: "f9", description: "Play the map" },
+  playHere: {
+    keys: "mod+f9",
+    description: "Play the map from where the 3D view stands",
+  },
   help: { keys: "mod+/", description: "Show keyboard shortcuts" },
 } as const;
 

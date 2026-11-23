@@ -244,3 +244,27 @@ export function moveSurfaceHeight(
   }
   return map;
 }
+
+// The nearest floor or ceiling height of a room beside a floor's or
+// ceiling's own room, above it or below, or null when none is that way.
+export function heightBeside(
+  map: GameMap,
+  key: string,
+  direction: 1 | -1,
+): number | null {
+  const info = describeSurface(map, key);
+  if (!info?.sector || info.height === null) return null;
+  const { sector, height } = info;
+  let best: number | null = null;
+  for (const owners of wallOwners(map).values()) {
+    if (!owners.includes(sector)) continue;
+    for (const other of owners) {
+      if (other === sector) continue;
+      for (const level of [other.floor, other.ceiling]) {
+        if ((level - height) * direction <= 0) continue;
+        if (best === null || (level - best) * direction < 0) best = level;
+      }
+    }
+  }
+  return best;
+}
