@@ -64,14 +64,15 @@ interface RebuildOptions {
   weak?: string;
 }
 
-// Draws a line over the map the way a desktop editor does. A stretch that
-// runs from one wall of a room across it to another splits the room in two;
-// a stretch that stays inside one room becomes a line in that room. Null
-// when no part of the line lands in a room, or it meets a switch's wall.
+// Draws a line over the map the way a desktop editor does. A stretch from
+// one wall of a room to another splits it; one that doesn't becomes a line
+// in the room, or in split mode makes the whole draw null. Null too when no
+// part of the line lands in a room, or it meets a switch's wall.
 export function drawLines(
   map: GameMap,
   points: Point[],
   grid = gridSize,
+  mode: "draw" | "split" = "draw",
 ): { map: GameMap; rooms: string[] } | null {
   const snapped = points
     .map((point) => snapPoint(point, grid))
@@ -169,6 +170,7 @@ export function drawLines(
         lines = list.filter((run) => !cuts.includes(run));
       }
     }
+    if (mode === "split" && lines.length > 0) return null;
     for (const { corners } of lines) {
       const holder = sectorAt(
         next,

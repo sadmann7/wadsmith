@@ -157,6 +157,28 @@ describe("drawing a line across a room", () => {
     expect(problems(split.map)).toEqual([]);
   });
 
+  it("refuses in split mode a line that leaves the room whole", () => {
+    const island = drawRoom(hall.map, box(192, 64, 320, 192), {}, 1);
+    const spoke = [
+      { x: 0, y: 128 },
+      { x: 192, y: 128 },
+    ];
+    expect(drawLines(island.map, spoke, 1, "split")).toBeNull();
+    const drawn = defined(drawLines(island.map, spoke, 1));
+    expect(drawn.map.sectors[0].details).toHaveLength(1);
+    expect(
+      drawLines(
+        hall.map,
+        [
+          { x: 64, y: 64 },
+          { x: 128, y: 64 },
+        ],
+        1,
+        "split",
+      ),
+    ).toBeNull();
+  });
+
   it("splits a room around a pillar, which goes to the half it's in", () => {
     const pillar = addRoom(hall.map, box(64, 64, 128, 128), {}, 1);
     const holed = {

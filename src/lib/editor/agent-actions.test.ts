@@ -147,6 +147,126 @@ describe("agent actions", () => {
     );
   });
 
+  it("splits a ring round a room inside, or refuses and changes nothing", () => {
+    const { map } = build(blank, [
+      [
+        "addRoom",
+        [
+          [
+            [216, 16],
+            [464, 16],
+            [624, 176],
+            [624, 416],
+            [464, 576],
+            [216, 576],
+            [56, 416],
+            [56, 176],
+          ],
+          "Lava Hall",
+        ],
+      ],
+      [
+        "addRoom",
+        [
+          [
+            [296, 248],
+            [392, 248],
+            [392, 344],
+            [296, 344],
+          ],
+          "Altar Island",
+        ],
+      ],
+    ]);
+    for (const y of [280, 312]) {
+      expect(() =>
+        runAgentAction(map, "splitRoom", [
+          [
+            [56, y],
+            [296, y],
+          ],
+        ]),
+      ).toThrow(/leaves a room whole, so nothing changed/);
+    }
+
+    const split = runAgentAction(map, "splitRoom", [
+      [
+        [56, 280],
+        [296, 280],
+        [296, 312],
+        [56, 312],
+      ],
+    ]);
+    expect(split.map.sectors).toHaveLength(3);
+    const strip = defined(
+      split.map.sectors.find(
+        (sector) => !["Lava Hall", "Altar Island"].includes(sector.name),
+      ),
+    );
+    expect(split.result).toEqual(["sector-1", strip.id]);
+    expect(split.map.sectors.every((sector) => !sector.details)).toBe(true);
+    const corners = (
+      runAgentAction(split.map, "describeRoom", [strip.id]).result as {
+        corners: { x: number; y: number }[];
+      }
+    ).corners.map(({ x, y }) => [x, y]);
+    expect(corners).toHaveLength(4);
+    expect(corners).toEqual(
+      expect.arrayContaining([
+        [56, 280],
+        [296, 280],
+        [296, 312],
+        [56, 312],
+      ]),
+    );
+    expect(errorsOf(split.map).map((issue) => issue.id)).toEqual(["no-player"]);
+  });
+
+  it("lists the lines drawn inside a room", () => {
+    const { map } = build(blank, [
+      [
+        "addRoom",
+        [
+          [
+            [0, 0],
+            [256, 0],
+            [256, 256],
+            [0, 256],
+          ],
+        ],
+      ],
+      [
+        "addDetailLine",
+        [
+          [
+            [64, 128],
+            [192, 128],
+          ],
+        ],
+      ],
+    ]);
+    const room = runAgentAction(map, "describeRoom", ["sector-1"]).result as {
+      lines: string[];
+    };
+    expect(room.lines).toHaveLength(1);
+    expect(() =>
+      runAgentAction(map, "splitRoom", [
+        [
+          [64, 64],
+          [192, 64],
+        ],
+      ]),
+    ).toThrow(/leaves a room whole/);
+    expect(() =>
+      runAgentAction(map, "splitRoom", [
+        [
+          [512, 0],
+          [512, 256],
+        ],
+      ]),
+    ).toThrow(/No part of that line lies in a room/);
+  });
+
   it("lets a door wait for its switch and says what is left to do", () => {
     const { map } = build(testMap, [["removeSwitch", ["switch-1"]]]);
     const waiting = runAgentAction(map, "makeDoor", [
