@@ -5,14 +5,17 @@ import {
   definePrimitive,
   dragThreshold,
   live,
+  matchesShortcut,
 } from "@ui-sdk/core";
 import { createParts } from "@ui-sdk/react/primitive";
 
+import type { EditorShortcut } from "@/lib/editor/shortcuts";
 import type { GameMap, Point, ThingKind } from "@/lib/map/types";
 import type { Camera } from "@/lib/preview/render";
 import type { SceneCamera } from "@/lib/preview/scene-camera";
 import type { SceneAssets } from "@/lib/wad/assets";
 
+import { currentKeys } from "@/lib/editor/keymap";
 import {
   getIsDragging,
   getIsKeyboardMenu,
@@ -1276,56 +1279,55 @@ const sceneEditor = definePrimitive({
           if (!event.repeat) paste(keyTargets(aimed()), event);
           return;
         }
-        if (!command && event.code === "KeyF" && map && look?.kind === "wall") {
+        const keys = currentKeys();
+        const pressed = (name: EditorShortcut) =>
+          matchesShortcut(event, keys[name]);
+        if (pressed("sceneFlood") && map && look?.kind === "wall") {
           if (flood(aimed(), event)) event.preventDefault();
           return;
         }
         if (moveTextures(event)) return;
-        const plain = !command && !event.altKey && !event.shiftKey;
-        if (plain && !event.repeat) {
+        if (!event.repeat) {
           const { view } = store.get();
-          if (event.code === "KeyG") {
+          if (pressed("sceneFly")) {
             event.preventDefault();
             changeView({ flying: !view.flying });
             return;
           }
-          if (event.code === "KeyB") {
+          if (pressed("sceneFullbright")) {
             event.preventDefault();
             changeView({ fullbright: !view.fullbright });
             return;
           }
-          if (event.code === "KeyT") {
+          if (pressed("sceneThings")) {
             event.preventDefault();
             changeView({ things: !view.things });
             return;
           }
-          if (event.code === "KeyU") {
+          if (pressed("scenePegUpper")) {
             togglePegging(event, "upperFixed");
             return;
           }
-          if (event.code === "KeyL") {
+          if (pressed("scenePegLower")) {
             togglePegging(event, "lowerFixed");
             return;
           }
         }
-        if (!command && event.shiftKey && event.code === "KeyR") {
+        if (pressed("sceneResetOffsets")) {
           resetOffsets(event);
           return;
         }
-        if (!command && event.altKey && event.code === "KeyA") {
+        if (pressed("sceneAlignRows")) {
           alignAimed(event, "y");
           return;
         }
-        if (!command && event.code === "KeyZ" && !event.repeat && canvas) {
+        if (pressed("sceneLook") && !event.repeat && canvas) {
           event.preventDefault();
           if (store.get().looking) document.exitPointerLock();
           else void canvas.requestPointerLock()?.catch?.(() => undefined);
           return;
         }
-        // Shift and A carries the aimed wall's texture on along the walls
-        // beside it, as Align along the room does, and Alt and A lines up its
-        // rows.
-        if (!command && event.shiftKey && event.code === "KeyA" && map) {
+        if (pressed("sceneAlignAlong") && map) {
           alignAimed(event, "x");
           return;
         }
@@ -1359,7 +1361,7 @@ const sceneEditor = definePrimitive({
           event.preventDefault();
           held.add(event.code);
           if (!walkFrame) walk(performance.now());
-        } else if (event.code === "KeyO" && map && !command && !event.repeat) {
+        } else if (pressed("sceneOpen") && map && !event.repeat) {
           // The door or lift under the pointer, or else the selected one,
           // stands open until the key is pressed on it again.
           const { hovered, selected, opened } = store.get();
@@ -1371,9 +1373,9 @@ const sceneEditor = definePrimitive({
               ? opened.filter((id) => id !== mover)
               : [...opened, mover],
           });
-        } else if (event.code === "KeyN" || event.code === "KeyP") {
+        } else if (pressed("sceneNext") || pressed("scenePrevious")) {
           event.preventDefault();
-          cycle(event.code === "KeyN" ? 1 : -1);
+          cycle(pressed("sceneNext") ? 1 : -1);
         } else if (event.key === "PageUp" || event.key === "PageDown") {
           event.preventDefault();
           nudge(event, event.key === "PageUp" ? 1 : -1);

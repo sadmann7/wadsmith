@@ -1546,7 +1546,7 @@ export function EditorScreen({
       onContextMenuCapture={normalizeControlClick}
     >
       <SceneCanvas
-        aria-label="3D view. Click a surface to select it, and drag a wall or press the arrows to move its texture. W, A, S and D walk, G switches between walking and flying, Space and C fly up and down, dragging with the right button or pressing Z looks around, N and P step through surfaces, and O opens the door or lift under the pointer."
+        aria-label={sceneLabel(shortcutKeys)}
         className="screen scene"
         map={map}
         assets={assets}
@@ -1593,9 +1593,12 @@ export function EditorScreen({
 
   const sceneKeys = (
     <p className="scene-keys m-0" aria-hidden="true">
-      {sceneView.flying ? "Flying" : "Walking"} · G{" "}
-      {sceneView.flying ? "walk" : "fly"} · WASD move · Right-drag look · Wheel
-      height · Arrows texture · Shift or Alt+A align
+      {sceneView.flying ? "Flying" : "Walking"}
+      {shortcutKeys.sceneFly
+        ? ` · ${keyText(shortcutKeys.sceneFly)} ${sceneView.flying ? "walk" : "fly"}`
+        : ""}{" "}
+      · WASD move · Right-drag look · Wheel height · Arrows texture · Shift or
+      Alt+A align
     </p>
   );
 
@@ -3348,6 +3351,26 @@ function shapeLabel(shape: DrawShape, sides: number) {
   if (shape === "ellipse") return "Ellipse";
   if (shape === "grid") return "Grid of rooms";
   return `${sides} sides`;
+}
+
+function keyText(keys: string) {
+  return formatShortcut(keys).replace(/[\u2066\u2069]/g, "");
+}
+
+function sceneLabel(keys: Record<EditorShortcut, string>) {
+  const clauses = [
+    "W, A, S and D walk",
+    keys.sceneFly &&
+      `${keyText(keys.sceneFly)} switches between walking and flying`,
+    "Space and C fly up and down",
+    `dragging with the right button${keys.sceneLook ? ` or pressing ${keyText(keys.sceneLook)}` : ""} looks around`,
+    keys.sceneNext &&
+      keys.scenePrevious &&
+      `${keyText(keys.sceneNext)} and ${keyText(keys.scenePrevious)} step through surfaces`,
+    keys.sceneOpen &&
+      `${keyText(keys.sceneOpen)} opens the door or lift under the pointer`,
+  ].filter(Boolean);
+  return `3D view. Click a surface to select it, and drag a wall or press the arrows to move its texture. ${clauses.join(", ")}.`;
 }
 
 function keyHint(keys: string, format = true) {

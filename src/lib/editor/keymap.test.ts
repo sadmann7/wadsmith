@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  bindingProblem,
   bindKeys,
   defaultKeys,
   keysFromEvent,
@@ -19,10 +20,23 @@ describe("keymap", () => {
 
   it("takes keys from the action that had them", () => {
     const { saved, taken } = bindKeys(defaultKeys, "find", "g");
-    expect(taken).toEqual(["snap"]);
+    expect(taken).toEqual(["snap", "sceneFly"]);
     const keys = resolveKeys(saved);
     expect(keys.find).toBe("g");
     expect(keys.snap).toBe("");
+  });
+
+  it("lets a map key and a 3D view key share a key", () => {
+    const { saved, taken } = bindKeys(defaultKeys, "snap", "b");
+    expect(taken).toEqual([]);
+    expect(resolveKeys(saved).sceneFullbright).toBe("b");
+  });
+
+  it("keeps the 3D view's walking keys for walking", () => {
+    expect(bindingProblem("sceneFly", "w")).not.toBeNull();
+    expect(bindingProblem("help", "space")).not.toBeNull();
+    expect(bindingProblem("snap", "w")).toBeNull();
+    expect(bindingProblem("sceneFly", "h")).toBeNull();
   });
 
   it("leaves other actions alone when unbinding", () => {

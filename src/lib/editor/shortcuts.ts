@@ -115,6 +115,86 @@ export const editorShortcuts = {
     description: "Play the map from where the 3D view stands",
   },
   help: { keys: "mod+/", description: "Show keyboard shortcuts" },
+  sceneFly: {
+    keys: "g",
+    description:
+      "Switch between walking, which stops at walls and climbs steps, and flying through them",
+    area: "scene",
+  },
+  sceneLook: {
+    keys: "z",
+    description:
+      "Look with the mouse until pressed again, and act on what the crosshair is over",
+    area: "scene",
+  },
+  sceneNext: {
+    keys: "n",
+    description: "Select the next surface",
+    area: "scene",
+  },
+  scenePrevious: {
+    keys: "p",
+    description: "Select the previous surface",
+    area: "scene",
+  },
+  sceneOpen: {
+    keys: "o",
+    description: "Open or shut the door or lift under the pointer",
+    area: "scene",
+  },
+  sceneFlood: {
+    keys: "f",
+    description: "Flood the copied texture along joined walls",
+    area: "scene",
+  },
+  sceneAlignAlong: {
+    keys: "shift+a",
+    description: "Align the texture along the walls beside the one aimed at",
+    area: "scene",
+  },
+  sceneAlignRows: {
+    keys: "alt+a",
+    description: "Line up the texture's rows on the walls beside it",
+    area: "scene",
+  },
+  scenePegUpper: {
+    keys: "u",
+    description: "Peg the upper texture of the walls, or unpeg it",
+    area: "scene",
+  },
+  scenePegLower: {
+    keys: "l",
+    description: "Peg the lower texture of the walls, or unpeg it",
+    area: "scene",
+  },
+  sceneResetOffsets: {
+    keys: "shift+r",
+    description: "Reset the walls' texture offsets",
+    area: "scene",
+  },
+  sceneFullbright: {
+    keys: "b",
+    description: "Show everything at full light, or as lit",
+    area: "scene",
+  },
+  sceneThings: {
+    keys: "t",
+    description: "Show or hide things",
+    area: "scene",
+  },
 } as const;
 
 export type EditorShortcut = keyof typeof editorShortcuts;
+
+export type ShortcutScope = "editor" | "map" | "scene";
+
+// Map keys and 3D view keys never fire together, so each may reuse the
+// other's, while an editor key works in both.
+export function scopeOf(name: EditorShortcut): ShortcutScope {
+  const entry = editorShortcuts[name];
+  return "area" in entry ? entry.area : "editor";
+}
+
+export function getIsScopeShared(a: ShortcutScope, b: ShortcutScope) {
+  return a === b || a === "editor" || b === "editor";
+}
