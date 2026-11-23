@@ -118,7 +118,7 @@ export const lineActions: Record<LineActionKind, ActionDefinition> = {
     },
   },
   "floor-lower": {
-    label: "Floor: lower to lowest",
+    label: "Floor: lower to lowest nearby floor",
     group: "Floors",
     triggers: {
       switch: { once: 23, repeat: 60 },
@@ -126,7 +126,7 @@ export const lineActions: Record<LineActionKind, ActionDefinition> = {
     },
   },
   "floor-raise": {
-    label: "Floor: raise to ceiling",
+    label: "Floor: raise to lowest nearby ceiling",
     group: "Floors",
     triggers: {
       switch: { once: 101, repeat: 64 },

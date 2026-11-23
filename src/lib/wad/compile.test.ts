@@ -1474,6 +1474,30 @@ describe("line editing", () => {
     expect(lineIssues(openWall, { tag: 99 })).toContain(`line-tag:${openWall}`);
   });
 
+  it("warns about a floor raise held down by a closed door next to it", () => {
+    const raise = (map: GameMap) => {
+      const raised = setLineTarget(
+        updateLine(map, openWall, {
+          action: {
+            kind: "floor-raise",
+            trigger: "shoot",
+            repeat: false,
+            tag: 0,
+          },
+        }),
+        openWall,
+        "sector-2",
+      );
+      return inspectMap(raised).warnings.find(
+        (issue) => issue.id === `line-stuck:${openWall}`,
+      );
+    };
+    expect(raise(testMap)?.message).toBe(
+      "Line 5: the floor of Corridor can't rise: it stops at the lowest ceiling next to it, Arena door, closed at -16.",
+    );
+    expect(raise(setRoomDoor(testMap, "sector-4", undefined))).toBeUndefined();
+  });
+
   it("warns about a press-to-open door with no door behind its line", () => {
     const pressed = {
       kind: "door-raise",
@@ -2305,8 +2329,8 @@ describe("map check", () => {
     ]);
     const floors = defined(groups.find((group) => group.label === "Floors"));
     expect(floors.items[0]).toMatchObject({
-      label: "Floor: lower to lowest",
-      short: "Lower to lowest",
+      label: "Floor: lower to lowest nearby floor",
+      short: "Lower to lowest nearby floor",
     });
   });
 
