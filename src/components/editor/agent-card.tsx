@@ -44,6 +44,7 @@ export function AgentCard({
   const changes = request.steps.length;
   return (
     <section
+      data-agent-card
       data-agent-hidden
       aria-label="What the agent did"
       className="absolute bottom-3 left-3 z-5 grid w-[min(520px,calc(100%-24px))] rounded-[6px] border border-input bg-card text-foreground shadow-popover"
@@ -145,6 +146,7 @@ function AgentQuestionCard({
   }, []);
   return (
     <section
+      data-agent-card
       data-agent-hidden
       role="alertdialog"
       aria-labelledby="agent-ask-title"

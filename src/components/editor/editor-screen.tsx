@@ -1964,6 +1964,9 @@ export function EditorScreen({
     agentSession.getSnapshot,
     () => idleAgentSession,
   );
+  const hasAgentCard = getHasAgentCard(agentState);
+  const showWelcome = !welcomed && !hasAgentCard;
+  const showMapDock = visibleLayout === "map" && showDock && !narrow;
   const agentAsk = agentState.question
     ? agentStepSummary(
         map,
@@ -2417,6 +2420,13 @@ export function EditorScreen({
                       findCameraRequest={findCameraRequest}
                       fitRequest={fitRequest}
                       fitSelectionRequest={fitSelectionRequest}
+                      fitAround={[
+                        showWelcome && "#welcome-card",
+                        hasAgentCard && "[data-agent-card]",
+                        showMapDock && ".player-dock",
+                      ]
+                        .filter(Boolean)
+                        .join(", ")}
                       selectAllRequest={selectAllRequest}
                       focusRequest={focusRequest}
                       callouts={callouts}
@@ -2457,8 +2467,9 @@ export function EditorScreen({
                     onUndoAll={undoAgentRequest}
                     onDismiss={() => agentSession.dismiss()}
                   />
-                  {welcomed || getHasAgentCard(agentState) ? null : (
+                  {showWelcome ? (
                     <section
+                      id="welcome-card"
                       aria-labelledby="welcome-title"
                       data-agent-hidden
                       className="absolute bottom-3 left-3 z-4 grid max-w-[min(380px,calc(100%-24px))] gap-3 rounded-[3px] border border-border bg-card p-4 shadow-lg"
@@ -2486,8 +2497,8 @@ export function EditorScreen({
                         <Button onClick={dismissWelcome}>Start editing</Button>
                       </div>
                     </section>
-                  )}
-                  {visibleLayout === "map" && showDock && !narrow ? (
+                  ) : null}
+                  {showMapDock ? (
                     <div className="player-dock">
                       <div className="player-dock-bar">Player view</div>
                       <div className="scene-frame">{scene}</div>

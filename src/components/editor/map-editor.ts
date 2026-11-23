@@ -29,6 +29,7 @@ import {
   type AgentOutcome,
   runAgentAction,
 } from "@/lib/editor/agent-actions";
+import { boundsOf, fitView } from "@/lib/editor/fit-view";
 import { currentKeys } from "@/lib/editor/keymap";
 import {
   getIsDragging,
@@ -136,6 +137,9 @@ interface MapEditorOptions {
   findCameraRequest?: number;
   fitRequest?: number;
   fitSelectionRequest?: number;
+  // A selector for what lies over the map, like a card, which a fit keeps the
+  // map clear of.
+  fitAround?: string;
   selectAllRequest?: number;
   drawRequest?: { id: number; point: Point } | null;
   focusRequest?: { id: number; point: Point } | null;
@@ -285,6 +289,7 @@ export const mapEditor = definePrimitive({
     findCameraRequest: "number",
     fitRequest: "number",
     fitSelectionRequest: "number",
+    fitAround: "string",
     selectAllRequest: "number",
     drawRequest: "value",
     focusRequest: "value",
@@ -489,6 +494,7 @@ export const mapEditor = definePrimitive({
     let fitted = false;
     let fittedView: Viewport | null = null;
     let reportPointer: ((point: Point | null) => void) | undefined;
+    let watchOverlays: (() => void) | undefined;
     let findAfterFit = false;
     let focusAfterFit: Point | null = null;
     let stopCameraDrag: (() => void) | undefined;
@@ -496,6 +502,7 @@ export const mapEditor = definePrimitive({
     let lookRequest = context.options().lookAtRequest?.id ?? 0;
     let fitRequest = context.options().fitRequest ?? 0;
     let fitSelectionRequest = context.options().fitSelectionRequest ?? 0;
+    let fitAround = context.options().fitAround ?? "";
     let selectAllRequest = context.options().selectAllRequest ?? 0;
     let drawRequest = context.options().drawRequest?.id ?? 0;
     let focusRequest = context.options().focusRequest?.id ?? 0;
@@ -542,6 +549,13 @@ export const mapEditor = definePrimitive({
       if (request === fitSelectionRequest) return;
       fitSelectionRequest = request;
       fitSelection();
+    });
+    context.onOptions((options) => {
+      const around = options.fitAround ?? "";
+      if (around === fitAround) return;
+      fitAround = around;
+      watchOverlays?.();
+      if (fitted && getIsFitView()) fitMap();
     });
     context.onOptions(({ contextMenuOpen }) => {
       if (!contextMenuOpen || !touchPress) return;
@@ -1050,22 +1064,50 @@ export const mapEditor = definePrimitive({
       );
     };
 
-    const fitPoints = (points: Point[], maxZoom: number) => {
-      if (points.length === 0) return;
-      viewport.fit(
-        {
-          left: Math.min(...points.map((point) => point.x)),
-          top: Math.min(...points.map((point) => point.y)),
-          right: Math.max(...points.map((point) => point.x)),
-          bottom: Math.max(...points.map((point) => point.y)),
-        },
-        { padding: 56, maxZoom },
+    const fitPoints = (
+      points: Point[],
+      maxZoom: number,
+      parts: Point[][] = [points],
+    ) => {
+      const surface = root();
+      if (points.length === 0 || !surface) return;
+      const box = surface.getBoundingClientRect();
+      const around = context.options().fitAround;
+      const overlays = around
+        ? [...document.querySelectorAll(around)].map((element) => {
+            const { left, top, right, bottom } =
+              element.getBoundingClientRect();
+            return {
+              left: left - box.left,
+              top: top - box.top,
+              right: right - box.left,
+              bottom: bottom - box.top,
+            };
+          })
+        : [];
+      viewport.setViewport(
+        fitView(
+          boundsOf(points),
+          box,
+          { padding: 56, minZoom: 0.1, maxZoom },
+          overlays,
+          parts.map(boundsOf),
+        ),
       );
     };
     const fitMap = () => {
-      const points = Object.values(store.get().positions);
+      const { map, positions } = store.get();
+      const points = Object.values(positions);
       if (points.length === 0) return;
-      fitPoints(points, 1.25);
+      const rooms = map.sectors.map(sectorVertices);
+      const inRooms = new Set(rooms.flat());
+      const parts = [
+        ...rooms.map((room) => room.flatMap((key) => positions[key] ?? [])),
+        ...Object.keys(positions)
+          .filter((key) => !inRooms.has(key))
+          .map((key) => [positions[key]]),
+      ].filter((part) => part.length > 0);
+      fitPoints(points, 1.25, parts);
       fittedView = store.get().viewport;
     };
     const getIsFitView = () => {
@@ -1247,9 +1289,11 @@ export const mapEditor = definePrimitive({
           reportView();
         };
         const stopView = store.subscribe(reportView);
+        let overlays: Element[] = [];
         // A hidden pane has no size to fit until it is first shown. After
         // that, the map is fitted again until the view is panned or zoomed.
         const observer = new ResizeObserver(() => {
+          watchOverlays?.();
           reportView();
           if (element.clientWidth === 0 || element.clientHeight === 0) return;
           if (fitted) {
@@ -1261,10 +1305,23 @@ export const mapEditor = definePrimitive({
           if (findAfterFit) findCamera();
           if (focusAfterFit) centerOn(focusAfterFit);
         });
+        watchOverlays = () => {
+          const around = context.options().fitAround;
+          const next = around ? [...document.querySelectorAll(around)] : [];
+          for (const overlay of overlays) {
+            if (!next.includes(overlay)) observer.unobserve(overlay);
+          }
+          for (const overlay of next) {
+            if (!overlays.includes(overlay)) observer.observe(overlay);
+          }
+          overlays = next;
+        };
         observer.observe(element);
+        watchOverlays();
         return () => {
           stopCamera?.();
           stopView();
+          watchOverlays = undefined;
           observer.disconnect();
         };
       },
