@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 
+import type { GameMap } from "@/lib/map/types";
+
 import { defined } from "@/lib/defined";
 import { addRoom, updateSector, updateThing } from "@/lib/map/edit";
 import { testMap } from "@/lib/map/test-map";
-import type { GameMap } from "@/lib/map/types";
 
 import { createEditHistory } from "./edit-history";
 
