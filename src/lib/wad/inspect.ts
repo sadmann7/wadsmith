@@ -8,6 +8,7 @@ import {
   sectorLevel,
   thingLevel,
 } from "@/lib/map/complevel";
+import { mbf21CodePointers } from "@/lib/map/dehacked";
 
 export interface GameFile {
   name: string;
@@ -169,14 +170,12 @@ function lumpName(bytes: Uint8Array) {
 const mbfCodePointers = codePointer(
   "Detonate|Mushroom|Die|Spawn|Turn|Face|Scratch|PlaySound|RandomJump|LineEffect|FireOldBFG|BetaSkullAttack|Stop",
 );
-const mbf21CodePointers = codePointer(
-  "SpawnObject|MonsterProjectile|MonsterBulletAttack|MonsterMeleeAttack|RadiusDamage|NoiseAlert|HealChase|SeekTracer|FindTracer|ClearTracer|JumpIfHealthBelow|JumpIfTargetInSight|JumpIfTargetCloser|JumpIfTracerInSight|JumpIfTracerCloser|JumpIfFlagsSet|AddFlags|RemoveFlags|WeaponProjectile|WeaponBulletAttack|WeaponMeleeAttack|WeaponSound|WeaponAlert|WeaponJump|ConsumeAmmo|CheckAmmo|RefireTo|GunFlashTo",
-);
+const mbf21CodePointer = codePointer([...mbf21CodePointers].join("|"));
 
 function patchLevel(patch: string): Complevel {
   if (/^\s*doom version\s*=\s*2021\b/im.test(patch)) return "mbf21";
   if (/\bMBF21 Bits\b/i.test(patch)) return "mbf21";
-  if (mbf21CodePointers.test(patch)) return "mbf21";
+  if (mbf21CodePointer.test(patch)) return "mbf21";
   if (mbfCodePointers.test(patch)) return "mbf";
   if (
     /^\s*\[(CODEPTR|STRINGS|PARS|HELPER|SPRITES|SOUNDS|MUSIC)\]/im.test(patch)
