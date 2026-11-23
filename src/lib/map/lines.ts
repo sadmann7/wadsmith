@@ -393,6 +393,10 @@ export function lineSpecial(action: LineAction) {
   return (action.repeat ? specials?.repeat : specials?.once) ?? null;
 }
 
+export function getIsTeleport(kind: LineActionKind | undefined) {
+  return kind !== undefined && lineActions[kind].group === "Teleporters";
+}
+
 export function endsLevel(kind: LineActionKind) {
   return kind === "exit" || kind === "exit-secret";
 }
@@ -426,12 +430,7 @@ export function getIsFast(kind: LineActionKind) {
 // The engine ignores a press from a line's back and a teleporter crossed from
 // its back.
 export function usedFromFront({ kind, trigger }: LineAction) {
-  return (
-    trigger === "door" ||
-    trigger === "switch" ||
-    kind === "teleport" ||
-    kind === "teleport-monsters"
-  );
+  return trigger === "door" || trigger === "switch" || getIsTeleport(kind);
 }
 
 export function getCanRepeatChoice(action: LineAction) {

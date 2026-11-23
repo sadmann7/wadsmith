@@ -1,11 +1,20 @@
 import { describe, expect, it } from "vitest";
 
+import { defined } from "@/lib/defined";
+
 import type { LineAction } from "./types";
 
-import { roomCenter, setLineTarget, updateLine } from "./edit";
-import { wallKey } from "./geometry";
+import {
+  addThing,
+  landTeleport,
+  roomCenter,
+  setLineTarget,
+  updateLine,
+} from "./edit";
+import { sectorAt, wallKey } from "./geometry";
 import { lineLinks, sectorLinks } from "./links";
-import { testMap } from "./test-map";
+import { setWallsAction } from "./many-lines";
+import { islandMap, testMap } from "./test-map";
 
 const openWall = wallKey("v3", "v4");
 const action = (kind: LineAction["kind"]): LineAction => ({
@@ -49,6 +58,76 @@ describe("links from a line to what it acts on", () => {
       ],
     };
     expect(lineLinks(map, openWall)[0].to).toEqual({ x: 896, y: 320 });
+  });
+
+  it("places a teleport destination in the room a teleporter aims at", () => {
+    const map = aimed("teleport");
+    const spots = map.things.filter(
+      (thing) => thing.kind === "teleport-destination",
+    );
+    expect(spots).toEqual([
+      expect.objectContaining(roomCenter(map, map.sectors[2])),
+    ]);
+    expect(setLineTarget(map, openWall, "sector-3").things).toEqual(map.things);
+    expect(aimed("floor-lower").things).toEqual(testMap.things);
+  });
+
+  it("keeps the destination a room already has", () => {
+    const placed = addThing(testMap, "teleport-destination", {
+      x: 864,
+      y: 32,
+    }).map;
+    const map = setLineTarget(
+      updateLine(placed, openWall, { action: action("teleport-monsters") }),
+      openWall,
+      "sector-3",
+    );
+    expect(map.things).toEqual(placed.things);
+  });
+
+  it("lands a line that becomes a teleporter on a room it already aims at", () => {
+    const lift = aimed("floor-lower");
+    const map = landTeleport(
+      updateLine(lift, openWall, {
+        action: {
+          ...defined(lift.lines?.[openWall]?.action),
+          kind: "teleport",
+        },
+      }),
+      openWall,
+    );
+    expect(
+      map.things.filter((thing) => thing.kind === "teleport-destination"),
+    ).toHaveLength(1);
+  });
+
+  it("lands beside a room drawn in the middle of the one aimed at", () => {
+    const edge = wallKey("a", "b");
+    const map = setLineTarget(
+      updateLine(islandMap, edge, { action: action("teleport") }),
+      edge,
+      "yard",
+    );
+    const spot = defined(
+      map.things.find((thing) => thing.kind === "teleport-destination"),
+    );
+    expect(sectorAt(map, spot)?.id).toBe("yard");
+  });
+
+  it("places nothing in a door, which is shut", () => {
+    const map = setLineTarget(
+      updateLine(testMap, openWall, { action: action("teleport") }),
+      openWall,
+      "sector-4",
+    );
+    expect(map.things).toEqual(testMap.things);
+  });
+
+  it("lands teleporters given an action together", () => {
+    const map = setWallsAction(aimed("floor-lower"), [openWall], "teleport");
+    expect(
+      map.things.filter((thing) => thing.kind === "teleport-destination"),
+    ).toHaveLength(1);
   });
 
   it("draws nothing for a door pressed open, which acts on what is behind it", () => {

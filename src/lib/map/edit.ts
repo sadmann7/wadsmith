@@ -28,6 +28,7 @@ import {
   wallOwners,
   wallStart,
 } from "./geometry";
+import { getIsTeleport } from "./lines";
 
 export const gridSize = 8;
 export const gridSizes = [1, 2, 4, 8, 16, 32, 64] as const;
@@ -234,11 +235,32 @@ export function setLineTarget(
   const sector = map.sectors.find((item) => item.id === sectorId);
   const tag = sector ? sector.tag || freeTag(map) : 0;
   const tagged = sector ? updateSector(map, sector.id, { tag }) : map;
-  return updateLine(
+  const aimed = updateLine(
     tagged,
     wall,
     action ? { action: { ...action, tag } } : { raw: { ...defined(raw), tag } },
   );
+  return landTeleport(aimed, wall);
+}
+
+// A teleporter lands on a destination thing in its room, so aiming one places
+// a destination there unless a room with its tag already has one. A door room
+// is shut, so it gets none.
+export function landTeleport(map: GameMap, wall: string): GameMap {
+  const action = map.lines?.[wall]?.action;
+  if (!action?.tag || !getIsTeleport(action.kind)) return map;
+  const rooms = map.sectors.filter((sector) => sector.tag === action.tag);
+  const landed = map.things.some(
+    (thing) =>
+      thing.kind === "teleport-destination" &&
+      rooms.includes(sectorAt(map, thing) as Sector),
+  );
+  if (landed) return map;
+  for (const room of rooms) {
+    const at = room.door ? null : landingSpot(map, room);
+    if (at) return addThing(map, "teleport-destination", at).map;
+  }
+  return map;
 }
 
 // The lowest tag no room or line action uses yet.
@@ -733,6 +755,41 @@ export function addRoom(
 }
 
 export type RoomSide = "north" | "east" | "south" | "west";
+
+// The grid point nearest the room's middle with a player's width of the room
+// around it, so a room nested inside it or a wall doesn't take the landing.
+function landingSpot(map: GameMap, room: Sector): Point | null {
+  const radius = 15;
+  const fits = (point: Point) =>
+    [
+      point,
+      { x: point.x - radius, y: point.y - radius },
+      { x: point.x + radius, y: point.y - radius },
+      { x: point.x - radius, y: point.y + radius },
+      { x: point.x + radius, y: point.y + radius },
+    ].every((corner) => sectorAt(map, corner) === room);
+  const middle = roomCenter(map, room);
+  if (fits(middle)) return middle;
+  const polygon = sectorPolygon(map, room);
+  const xs = polygon.map((point) => point.x);
+  const ys = polygon.map((point) => point.y);
+  const [left, top] = [Math.min(...xs), Math.min(...ys)];
+  const [right, bottom] = [Math.max(...xs), Math.max(...ys)];
+  const [stepX, stepY] = [landingStep(right - left), landingStep(bottom - top)];
+  const spots: Point[] = [];
+  for (let x = Math.ceil(left / stepX) * stepX; x <= right; x += stepX) {
+    for (let y = Math.ceil(top / stepY) * stepY; y <= bottom; y += stepY) {
+      spots.push({ x, y });
+    }
+  }
+  const away = (point: Point) =>
+    Math.hypot(point.x - middle.x, point.y - middle.y);
+  return spots.sort((a, b) => away(a) - away(b)).find(fits) ?? null;
+}
+
+function landingStep(size: number) {
+  return gridSize * Math.max(1, Math.ceil(size / gridSize / 64));
+}
 
 function setLine(map: GameMap, wall: string, line: LineSettings | undefined) {
   return {

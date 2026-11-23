@@ -79,6 +79,7 @@ import {
   fillHole,
   flipDetailLine,
   freeWallAt,
+  landTeleport,
   makePillar,
   removeDetailLine,
   removeHole,
@@ -108,6 +109,7 @@ import {
   describeLine,
   fitLineAction,
   getIsLineActionKind,
+  getIsTeleport,
   lineActionGroups,
   lineActionKinds,
   newLineAction,
@@ -1005,16 +1007,15 @@ function WallMenu({ sector, wall, ...props }: WallMenuProps) {
       );
       return;
     }
-    onCommit(
-      updateLine(map, wall, {
-        action: action
-          ? fitLineAction({ ...action, kind }, line)
-          : newLineAction(line, kind),
-        scrolls: undefined,
-        raw: undefined,
-        shut: undefined,
-      }),
-    );
+    const acted = updateLine(map, wall, {
+      action: action
+        ? fitLineAction({ ...action, kind }, line)
+        : newLineAction(line, kind),
+      scrolls: undefined,
+      raw: undefined,
+      shut: undefined,
+    });
+    onCommit(getIsTeleport(action?.kind) ? acted : landTeleport(acted, wall));
   };
 
   return (

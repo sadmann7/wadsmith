@@ -1,10 +1,11 @@
 import type { GameMap, LineActionKind, LineSettings, LineSide } from "./types";
 
-import { updateLine, updateLineSide } from "./edit";
+import { landTeleport, updateLine, updateLineSide } from "./edit";
 import { wallOwners } from "./geometry";
 import {
   describeLine,
   fitLineAction,
+  getIsTeleport,
   lineUsesTag,
   newLineAction,
   triggersFor,
@@ -187,12 +188,13 @@ export function setWallsAction(
           kind === current.kind ? current.trigger : undefined,
         )
       : newLineAction(line, kind);
-    return updateLine(next, wall, {
+    const acted = updateLine(next, wall, {
       action,
       scrolls: undefined,
       shut: undefined,
       raw: undefined,
     });
+    return getIsTeleport(current?.kind) ? acted : landTeleport(acted, wall);
   }, map);
 }
 
