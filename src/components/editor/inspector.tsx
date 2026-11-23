@@ -100,19 +100,20 @@ import {
 } from "@/lib/map/edit";
 import { containerOf } from "@/lib/map/geometry";
 import {
+  actionForSpecial,
   describeLine,
   fitLineAction,
-  getCanRepeatChoice,
   getIsLineActionKind,
   keysFor,
   lineActionGroups,
   lineActionKinds,
   lineActions,
   type LineSides,
+  lineSpecial,
   lineUsesTag,
   newLineAction,
-  triggerChoices,
-  triggerLabels,
+  triggerLabel,
+  triggerOptions,
   triggersFor,
   usedFromFront,
 } from "@/lib/map/lines";
@@ -831,14 +832,20 @@ export function LineInspector({
                 <div className="flex items-center items-end gap-2 [&>*]:min-w-0 [&>*]:flex-1">
                   <ChoiceField
                     label="Trigger"
-                    value={action.trigger}
-                    items={triggerChoices(action, line).map((value) => ({
-                      value,
-                      label: triggerLabels[value],
-                    }))}
-                    onChange={(trigger) =>
-                      changeAction({ trigger: trigger as LineTrigger })
-                    }
+                    value={`${action.trigger}:${action.repeat}`}
+                    items={triggerOptions(action, line).map(
+                      ({ trigger, repeat }) => ({
+                        value: `${trigger}:${repeat}`,
+                        label: triggerLabel(trigger, repeat),
+                      }),
+                    )}
+                    onChange={(value) => {
+                      const [trigger, repeat] = value.split(":");
+                      changeAction({
+                        trigger: trigger as LineTrigger,
+                        repeat: repeat === "true",
+                      });
+                    }}
                   />
                   {keysFor(action.kind, action.trigger).length > 0 ? (
                     <ChoiceField
@@ -872,13 +879,6 @@ export function LineInspector({
                     onChange={(next) =>
                       onTargetChange(next === "none" ? null : next)
                     }
-                  />
-                ) : null}
-                {getCanRepeatChoice(action) ? (
-                  <ToggleField
-                    label="Can repeat"
-                    checked={action.repeat}
-                    onChange={(repeat) => changeAction({ repeat })}
                   />
                 ) : null}
               </>
@@ -936,24 +936,37 @@ export function LineInspector({
             ) : null}
           </>
         )}
-        {!line.wiredSwitch && !action && !opensDoor ? (
+        {!line.wiredSwitch && (action || raw || !opensDoor) ? (
           <div className="flex items-center gap-2 [&>*]:min-w-0 [&>*]:flex-1">
             <NumberSetting
               label="Special number"
-              value={settings.raw?.special ?? 0}
+              value={action ? (lineSpecial(action) ?? 0) : (raw?.special ?? 0)}
               step={1}
               min={0}
               max={rawSpecialLimit}
-              onChange={(special) =>
-                onLineChange({
-                  raw: special
-                    ? { special, tag: settings.raw?.tag ?? 0 }
-                    : undefined,
-                  scrolls: special ? undefined : settings.scrolls,
-                })
-              }
+              onChange={(special) => {
+                // Typing or stepping passes through specials that take no tag,
+                // so the line keeps its tag for the number after.
+                const tag = action?.tag ?? raw?.tag ?? 0;
+                const known = actionForSpecial(special);
+                onLineChange(
+                  known
+                    ? {
+                        action: { ...known, tag },
+                        raw: undefined,
+                        scrolls: undefined,
+                        shut: undefined,
+                      }
+                    : {
+                        action: undefined,
+                        raw: special ? { special, tag } : undefined,
+                        scrolls:
+                          special || action ? undefined : settings.scrolls,
+                      },
+                );
+              }}
             />
-            {raw ? (
+            {raw && !action ? (
               <TagSetting
                 value={raw.tag}
                 free={freeTag(map)}

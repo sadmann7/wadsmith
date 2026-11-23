@@ -12,12 +12,20 @@ import type { LivePeer } from "@/lib/episodes/live";
 import type { MapLink } from "@/lib/map/links";
 import type { PlaytestRun, RunMark } from "@/lib/map/playtest";
 import type { SoundReach } from "@/lib/map/sound";
-import type { GameMap, Point, Sector, ThingKind } from "@/lib/map/types";
+import type {
+  GameMap,
+  LineSettings,
+  Point,
+  Sector,
+  ThingKind,
+} from "@/lib/map/types";
 
 import { buttonVariants } from "@/components/ui/button";
 import { thingIcons } from "@/lib/editor/thing-icons";
+import { generalizedTrigger, getIsGeneralized } from "@/lib/map/boom";
 import { doorKeyPrefix, switchKeyPrefix, thingKeyPrefix } from "@/lib/map/edit";
 import { paintOrder, wallOwners } from "@/lib/map/geometry";
+import { actionForSpecial } from "@/lib/map/lines";
 import { type CustomThings, thingLabel } from "@/lib/wad/custom-things";
 
 import {
@@ -134,6 +142,7 @@ export function MapCanvas({
           className="map-wall"
           data-portal={wall.shared ? "" : undefined}
           data-detail={wall.detail ? "" : undefined}
+          data-trigger={wall.trigger}
         />
       ))}
       {map.switches.flatMap((item) =>
@@ -460,8 +469,20 @@ function wallsOf(map: GameMap) {
       to,
       shared: owners.length > 1,
       detail: owners.length === 2 && owners[0] === owners[1],
+      trigger: triggerOf(map.lines?.[key]),
     };
   });
+}
+
+function triggerOf(line: LineSettings | undefined) {
+  const raw = line?.raw?.special;
+  const trigger =
+    line?.action?.trigger ??
+    (raw === undefined
+      ? undefined
+      : (actionForSpecial(raw)?.trigger ??
+        (getIsGeneralized(raw) ? generalizedTrigger(raw).trigger : undefined)));
+  return trigger === "door" ? "switch" : trigger;
 }
 
 function boxOf(map: GameMap, sector: GameMap["sectors"][number]): Area {

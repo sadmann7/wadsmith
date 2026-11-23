@@ -43,6 +43,8 @@
   --color-map-door: var(--color-warning);
   --color-map-wire: var(--color-warning);
   --color-map-switch: var(--color-success);
+  --color-map-walk: var(--color-info);
+  --color-map-shoot: var(--color-destructive);
   --color-map-camera: var(--color-warning);
   --color-map-note: var(--color-warning);
   --color-thing-start: var(--color-warning);
@@ -886,6 +888,24 @@
   .map-wall[data-portal] {
     stroke: var(--color-map-portal);
     stroke-dasharray: 5 4;
+  }
+
+  .map-wall[data-trigger] {
+    stroke-width: 2.5;
+  }
+
+  .map-wall[data-trigger="walk"] {
+    stroke: var(--color-map-walk);
+    stroke-dasharray: 8 4;
+  }
+
+  .map-wall[data-trigger="switch"] {
+    stroke: var(--color-map-switch);
+  }
+
+  .map-wall[data-trigger="shoot"] {
+    stroke: var(--color-map-shoot);
+    stroke-dasharray: 2 3;
   }
 
   .map-wall[data-hover] {

@@ -377,12 +377,61 @@ export function lineActionGroups(kinds: LineActionKind[]) {
 export const lineTriggers: LineTrigger[] = ["door", "switch", "walk", "shoot"];
 export const keyColors: KeyColor[] = ["blue", "yellow", "red"];
 
-export const triggerLabels: Record<LineTrigger, string> = {
-  door: "Press door",
-  switch: "Press switch",
+const triggerLabels: Record<LineTrigger, string> = {
+  door: "Use door",
+  switch: "Use",
   walk: "Walk over",
   shoot: "Shoot",
 };
+
+// Every special an action has, back to the action, trigger, key and repeat it
+// stands for.
+const specialActions = new Map(
+  lineActionKinds.flatMap((kind) => {
+    const { triggers, keys } = lineActions[kind];
+    const entries = (
+      trigger: LineTrigger,
+      specials: Specials,
+      key?: KeyColor,
+    ) => {
+      const found: [number, Omit<LineAction, "tag">][] = [];
+      if (specials.once !== undefined) {
+        found.push([specials.once, { kind, trigger, repeat: false, key }]);
+      }
+      if (specials.repeat !== undefined) {
+        found.push([specials.repeat, { kind, trigger, repeat: true, key }]);
+      }
+      return found;
+    };
+    return [
+      ...Object.entries(triggers).flatMap(([trigger, specials]) =>
+        entries(trigger as LineTrigger, specials),
+      ),
+      ...Object.entries(keys ?? {}).flatMap(([trigger, colors]) =>
+        Object.entries(colors).flatMap(([key, specials]) =>
+          entries(trigger as LineTrigger, specials, key as KeyColor),
+        ),
+      ),
+    ];
+  }),
+);
+
+export function actionForSpecial(
+  special: number,
+  tag = 0,
+): LineAction | undefined {
+  const found = specialActions.get(special);
+  if (!found) return undefined;
+  const { key, ...rest } = found;
+  const action = { ...rest, ...(key ? { key } : {}), tag: 0 };
+  return { ...action, tag: lineUsesTag(action) ? tag : 0 };
+}
+
+export function triggerLabel(trigger: LineTrigger, repeat: boolean) {
+  return repeat
+    ? `${triggerLabels[trigger]}, repeatable`
+    : `${triggerLabels[trigger]} once`;
+}
 
 export function getIsLineActionKind(value: unknown): value is LineActionKind {
   return typeof value === "string" && Object.hasOwn(lineActions, value);
@@ -433,9 +482,19 @@ export function usedFromFront({ kind, trigger }: LineAction) {
   return trigger === "door" || trigger === "switch" || getIsTeleport(kind);
 }
 
-export function getCanRepeatChoice(action: LineAction) {
-  const specials = specialsOf(action);
-  return specials?.once !== undefined && specials.repeat !== undefined;
+// Each trigger the action can take on this line, once and repeatable where the
+// action has both, for the key it needs where that trigger takes one.
+export function triggerOptions(action: LineAction, sides: LineSides) {
+  return triggerChoices(action, sides).flatMap((trigger) => {
+    const key = keysFor(action.kind, trigger).includes(action.key as KeyColor)
+      ? action.key
+      : undefined;
+    const specials = specialsOf({ ...action, trigger, key });
+    return [
+      ...(specials?.once === undefined ? [] : [{ trigger, repeat: false }]),
+      ...(specials?.repeat === undefined ? [] : [{ trigger, repeat: true }]),
+    ];
+  });
 }
 
 // A press-to-open door moves the sector behind its line, so it suits a line

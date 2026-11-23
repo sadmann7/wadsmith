@@ -3,7 +3,6 @@ import type {
   Complevel,
   DoorSettings,
   GameMap,
-  LineAction,
   LineSettings,
   LineSide,
   MapSwitch,
@@ -43,11 +42,10 @@ import {
   wallKey,
 } from "@/lib/map/geometry";
 import {
+  actionForSpecial,
   closesDoor,
   doorSpecial,
   getIsFast,
-  lineActionKinds,
-  lineActions,
   movesSector,
   opensDoor,
   usedFromFront,
@@ -137,40 +135,6 @@ const keyedManualDoors = new Set([26, 27, 28, 32, 33, 34]);
 const fastManualDoors = new Set([117, 118]);
 
 const specialScrollLeft = 48;
-
-const actions = actionTable();
-
-function actionTable() {
-  const table = new Map<number, Omit<LineAction, "tag">>();
-  for (const kind of lineActionKinds) {
-    const definition = lineActions[kind];
-    const add = (
-      trigger: LineAction["trigger"],
-      specials: { once?: number; repeat?: number },
-      key?: LineAction["key"],
-    ) => {
-      if (specials.once !== undefined) {
-        table.set(specials.once, { kind, trigger, repeat: false, key });
-      }
-      if (specials.repeat !== undefined) {
-        table.set(specials.repeat, { kind, trigger, repeat: true, key });
-      }
-    };
-    for (const [trigger, specials] of Object.entries(definition.triggers)) {
-      add(trigger as LineAction["trigger"], specials);
-    }
-    for (const [trigger, colors] of Object.entries(definition.keys ?? {})) {
-      for (const [key, specials] of Object.entries(colors)) {
-        add(
-          trigger as LineAction["trigger"],
-          specials,
-          key as LineAction["key"],
-        );
-      }
-    }
-  }
-  return table;
-}
 
 const effects = new Map(
   Object.entries(sectorEffects).map(([effect, { special }]) => [
@@ -351,7 +315,7 @@ export function decompileMap(
     if (fastManualDoors.has(special)) doorFast.add(index);
   }
   for (const line of [...lines, ...details]) {
-    const action = actions.get(line.special);
+    const action = actionForSpecial(line.special);
     if (
       !action ||
       action.trigger === "door" ||
@@ -399,7 +363,7 @@ export function decompileMap(
     const openedTags = new Set<number>();
     const openedByUse = new Set<number>();
     for (const line of [...lines, ...details]) {
-      const action = actions.get(line.special);
+      const action = actionForSpecial(line.special, line.tag);
       if (!action || !movesSector(action.kind)) continue;
       if (action.trigger === "door") {
         if (line.backSector !== null) openedByUse.add(line.backSector);
@@ -624,7 +588,7 @@ export function decompileMap(
         entry.shut = true;
       }
     } else {
-      const action = actions.get(line.special);
+      const action = actionForSpecial(line.special, line.tag);
       // A line that opens the door the door's own way adds nothing, unless
       // it carries a tag to keep.
       const automatic =
@@ -639,9 +603,7 @@ export function decompileMap(
       const unreachable =
         kept.length === 1 && (trigger === "walk" || trigger === "door");
       if (action && !automatic && !unreachable) {
-        const value = { ...action, tag: line.tag };
-        if (!value.key) delete value.key;
-        entry.action = value;
+        entry.action = { ...action, tag: line.tag };
       } else if (!action && !automatic && !unreachable) {
         entry.raw = { special: line.special, tag: line.tag };
       }
