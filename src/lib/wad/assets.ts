@@ -2,17 +2,8 @@ import type { TextureNames } from "@/lib/map/textures";
 import type { ThingKind } from "@/lib/map/types";
 
 import { defined } from "@/lib/defined";
-import {
-  doorTextures,
-  switchTextures,
-  thingCatalog,
-  thingKinds,
-} from "@/lib/map/catalog";
-import {
-  freedoomFlats,
-  freedoomWalls,
-  middleTextures,
-} from "@/lib/map/freedoom-textures";
+import { thingCatalog, thingKinds } from "@/lib/map/catalog";
+import { freedoomNames } from "@/lib/map/textures";
 
 import { resourceSprites } from "./custom-things";
 import {
@@ -405,13 +396,7 @@ export function createFlatAssets(): SceneAssets {
   const tile = (name: string) => solidPicture(1, 1, indexes.get(name) ?? 0);
   return {
     shades,
-    names: {
-      walls: freedoomWalls,
-      flats: freedoomFlats,
-      middles: middleTextures,
-      textures: [...middleTextures, ...doorTextures, ...switchTextures],
-      custom: [],
-    },
+    names: freedoomNames,
     texture: tile,
     flat: tile,
     sprite(kind) {
