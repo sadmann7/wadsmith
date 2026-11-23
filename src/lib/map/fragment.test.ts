@@ -597,6 +597,33 @@ describe("turning, flipping and resizing", () => {
     }
   });
 
+  it("names the door a turn breaks, not a room that was already broken", () => {
+    const arena = defined(
+      starterMap.sectors.find((sector) => sector.name === "Arena"),
+    );
+    const broken = addRoom(starterMap, [
+      { x: 2048, y: 0 },
+      { x: 2112, y: 0 },
+      { x: 2176, y: 0 },
+    ]);
+    const turned = defined(
+      transformParts(
+        broken.map,
+        partKeys(broken.map, selectedParts(broken.map, [], arena.id)),
+        { kind: "rotate", degrees: 90 },
+        32,
+      ),
+    );
+    const named = newProblems(broken.map, turned).map((issue) => issue.target);
+    const doors = starterMap.sectors
+      .filter(
+        (sector) => sector.name === "Arena door" || sector.name === "Blue door",
+      )
+      .map((sector) => sector.id);
+    expect(named).toEqual(expect.arrayContaining(doors));
+    expect(named).not.toContain(broken.id);
+  });
+
   it("finds nothing new when a room joined to no other turns", () => {
     const turned = defined(
       transformParts(square, keys, { kind: "rotate", degrees: 90 }, 32),
