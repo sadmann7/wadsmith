@@ -91,7 +91,7 @@ describe.skipIf(!ready)("a custom thing in the engine", () => {
         customThingWarnings(map, customThingsOf([mod])).map(
           (issue) => issue.id,
         ),
-      ).toEqual(complevel === "mbf21" ? [] : ["custom-mbf21:20001"]);
+      ).toEqual(fires || complevel === "mbf21" ? [] : ["custom-mbf21:20001"]);
     },
     30_000,
   );

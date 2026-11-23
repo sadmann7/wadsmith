@@ -118,7 +118,7 @@ describe("custom things", () => {
       {
         name: "DEHACKED",
         data: encoder.encode(
-          "Thing 151 (Plasma Zombie)\nID # = 20001\nMBF21 Bits = NORADIUSDMG\n",
+          "Thing 151 (Plasma Zombie)\nID # = 20001\nInitial frame = 1100\n\nFrame 1100\nNext frame = 1100\n\n[CODEPTR]\nFRAME 1100 = NoiseAlert\n",
         ),
       },
     ]);

@@ -97,8 +97,8 @@ const engineTypes = new Set(
 );
 
 // A custom thing no added patch numbers is skipped by the game, and one that
-// relies on MBF21 loses its MBF21 flags and actions below MBF21, so the map
-// check names each number once.
+// runs MBF21 actions does nothing with them below MBF21, so the map check
+// names each number once.
 export function customThingWarnings(
   map: GameMap,
   custom: CustomThings,
@@ -125,7 +125,7 @@ export function customThingWarnings(
         severity: "warning",
         message: `${defined.name} needs MBF21`,
         detail:
-          "Its patch uses MBF21 flags or actions, which the game ignores below MBF21. Set Compatibility to MBF21 in Map settings.",
+          "Its patch gives it MBF21 actions, which the game skips below MBF21. Set Compatibility to MBF21 in Map settings.",
         target: thing.id,
       });
     }

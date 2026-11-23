@@ -84,7 +84,7 @@ describe("parseDehacked", () => {
     ]);
   });
 
-  it("notices the MBF21 features a thing relies on", () => {
+  it("notices a thing that runs MBF21 actions", () => {
     const mbf21 = (patch: string) =>
       Object.fromEntries(
         parseDehacked(patch).map((thing) => [thing.name, thing.isMbf21]),
@@ -93,6 +93,7 @@ describe("parseDehacked", () => {
       mbf21(`Thing 151 (Flags)
 ID # = 20001
 MBF21 Bits = NORADIUSDMG
+Initial frame = 1300
 
 Thing 152 (Gunner)
 ID # = 20002
@@ -111,17 +112,23 @@ Next frame = 1100
 Frame 1200
 Next frame = 1200
 
+Frame 1300
+Next frame = 1300
+
 [CODEPTR]
-FRAME 1101 = A_MonsterBulletAttack
+FRAME 1101 = MonsterBulletAttack
+FRAME 1300 = A_MonsterBulletAttack
 `),
-    ).toEqual({ Flags: true, Gunner: true, Plain: false });
+    ).toEqual({ Flags: false, Gunner: true, Plain: false });
     expect(
       mbf21(
-        "Thing 153 (Plain)\nID # = 20003\nInitial frame = 1200\n\nFrame 1200\nNext frame = 1200\n\nFrame 1300\nArgs1 = 5\n",
+        "Thing 153 (Plain)\nID # = 20003\nInitial frame = 1200\n\nFrame 1200\nNext frame = 1200\n\n[CODEPTR]\nFRAME 1300 = SpawnObject\n",
       ),
     ).toEqual({ Plain: false });
     expect(
-      mbf21("Thing 12 (Imp)\nID # = 30000\n\nFrame 1300\nArgs1 = 5\n"),
+      mbf21(
+        "Thing 12 (Imp)\nID # = 30000\n\n[CODEPTR]\nFRAME 1300 = SpawnObject\n",
+      ),
     ).toEqual({ Imp: true });
     expect(
       mbf21("Thing 12 (Imp)\nID # = 30000\n\n[CODEPTR]\nFRAME 1300 = Look\n"),

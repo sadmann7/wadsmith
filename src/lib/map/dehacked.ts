@@ -11,8 +11,8 @@ export interface CustomThing {
   category: CustomCategory;
   // Its first frame's sprite and frame letter, like "SP00A".
   sprite: string | null;
-  // Whether it relies on MBF21's thing fields, frame args or code pointers,
-  // which the engine ignores below MBF21.
+  // Whether its frames run MBF21 code pointers, which the engine skips below
+  // MBF21. MBF21's thing fields and flags apply at every level.
   isMbf21: boolean;
 }
 
@@ -62,15 +62,6 @@ export const mbf21CodePointers = new Set(
   ].map((name) => name.toLowerCase()),
 );
 
-const mbf21ThingFields = [
-  "mbf21 bits",
-  "infighting group",
-  "projectile group",
-  "splash group",
-  "fast speed",
-  "melee range",
-  "rip sound",
-];
 const stateFields = [
   "initial frame",
   "first moving frame",
@@ -216,26 +207,16 @@ export function parseDehacked(...patches: string[]): CustomThing[] {
         category,
         sprite: state === null ? null : spriteOf(state),
         isMbf21:
-          mbf21ThingFields.some((field) => thing.has(field)) ||
-          (number > vanillaThings.length
+          number > vanillaThings.length
             ? getReachesMbf21Frame(thing)
-            : hasMbf21Frames),
+            : hasMbf21Frames,
       },
     ];
   });
 }
 
-const mbf21FrameFields = [
-  "mbf21 bits",
-  ...Array.from({ length: 8 }, (_, index) => `args${index + 1}`),
-];
-
 function getIsMbf21Frame(frame: Map<string, string>) {
-  const pointer = frame.get("pointer")?.toLowerCase().replace(/^a_/, "");
-  return (
-    (pointer !== undefined && mbf21CodePointers.has(pointer)) ||
-    mbf21FrameFields.some((field) => frame.has(field))
-  );
+  return mbf21CodePointers.has(frame.get("pointer")?.toLowerCase() ?? "");
 }
 
 function frameFields(frames: Map<number, Map<string, string>>, number: number) {
