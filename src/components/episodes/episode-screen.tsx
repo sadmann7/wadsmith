@@ -2185,9 +2185,15 @@ function texturesMessage({
   flats,
   holed,
   wads,
+  patches,
   skipped,
 }: AddedTextures) {
   const parts: string[] = [];
+  if (patches.length > 0) {
+    parts.push(
+      `${patches.join(", ")} added. Its numbered things are under Custom in Thing mode.`,
+    );
+  }
   const open = images.filter(
     (name) => holed.includes(name) && !flats.includes(name),
   );

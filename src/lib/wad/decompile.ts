@@ -763,8 +763,10 @@ export function decompileMap(
     !regionsOf[at].holes.some((hole) => pointInPolygon(point, hole));
   const things: Thing[] = [];
   doom.things.forEach((source, index) => {
-    const kind = thingKindOf.get(source.type);
-    if (!kind) {
+    // A thing the editor doesn't know by name keeps its number, for the
+    // DEHACKED patch or port that defines it.
+    const kind = thingKindOf.get(source.type) ?? "custom";
+    if (kind === "custom" && (source.type <= 0 || source.type > 32767)) {
       const label = "Other things";
       report.droppedThings[label] = (report.droppedThings[label] ?? 0) + 1;
       return;
@@ -781,10 +783,11 @@ export function decompileMap(
       report.outsideThings += 1;
       return;
     }
-    const enemy = thingCatalog[kind].category === "enemy";
+    const enemy = kind === "custom" || thingCatalog[kind].category === "enemy";
     things.push({
       id: `t${index}`,
       kind,
+      ...(kind === "custom" ? { type: source.type } : {}),
       x: source.x,
       y: 0 - source.y,
       angle: ((source.angle % 360) + 360) % 360,

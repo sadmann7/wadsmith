@@ -114,9 +114,17 @@ export function updateThing(
   return {
     ...map,
     things: map.things.map((thing) =>
-      thing.id === id ? { ...thing, ...patch } : thing,
+      thing.id === id ? keptType({ ...thing, ...patch }) : thing,
     ),
   };
+}
+
+// Only a custom thing carries an editor number of its own.
+function keptType(thing: Thing): Thing {
+  if (thing.kind === "custom" || thing.type === undefined) return thing;
+  const named = { ...thing };
+  delete named.type;
+  return named;
 }
 
 // Rings of spots around player 1, nearest first, for the starts that join it.
@@ -166,6 +174,7 @@ export function addThing(
   point: Point,
   angle = 0,
   grid = gridSize,
+  type?: number,
 ): { map: GameMap; id: string } {
   const at = snapPoint(point, grid);
   const things = getIsPlayerStart(kind)
@@ -177,7 +186,13 @@ export function addThing(
   );
   return {
     id,
-    map: { ...map, things: [...things, { id, kind, angle, ...at }] },
+    map: {
+      ...map,
+      things: [
+        ...things,
+        { id, kind, ...(type === undefined ? {} : { type }), angle, ...at },
+      ],
+    },
   };
 }
 
@@ -404,6 +419,7 @@ export function duplicateThings(map: GameMap, ids: string[]) {
       copySpot(map, thing),
       thing.angle,
       1,
+      thing.type,
     );
     next = updateThing(added.map, added.id, {
       skills: thing.skills,

@@ -311,6 +311,12 @@ export const thingCatalog: Record<
     category: "enemy",
     hangs: 72,
   },
+  custom: {
+    label: "Custom thing",
+    doomType: 0,
+    color: "#a8a29e",
+    category: "decor",
+  },
   "boss-brain": {
     label: "Boss brain",
     doomType: 88,
@@ -857,7 +863,11 @@ export const keyThings: Record<KeyColor, ThingKind[]> = {
   red: ["red-key", "red-skull-key"],
 };
 
-export const thingKinds = Object.keys(thingCatalog) as ThingKind[];
+// A custom thing takes its editor number from the thing itself, so it isn't
+// one of the kinds offered by name.
+export const thingKinds: ThingKind[] = (
+  Object.keys(thingCatalog) as ThingKind[]
+).filter((kind) => kind !== "custom");
 
 // Vanilla Doom stops loading a deathmatch with fewer deathmatch starts than this.
 export const deathmatchStarts = 4;
@@ -866,7 +876,7 @@ export const deathmatchStarts = 4;
 // start stays what it is.
 export function swappableKinds(kind: ThingKind) {
   const { category } = thingCatalog[kind];
-  return category === "start"
+  return category === "start" || kind === "custom"
     ? []
     : thingKinds.filter((item) => thingCatalog[item].category === category);
 }

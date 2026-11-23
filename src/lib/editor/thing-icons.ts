@@ -46,6 +46,7 @@ import {
   Package,
   Pill,
   Plus,
+  Puzzle,
   Rabbit,
   Radar,
   Radiation,
@@ -229,4 +230,5 @@ export const thingIcons: Record<
     icon: MapPin,
     color: "var(--color-thing-decor)",
   },
+  custom: { icon: Puzzle, color: "var(--color-thing-decor)" },
 };

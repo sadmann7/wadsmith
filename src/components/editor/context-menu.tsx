@@ -171,6 +171,9 @@ interface MapContextMenuProps {
   map: GameMap;
   target: MapTarget | null;
   thingKind: ThingKind;
+  // A custom thing's editor number and name, when one is picked.
+  thingType?: number;
+  thingLabel: string;
   edit: EditActions;
   textures: TextureActions;
   onOpenChange: MenuProps["onOpenChange"];
@@ -845,21 +848,28 @@ interface PlaceItemProps extends BodyProps {
   point: Point | null;
 }
 
-function PlaceItem({ map, point, thingKind, onCommit }: PlaceItemProps) {
+function PlaceItem({
+  map,
+  point,
+  thingKind,
+  thingType,
+  thingLabel,
+  onCommit,
+}: PlaceItemProps) {
   return (
     <Item
       icon={thingIcons[thingKind].icon}
       disabled={!getCanStand(map, point)}
       onSelect={() => {
         if (!point) return;
-        const placed = addThing(map, thingKind, point, 0, 1);
+        const placed = addThing(map, thingKind, point, 0, 1, thingType);
         onCommit(placed.map, {
           keys: [`${thingKeyPrefix}${placed.id}`],
           sector: null,
         });
       }}
     >
-      Place {thingCatalog[thingKind].label} here
+      Place {thingLabel} here
     </Item>
   );
 }

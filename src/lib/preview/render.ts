@@ -62,7 +62,7 @@ interface SceneOptions {
   assets: SceneAssets;
   hovered?: string | null;
   selected?: string | null;
-  ghost?: (Point & { kind: ThingKind }) | null;
+  ghost?: (Point & { kind: ThingKind; type?: number }) | null;
   // The texture drawn where a ceiling or floor wears the sky flat.
   sky?: string | null;
   // The doors and lifts shown as they stand once worked.
@@ -73,6 +73,8 @@ interface SceneOptions {
   fullbright?: boolean;
   // False leaves things out, all but the one being placed.
   things?: boolean;
+  // The sprite frame each custom thing's editor number shows, like "SP00A".
+  customSprites?: ReadonlyMap<number, string | null>;
 }
 
 // A see-through texture on an open line, kept until what lies behind it in
@@ -195,6 +197,7 @@ export function renderScene(
     picked = noMovers,
     fullbright = false,
     things = true,
+    customSprites,
   }: SceneOptions,
 ) {
   const { width, height, colors, pick, extent, reach, focal } = target;
@@ -542,7 +545,12 @@ export function renderScene(
     .toSorted((a, b) => b.distance - a.distance);
 
   for (const { thing, isGhost, distance, side } of sprites) {
-    const picture = assets.sprite(thing.kind);
+    const custom =
+      thing.kind === "custom" && thing.type !== undefined
+        ? customSprites?.get(thing.type)
+        : undefined;
+    const picture =
+      (custom ? assets.frame(custom) : null) ?? assets.sprite(thing.kind);
     if (!picture) continue;
     const owner = isGhost ? sectorAt(map, thing) : thingOwner(map, thing);
     const { hangs } = thingCatalog[thing.kind];

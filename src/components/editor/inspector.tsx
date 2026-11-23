@@ -6,6 +6,7 @@ import {
 import { Search, TriangleAlert } from "lucide-react";
 import * as React from "react";
 
+import type { CustomThing } from "@/lib/map/dehacked";
 import type {
   Complevel,
   DoorSettings,
@@ -123,7 +124,7 @@ import { rankByQuery } from "@/lib/search";
 import { TextureSwatch } from "./surface-panel";
 import { type TextureKind, TexturePicker } from "./texture-picker";
 
-type ThingTab = "enemy" | "item" | "key" | "decor";
+type ThingTab = "enemy" | "item" | "key" | "decor" | "custom";
 
 const skillLabels: Record<ThingSkill, string> = {
   easy: "Easy",
@@ -1119,14 +1120,21 @@ export function LinesInspector({
 
 type ThingChange = (thing: Thing) => Partial<Omit<Thing, "id">>;
 
+export interface ThingPick {
+  kind: ThingKind;
+  type?: number;
+}
+
 interface ThingInspectorProps {
   map: GameMap;
   things: Thing[];
-  placing: ThingKind | null;
+  placing: ThingPick | null;
   kinds?: readonly ThingKind[];
+  // The things the added DEHACKED patches number.
+  custom?: readonly CustomThing[];
   grid?: number;
   onChange: (change: ThingChange) => void;
-  onPlace: (kind: ThingKind | null) => void;
+  onPlace: (pick: ThingPick | null) => void;
 }
 
 export function ThingInspector({
@@ -1134,6 +1142,7 @@ export function ThingInspector({
   things,
   placing,
   kinds = thingKinds,
+  custom = noCustomThings,
   grid = gridSize,
   onChange,
   onPlace,
@@ -1148,7 +1157,12 @@ export function ThingInspector({
           onChange={onChange}
         />
       ) : null}
-      <PlaceThings kind={placing} kinds={kinds} onPick={onPlace} />
+      <PlaceThings
+        picked={placing}
+        kinds={kinds}
+        custom={custom}
+        onPick={onPlace}
+      />
       <BalancePanel map={map} />
     </>
   );
@@ -1840,9 +1854,12 @@ function ThingFields({ things, grid, onChange }: ThingFieldsProps) {
   const pressed = allSkills.filter((skill) =>
     placed.every((thing) => appearsOn(thing.skills, skill)),
   );
-  const kinds = swappableKinds(first.kind).filter((kind) =>
-    things.every((thing) => swappableKinds(thing.kind).includes(kind)),
-  );
+  // A custom thing's number comes from its patch, so it keeps its kind.
+  const kinds = things.some((thing) => thing.kind === "custom")
+    ? []
+    : swappableKinds(first.kind).filter((kind) =>
+        things.every((thing) => swappableKinds(thing.kind).includes(kind)),
+      );
   const sameKind = things.every((thing) => thing.kind === first.kind);
   const toggleSkill = (skill: ThingSkill, on: boolean) =>
     onChange((thing) => {
@@ -2015,6 +2032,13 @@ function CompactNumber({
   );
 }
 
+const noCustomThings: CustomThing[] = [];
+const customColors: Record<CustomThing["category"], string> = {
+  enemy: "var(--color-thing-enemy)",
+  item: "var(--color-thing-item)",
+  decor: "var(--color-thing-decor)",
+};
+const customTab = { value: "custom" as const, label: "Custom" };
 const thingTabs: { value: ThingTab; label: string }[] = [
   { value: "enemy", label: "Enemies" },
   { value: "item", label: "Items" },
@@ -2023,20 +2047,55 @@ const thingTabs: { value: ThingTab; label: string }[] = [
 ];
 
 interface PlaceThingsProps {
-  kind: ThingKind | null;
+  picked: ThingPick | null;
   kinds: readonly ThingKind[];
-  onPick: (kind: ThingKind | null) => void;
+  custom: readonly CustomThing[];
+  onPick: (pick: ThingPick | null) => void;
 }
 
-function PlaceThings({ kind, kinds, onPick }: PlaceThingsProps) {
-  const [tab, setTab] = React.useState(() => (kind ? tabOf(kind) : "enemy"));
+interface ThingEntry {
+  key: string;
+  pick: ThingPick;
+  label: string;
+  tab: ThingTab;
+  icon: (typeof thingIcons)[ThingKind]["icon"];
+  color: string;
+}
+
+function PlaceThings({ picked, kinds, custom, onPick }: PlaceThingsProps) {
+  const [tab, setTab] = React.useState<ThingTab>(() =>
+    picked?.kind === "custom"
+      ? "custom"
+      : picked
+        ? tabOf(picked.kind)
+        : "enemy",
+  );
   const [query, setQuery] = React.useState("");
+  const entries: ThingEntry[] = [
+    ...kinds.map((kind) => ({
+      key: kind,
+      pick: { kind },
+      label: thingCatalog[kind].label,
+      tab: tabOf(kind),
+      ...thingIcons[kind],
+    })),
+    ...custom.map((thing) => ({
+      key: `custom:${thing.type}`,
+      pick: { kind: "custom" as const, type: thing.type },
+      label: thing.name,
+      tab: "custom" as const,
+      icon: thingIcons.custom.icon,
+      color: customColors[thing.category],
+    })),
+  ];
+  const tabs = custom.length > 0 ? [...thingTabs, customTab] : thingTabs;
+  const shownTab = tab === "custom" && custom.length === 0 ? "enemy" : tab;
   const shown = query.trim()
-    ? rankByQuery(kinds, query, (item) => [
-        thingCatalog[item].label,
-        thingTabs.find((entry) => entry.value === tabOf(item))?.label ?? "",
+    ? rankByQuery(entries, query, (entry) => [
+        entry.label,
+        tabs.find((item) => item.value === entry.tab)?.label ?? "",
       ])
-    : kinds.filter((item) => tabOf(item) === tab);
+    : entries.filter((entry) => entry.tab === shownTab);
   return (
     <InspectorSection title="Place a thing">
       <InputGroup className="h-8">
@@ -2055,10 +2114,10 @@ function PlaceThings({ kind, kinds, onPick }: PlaceThingsProps) {
       <SegmentedControl
         aria-label="Thing type"
         className="w-full [&>button]:flex-1 [&>button]:px-1"
-        value={tab}
+        value={shownTab}
         onValueChange={(next) => setTab(next as ThingTab)}
       >
-        {thingTabs.map(({ value, label }) => (
+        {tabs.map(({ value, label }) => (
           <SegmentedControlItem key={value} value={value}>
             {label}
           </SegmentedControlItem>
@@ -2066,17 +2125,19 @@ function PlaceThings({ kind, kinds, onPick }: PlaceThingsProps) {
       </SegmentedControl>
       {shown.length > 0 ? (
         <div className="grid grid-cols-4 gap-1.5">
-          {shown.map((item) => {
-            const { icon: Icon, color } = thingIcons[item];
-            const active = item === kind;
+          {shown.map((entry) => {
+            const { icon: Icon, color } = entry;
+            const active =
+              picked?.kind === entry.pick.kind &&
+              picked.type === entry.pick.type;
             return (
               <button
-                key={item}
+                key={entry.key}
                 type="button"
                 aria-pressed={active}
-                title={thingCatalog[item].label}
+                title={entry.label}
                 className="grid h-[58px] min-w-0 content-center justify-items-center gap-1 rounded-[2px] border-0 bg-muted px-1 text-xs text-muted-foreground hover:text-foreground aria-pressed:bg-primary/15 aria-pressed:text-foreground"
-                onClick={() => onPick(active ? null : item)}
+                onClick={() => onPick(active ? null : entry.pick)}
               >
                 <Icon
                   size={18}
@@ -2084,7 +2145,7 @@ function PlaceThings({ kind, kinds, onPick }: PlaceThingsProps) {
                   aria-hidden="true"
                 />
                 <span className="w-full truncate text-center">
-                  {thingCatalog[item].label}
+                  {entry.label}
                 </span>
               </button>
             );

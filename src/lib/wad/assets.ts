@@ -14,6 +14,7 @@ import {
   middleTextures,
 } from "@/lib/map/freedoom-textures";
 
+import { resourceSprites } from "./custom-things";
 import {
   drawPatch,
   flatSize,
@@ -36,6 +37,8 @@ export interface SceneAssets {
   texture: (name: string) => Picture;
   flat: (name: string) => Picture;
   sprite: (kind: ThingKind) => Picture | null;
+  // A sprite by its name and frame, like "TROOA", facing front.
+  frame: (name: string) => Picture | null;
 }
 
 export const shadeLevels = 32;
@@ -165,6 +168,7 @@ const spriteFrames: Record<ThingKind, string | null> = {
   "boss-shooter": null,
   "spawn-spot": null,
   "teleport-destination": null,
+  custom: null,
 };
 
 // These follow the engine's scalelight and zlight tables for a 320-wide view.
@@ -186,6 +190,8 @@ export function readWadAssets(
 ): SceneAssets {
   const catalog = readTextureCatalog({ iwad, resources });
   const { definitions, flats, lumps } = catalog;
+  // A mod's sprites come after the game's, as the engine loads them.
+  const spriteLumps = new Map([...lumps, ...resourceSprites(resources)]);
 
   const required = (name: string) => {
     const lump = lumps.get(name);
@@ -210,7 +216,7 @@ export function readWadAssets(
   const missing = solidPicture(1, 1, 0);
   const textureCache = new Map<string, Picture>();
   const flatCache = new Map<string, Picture>();
-  const spriteCache = new Map<ThingKind, Picture | null>();
+  const spriteCache = new Map<string, Picture | null>();
 
   const compose = (definition: TextureDefinition) => {
     const picture = createPicture(definition.width, definition.height);
@@ -277,10 +283,13 @@ export function readWadAssets(
       return picture;
     },
     sprite(kind) {
-      const cached = spriteCache.get(kind);
-      if (cached !== undefined) return cached;
       const frame = spriteFrames[kind];
-      const lump = frame === null ? undefined : spriteLump(lumps, frame);
+      return frame === null ? null : assets.frame(frame);
+    },
+    frame(frame) {
+      const cached = spriteCache.get(frame);
+      if (cached !== undefined) return cached;
+      const lump = spriteLump(spriteLumps, frame);
       let picture: Picture | null = null;
       if (lump && lump.length >= 8) {
         const view = new DataView(
@@ -293,7 +302,7 @@ export function readWadAssets(
         picture.topOffset = view.getInt16(6, true);
         drawPatch(lump, picture, 0, 0);
       }
-      spriteCache.set(kind, picture);
+      spriteCache.set(frame, picture);
       return picture;
     },
   };
@@ -418,6 +427,7 @@ export function createFlatAssets(): SceneAssets {
       picture.topOffset = picture.height;
       return picture;
     },
+    frame: () => null,
   };
 }
 

@@ -5,6 +5,7 @@ import {
   readStoredFile,
   writeStoredFile,
 } from "@/lib/episodes/episode-store";
+import { customThingsOf } from "@/lib/wad/custom-things";
 import { getIsWad, readLumps, WadFileError } from "@/lib/wad/inspect";
 import { getHasTextures } from "@/lib/wad/resources";
 
@@ -93,14 +94,18 @@ export async function restoreBundledIwad() {
 
 // Like the IWAD, a resource stays in this browser.
 export async function addResource(name: string, data: Uint8Array) {
-  let textured = false;
+  let useful = false;
   try {
-    textured = getIsWad(data) && getHasTextures(data);
+    useful =
+      getIsWad(data) &&
+      (getHasTextures(data) || customThingsOf([data]).size > 0);
   } catch {
-    textured = false;
+    useful = false;
   }
-  if (!textured) {
-    throw new WadFileError(`${name} has no textures or flats in it.`);
+  if (!useful) {
+    throw new WadFileError(
+      `${name} has no textures, flats or numbered things in it.`,
+    );
   }
   const id = `${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 8)}`;
   const key = `${resourcePrefix}${id}`;

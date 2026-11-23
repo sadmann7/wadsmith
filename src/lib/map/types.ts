@@ -261,7 +261,8 @@ type ThingKind =
   | "pool-of-brains"
   | "boss-shooter"
   | "spawn-spot"
-  | "teleport-destination";
+  | "teleport-destination"
+  | "custom";
 
 type ThingCategory = "start" | "enemy" | "item" | "key" | "decor";
 
@@ -270,6 +271,8 @@ type ThingSkill = "easy" | "medium" | "hard";
 type Thing = Point & {
   id: string;
   kind: ThingKind;
+  // A custom thing's editor number, from a DEHACKED patch.
+  type?: number;
   angle: number;
   skills?: ThingSkill[];
   ambush?: boolean;
