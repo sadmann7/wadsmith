@@ -13,8 +13,9 @@ const rawColor =
   /#[0-9a-f]{3,8}\b|\b(?:oklch|oklab|lch|lab|hwb|rgba?|hsla?)\(/i;
 const namedCssColor =
   /:\s*(?:[^;{}]*\s)?(?:black|white|red|green|blue|yellow|orange|gray|grey)\s*(?:;|$)/im;
+// A utility follows a space or a quote, never a slash as in an import path.
 const colorUtility =
-  /(?<![\w-])(bg|text|border|outline|from)-([a-z][\w-]*|\[[^\]]+\])(?:\/\d+)?(?![\w-])/g;
+  /(?<![\w/-])(bg|text|border|outline|from)-([a-z][\w-]*|\[[^\]]+\])(?:\/\d+)?(?![\w-])/g;
 // Utilities with these prefixes that set something other than a color.
 const otherUtilities: Record<string, RegExp> = {
   bg: /^(?:transparent|linear-to-[a-z]+)$/,

@@ -20,6 +20,7 @@ import {
   type AddedTextures,
   addTextureFiles,
 } from "@/lib/engine/texture-files";
+import { rankByQuery } from "@/lib/search";
 
 import { TextureSwatch } from "./surface-panel";
 import { TextureGrid, TextureTile } from "./texture-grid";
@@ -86,10 +87,9 @@ export function TexturePicker({
       setAdded("Couldn't add those textures.");
     }
   };
-  const search = query.trim().toUpperCase();
   const active =
     categories.find((item) => item.id === category) ?? categories[0];
-  const names = active.names.filter((name) => name.includes(search));
+  const names = rankByQuery(active.names, query, (name) => [name]);
   const firstResult = names.includes(chosen) ? chosen : names[0];
   const preview = picture(chosen);
   const uses = use.get(chosen) ?? 0;
