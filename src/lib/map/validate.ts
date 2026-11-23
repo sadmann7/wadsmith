@@ -823,21 +823,27 @@ function validateLines(
   }
 }
 
-// A floor raise stops at the lowest ceiling around the sector, and a door
-// counts at its closed height, which is its floor.
+// A floor raise goes to the lowest ceiling around the sector, or its own if
+// lower, and a door counts at its closed height, which is its floor. The
+// engine moves the floor there even when that's below it.
 function stuckFloor(map: GameMap, sector: Sector) {
-  const [lowest] = neighbours(map, sector)
+  const [lowest] = [...neighbours(map, sector), sector]
     .map((other) => ({
       other,
       height: other.door ? other.floor : other.ceiling,
     }))
     .sort((a, b) => a.height - b.height);
-  if (!lowest || lowest.height > sector.floor) return [];
+  if (lowest.height > sector.floor) return [];
   const { other, height } = lowest;
+  const at = `${other.door ? "closed " : ""}at ${height}`;
+  const where =
+    other === sector
+      ? `its own ceiling, ${at}`
+      : `the lowest ceiling next to it, ${other.name}, ${at}`;
   return [
-    `the floor of ${sector.name} can't rise: it stops at the lowest ceiling next to it, ${other.name}, ${
-      other.door ? "closed " : ""
-    }at ${height}.`,
+    height === sector.floor
+      ? `the floor of ${sector.name} can't rise: it stops at ${where}.`
+      : `the floor of ${sector.name} drops instead of rising: it goes to ${where}.`,
   ];
 }
 

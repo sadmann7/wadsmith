@@ -1474,8 +1474,8 @@ describe("line editing", () => {
     expect(lineIssues(openWall, { tag: 99 })).toContain(`line-tag:${openWall}`);
   });
 
-  it("warns about a floor raise held down by a closed door next to it", () => {
-    const raise = (map: GameMap) => {
+  it("warns about a floor raise that can't rise", () => {
+    const raise = (map: GameMap, target = "sector-2") => {
       const raised = setLineTarget(
         updateLine(map, openWall, {
           action: {
@@ -1486,7 +1486,7 @@ describe("line editing", () => {
           },
         }),
         openWall,
-        "sector-2",
+        target,
       );
       return inspectMap(raised).warnings.find(
         (issue) => issue.id === `line-stuck:${openWall}`,
@@ -1496,6 +1496,14 @@ describe("line editing", () => {
       "Line 5: the floor of Corridor can't rise: it stops at the lowest ceiling next to it, Arena door, closed at -16.",
     );
     expect(raise(setRoomDoor(testMap, "sector-4", undefined))).toBeUndefined();
+    expect(
+      raise(updateSector(testMap, "sector-2", { floor: 0 }))?.message,
+    ).toBe(
+      "Line 5: the floor of Corridor drops instead of rising: it goes to the lowest ceiling next to it, Arena door, closed at -16.",
+    );
+    expect(raise(testMap, "sector-4")?.message).toBe(
+      "Line 5: the floor of Arena door can't rise: it stops at its own ceiling, closed at -16.",
+    );
   });
 
   it("warns about a press-to-open door with no door behind its line", () => {
