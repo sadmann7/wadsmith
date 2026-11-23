@@ -183,6 +183,25 @@ export function validateMap(map: GameMap, context?: CheckContext): MapIssue[] {
   return inspectMap(map, context).errors;
 }
 
+// Problems are counted by kind, since an edit can rename walls and rooms.
+export function newProblems(before: GameMap, after: GameMap): MapIssue[] {
+  const counts = new Map<string, number>();
+  for (const issue of validateMap(before)) {
+    const kind = issueKind(issue);
+    counts.set(kind, (counts.get(kind) ?? 0) + 1);
+  }
+  return validateMap(after).filter((issue) => {
+    const kind = issueKind(issue);
+    const left = counts.get(kind) ?? 0;
+    counts.set(kind, left - 1);
+    return left <= 0;
+  });
+}
+
+function issueKind(issue: MapIssue) {
+  return issue.id.split(":")[0];
+}
+
 const heightLimit = 32767;
 
 function validateSector(

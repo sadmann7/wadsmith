@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { defined } from "@/lib/defined";
 
+import type { Transform } from "./fragment";
 import type { GameMap, LineAction } from "./types";
 
 import {
@@ -23,8 +24,9 @@ import {
   transformParts,
 } from "./fragment";
 import { wallKey, wallOwners } from "./geometry";
+import { starterMap } from "./starter-map";
 import { islandMap, testMap } from "./test-map";
-import { validateMap } from "./validate";
+import { newProblems, validateMap } from "./validate";
 
 const openWall = wallKey("v3", "v4");
 const lowerFloor: LineAction = {
@@ -566,5 +568,39 @@ describe("turning, flipping and resizing", () => {
       expect([Math.abs(point.x % 8), Math.abs(point.y % 8)]).toEqual([0, 0]);
     }
     expect(turned.things[0].angle).toBe(315);
+  });
+
+  it("finds the doors a turn or flip of a joined room would break", () => {
+    const arena = defined(
+      starterMap.sectors.find((sector) => sector.name === "Arena"),
+    );
+    const arenaKeys = partKeys(
+      starterMap,
+      selectedParts(starterMap, [], arena.id),
+    );
+    const steps: Transform[] = [
+      { kind: "rotate", degrees: 90 },
+      { kind: "rotate", degrees: -90 },
+      { kind: "mirror", axis: "vertical" },
+    ];
+    for (const step of steps) {
+      const turned = defined(transformParts(starterMap, arenaKeys, step, 32));
+      const broken = newProblems(starterMap, turned).map(
+        (issue) => issue.target,
+      );
+      for (const door of ["Arena door", "Blue door"]) {
+        const room = defined(
+          starterMap.sectors.find((sector) => sector.name === door),
+        );
+        expect(broken).toContain(room.id);
+      }
+    }
+  });
+
+  it("finds nothing new when a room joined to no other turns", () => {
+    const turned = defined(
+      transformParts(square, keys, { kind: "rotate", degrees: 90 }, 32),
+    );
+    expect(newProblems(square, turned)).toEqual([]);
   });
 });
