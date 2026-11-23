@@ -1,7 +1,11 @@
 "use client";
 
 import { applyPatch, type MapPatch } from "@rooms/map-patch";
-import { createLocalStorage, matchesShortcut } from "@ui-sdk/core";
+import {
+  createLocalStorage,
+  formatShortcut,
+  matchesShortcut,
+} from "@ui-sdk/core";
 import * as SegmentedControlPrimitive from "@ui-sdk/react/segmented-control";
 import { useShortcut } from "@ui-sdk/react/shortcuts";
 import {
@@ -61,6 +65,7 @@ import {
   SegmentedControl,
   SegmentedControlItem,
 } from "@/components/ui/segmented-control";
+import { useEditorKeys } from "@/hooks/use-editor-keys";
 import { useIwad } from "@/hooks/use-iwad";
 import { actForPerson, agentSession } from "@/lib/editor/agent";
 import { agentStepSummary } from "@/lib/editor/agent-actions";
@@ -532,6 +537,7 @@ export function EditorScreen({
   );
 
   const iwad = useIwad();
+  const shortcutKeys = useEditorKeys();
   const assets = React.useMemo(() => {
     if (!iwad) return createFlatAssets();
     try {
@@ -838,10 +844,10 @@ export function EditorScreen({
     };
   }, []);
 
-  useShortcut(editorShortcuts.undo.keys, undo, shortcut("undo", notTyping));
-  useShortcut(editorShortcuts.redo.keys, redo, shortcut("redo", notTyping));
+  useShortcut(shortcutKeys.undo, undo, shortcut("undo", notTyping));
+  useShortcut(shortcutKeys.redo, redo, shortcut("redo", notTyping));
   useShortcut(
-    editorShortcuts.duplicate.keys,
+    shortcutKeys.duplicate,
     duplicateSelection,
     shortcut(
       "duplicate",
@@ -852,22 +858,22 @@ export function EditorScreen({
   );
   const canTransform = () => modeKeys() && transformKeys.length > 0;
   useShortcut(
-    editorShortcuts.rotateRight.keys,
+    shortcutKeys.rotateRight,
     () => transformSelection([{ kind: "rotate", degrees: 90 }]),
     shortcut("rotateRight", canTransform),
   );
   useShortcut(
-    editorShortcuts.rotateLeft.keys,
+    shortcutKeys.rotateLeft,
     () => transformSelection([{ kind: "rotate", degrees: -90 }]),
     shortcut("rotateLeft", canTransform),
   );
   useShortcut(
-    editorShortcuts.flipAcross.keys,
+    shortcutKeys.flipAcross,
     () => transformSelection([{ kind: "mirror", axis: "horizontal" }]),
     shortcut("flipAcross", canTransform),
   );
   useShortcut(
-    editorShortcuts.flipOver.keys,
+    shortcutKeys.flipOver,
     () => transformSelection([{ kind: "mirror", axis: "vertical" }]),
     shortcut("flipOver", canTransform),
   );
@@ -909,7 +915,17 @@ export function EditorScreen({
     setSelection(keys);
   };
   useShortcut(
-    editorShortcuts.find.keys,
+    shortcutKeys.clearSelection,
+    () => {
+      setSurface(null);
+      setActiveSector(null);
+      setSelection([]);
+      setScenePicked([]);
+    },
+    shortcut("clearSelection", modeKeys),
+  );
+  useShortcut(
+    shortcutKeys.find,
     () => setFinding(true),
     shortcut("find", notTyping),
   );
@@ -957,12 +973,12 @@ export function EditorScreen({
     commit(next);
   };
   useShortcut(
-    editorShortcuts.flipWalls.keys,
+    shortcutKeys.flipWalls,
     () => flipSelection(selectedOrShown(), false),
     shortcut("flipWalls", () => modeKeys() && selectedOrShown().length > 0),
   );
   useShortcut(
-    editorShortcuts.swapSides.keys,
+    shortcutKeys.swapSides,
     () => flipSelection(selectedOrShown(), true),
     shortcut("swapSides", () => modeKeys() && selectedOrShown().length > 0),
   );
@@ -985,7 +1001,7 @@ export function EditorScreen({
     setActiveSector(joined.id);
   };
   useShortcut(
-    editorShortcuts.joinRooms.keys,
+    shortcutKeys.joinRooms,
     joinSelection,
     shortcut("joinRooms", () => modeKeys() && selectedRooms.length > 1),
   );
@@ -1000,13 +1016,13 @@ export function EditorScreen({
     ) {
       return;
     }
-    if (matchesShortcut(event, editorShortcuts.redo.keys)) {
+    if (matchesShortcut(event, shortcutKeys.redo)) {
       event.preventDefault();
       redo();
-    } else if (matchesShortcut(event, editorShortcuts.undo.keys)) {
+    } else if (matchesShortcut(event, shortcutKeys.undo)) {
       event.preventDefault();
       undo();
-    } else if (matchesShortcut(event, editorShortcuts.duplicate.keys)) {
+    } else if (matchesShortcut(event, shortcutKeys.duplicate)) {
       event.preventDefault();
     }
   });
@@ -1016,7 +1032,7 @@ export function EditorScreen({
     return () => window.removeEventListener("keydown", onHeldKey);
   }, []);
   useShortcut(
-    editorShortcuts.help.keys,
+    shortcutKeys.help,
     () => setShowShortcuts(true),
     shortcut("help"),
   );
@@ -1054,52 +1070,52 @@ export function EditorScreen({
   };
 
   useShortcut(
-    editorShortcuts.vertices.keys,
+    shortcutKeys.vertices,
     () => chooseMode("vertices"),
     shortcut("vertices", modeKeys),
   );
   useShortcut(
-    editorShortcuts.lines.keys,
+    shortcutKeys.lines,
     () => chooseMode("lines"),
     shortcut("lines", modeKeys),
   );
   useShortcut(
-    editorShortcuts.sectors.keys,
+    shortcutKeys.sectors,
     () => chooseMode("sectors"),
     shortcut("sectors", modeKeys),
   );
   useShortcut(
-    editorShortcuts.things.keys,
+    shortcutKeys.things,
     () => chooseMode("things"),
     shortcut("things", modeKeys),
   );
   useShortcut(
-    editorShortcuts.draw.keys,
+    shortcutKeys.draw,
     () => chooseMode("draw"),
     shortcut("draw", modeKeys),
   );
   useShortcut(
-    editorShortcuts.drawLine.keys,
+    shortcutKeys.drawLine,
     () => chooseMode("line"),
     shortcut("drawLine", modeKeys),
   );
   useShortcut(
-    editorShortcuts.gridSmaller.keys,
+    shortcutKeys.gridSmaller,
     () => stepGrid(-1),
     shortcut("gridSmaller", modeKeys),
   );
   useShortcut(
-    editorShortcuts.gridLarger.keys,
+    shortcutKeys.gridLarger,
     () => stepGrid(1),
     shortcut("gridLarger", modeKeys),
   );
   useShortcut(
-    editorShortcuts.snap.keys,
+    shortcutKeys.snap,
     () => changeGrid({ ...gridSetting, snap: !gridSetting.snap }),
     shortcut("snap", modeKeys),
   );
   useShortcut(
-    editorShortcuts.look.keys,
+    shortcutKeys.look,
     () => {
       const pointer = mapPointer.current;
       if (!pointer) return;
@@ -1111,7 +1127,7 @@ export function EditorScreen({
     shortcut("look", mapKeys),
   );
   useShortcut(
-    editorShortcuts.pane.keys,
+    shortcutKeys.pane,
     (event) => {
       const focused = (event.target as Element).closest?.<HTMLElement>(
         "[data-pane]",
@@ -1126,7 +1142,7 @@ export function EditorScreen({
   );
 
   useShortcut(
-    editorShortcuts.fitSelection.keys,
+    shortcutKeys.fitSelection,
     () => setFitSelectionRequest((request) => request + 1),
     shortcut("fitSelection", () => modeKeys() && visibleLayout !== "scene"),
   );
@@ -1149,7 +1165,7 @@ export function EditorScreen({
     );
   };
   useShortcut(
-    editorShortcuts.makeDoor.keys,
+    shortcutKeys.makeDoor,
     toggleDoors,
     shortcut("makeDoor", () => modeKeys() && selectedRooms.length > 0),
   );
@@ -1179,23 +1195,23 @@ export function EditorScreen({
   };
   const canSlope = () => notTyping() && modeKeys() && selectedRooms.length > 2;
   useShortcut(
-    editorShortcuts.floorGradient.keys,
+    shortcutKeys.floorGradient,
     () => slopeRooms("floor"),
     shortcut("floorGradient", canSlope),
   );
   useShortcut(
-    editorShortcuts.ceilingGradient.keys,
+    shortcutKeys.ceilingGradient,
     () => slopeRooms("ceiling"),
     shortcut("ceilingGradient", canSlope),
   );
   useShortcut(
-    editorShortcuts.lightGradient.keys,
+    shortcutKeys.lightGradient,
     () => slopeRooms("light"),
     shortcut("lightGradient", canSlope),
   );
 
   useShortcut(
-    editorShortcuts.placePrefab.keys,
+    shortcutKeys.placePrefab,
     () => {
       if (!lastPrefab) {
         setNotice("Place a prefab from the map's menu first.");
@@ -1689,12 +1705,8 @@ export function EditorScreen({
     onPlayingChange(true, false);
   };
 
-  useShortcut(editorShortcuts.play.keys, play, shortcut("play"));
-  useShortcut(
-    editorShortcuts.playHere.keys,
-    playFromCamera,
-    shortcut("playHere"),
-  );
+  useShortcut(shortcutKeys.play, play, shortcut("play"));
+  useShortcut(shortcutKeys.playHere, playFromCamera, shortcut("playHere"));
 
   const keepPlaytest = (run: PlaytestRun) => {
     const saved = keepRun(playtest, run, !game?.fromCamera);
@@ -1918,20 +1930,20 @@ export function EditorScreen({
               <MenuContent>
                 <MenuItem
                   value="undo"
-                  shortcut={editorShortcuts.undo.keys}
+                  shortcut={shortcutKeys.undo}
                   disabled={!undoable.undo}
                 >
                   Undo
                 </MenuItem>
                 <MenuItem
                   value="redo"
-                  shortcut={editorShortcuts.redo.keys}
+                  shortcut={shortcutKeys.redo}
                   disabled={!undoable.redo}
                 >
                   Redo
                 </MenuItem>
                 <MenuSeparator />
-                <MenuItem value="find" shortcut={editorShortcuts.find.keys}>
+                <MenuItem value="find" shortcut={shortcutKeys.find}>
                   Find and select…
                 </MenuItem>
               </MenuContent>
@@ -1957,10 +1969,7 @@ export function EditorScreen({
                 </MenuItem>
                 <MenuItem value="camera">Find camera on map</MenuItem>
                 <MenuSeparator />
-                <MenuItem
-                  value="shortcuts"
-                  shortcut={editorShortcuts.help.keys}
-                >
+                <MenuItem value="shortcuts" shortcut={shortcutKeys.help}>
                   Keyboard shortcuts
                 </MenuItem>
               </MenuContent>
@@ -2098,8 +2107,8 @@ export function EditorScreen({
               <SegmentedControlPrimitive.SegmentedControlItem
                 key={value}
                 value={value}
-                aria-keyshortcuts={editorShortcuts[key].keys}
-                title={`${modeNames[value]} (${editorShortcuts[key].keys.toUpperCase()})`}
+                aria-keyshortcuts={shortcutKeys[key] || undefined}
+                title={`${modeNames[value]}${keyHint(shortcutKeys[key])}`}
                 disabled={
                   visibleLayout === "scene" &&
                   (value === "draw" || value === "line")
@@ -2848,7 +2857,17 @@ export function EditorScreen({
                   variant: "text",
                   className: "min-h-5 px-1 font-mono text-[11px]",
                 })}
-                title={`Grid size and snapping (${editorShortcuts.gridSmaller.keys} ${editorShortcuts.gridLarger.keys} ${editorShortcuts.snap.keys.toUpperCase()})`}
+                title={`Grid size and snapping${keyHint(
+                  [
+                    shortcutKeys.gridSmaller,
+                    shortcutKeys.gridLarger,
+                    shortcutKeys.snap,
+                  ]
+                    .filter(Boolean)
+                    .map((keys) => formatShortcut(keys))
+                    .join(" "),
+                  false,
+                )}`}
               >
                 Grid {gridSetting.size} · Snap {gridSetting.snap ? "on" : "off"}
               </MenuTrigger>
@@ -3237,10 +3256,22 @@ function shapeLabel(shape: DrawShape, sides: number) {
   return `${sides} sides`;
 }
 
+function keyHint(keys: string, format = true) {
+  if (!keys) return "";
+  return ` (${format ? formatShortcut(keys) : keys})`;
+}
+
+// Any key can be given a modifier, which the registry lets through in a text
+// field, so only these few still work while typing.
+const typingShortcuts = new Set<EditorShortcut>(["help", "play", "playHere"]);
+
 function shortcut(name: EditorShortcut, when?: () => boolean) {
   return {
     description: editorShortcuts[name].description,
-    when: () => !document.querySelector(".game-stage") && (when?.() ?? true),
+    when: () =>
+      !document.querySelector(".game-stage") &&
+      (typingShortcuts.has(name) || notTyping()) &&
+      (when?.() ?? true),
   };
 }
 

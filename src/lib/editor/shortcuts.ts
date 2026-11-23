@@ -22,6 +22,11 @@ export const editorShortcuts = {
     description: "Swap what is selected for what isn't",
     area: "map",
   },
+  clearSelection: {
+    keys: "",
+    description: "Clear the selection, as Esc does too",
+    area: "map",
+  },
   find: {
     keys: "mod+shift+f",
     description: "Find and select by texture, tag, action or thing type",

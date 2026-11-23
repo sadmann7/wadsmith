@@ -1,5 +1,7 @@
 import { ariaKeyshortcuts, formatShortcut } from "@ui-sdk/core";
+import * as React from "react";
 
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogBackdrop,
@@ -8,7 +10,27 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { editorShortcuts } from "@/lib/editor/shortcuts";
+import { FieldItem } from "@/components/ui/field";
+import {
+  Select,
+  SelectCheck,
+  SelectContent,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useEditorKeys } from "@/hooks/use-editor-keys";
+import {
+  bindKeys,
+  getSavedKeys,
+  type Keymap,
+  type KeyPreset,
+  keyPresets,
+  keysFromEvent,
+  saveKeys,
+} from "@/lib/editor/keymap";
+import { type EditorShortcut, editorShortcuts } from "@/lib/editor/shortcuts";
 
 interface Key {
   text: string;
@@ -17,19 +39,72 @@ interface Key {
 interface Shortcut {
   keys: Key[];
   does: string;
+  name?: EditorShortcut;
 }
 
 function key(text: string, spoken?: string): Key {
   return { text, spoken };
 }
 
-type TableEntry = (typeof editorShortcuts)[keyof typeof editorShortcuts];
+type TableEntry = (typeof editorShortcuts)[EditorShortcut];
+
+const presetItems = (Object.keys(keyPresets) as KeyPreset[]).map((value) => ({
+  value,
+  label: keyPresets[value].label,
+}));
 
 interface ShortcutSheetProps {
   onClose: () => void;
 }
 
 export function ShortcutSheet({ onClose }: ShortcutSheetProps) {
+  const keymap = useEditorKeys();
+  const [preset, setPreset] = React.useState(() => getSavedKeys().preset);
+  const [binding, setBinding] = React.useState<EditorShortcut | null>(null);
+  const [status, setStatus] = React.useState("");
+
+  const choosePreset = (next: KeyPreset) => {
+    setPreset(next);
+    saveKeys({ preset: next, keys: {} });
+    setStatus(`Using the ${keyPresets[next].label} keys.`);
+  };
+
+  const capture = (event: React.KeyboardEvent, name: EditorShortcut) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.key === "Escape") {
+      setBinding(null);
+      setStatus("");
+      return;
+    }
+    const pressed = keysFromEvent(
+      event.nativeEvent,
+      ariaKeyshortcuts("mod") === "Meta",
+    );
+    if (!pressed) return;
+    if ("problem" in pressed) {
+      setStatus(pressed.problem);
+      return;
+    }
+    const { saved, taken } = bindKeys(getSavedKeys(), name, pressed.keys);
+    saveKeys(saved);
+    setBinding(null);
+    const what = editorShortcuts[name].description;
+    setStatus(
+      taken.length > 0
+        ? `${what}: ${formatShortcut(pressed.keys)}, taken from ${taken
+            .map((other) => editorShortcuts[other].description)
+            .join(" and ")}.`
+        : `${what}: ${formatShortcut(pressed.keys)}.`,
+    );
+  };
+
+  const unbind = (name: EditorShortcut) => {
+    saveKeys(bindKeys(getSavedKeys(), name, "").saved);
+    setBinding(null);
+    setStatus(`${editorShortcuts[name].description}: no key.`);
+  };
+
   return (
     <Dialog
       open
@@ -43,8 +118,41 @@ export function ShortcutSheet({ onClose }: ShortcutSheetProps) {
           <DialogTitle>Keyboard shortcuts</DialogTitle>
           <DialogCloseButton />
         </DialogHeader>
+        <div className="flex flex-wrap items-end gap-3 border-b border-border px-5 py-3">
+          <Select
+            value={preset}
+            items={presetItems}
+            onValueChange={(next) => {
+              if (next) choosePreset(next);
+            }}
+          >
+            <FieldItem className="min-w-[220px]">
+              <SelectLabel>Keys</SelectLabel>
+              <SelectTrigger>
+                <SelectValue />
+                <span aria-hidden="true">▾</span>
+              </SelectTrigger>
+            </FieldItem>
+            <SelectContent>
+              {presetItems.map((item) => (
+                <SelectItem key={item.value} value={item.value}>
+                  {item.label}
+                  <SelectCheck />
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button onClick={() => choosePreset(preset)}>Reset changes</Button>
+          <p
+            role="status"
+            className="m-0 min-h-5 basis-full text-xs text-muted-foreground"
+          >
+            {status ||
+              "Click a key in the Editor or Map list to change it, then press the new key."}
+          </p>
+        </div>
         <div className="relative grid min-h-0 grid-cols-2 gap-x-8 gap-y-6 overflow-y-auto p-5 max-[640px]:grid-cols-1">
-          {groups().map((group) => (
+          {groups(keymap).map((group) => (
             <section key={group.title} className="grid content-start gap-2">
               <h3 className="m-0 font-mono text-xs font-normal tracking-wide text-muted-foreground uppercase">
                 {group.title}
@@ -57,22 +165,24 @@ export function ShortcutSheet({ onClose }: ShortcutSheetProps) {
                   >
                     <dt className="text-sm text-foreground">{item.does}</dt>
                     <dd className="m-0 flex items-baseline gap-1">
-                      {item.keys.map((entry, index) => (
-                        <span key={entry.text} className="flex gap-1">
-                          {index > 0 ? (
-                            <span className="text-xs text-muted-foreground">
-                              <span aria-hidden="true">/</span>
-                              <span className="sr-only">or</span>
-                            </span>
-                          ) : null}
-                          <kbd
-                            aria-label={entry.spoken}
-                            className="rounded-[3px] border border-input px-1.5 font-mono text-xs text-foreground"
-                          >
-                            {entry.text}
-                          </kbd>
-                        </span>
-                      ))}
+                      {item.name ? (
+                        <KeyButton
+                          name={item.name}
+                          keys={item.keys}
+                          binding={binding === item.name}
+                          onStart={() => {
+                            setBinding(item.name ?? null);
+                            setStatus(
+                              "Press the new key, Esc to keep the old one, or Delete for no key.",
+                            );
+                          }}
+                          onCapture={capture}
+                          onUnbind={unbind}
+                          onCancel={() => setBinding(null)}
+                        />
+                      ) : (
+                        <Keys keys={item.keys} />
+                      )}
                     </dd>
                   </div>
                 ))}
@@ -94,18 +204,103 @@ export function ShortcutSheet({ onClose }: ShortcutSheetProps) {
   );
 }
 
+interface KeyButtonProps {
+  name: EditorShortcut;
+  keys: Key[];
+  binding: boolean;
+  onStart: () => void;
+  onCapture: (event: React.KeyboardEvent, name: EditorShortcut) => void;
+  onUnbind: (name: EditorShortcut) => void;
+  onCancel: () => void;
+}
+
+function KeyButton({
+  name,
+  keys,
+  binding,
+  onStart,
+  onCapture,
+  onUnbind,
+  onCancel,
+}: KeyButtonProps) {
+  const label = keys.map((entry) => entry.spoken ?? entry.text).join(" ");
+  return (
+    <button
+      type="button"
+      aria-label={
+        binding
+          ? `Press a new key for ${editorShortcuts[name].description}`
+          : `${label || "No key"}, change the key for ${editorShortcuts[name].description}`
+      }
+      className="rounded-[3px] border border-input px-1.5 font-mono text-xs text-foreground hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring data-[binding]:border-ring data-[binding]:text-muted-foreground"
+      data-binding={binding ? "" : undefined}
+      onClick={() => {
+        if (!binding) onStart();
+      }}
+      onBlur={() => {
+        if (binding) onCancel();
+      }}
+      onKeyDown={(event) => {
+        if (!binding) return;
+        if (event.key === "Tab") {
+          onCancel();
+          return;
+        }
+        if (
+          (event.key === "Delete" || event.key === "Backspace") &&
+          !event.altKey &&
+          !event.ctrlKey &&
+          !event.metaKey &&
+          !event.shiftKey
+        ) {
+          event.preventDefault();
+          event.stopPropagation();
+          onUnbind(name);
+          return;
+        }
+        onCapture(event, name);
+      }}
+    >
+      {binding ? "Press keys" : keys.length > 0 ? keys[0].text : "None"}
+    </button>
+  );
+}
+
+interface KeysProps {
+  keys: Key[];
+}
+
+function Keys({ keys }: KeysProps) {
+  return keys.map((entry, index) => (
+    <span key={entry.text} className="flex gap-1">
+      {index > 0 ? (
+        <span className="text-xs text-muted-foreground">
+          <span aria-hidden="true">/</span>
+          <span className="sr-only">or</span>
+        </span>
+      ) : null}
+      <kbd
+        aria-label={entry.spoken}
+        className="rounded-[3px] border border-input px-1.5 font-mono text-xs text-foreground"
+      >
+        {entry.text}
+      </kbd>
+    </span>
+  ));
+}
+
 const backspace = key("⌫", "Backspace");
 
-function groups(): { title: string; items: Shortcut[] }[] {
+function groups(keymap: Keymap): { title: string; items: Shortcut[] }[] {
   return [
     {
       title: "Editor",
-      items: tableRows((item) => !("area" in item)),
+      items: tableRows(keymap, (item) => !("area" in item)),
     },
     {
       title: "Map",
       items: [
-        ...tableRows((item) => "area" in item),
+        ...tableRows(keymap, (item) => "area" in item),
         {
           keys: [key("Arrows")],
           does: "Nudge the selection, with Shift for 8 steps",
@@ -122,7 +317,6 @@ function groups(): { title: string; items: Shortcut[] }[] {
           keys: [key("Space-drag"), key("Middle-drag")],
           does: "Pan the map",
         },
-        { keys: [key("Esc")], does: "Clear the selection" },
         {
           keys: [key("Page Up"), key("Page Down")],
           does: "Raise or lower the floor of the selected rooms, or the room under the pointer, with Shift for 3 steps",
@@ -282,10 +476,17 @@ function groups(): { title: string; items: Shortcut[] }[] {
   ];
 }
 
-function tableRows(include: (item: TableEntry) => boolean): Shortcut[] {
-  return Object.values(editorShortcuts)
-    .filter(include)
-    .map((item) => ({ keys: [chord(item.keys)], does: item.description }));
+function tableRows(
+  keymap: Keymap,
+  include: (item: TableEntry) => boolean,
+): Shortcut[] {
+  return (Object.keys(editorShortcuts) as EditorShortcut[])
+    .filter((name) => include(editorShortcuts[name]))
+    .map((name) => ({
+      name,
+      keys: keymap[name] ? [chord(keymap[name])] : [],
+      does: editorShortcuts[name].description,
+    }));
 }
 
 function chord(shortcut: string): Key {
