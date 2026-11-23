@@ -155,6 +155,8 @@ const riseSpeed = 160;
 const lookTurn = 0.15;
 const lookTilt = 0.002;
 const mostTilt = 0.5;
+// Windows asks for the menu once the right button comes up after a drag.
+const menuAfterDragMs = 300;
 const thingTurn = 45;
 const placeDistances = [128, 96, 64, 32];
 const walkKeys = /^(Arrow(Up|Down|Left|Right)|Key[WASDC]|Space)$/;
@@ -232,6 +234,9 @@ const sceneEditor = definePrimitive({
     let stopDrag: (() => void) | undefined;
     let dragging = false;
     let touchPress: Point | null = null;
+    // A press of the right button, and where the menu it asked for opens.
+    let rightPress: { dragged: boolean; menu: Point | null } | null = null;
+    let quietMenuUntil = 0;
     const held = new Set<string>();
     let shiftHeld = false;
     let wheeled = { surface: "", sum: 0, at: 0 };
@@ -344,6 +349,20 @@ const sceneEditor = definePrimitive({
           store.set({ hovered: aimed, ghost: null });
         }
       }
+    };
+
+    const turnView = (dx: number, dy: number) => {
+      const view = cameraState();
+      if (!view) return;
+      view.position = {
+        ...view.position,
+        angle: view.position.angle - dx * lookTurn,
+        pitch: Math.max(
+          -mostTilt,
+          Math.min(mostTilt, (view.position.pitch ?? 0) - dy * lookTilt),
+        ),
+      };
+      view.walked = true;
     };
 
     const scheduleDraw = () => {
@@ -977,18 +996,7 @@ const sceneEditor = definePrimitive({
       pointermove(event: PointerEvent) {
         const view = cameraState();
         if (store.get().looking && view) {
-          view.position = {
-            ...view.position,
-            angle: view.position.angle - event.movementX * lookTurn,
-            pitch: Math.max(
-              -mostTilt,
-              Math.min(
-                mostTilt,
-                (view.position.pitch ?? 0) - event.movementY * lookTilt,
-              ),
-            ),
-          };
-          view.walked = true;
+          turnView(event.movementX, event.movementY);
           const hovered = surfaceAt(event)?.key ?? null;
           if (hovered !== store.get().hovered) store.set({ hovered });
           return;
@@ -1018,6 +1026,17 @@ const sceneEditor = definePrimitive({
         store.set({ hovered: null, ghost: null });
       },
       contextmenu(event: MouseEvent) {
+        // Some systems ask for the menu as the right button goes down, so it
+        // waits to see whether the press drags to look instead, and others
+        // ask once it comes up, after a drag that already looked.
+        if (rightPress || performance.now() < quietMenuUntil) {
+          event.preventDefault();
+          event.stopPropagation();
+          if (rightPress)
+            rightPress.menu = { x: event.clientX, y: event.clientY };
+          quietMenuUntil = 0;
+          return;
+        }
         // A menu needs the pointer back.
         if (document.pointerLockElement === canvas) document.exitPointerLock();
         reportContext(event);
@@ -1037,6 +1056,61 @@ const sceneEditor = definePrimitive({
           if (!key) return;
           if (event.shiftKey) flood(key, event);
           else paste(pressTargets(key), event);
+          return;
+        }
+        // Dragging with the right button turns and tilts the view, and a
+        // click of it still opens the menu.
+        if (event.button === 2 && event.pointerType === "mouse" && canvas) {
+          const element = canvas;
+          element.focus({ preventScroll: true });
+          const press = { dragged: false, menu: null as Point | null };
+          rightPress = press;
+          let last = { x: event.clientX, y: event.clientY };
+          stopDrag = bindDrag(element, event, {
+            threshold: dragThreshold,
+            onStart: () => {
+              press.dragged = true;
+            },
+            onMove: ({ x, y }) => {
+              turnView(x - last.x, y - last.y);
+              last = { x, y };
+            },
+            onEnd: () => {
+              stopDrag = undefined;
+              rightPress = null;
+              if (press.dragged) {
+                quietMenuUntil = performance.now() + menuAfterDragMs;
+                // The button may come up over another part of the page.
+                const swallow = (menu: Event) => {
+                  if (performance.now() < quietMenuUntil) {
+                    menu.preventDefault();
+                    menu.stopPropagation();
+                  }
+                };
+                document.addEventListener("contextmenu", swallow, {
+                  capture: true,
+                  once: true,
+                });
+                setTimeout(
+                  () =>
+                    document.removeEventListener("contextmenu", swallow, {
+                      capture: true,
+                    }),
+                  menuAfterDragMs,
+                );
+              } else if (press.menu) {
+                element.dispatchEvent(
+                  new MouseEvent("contextmenu", {
+                    bubbles: true,
+                    cancelable: true,
+                    button: 2,
+                    clientX: press.menu.x,
+                    clientY: press.menu.y,
+                  }),
+                );
+              }
+            },
+          });
           return;
         }
         if (event.button !== 0 || getIsSecondaryPress(event)) return;
@@ -1175,7 +1249,8 @@ const sceneEditor = definePrimitive({
       },
       keydown(event: KeyboardEvent) {
         if (event.key === "Shift") shiftHeld = true;
-        if (stopDrag || openMenuFromKey(event)) return;
+        // Keys still walk and fly while the right button looks around.
+        if ((stopDrag && !rightPress) || openMenuFromKey(event)) return;
         const { map, placing } = store.get();
         const thing = selectedThing();
         if (event.altKey && nudgeThing(event)) return;

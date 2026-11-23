@@ -105,6 +105,10 @@ export const editorShortcuts = {
     description: "Maximise the pane under the pointer, or split again",
   },
   look: { keys: "c", description: "Point the 3D camera at the pointer" },
+  switchView: {
+    keys: "q",
+    description: "Switch between the map and the 3D view",
+  },
   play: { keys: "f9", description: "Play the map" },
   playHere: {
     keys: "mod+f9",
