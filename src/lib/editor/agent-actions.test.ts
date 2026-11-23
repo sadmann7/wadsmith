@@ -12,6 +12,7 @@ import {
 import { checkMap } from "@/lib/map/checks";
 import { wallKey } from "@/lib/map/geometry";
 import { testMap } from "@/lib/map/test-map";
+import { freedoomNames } from "@/lib/map/textures";
 import { compileMap } from "@/lib/wad/compile";
 
 import {
@@ -438,14 +439,109 @@ describe("agent actions", () => {
         { room: "Start room", wallTexture: "NOPE" },
         context,
       ),
-    ).toThrow(/has no texture called NOPE/);
-    // Without the game's names, any name goes.
+    ).toThrow(/No wall texture "NOPE" for wallTexture\. The closest are/);
+    // Without the game's names, Freedoom's stand in.
+    expect(() =>
+      runAgentAction(testMap, "updateRoom", {
+        room: "Start room",
+        wallTexture: "STARTAN4",
+      }),
+    ).toThrow(/The closest are STARTAN1, STARTAN2, STARTAN3/);
     expect(
       runAgentAction(testMap, "updateRoom", {
         room: "Start room",
-        wallTexture: "NOPE",
+        wallTexture: "startan3",
       }).map.sectors[0].wallTexture,
-    ).toBe("NOPE");
+    ).toBe("STARTAN3");
+  });
+
+  it("refuses a texture or flat the game doesn't have, wherever it goes", () => {
+    const steps: [string, Record<string, unknown>, RegExp][] = [
+      [
+        "addRoom",
+        {
+          corners: [
+            { x: 512, y: 512 },
+            { x: 640, y: 512 },
+            { x: 640, y: 640 },
+          ],
+          floorTexture: "FLOOR4_9",
+        },
+        /No flat "FLOOR4_9" for floorTexture\. The closest are FLOOR4_1, FLOOR4_5, FLOOR4_6, FLOOR4_8/,
+      ],
+      [
+        "updateRoom",
+        { room: "Start room", ceilingTexture: "STARTAN3" },
+        /No flat "STARTAN3"/,
+      ],
+      [
+        "paintSurface",
+        { room: "Start room", surface: "floor", texture: "NUKAGE9" },
+        /No flat "NUKAGE9" for texture\. The closest are NUKAGE1/,
+      ],
+      [
+        "paintSurface",
+        {
+          room: "Start room",
+          surface: "wall",
+          wall: "v6|v1",
+          texture: "BRWN1",
+        },
+        /No wall texture "BRWN1" for texture\. The closest are BROWN1/,
+      ],
+      [
+        "setLineSide",
+        { wall: "v3|v4", room: "Corridor", middle: "MIDGRAT" },
+        /No wall texture "MIDGRAT" for middle\. The closest are MIDGRATE/,
+      ],
+      [
+        "replaceTexture",
+        { from: "STARTAN3", to: "STARTAN", kind: "wall" },
+        /No wall texture "STARTAN" for to\./,
+      ],
+    ];
+    for (const [name, args, message] of steps) {
+      expect(() => runAgentAction(testMap, name, args)).toThrow(message);
+    }
+    // "-" still takes a side's texture away.
+    const cleared = runAgentAction(testMap, "setLineSide", {
+      wall: "v3|v4",
+      room: "Corridor",
+      middle: "-",
+    });
+    expect(cleared.map).not.toBe(testMap);
+  });
+
+  it("lists every wall texture and flat the game has, a page at a time", () => {
+    const walls = runAgentAction(testMap, "listCatalog", ["walls"]).result as {
+      total: number;
+      items: string[];
+      next?: number;
+    };
+    expect(walls.total).toBe(freedoomNames.walls.length);
+    expect(walls.items).toHaveLength(200);
+    expect(walls.next).toBe(200);
+    const rest = runAgentAction(testMap, "listCatalog", {
+      of: "walls",
+      offset: 200,
+      limit: 1000,
+    }).result as { items: string[]; next?: number };
+    expect([...walls.items, ...rest.items]).toEqual(freedoomNames.walls);
+    expect(rest.next).toBeUndefined();
+    const nukage = runAgentAction(testMap, "listCatalog", {
+      of: "flats",
+      search: "nukage",
+    }).result;
+    expect(nukage).toEqual({
+      total: 3,
+      offset: 0,
+      items: ["NUKAGE1", "NUKAGE2", "NUKAGE3"],
+      sky: "F_SKY1",
+    });
+    const custom = runAgentAction(testMap, "listCatalog", ["flats"], {
+      names: { ...freedoomNames, flats: ["MYFLAT"] },
+    }).result;
+    expect(custom).toMatchObject({ total: 1, items: ["MYFLAT"] });
   });
 
   it("reads the map without changing it", () => {
