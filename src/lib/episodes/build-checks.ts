@@ -88,19 +88,33 @@ function runQueue() {
   }
 }
 
+// Builds a map that isn't saved in an episode yet, like the one being edited,
+// on the same workers. Aborting takes it out of the queue if it hasn't
+// started, and it then resolves with nothing built.
+export function buildInBackground(map: GameMap, signal?: AbortSignal) {
+  return new Promise<Build>((resolve) => {
+    if (typeof Worker === "undefined") {
+      resolve(buildMap(map));
+      return;
+    }
+    const job: Job = { id: nextId++, map, done: resolve };
+    queue.push(job);
+    signal?.addEventListener("abort", () => {
+      const at = queue.indexOf(job);
+      if (at < 0) return;
+      queue.splice(at, 1);
+      resolve({ problem: null, lumps: null });
+    });
+    runQueue();
+  });
+}
+
 export function checkBuild(entry: EpisodeMap) {
   const known = checks.get(entry.id);
   if (known?.revision === entry.mapRevision) return known.result;
   const check: Check = {
     revision: entry.mapRevision,
-    result: new Promise<Build>((resolve) => {
-      if (typeof Worker === "undefined") {
-        resolve(buildMap(entry.map));
-        return;
-      }
-      queue.push({ id: nextId++, map: entry.map, done: resolve });
-      runQueue();
-    }).then((build) => {
+    result: buildInBackground(entry.map).then((build) => {
       check.build = build;
       results = new Map(results).set(entry.id, {
         revision: check.revision,

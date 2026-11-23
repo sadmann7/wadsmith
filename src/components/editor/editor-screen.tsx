@@ -67,6 +67,7 @@ import {
 } from "@/components/ui/segmented-control";
 import { useEditorKeys } from "@/hooks/use-editor-keys";
 import { useIwad } from "@/hooks/use-iwad";
+import { useVanillaLimits } from "@/hooks/use-vanilla-limits";
 import { actForPerson, agentSession } from "@/lib/editor/agent";
 import { agentStepSummary } from "@/lib/editor/agent-actions";
 import { getHasAgentCard, idleAgentSession } from "@/lib/editor/agent-session";
@@ -555,7 +556,12 @@ export function EditorScreen({
   const placeable = iwadGame.doom2
     ? thingKinds
     : thingKinds.filter((kind) => !thingCatalog[kind].doom2);
-  const checks = React.useMemo(() => checkMap(map, context), [context, map]);
+  const limits = useVanillaLimits(map);
+  const limitIssues = limits.issues;
+  const checks = React.useMemo(
+    () => [...checkMap(map, context), ...limitIssues],
+    [context, limitIssues, map],
+  );
   const issues = checks.filter((issue) => issue.severity === "error");
   const canPlay = issues.length === 0;
   const liveHealth: MapHealth = checks.some(
@@ -3119,6 +3125,7 @@ export function EditorScreen({
           slot={slot}
           game={iwadGame}
           context={context}
+          limits={limits}
           onBuild={(fileName) => {
             try {
               downloadWad(

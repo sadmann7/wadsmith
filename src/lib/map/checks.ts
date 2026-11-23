@@ -146,6 +146,7 @@ const buildGroups: {
   passed: string;
   ids: RegExp;
   needsValidRooms?: boolean;
+  needsBuild?: boolean;
 }[] = [
   {
     name: "Closed sectors",
@@ -179,7 +180,8 @@ const buildGroups: {
   {
     name: "Format limits",
     passed: "Within classic Doom limits",
-    ids: /^(range|height-range)(:|$)/,
+    ids: /^(range|height-range|vanilla-[a-z]+)(:|$)/,
+    needsBuild: true,
   },
   {
     name: "Compatibility",
@@ -189,25 +191,48 @@ const buildGroups: {
 ];
 
 // validateMap stops at the first layer of errors, so later groups stay unknown.
-export function buildChecks(map: GameMap, context?: CheckContext) {
-  const issues = checkMap(map, context);
+export function buildChecks(
+  map: GameMap,
+  context?: CheckContext,
+  limits: { issues: CheckedIssue[]; pending: boolean } = {
+    issues: [],
+    pending: false,
+  },
+) {
+  const issues = [...checkMap(map, context), ...limits.issues];
   const blocked = issues.some((issue) => issue.severity === "error");
-  const grouped = buildGroups.map(({ name, passed, ids, needsValidRooms }) => {
-    const found = issues.filter((issue) => ids.test(issue.id));
-    return {
-      name,
-      passed,
-      issues: found,
-      waiting: Boolean(needsValidRooms && blocked && found.length === 0),
-    };
-  });
+  const grouped = buildGroups.map(
+    ({ name, passed, ids, needsValidRooms, needsBuild }) => {
+      const found = issues.filter((issue) => ids.test(issue.id));
+      return {
+        name,
+        passed,
+        issues: found,
+        waiting:
+          found.length === 0 &&
+          Boolean(
+            (needsValidRooms && blocked) || (needsBuild && limits.pending),
+          ),
+        waitingText:
+          needsBuild && limits.pending
+            ? "Checked once the map builds"
+            : "Checked after errors are fixed",
+      };
+    },
+  );
   const known = new Set(grouped.flatMap((group) => group.issues));
   const other = issues.filter((issue) => !known.has(issue));
   return other.length === 0
     ? grouped
     : [
         ...grouped,
-        { name: "Other problems", passed: "", issues: other, waiting: false },
+        {
+          name: "Other problems",
+          passed: "",
+          issues: other,
+          waiting: false,
+          waitingText: "",
+        },
       ];
 }
 

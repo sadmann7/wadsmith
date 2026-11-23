@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import * as React from "react";
 
+import type { VanillaLimits } from "@/hooks/use-vanilla-limits";
 import type { GameMap } from "@/lib/map/types";
 import type { CheckContext } from "@/lib/map/validate";
 
@@ -53,6 +54,7 @@ interface BuildDialogProps {
   slot: string;
   game: GameInfo;
   context: CheckContext;
+  limits: VanillaLimits;
   onBuild: (fileName: string) => string | null;
   onShow: (issue: CheckedIssue) => void;
   onClose: () => void;
@@ -64,13 +66,14 @@ export function BuildDialog({
   slot,
   game,
   context,
+  limits,
   onBuild,
   onShow,
   onClose,
 }: BuildDialogProps) {
   const [fileName, setFileName] = React.useState(() => defaultFileName(name));
   const [buildError, setBuildError] = React.useState<string | null>(null);
-  const checks = buildChecks(map, context);
+  const checks = buildChecks(map, context, limits);
   const issues = checks.flatMap((check) => check.issues);
   const errors = issues.filter((issue) => issue.severity === "error");
   const warnings = issues.length - errors.length;
@@ -150,7 +153,7 @@ export function BuildDialog({
                         {issue
                           ? `${issueText(issue).title}${more > 0 ? ` · +${more} more` : ""}`
                           : check.waiting
-                            ? "Checked after errors are fixed"
+                            ? check.waitingText
                             : check.passed}
                       </div>
                     </div>
