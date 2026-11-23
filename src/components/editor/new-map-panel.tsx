@@ -1,7 +1,9 @@
+import { formatShortcut } from "@ui-sdk/core";
 import { Check } from "lucide-react";
 
 import type { GameMap } from "@/lib/map/types";
 
+import { useEditorKeys } from "@/hooks/use-editor-keys";
 import { getHasExit } from "@/lib/map/checks";
 import { roomDefaults } from "@/lib/map/edit";
 import { sectorAt } from "@/lib/map/geometry";
@@ -14,6 +16,7 @@ interface NewMapPanelProps {
 
 export function NewMapPanel({ map, corners, drawing }: NewMapPanelProps) {
   const room = roomDefaults(map.sectors.length + 1);
+  const thingsKey = useEditorKeys().things;
   const steps = [
     {
       title: "Close your first room",
@@ -22,7 +25,9 @@ export function NewMapPanel({ map, corners, drawing }: NewMapPanelProps) {
     },
     {
       title: "Place a player start",
-      hint: "Things mode, press T",
+      hint: thingsKey
+        ? `Things mode, press ${formatShortcut(thingsKey)}`
+        : "Things mode",
       done: map.things.some(
         (thing) => thing.kind === "player" && sectorAt(map, thing),
       ),

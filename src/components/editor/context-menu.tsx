@@ -52,10 +52,12 @@ import {
 } from "lucide-react";
 import * as React from "react";
 
+import type { EditorShortcut } from "@/lib/editor/shortcuts";
 import type { Transform } from "@/lib/map/fragment";
 import type { TextureKind } from "@/lib/map/texture-tools";
 import type { GameMap, Point, Thing, ThingKind } from "@/lib/map/types";
 
+import { currentKeys } from "@/lib/editor/keymap";
 import {
   getCanStand,
   type MapTarget,
@@ -63,7 +65,6 @@ import {
   viewOfTarget,
   wallMiddle,
 } from "@/lib/editor/map-target";
-import { type EditorShortcut, editorShortcuts } from "@/lib/editor/shortcuts";
 import { thingIcons } from "@/lib/editor/thing-icons";
 import { getIsGeneralized } from "@/lib/map/boom";
 import { swappableKinds, thingCatalog } from "@/lib/map/catalog";
@@ -498,7 +499,7 @@ function EditItems({ edit, point }: EditItemsProps) {
       <PasteItem edit={edit} point={point} />
       <Item
         icon={CopyPlus}
-        hint={formatShortcut(editorShortcuts.duplicate.keys)}
+        hint={formatShortcut(currentKeys().duplicate)}
         disabled={!edit.canCopy}
         onSelect={edit.onDuplicate}
       >
@@ -575,7 +576,7 @@ function TransformMenu({ edit }: TransformMenuProps) {
           {label}
           {shortcut ? (
             <span className={hintClass}>
-              {formatShortcut(editorShortcuts[shortcut].keys)}
+              {formatShortcut(currentKeys()[shortcut])}
             </span>
           ) : null}
         </MenuItem>
@@ -1029,14 +1030,14 @@ function WallMenu({ sector, wall, ...props }: WallMenuProps) {
         <>
           <Item
             icon={FlipHorizontal2}
-            hint={formatShortcut(editorShortcuts.flipWalls.keys)}
+            hint={formatShortcut(currentKeys().flipWalls)}
             onSelect={() => props.edit.onFlip(wall, false)}
           >
             Flip line
           </Item>
           <Item
             icon={FlipHorizontal2}
-            hint={formatShortcut(editorShortcuts.swapSides.keys)}
+            hint={formatShortcut(currentKeys().swapSides)}
             onSelect={() => props.edit.onFlip(wall, true)}
           >
             Swap sides' textures

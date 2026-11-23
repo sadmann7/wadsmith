@@ -29,6 +29,7 @@ import {
   type AgentOutcome,
   runAgentAction,
 } from "@/lib/editor/agent-actions";
+import { currentKeys } from "@/lib/editor/keymap";
 import {
   getIsDragging,
   getIsKeyboardMenu,
@@ -38,7 +39,6 @@ import {
   targetForKeys,
   wallTarget,
 } from "@/lib/editor/map-target";
-import { editorShortcuts } from "@/lib/editor/shortcuts";
 import { getIsPlayerStart } from "@/lib/map/catalog";
 import {
   addSwitch,
@@ -1503,11 +1503,8 @@ export const mapEditor = definePrimitive({
           return;
         }
         if (tool === "select") {
-          const all = matchesShortcut(event, editorShortcuts.selectAll.keys);
-          const invert = matchesShortcut(
-            event,
-            editorShortcuts.invertSelection.keys,
-          );
+          const all = matchesShortcut(event, currentKeys().selectAll);
+          const invert = matchesShortcut(event, currentKeys().invertSelection);
           if (all || invert) {
             selectEverything(invert);
             event.preventDefault();
