@@ -302,6 +302,14 @@ const sceneEditor = definePrimitive({
       const view = cameraState();
       const output = canvas?.getContext("2d");
       if (!map || !assets || !view || !target || !image || !output) return;
+      // Setting a canvas's size clears it, so the size changes only here,
+      // right before the frame that fills it.
+      if (output.canvas.width !== target.width) {
+        output.canvas.width = target.width;
+      }
+      if (output.canvas.height !== target.height) {
+        output.canvas.height = target.height;
+      }
       view.sync(map, draftMap !== null);
       renderScene(
         target,
@@ -1311,9 +1319,7 @@ const sceneEditor = definePrimitive({
   },
   slots: (slot) => ({
     root: slot({
-      attrs: (state) => ({
-        width: String(state.width),
-        height: String(state.height),
+      attrs: () => ({
         tabindex: "0",
         "aria-roledescription": "3D map editor",
       }),
