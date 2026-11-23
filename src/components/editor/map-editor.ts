@@ -1044,7 +1044,9 @@ export const mapEditor = definePrimitive({
       );
     };
     const fitMap = () => {
-      fitPoints(Object.values(store.get().positions), 1.25);
+      const points = Object.values(store.get().positions);
+      if (points.length === 0) return;
+      fitPoints(points, 1.25);
       fittedView = store.get().viewport;
     };
     const getIsFitView = () => {
