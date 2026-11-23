@@ -112,6 +112,36 @@ describe("custom things", () => {
     const pusher = addThing(testMap, "custom", { x: 96, y: 128 }, 0, 1, 5001);
     expect(customThingWarnings(pusher.map, new Map())).toEqual([]);
   });
+
+  it("warns when a thing relies on MBF21 and the map is set lower", () => {
+    const mbf21 = packWad([
+      {
+        name: "DEHACKED",
+        data: encoder.encode(
+          "Thing 151 (Plasma Zombie)\nID # = 20001\nInitial frame = 1100\n\nFrame 1100\nNext frame = 1100\n\n[CODEPTR]\nFRAME 1100 = NoiseAlert\n",
+        ),
+      },
+    ]);
+    const custom = customThingsOf([mbf21]);
+    const twice = addThing(
+      withZombie(),
+      "custom",
+      { x: 160, y: 128 },
+      0,
+      1,
+      20001,
+    ).map;
+    expect(customThingWarnings(twice, custom)).toMatchObject([
+      { id: "custom-mbf21:20001", message: "Plasma Zombie needs MBF21" },
+    ]);
+    expect(
+      customThingWarnings({ ...twice, complevel: "boom" }, custom),
+    ).toHaveLength(1);
+    expect(
+      customThingWarnings({ ...twice, complevel: "mbf21" }, custom),
+    ).toEqual([]);
+    expect(customThingWarnings(twice, customThingsOf([mod]))).toEqual([]);
+  });
 });
 
 function withZombie(): GameMap {

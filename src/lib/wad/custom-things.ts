@@ -2,6 +2,7 @@ import type { CheckedIssue } from "@/lib/map/checks";
 import type { GameMap, Thing } from "@/lib/map/types";
 
 import { thingCatalog } from "@/lib/map/catalog";
+import { atLeast } from "@/lib/map/complevel";
 import { type CustomThing, parseDehacked } from "@/lib/map/dehacked";
 import { vanillaThings } from "@/lib/map/doom-info";
 
@@ -14,14 +15,11 @@ export type CustomThings = ReadonlyMap<number, CustomThing>;
 const spriteMarkers = /^S{1,2}_(START|END)$/;
 const soundLump = /^D[SP][A-Z0-9_]+$/;
 
-// The things the DEHACKED lumps of the added WADs number, later WADs taking
-// a number over from earlier ones, as the engine loads them.
+// The things the DEHACKED lumps of the added WADs number. A built map carries
+// the lumps in the same order, and the engine applies them one after another.
 export function customThingsOf(resources: readonly Uint8Array[]): CustomThings {
-  const things = new Map<number, CustomThing>();
-  for (const resource of resources) {
-    for (const thing of patchedThings(resource)) things.set(thing.type, thing);
-  }
-  return things;
+  const patches = resources.flatMap(patchesOf);
+  return new Map(parseDehacked(...patches).map((thing) => [thing.type, thing]));
 }
 
 // The sprites the added WADs carry between their sprite markers, which the
@@ -98,41 +96,54 @@ const engineTypes = new Set(
   vanillaThings.map(([type]) => type).filter((type) => type > 0),
 );
 
-// A custom thing no added patch numbers is skipped by the game, so the map
-// check names each number once.
+// A custom thing no added patch numbers is skipped by the game, and one that
+// runs MBF21 actions does nothing with them below MBF21, so the map check
+// names each number once.
 export function customThingWarnings(
   map: GameMap,
   custom: CustomThings,
 ): CheckedIssue[] {
-  const missing = new Map<number, string>();
+  const isMbf21Map = atLeast(map.complevel ?? "vanilla", "mbf21");
+  const issues = new Map<number, CheckedIssue>();
   for (const thing of map.things) {
     if (thing.kind !== "custom" || thing.type === undefined) continue;
-    if (engineTypes.has(thing.type)) continue;
-    if (!custom.has(thing.type) && !missing.has(thing.type)) {
-      missing.set(thing.type, thing.id);
+    const { type } = thing;
+    if (engineTypes.has(type) || issues.has(type)) continue;
+    const defined = custom.get(type);
+    if (!defined) {
+      issues.set(type, {
+        id: `custom-unknown:${type}`,
+        severity: "warning",
+        message: `Nothing added defines thing ${type}`,
+        detail:
+          "Add the mod or DEHACKED patch that numbers it, or the game leaves it out.",
+        target: thing.id,
+      });
+    } else if (defined.isMbf21 && !isMbf21Map) {
+      issues.set(type, {
+        id: `custom-mbf21:${type}`,
+        severity: "warning",
+        message: `${defined.name} needs MBF21`,
+        detail:
+          "Its patch gives it MBF21 actions, which the game skips below MBF21. Set Compatibility to MBF21 in Map settings.",
+        target: thing.id,
+      });
     }
   }
-  return [...missing].map(([type, target]) => ({
-    id: `custom-unknown:${type}`,
-    severity: "warning",
-    message: `Nothing added defines thing ${type}`,
-    detail:
-      "Add the mod or DEHACKED patch that numbers it, or the game leaves it out.",
-    target,
-  }));
+  return [...issues.values()];
 }
 
-const parsed = new WeakMap<Uint8Array, CustomThing[]>();
+const decoded = new WeakMap<Uint8Array, string[]>();
 const decoder = new TextDecoder("latin1");
 
-function patchedThings(resource: Uint8Array) {
-  const known = parsed.get(resource);
+function patchesOf(resource: Uint8Array) {
+  const known = decoded.get(resource);
   if (known) return known;
-  const things = lumpsOf(resource)
+  const patches = lumpsOf(resource)
     .filter((lump) => lump.name === "DEHACKED")
-    .flatMap((lump) => parseDehacked(decoder.decode(lump.data)));
-  parsed.set(resource, things);
-  return things;
+    .map((lump) => decoder.decode(lump.data));
+  decoded.set(resource, patches);
+  return patches;
 }
 
 function lumpsOf(resource: Uint8Array) {

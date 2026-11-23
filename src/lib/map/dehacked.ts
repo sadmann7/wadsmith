@@ -11,6 +11,9 @@ export interface CustomThing {
   category: CustomCategory;
   // Its first frame's sprite and frame letter, like "SP00A".
   sprite: string | null;
+  // Whether its frames run MBF21 code pointers, which the engine skips below
+  // MBF21. MBF21's thing fields and flags apply at every level.
+  isMbf21: boolean;
 }
 
 interface ThingPatch {
@@ -23,66 +26,148 @@ const fullBright = 0x8000;
 const blockHeader =
   /^(thing|frame|pointer|sound|ammo|weapon|cheat|misc|sprite)\s+(\d+)\s*(?:\((.*)\))?\s*$/i;
 
-// The things a DEHACKED or BEX patch gives editor numbers of their own, with
-// what a map editor needs to show them. Anything else in it is left alone.
 // A map stores editor numbers as signed 16-bit values.
 const typeLimit = 32767;
 
-export function parseDehacked(text: string): CustomThing[] {
+export const mbf21CodePointers = new Set(
+  [
+    "SpawnObject",
+    "MonsterProjectile",
+    "MonsterBulletAttack",
+    "MonsterMeleeAttack",
+    "RadiusDamage",
+    "NoiseAlert",
+    "HealChase",
+    "SeekTracer",
+    "FindTracer",
+    "ClearTracer",
+    "JumpIfHealthBelow",
+    "JumpIfTargetInSight",
+    "JumpIfTargetCloser",
+    "JumpIfTracerInSight",
+    "JumpIfTracerCloser",
+    "JumpIfFlagsSet",
+    "AddFlags",
+    "RemoveFlags",
+    "WeaponProjectile",
+    "WeaponBulletAttack",
+    "WeaponMeleeAttack",
+    "WeaponSound",
+    "WeaponAlert",
+    "WeaponJump",
+    "ConsumeAmmo",
+    "CheckAmmo",
+    "RefireTo",
+    "GunFlashTo",
+  ].map((name) => name.toLowerCase()),
+);
+
+const stateFields = [
+  "initial frame",
+  "first moving frame",
+  "injury frame",
+  "close attack frame",
+  "far attack frame",
+  "death frame",
+  "exploding frame",
+  "respawn frame",
+];
+
+// The things DEHACKED or BEX patches give editor numbers of their own, with
+// what a map editor needs to show them. Patches apply in order, as the engine
+// loads them, and anything else in them is left alone.
+export function parseDehacked(...patches: string[]): CustomThing[] {
   const things = new Map<number, ThingPatch>();
   const frames = new Map<number, Map<string, string>>();
   const renamed = new Map<number, string>();
-  let fields: Map<string, string> | null = null;
-  let section: string | null = null;
-  const lines = text.replace(/\r\n?/g, "\n").split("\n");
-  for (let at = 0; at < lines.length; at += 1) {
-    const line = lines[at].trim();
-    if (!line || line.startsWith("#")) continue;
-    const text = /^text\s+(\d+)\s+(\d+)\s*$/i.exec(line);
-    if (text) {
-      at += skipText(lines, at + 1, Number(text[1]) + Number(text[2]));
-      fields = null;
-      section = null;
-      continue;
+  // The engine gives each thing past its own table a slot when a patch first
+  // names it.
+  const slots = new Map<number, number>();
+  const mention = (number: number) => {
+    if (number > vanillaThings.length && !slots.has(number)) {
+      slots.set(number, vanillaThings.length + slots.size);
     }
-    const bracket = /^\[(\w+)\]$/.exec(line);
-    if (bracket) {
-      section = bracket[1].toUpperCase();
-      fields = null;
-      continue;
-    }
-    const header = blockHeader.exec(line);
-    if (header) {
-      section = null;
-      const kind = header[1].toLowerCase();
-      const number = Number(header[2]);
-      // A patch made of several may name the same thing or frame again,
-      // and the later fields add to the earlier ones.
-      if (kind === "thing") {
-        const known = things.get(number);
-        const name = header[3]?.trim() || known?.name || null;
-        fields = known?.fields ?? new Map();
-        things.set(number, { number, name, fields });
-      } else if (kind === "frame") {
-        fields = frames.get(number) ?? new Map();
-        frames.set(number, fields);
-      } else {
-        fields = new Map();
+  };
+  for (const patch of patches) {
+    let fields: Map<string, string> | null = null;
+    let section: string | null = null;
+    const lines = patch.replace(/\r\n?/g, "\n").split("\n");
+    for (let at = 0; at < lines.length; at += 1) {
+      const line = lines[at].trim();
+      if (!line || line.startsWith("#")) continue;
+      const text = /^text\s+(\d+)\s+(\d+)\s*$/i.exec(line);
+      if (text) {
+        at += skipText(lines, at + 1, Number(text[1]) + Number(text[2]));
+        fields = null;
+        section = null;
+        continue;
       }
-      continue;
-    }
-    const pair = /^([^=]+?)\s*=\s*(.*)$/.exec(line);
-    if (!pair) continue;
-    const key = pair[1].trim().toLowerCase();
-    if (section === "SPRITES") {
-      const index = /^\d+$/.test(key)
-        ? Number(key)
-        : spriteNames.indexOf(key.toUpperCase());
-      if (index >= 0) renamed.set(index, pair[2].trim().toUpperCase());
-    } else if (fields) {
-      fields.set(key, pair[2].trim());
+      const bracket = /^\[(\w+)\]$/.exec(line);
+      if (bracket) {
+        section = bracket[1].toUpperCase();
+        fields = null;
+        continue;
+      }
+      const header = blockHeader.exec(line);
+      if (header) {
+        section = null;
+        const kind = header[1].toLowerCase();
+        const number = Number(header[2]);
+        // A patch made of several may name the same thing or frame again,
+        // and the later fields add to the earlier ones.
+        if (kind === "thing") {
+          mention(number);
+          const known = things.get(number);
+          const name = header[3]?.trim() || known?.name || null;
+          fields = known?.fields ?? new Map();
+          things.set(number, { number, name, fields });
+        } else if (kind === "frame") {
+          fields = frameFields(frames, number);
+        } else {
+          fields = new Map();
+        }
+        continue;
+      }
+      const pair = /^([^=]+?)\s*=\s*(.*)$/.exec(line);
+      if (!pair) continue;
+      const key = pair[1].trim().toLowerCase();
+      if (section === "SPRITES") {
+        const index = /^\d+$/.test(key)
+          ? Number(key)
+          : spriteNames.indexOf(key.toUpperCase());
+        if (index >= 0) renamed.set(index, pair[2].trim().toUpperCase());
+      } else if (section === "CODEPTR") {
+        const frame = /^frame\s+(\d+)$/.exec(key);
+        if (frame) {
+          frameFields(frames, Number(frame[1])).set("pointer", pair[2].trim());
+        }
+      } else if (fields) {
+        fields.set(key, pair[2].trim());
+        if (key === "dropped item") mention(numberOf(pair[2]) ?? 0);
+      }
     }
   }
+
+  const hasMbf21Frames = [...frames.values()].some(getIsMbf21Frame);
+  // A frame the patches leave alone leads on as the game's own frames do,
+  // which aren't known here, so reaching one counts every MBF21 frame.
+  const getReachesMbf21Frame = (thing: Map<string, string>) => {
+    const seen = new Set<number>();
+    const queue = stateFields.flatMap(
+      (field) => numberOf(thing.get(field)) ?? [],
+    );
+    for (const state of queue) {
+      if (state === 0 || seen.has(state)) continue;
+      seen.add(state);
+      const frame = frames.get(state);
+      if (!frame) return hasMbf21Frames;
+      if (getIsMbf21Frame(frame)) return true;
+      const next = numberOf(frame.get("next frame"));
+      if (next === null) return hasMbf21Frames;
+      queue.push(next);
+    }
+    return false;
+  };
 
   const spriteOf = (state: number) => {
     const frame = frames.get(state);
@@ -99,7 +184,13 @@ export function parseDehacked(text: string): CustomThing[] {
     return `${name}${String.fromCharCode(65 + (sub & ~fullBright))}`;
   };
 
-  return [...things.values()].flatMap(({ number, name, fields: thing }) => {
+  // The engine looks a thing up by its editor number from its last slot down,
+  // so a later entry here takes the number over.
+  const slotOf = (number: number) => slots.get(number) ?? number - 1;
+  const numbered = [...things.values()].toSorted(
+    (a, b) => slotOf(a.number) - slotOf(b.number),
+  );
+  return numbered.flatMap(({ number, name, fields: thing }) => {
     const type = numberOf(thing.get("id #"));
     if (type === null || type <= 0 || type > typeLimit) return [];
     const vanilla = vanillaThings[number - 1];
@@ -115,9 +206,25 @@ export function parseDehacked(text: string): CustomThing[] {
         height: fixedOf(thing.get("height")) ?? vanilla?.[3] ?? 16,
         category,
         sprite: state === null ? null : spriteOf(state),
+        isMbf21:
+          number > vanillaThings.length
+            ? getReachesMbf21Frame(thing)
+            : hasMbf21Frames,
       },
     ];
   });
+}
+
+function getIsMbf21Frame(frame: Map<string, string>) {
+  return mbf21CodePointers.has(frame.get("pointer")?.toLowerCase() ?? "");
+}
+
+function frameFields(frames: Map<number, Map<string, string>>, number: number) {
+  const known = frames.get(number);
+  if (known) return known;
+  const fields = new Map<string, string>();
+  frames.set(number, fields);
+  return fields;
 }
 
 // A Text block replaces one string with another, written out over as many

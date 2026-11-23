@@ -44,6 +44,7 @@ describe("parseDehacked", () => {
         height: 56,
         category: "enemy",
         sprite: "ZOMBB",
+        isMbf21: false,
       },
       {
         type: 20002,
@@ -52,6 +53,7 @@ describe("parseDehacked", () => {
         height: 16,
         category: "item",
         sprite: "POSSA",
+        isMbf21: false,
       },
     ]);
   });
@@ -65,6 +67,7 @@ describe("parseDehacked", () => {
         height: 56,
         category: "enemy",
         sprite: "TROOA",
+        isMbf21: false,
       },
     ]);
   });
@@ -79,5 +82,71 @@ describe("parseDehacked", () => {
       { type: 20001, name: "Split", sprite: "SP00A" },
       { type: 20002, name: "Thing 152", sprite: null },
     ]);
+  });
+
+  it("notices a thing that runs MBF21 actions", () => {
+    const mbf21 = (patch: string) =>
+      Object.fromEntries(
+        parseDehacked(patch).map((thing) => [thing.name, thing.isMbf21]),
+      );
+    expect(
+      mbf21(`Thing 151 (Flags)
+ID # = 20001
+MBF21 Bits = NORADIUSDMG
+Initial frame = 1300
+
+Thing 152 (Gunner)
+ID # = 20002
+Initial frame = 1100
+
+Thing 153 (Plain)
+ID # = 20003
+Initial frame = 1200
+
+Frame 1100
+Next frame = 1101
+
+Frame 1101
+Next frame = 1100
+
+Frame 1200
+Next frame = 1200
+
+Frame 1300
+Next frame = 1300
+
+[CODEPTR]
+FRAME 1101 = MonsterBulletAttack
+FRAME 1300 = A_MonsterBulletAttack
+`),
+    ).toEqual({ Flags: false, Gunner: true, Plain: false });
+    expect(
+      mbf21(
+        "Thing 153 (Plain)\nID # = 20003\nInitial frame = 1200\n\nFrame 1200\nNext frame = 1200\n\n[CODEPTR]\nFRAME 1300 = SpawnObject\n",
+      ),
+    ).toEqual({ Plain: false });
+    expect(
+      mbf21(
+        "Thing 12 (Imp)\nID # = 30000\n\n[CODEPTR]\nFRAME 1300 = SpawnObject\n",
+      ),
+    ).toEqual({ Imp: true });
+    expect(
+      mbf21("Thing 12 (Imp)\nID # = 30000\n\n[CODEPTR]\nFRAME 1300 = Look\n"),
+    ).toEqual({ Imp: false });
+  });
+
+  it("applies patches in order, with the last named thing taking a shared number", () => {
+    const names = (...patches: string[]) =>
+      parseDehacked(...patches).map(({ type, name }) => [type, name]);
+    const moved = "Thing 151\nID # = 20002\n";
+    expect(names("Thing 151 (Gunner)\nID # = 20001\n", moved)).toEqual([
+      [20002, "Gunner"],
+    ]);
+    expect(
+      names(
+        "Thing 152 (Decoy)\nID # = 20001\n",
+        "Thing 151 (Gunner)\nID # = 20001\n\nThing 12 (Imp)\nID # = 20001\n",
+      ).at(-1),
+    ).toEqual([20001, "Gunner"]);
   });
 });
