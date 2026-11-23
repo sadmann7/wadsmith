@@ -901,7 +901,6 @@
 
   .map-wall[data-trigger="switch"] {
     stroke: var(--color-map-switch);
-    stroke-dasharray: none;
   }
 
   .map-wall[data-trigger="shoot"] {
