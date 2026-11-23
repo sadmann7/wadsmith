@@ -798,6 +798,11 @@ function validateLines(
       );
     } else if (!map.sectors.some((sector) => sector.tag === action.tag)) {
       add("line-tag", "the sector this action moves no longer has its tag.");
+    } else if (action.kind === "floor-raise") {
+      const stuck = map.sectors.flatMap((sector) =>
+        sector.tag === action.tag ? stuckFloor(map, sector) : [],
+      );
+      if (stuck.length > 0) add("line-stuck", stuck.join(" "), warnings);
     } else if (
       getIsTeleport(action.kind) &&
       !map.sectors.some(
@@ -816,6 +821,39 @@ function validateLines(
       );
     }
   }
+}
+
+// A floor raise goes to the lowest ceiling around the sector, or its own if
+// lower, and a door counts at its closed height, which is its floor. The
+// engine moves the floor there even when that's below it.
+function stuckFloor(map: GameMap, sector: Sector) {
+  const [lowest] = [...neighbours(map, sector), sector]
+    .map((other) => ({
+      other,
+      height: other.door ? other.floor : other.ceiling,
+    }))
+    .sort((a, b) => a.height - b.height);
+  if (lowest.height > sector.floor) return [];
+  const { other, height } = lowest;
+  const at = `${other.door ? "closed " : ""}at ${height}`;
+  const where =
+    other === sector
+      ? `its own ceiling, ${at}`
+      : `the lowest ceiling next to it, ${other.name}, ${at}`;
+  return [
+    height === sector.floor
+      ? `the floor of ${sector.name} can't rise: it stops at ${where}.`
+      : `the floor of ${sector.name} drops instead of rising: it goes to ${where}.`,
+  ];
+}
+
+function neighbours(map: GameMap, sector: Sector) {
+  const found = new Set<Sector>();
+  for (const owners of wallOwners(map).values()) {
+    if (!owners.includes(sector)) continue;
+    for (const other of owners) if (other !== sector) found.add(other);
+  }
+  return [...found];
 }
 
 // The engine moves the ceiling of whatever is behind a pressed door line, and
