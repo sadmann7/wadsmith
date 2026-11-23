@@ -382,8 +382,12 @@ function groups(keymap: Keymap): { title: string; items: Shortcut[] }[] {
         },
         { keys: [key("Space"), key("C")], does: "Fly up or down" },
         {
+          keys: [key("Right-drag")],
+          does: "Look around, while a right-click still opens the menu",
+        },
+        {
           keys: [key("Z")],
-          does: "Look with the mouse, and act on what the crosshair is over",
+          does: "Look with the mouse until pressed again, and act on what the crosshair is over",
         },
         {
           keys: [key("N"), key("P")],

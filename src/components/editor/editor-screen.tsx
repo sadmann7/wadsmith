@@ -1233,6 +1233,37 @@ export function EditorScreen({
     shortcut("placePrefab", () => modeKeys() && visibleLayout !== "scene"),
   );
 
+  // The 3D view goes back to the map layout it came from, and from the map
+  // it starts where the pointer is, as switching to visual mode does in UDB.
+  const leftLayout = React.useRef<ViewLayout>("map");
+  React.useEffect(() => {
+    if (visibleLayout !== "scene") leftLayout.current = visibleLayout;
+  }, [visibleLayout]);
+  useShortcut(
+    shortcutKeys.switchView,
+    () => {
+      if (visibleLayout === "scene") {
+        changeLayout(narrow ? "map" : leftLayout.current);
+        focusPane("map");
+        return;
+      }
+      const pointer = mapPointer.current;
+      if (hoveredPane.current === "map" && pointer) {
+        setLookAtRequest((request) => ({
+          ...pointer,
+          id: (request?.id ?? 0) + 1,
+        }));
+      }
+      // The map reads the pointer against its own box, which it loses once
+      // hidden, so the layout changes a frame later.
+      requestAnimationFrame(() => {
+        changeLayout("scene");
+        focusPane("scene");
+      });
+    },
+    shortcut("switchView", mapKeys),
+  );
+
   const findCameraOnMap = () => {
     if (visibleLayout === "scene") changeLayout(narrow ? "map" : "split");
     setFindCameraRequest((request) => request + 1);
@@ -1485,7 +1516,7 @@ export function EditorScreen({
       onContextMenuCapture={normalizeControlClick}
     >
       <SceneCanvas
-        aria-label="3D view. Click a surface to select it, and drag a wall or press the arrows to move its texture. W, A, S and D walk, G switches between walking and flying, Space and C fly up and down, Z looks with the mouse, N and P step through surfaces, and O opens the door or lift under the pointer."
+        aria-label="3D view. Click a surface to select it, and drag a wall or press the arrows to move its texture. W, A, S and D walk, G switches between walking and flying, Space and C fly up and down, dragging with the right button or pressing Z looks around, N and P step through surfaces, and O opens the door or lift under the pointer."
         className="screen scene"
         map={map}
         assets={assets}
@@ -1533,7 +1564,7 @@ export function EditorScreen({
   const sceneKeys = (
     <p className="scene-keys m-0" aria-hidden="true">
       {sceneView.flying ? "Flying" : "Walking"} · G{" "}
-      {sceneView.flying ? "walk" : "fly"} · WASD move · Z mouse look · Wheel
+      {sceneView.flying ? "walk" : "fly"} · WASD move · Right-drag look · Wheel
       height · Arrows texture · Shift or Alt+A align
     </p>
   );
@@ -3356,6 +3387,19 @@ function roomKeys(map: GameMap, mode: EditMode, id: string | null) {
   if (!room) return [];
   if (mode === "sectors") return [`${roomKeyPrefix}${room.id}`];
   return mode === "vertices" ? sectorVertices(room) : [];
+}
+
+// A pane shown by a key takes the keys that follow, once it has rendered.
+function focusPane(pane: SinglePane) {
+  requestAnimationFrame(() => {
+    document
+      .querySelector<HTMLElement>(
+        pane === "scene"
+          ? '[data-pane="scene"] [aria-roledescription="3D map editor"]'
+          : '[aria-roledescription="map editor"]',
+      )
+      ?.focus({ preventScroll: true });
+  });
 }
 
 function modeKeys() {
