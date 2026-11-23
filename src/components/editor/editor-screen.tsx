@@ -195,7 +195,7 @@ import {
   type TextureKind,
 } from "@/lib/map/texture-tools";
 import { flatUse, wallUse } from "@/lib/map/textures";
-import { validateMap } from "@/lib/map/validate";
+import { newProblems } from "@/lib/map/validate";
 import {
   curveWalls,
   flipWalls,
@@ -808,6 +808,11 @@ export function EditorScreen({
       }
       next = turned;
     }
+    const [problem] = newProblems(map, next);
+    if (problem) {
+      setNotice(`That would give the map a new problem. ${problem.message}`);
+      return;
+    }
     setNotice("");
     commit(next);
     // Corners that met others on the way are gone, and so are the walls and
@@ -988,14 +993,7 @@ export function EditorScreen({
   // didn't have, which the notice names instead.
   const commitTool = (next: GameMap, refusal: string) => {
     if (next === map) return false;
-    // Ids name walls and rooms, which a tool renames, so problems are
-    // counted by kind.
-    const before = problemKinds(map);
-    if (
-      [...problemKinds(next)].some(
-        ([kind, count]) => count > (before.get(kind) ?? 0),
-      )
-    ) {
+    if (newProblems(map, next).length > 0) {
       setNotice(refusal);
       return false;
     }
@@ -3517,15 +3515,6 @@ function shortcut(name: EditorShortcut, when?: () => boolean) {
       (typingShortcuts.has(name) || notTyping()) &&
       (when?.() ?? true),
   };
-}
-
-function problemKinds(map: GameMap) {
-  const counts = new Map<string, number>();
-  for (const issue of validateMap(map)) {
-    const kind = issue.id.split(":")[0];
-    counts.set(kind, (counts.get(kind) ?? 0) + 1);
-  }
-  return counts;
 }
 
 function notTyping() {
