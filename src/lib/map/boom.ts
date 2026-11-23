@@ -64,13 +64,13 @@ const trigger: BoomField = {
   width: 3,
   options: [
     "Walk over once",
-    "Walk over, repeats",
-    "Press switch once",
-    "Press switch, repeats",
+    "Walk over, repeatable",
+    "Use once",
+    "Use, repeatable",
     "Shoot once",
-    "Shoot, repeats",
-    "Press door once",
-    "Press door, repeats",
+    "Shoot, repeatable",
+    "Use door once",
+    "Use door, repeatable",
   ],
 };
 const speed: BoomField = {
