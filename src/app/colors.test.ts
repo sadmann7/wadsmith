@@ -106,6 +106,13 @@ describe("color contrast", () => {
     expect(contrast(text, surface)).toBeGreaterThanOrEqual(4.5);
   });
 
+  it.each(["background", "card"])(
+    "draws the logo's shaded walls on %s at 3:1",
+    (surface) => {
+      expect(contrast("primary-shade", surface)).toBeGreaterThanOrEqual(3);
+    },
+  );
+
   it.each(["background", "card", "muted"])(
     "draws focus rings on %s at 3:1",
     (surface) => {

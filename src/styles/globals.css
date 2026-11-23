@@ -20,6 +20,7 @@
   --color-input: oklch(1 0 0 / 15%);
   --color-primary: oklch(0.702 0.196 40.7);
   --color-primary-foreground: oklch(0.161 0.024 47.1);
+  --color-primary-shade: oklch(0.55 0.165 38);
   --color-ring: oklch(0.553 0.013 58.071);
   --color-destructive: oklch(0.68 0.19 26.8);
   --color-warning: oklch(0.844 0.151 87.9);
