@@ -59,6 +59,8 @@ export interface MapIssue {
   message: string;
   detail?: string;
   target?: string;
+  // Where the 3D view stands to see it, in degrees counterclockwise from east.
+  view?: { x: number; y: number; angle: number };
 }
 
 const coordinateLimit = 32000;

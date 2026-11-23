@@ -103,7 +103,12 @@ import {
   thingKinds,
   wallTextures,
 } from "@/lib/map/catalog";
-import { checkMap, fixIssue, issueText } from "@/lib/map/checks";
+import {
+  type CheckedIssue,
+  checkMap,
+  fixIssue,
+  issueText,
+} from "@/lib/map/checks";
 import {
   addNote,
   addPlayerStarts,
@@ -1449,6 +1454,21 @@ export function EditorScreen({
     }
   };
 
+  // A view a check found goes to the 3D view too, standing where it was seen.
+  const showIssue = (issue: CheckedIssue) => {
+    const target = issue.target ? targetForIssue(map, issue.target) : null;
+    if (target) showTarget(target);
+    const { view } = issue;
+    if (!view || !camera.placeAt(map, view, view.angle)) return;
+    if (narrow) changeLayout("scene");
+    else if (
+      visibleLayout !== "split" &&
+      !(visibleLayout === "map" && showDock)
+    ) {
+      changeLayout("split");
+    }
+  };
+
   const showInScene = (target: MapTarget) => {
     const view = viewOfTarget(map, target);
     if (!view) return;
@@ -2391,12 +2411,12 @@ export function EditorScreen({
                           >
                             Fix
                           </button>
-                        ) : target ? (
+                        ) : target || issue.view ? (
                           <button
                             type="button"
                             className="border-0 bg-transparent p-0 text-muted-foreground hover:text-foreground"
                             aria-label={`Show: ${title}`}
-                            onClick={() => showTarget(target)}
+                            onClick={() => showIssue(issue)}
                           >
                             Show
                           </button>
@@ -3142,11 +3162,8 @@ export function EditorScreen({
             return null;
           }}
           onShow={(issue) => {
-            const target = issue.target
-              ? targetForIssue(map, issue.target)
-              : null;
             setBuilding(false);
-            if (target) showTarget(target);
+            showIssue(issue);
           }}
           onClose={() => setBuilding(false)}
         />

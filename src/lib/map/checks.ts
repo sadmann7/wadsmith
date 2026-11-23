@@ -215,7 +215,7 @@ export function buildChecks(
           ),
         waitingText:
           needsBuild && limits.pending
-            ? "Checked once the map builds"
+            ? "Checked once the views are scanned"
             : "Checked after errors are fixed",
       };
     },
