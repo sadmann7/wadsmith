@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { GameMap } from "./types";
 
 import { updateLine, updateSector } from "./edit";
-import { standingSpot } from "./standing";
+import { standingSpot, walkStep } from "./standing";
 import { testMap } from "./test-map";
 
 describe("a spot to stand on", () => {
@@ -117,3 +117,116 @@ describe("a spot to stand on", () => {
     expect(standingSpot(squeezed, { x: 440, y: 108 })).toBeNull();
   });
 });
+
+describe("walking the 3D view", () => {
+  it("walks across open floor and down a step", () => {
+    expect(walkStep(testMap, { x: 96, y: 160 }, { x: 104, y: 160 })).toEqual({
+      x: 104,
+      y: 160,
+    });
+    expect(walkStep(testMap, { x: 380, y: 160 }, { x: 388, y: 160 })).toEqual({
+      x: 388,
+      y: 160,
+    });
+  });
+
+  it("stops short of a wall and slides along it", () => {
+    expect(walkStep(testMap, { x: 20, y: 160 }, { x: 12, y: 160 })).toEqual({
+      x: 20,
+      y: 160,
+    });
+    expect(walkStep(testMap, { x: 20, y: 160 }, { x: 12, y: 168 })).toEqual({
+      x: 20,
+      y: 168,
+    });
+  });
+
+  it("stops at a ledge too high, a shut door and a blocking line", () => {
+    const raised = updateSector(testMap, "sector-2", { floor: 64 });
+    expect(walkStep(raised, { x: 360, y: 160 }, { x: 372, y: 160 })).toEqual({
+      x: 360,
+      y: 160,
+    });
+    const shut = updateSector(testMap, "sector-4", { ceiling: -16 });
+    expect(walkStep(shut, { x: 472, y: 160 }, { x: 484, y: 160 })).toEqual({
+      x: 472,
+      y: 160,
+    });
+    const fenced = updateLine(testMap, "v3|v4", { blocksAll: true });
+    expect(walkStep(fenced, { x: 360, y: 160 }, { x: 372, y: 160 })).toEqual({
+      x: 360,
+      y: 160,
+    });
+  });
+
+  it("walks through a door that stands open", () => {
+    expect(walkStep(testMap, { x: 472, y: 160 }, { x: 484, y: 160 })).toEqual({
+      x: 484,
+      y: 160,
+    });
+  });
+
+  it("climbs stairs narrower than a player", () => {
+    const stairs = row([0, 128, 144, 160, 176, 320], [0, 16, 32, 48, 48]);
+    let spot = { x: 64, y: 64 };
+    for (let step = 0; step < 40; step += 1) {
+      spot = walkStep(stairs, spot, { x: spot.x + 8, y: 64 });
+    }
+    expect(spot.x).toBeGreaterThan(200);
+  });
+
+  it("can't walk back up a ledge after dropping off it", () => {
+    const ledge = row([0, 128, 320], [48, -16]);
+    let spot = { x: 100, y: 64 };
+    for (let step = 0; step < 10; step += 1) {
+      spot = walkStep(ledge, spot, { x: spot.x + 8, y: 64 });
+    }
+    expect(spot.x).toBe(180);
+    for (let step = 0; step < 10; step += 1) {
+      spot = walkStep(ledge, spot, { x: spot.x - 8, y: 64 });
+    }
+    expect(spot.x).toBe(148);
+  });
+
+  it("can't climb a ledge from beside its foot", () => {
+    const ledge = row([0, 128, 320], [0, 200]);
+    let spot = { x: 120, y: 64 };
+    for (let step = 0; step < 10; step += 1) {
+      spot = walkStep(ledge, spot, { x: spot.x + 8, y: 64 });
+    }
+    expect(spot.x).toBe(120);
+  });
+
+  it("lets a camera caught in a wall walk out", () => {
+    expect(walkStep(testMap, { x: 4, y: 160 }, { x: 12, y: 160 })).toEqual({
+      x: 12,
+      y: 160,
+    });
+    expect(walkStep(testMap, { x: 8, y: 160 }, { x: 4, y: 160 })).toEqual({
+      x: 8,
+      y: 160,
+    });
+  });
+});
+
+// Rooms side by side from west to east, split at `edges`, each 128 deep and
+// with its floor from `floors` under a ceiling at 200.
+function row(edges: number[], floors: number[]): GameMap {
+  const vertices: GameMap["vertices"] = {};
+  for (const [at, x] of edges.entries()) {
+    vertices[`n${at}`] = { x, y: 0 };
+    vertices[`s${at}`] = { x, y: 128 };
+  }
+  return {
+    vertices,
+    sectors: floors.map((floor, at) => ({
+      ...testMap.sectors[0],
+      id: `room-${at}`,
+      vertices: [`n${at}`, `n${at + 1}`, `s${at + 1}`, `s${at}`],
+      floor,
+      ceiling: 200,
+    })),
+    things: [],
+    switches: [],
+  };
+}

@@ -18,15 +18,16 @@ export type TextureKind = "wall" | "flat";
 const unknownSpan = 1024;
 const sideParts = ["upper", "lower", "middle"] as const;
 
-// Runs a room's texture on unbroken from one wall: each wall beside it that
-// shows the same texture starts where the last one ended, both ways round,
-// until a wall shows something else. A switch and a door's face keep their
-// art and the run carries on past them. Offsets wrap at `widthOf` a texture.
+// Runs a room's texture on unbroken from one wall, both ways round, until a
+// wall shows something else; a switch's and a door's art is skipped. Across,
+// each wall starts where the last ended; up and down, its rows sit at the
+// heights of the first wall's. Offsets wrap at `sizeOf` the texture.
 export function alignWalls(
   map: GameMap,
   sectorId: string,
   wall: string,
-  widthOf: (texture: string) => number,
+  sizeOf: (texture: string) => number,
+  axis: "x" | "y" = "x",
 ): GameMap {
   const sector = map.sectors.find((item) => item.id === sectorId);
   if (!sector || sector.door) return map;
@@ -87,8 +88,8 @@ export function alignWalls(
     }));
     const start = edges.findIndex((edge) => edge.key === wall);
     if (start < 0) continue;
-    const width = widthOf(textures[0]);
-    const span = width > 1 ? width : unknownSpan;
+    const size = sizeOf(textures[0]);
+    const span = size > 1 ? size : unknownSpan;
     const carries = (key: string) => {
       const here = shown(key);
       return (
@@ -114,6 +115,25 @@ export function alignWalls(
       if (offsets.has(edge.key) || !carries(edge.key)) break;
       offset -= edge.length;
       offsets.set(edge.key, offset);
+    }
+    if (axis === "y") {
+      const first = textureTop(map, sector, wall, textures, span);
+      if (first === null) return map;
+      const from = map.lines?.[wall]?.sides?.[sector.id]?.offsetY ?? 0;
+      return [...offsets.keys()].reduce((next, key) => {
+        const top = textureTop(map, sector, key, textures, span);
+        if (top === null || key === wall || shown(key)?.length === 0) {
+          return next;
+        }
+        const value = from + first - top;
+        const wrapped = ((value % span) + span) % span;
+        const current = next.lines?.[key]?.sides?.[sector.id]?.offsetY ?? 0;
+        return wrapped === ((current % span) + span) % span
+          ? next
+          : updateLineSide(next, key, sector.id, {
+              offsetY: wrapped || undefined,
+            });
+      }, map);
     }
     return [...offsets].reduce((next, [key, value]) => {
       const bare = shown(key)?.length === 0;
@@ -250,4 +270,32 @@ function wallPatch(sector: Sector, swap: (texture: string) => string) {
   return changed
     ? { wallTexture, ...(overrides ? { wallOverrides: overrides } : {}) }
     : null;
+}
+
+// The height of the top row of the part of a wall that shows one of
+// `textures`, before its offset, pegged the way the engine pegs it. Null when
+// no part of the wall shows one.
+function textureTop(
+  map: GameMap,
+  sector: Sector,
+  wall: string,
+  textures: string[],
+  height: number,
+) {
+  const owners = wallOwners(map).get(wall) ?? [];
+  const other = owners.find((item) => item !== sector);
+  const line = map.lines?.[wall];
+  const shows = (part: (typeof sideParts)[number]) =>
+    textures.includes(wallPartTexture(map, sector, wall, part));
+  if (!other) {
+    if (!shows("middle")) return null;
+    return line?.lowerFixed ? sector.floor + height : sector.ceiling;
+  }
+  if (other.ceiling < sector.ceiling && shows("upper")) {
+    return line?.upperFixed ? sector.ceiling : other.ceiling + height;
+  }
+  if (other.floor > sector.floor && shows("lower")) {
+    return line?.lowerFixed ? sector.ceiling : other.floor;
+  }
+  return null;
 }

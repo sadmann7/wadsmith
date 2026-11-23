@@ -212,7 +212,12 @@ import { type EpisodeEntry, type MapHealth, MapSwitcher } from "./map-switcher";
 import { NewMapPanel } from "./new-map-panel";
 import { PlaytestPanel } from "./playtest-panel";
 import { PrefabsDialog } from "./prefabs-dialog";
-import { type DraftSource, SceneCanvas } from "./scene-editor";
+import {
+  type DraftSource,
+  SceneCanvas,
+  type SceneView,
+  startView,
+} from "./scene-editor";
 import { CurveDialog, StairsDialog } from "./shape-dialogs";
 import { ShortcutSheet } from "./shortcut-sheet";
 import { SurfacePanel } from "./surface-panel";
@@ -451,6 +456,7 @@ export function EditorScreen({
   // pastes the piece and not the look.
   const [pieceNewer, setPieceNewer] = React.useState(false);
   const [scenePicked, setScenePicked] = React.useState<string[]>([]);
+  const [sceneView, setSceneView] = React.useState<SceneView>(startView);
   const [drawShape, setDrawShape] = React.useState<DrawShape>("outline");
   const [drawSides, setDrawSides] = React.useState(8);
   const [prefabsAt, setPrefabsAt] = React.useState<{
@@ -1261,7 +1267,7 @@ export function EditorScreen({
       onContextMenuCapture={normalizeControlClick}
     >
       <SceneCanvas
-        aria-label="3D view. Click a surface to select it, and drag a wall to move its texture. W, A, S and D walk, Space and C fly up and down, Z looks with the mouse, N and P step through surfaces, and O opens the door or lift under the pointer."
+        aria-label="3D view. Click a surface to select it, and drag a wall or press the arrows to move its texture. W, A, S and D walk, G switches between walking and flying, Space and C fly up and down, Z looks with the mouse, N and P step through surfaces, and O opens the door or lift under the pointer."
         className="screen scene"
         map={map}
         assets={assets}
@@ -1287,9 +1293,11 @@ export function EditorScreen({
         picked={scenePicked}
         onPickedChange={setScenePicked}
         onMapChange={(next, details) =>
-          commit(next, details.reason === "wheel" ? "scene-wheel" : undefined)
+          commit(next, sceneGroups[details.reason])
         }
         onSelectedChange={selectSurface}
+        view={sceneView}
+        onViewChange={setSceneView}
         onContextSurface={reportSceneTarget}
         contextMenuOpen={contextMenuOpen}
       />
@@ -1306,8 +1314,9 @@ export function EditorScreen({
 
   const sceneKeys = (
     <p className="scene-keys m-0" aria-hidden="true">
-      WASD walk · Space C fly · Z mouse look · Wheel height, Shift 1, Alt light
-      · ⇧A align · , . turn thing
+      {sceneView.flying ? "Flying" : "Walking"} · G{" "}
+      {sceneView.flying ? "walk" : "fly"} · WASD move · Z mouse look · Wheel
+      height · Arrows texture · Shift or Alt+A align
     </p>
   );
 
@@ -1503,6 +1512,13 @@ export function EditorScreen({
     });
     onPlayingChange(true, false);
   };
+
+  useShortcut(editorShortcuts.play.keys, play, shortcut("play"));
+  useShortcut(
+    editorShortcuts.playHere.keys,
+    playFromCamera,
+    shortcut("playHere"),
+  );
 
   const keepPlaytest = (run: PlaytestRun) => {
     const saved = keepRun(playtest, run, !game?.fromCamera);
@@ -3071,6 +3087,14 @@ function notTyping() {
 function saveLayout(view: ViewLayout, sizes: number[], dock: boolean) {
   savedLayout.set(JSON.stringify({ view, sizes, dock }));
 }
+
+// Edits from the 3D view that join one undo step while they keep coming, like
+// a held key's repeats.
+const sceneGroups: Partial<Record<string, string>> = {
+  wheel: "scene-wheel",
+  "offset-key": "scene-offsets",
+  "height-key": "scene-heights",
+};
 
 function modeKeys() {
   return mapKeys() && !document.activeElement?.closest(".scene");

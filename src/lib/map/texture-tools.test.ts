@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { GameMap } from "./types";
 
-import { addRoom, updateLineSide, updateSector } from "./edit";
+import { addRoom, updateLine, updateLineSide, updateSector } from "./edit";
 import { wallKey } from "./geometry";
 import { islandMap, testMap } from "./test-map";
 import { alignWalls, countTexture, replaceTexture } from "./texture-tools";
@@ -151,6 +151,24 @@ describe("aligning textures along walls", () => {
     expect(
       [top, right, bottom, left].map((wall) => offsetOf(aligned, wall)),
     ).toEqual([0, 96, 136, 232]);
+  });
+
+  it("lines up the rows of walls pegged different ways", () => {
+    const north = wallKey("v3", "v13");
+    const south = wallKey("v14", "v4");
+    const step = wallKey("v3", "v4");
+    const start = updateLineSide(testMap, north, "sector-2", { offsetY: 5 });
+    const pegged = updateLine(start, south, { lowerFixed: true });
+    const aligned = alignWalls(pegged, "sector-2", north, () => 128, "y");
+    const offsetY = (wall: string) =>
+      aligned.lines?.[wall]?.sides?.["sector-2"]?.offsetY ?? 0;
+    // The north wall hangs from the ceiling at 96 and the south one stands
+    // on the floor at -16, so its top row is at 112. The step's lower part
+    // hangs from the start room's floor at 0.
+    expect([north, south, step].map(offsetY)).toEqual([5, 117, 101]);
+    expect(aligned.lines?.[north]?.sides?.["sector-2"]?.offsetX).toBe(
+      undefined,
+    );
   });
 
   it("changes nothing for a room or wall that isn't there", () => {

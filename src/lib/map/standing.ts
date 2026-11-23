@@ -24,6 +24,24 @@ export function standingSpot(map: GameMap, point: Point): Point | null {
   return null;
 }
 
+// Where a player walking from one spot toward another ends up: there, or as
+// far along one axis as the walls let it slide, or where it stood. A player
+// caught in a wall, by flying or a door shutting on it, only moves to free
+// itself.
+export function walkStep(map: GameMap, from: Point, to: Point): Point {
+  const room = sectorAt(map, from);
+  if (!room) return sectorAt(map, to) ? to : from;
+  const floor = standingFloor(map, from, room.floor);
+  const caught = overlap(map, from, floor);
+  for (const next of [to, { x: to.x, y: from.y }, { x: from.x, y: to.y }]) {
+    if (next.x === from.x && next.y === from.y) continue;
+    if (!sectorAt(map, next)) continue;
+    const reach = overlap(map, next, floor);
+    if (reach === 0 || reach < caught) return next;
+  }
+  return from;
+}
+
 // A player is a box this far across from its middle, this tall, and climbs a
 // step this high.
 const playerRadius = 16;
@@ -56,6 +74,67 @@ function pushOff(map: GameMap, spot: Point, floor: number) {
     next = { x: near.x + dx * scale, y: near.y + dy * scale };
   }
   return next;
+}
+
+// A player stands on the highest floor its box is over that it could have
+// stepped up to, so it climbs stairs narrower than itself and stays up at a
+// ledge's edge, but a camera set down at a ledge's foot stays at the foot.
+function standingFloor(map: GameMap, spot: Point, floor: number) {
+  const floors = [...touching(map, spot)].flatMap(({ key, owners }) =>
+    owners.length < 2 || map.lines?.[key]?.blocksAll
+      ? []
+      : owners.map((owner) => owner.floor),
+  );
+  let highest = floor;
+  for (const level of floors.toSorted((a, b) => a - b)) {
+    if (level > highest && level - highest <= maxStep) highest = level;
+  }
+  return highest;
+}
+
+// How deep the walls that stop a player standing on `floor` reach into its
+// box at a spot, all told, which is 0 where it fits.
+function overlap(map: GameMap, spot: Point, floor: number) {
+  let depth = 0;
+  for (const wall of touching(map, spot)) {
+    if (getIsWalkBlocking(map, wall.key, wall.owners, floor)) {
+      depth += wall.depth;
+    }
+  }
+  return depth;
+}
+
+// The walls whose line reaches into a player's box at a spot, with how far.
+function* touching(map: GameMap, spot: Point) {
+  for (const [key, owners] of wallOwners(map)) {
+    const [a, b] = key.split("|").map((id) => map.vertices[id]);
+    if (!a || !b) continue;
+    const near = nearestOn(a, b, spot);
+    const reach = Math.max(
+      Math.abs(spot.x - near.x),
+      Math.abs(spot.y - near.y),
+    );
+    if (reach < playerRadius) {
+      yield { key, owners, depth: playerRadius - reach };
+    }
+  }
+}
+
+// Walking goes where the game would let a player: a door counts by how far it
+// stands open, not as a wall.
+function getIsWalkBlocking(
+  map: GameMap,
+  key: string,
+  owners: Sector[],
+  floor: number,
+) {
+  if (map.lines?.[key]?.blocksAll) return true;
+  const [front, back] = owners;
+  if (!back) return true;
+  if (front === back) return false;
+  const top = Math.max(front.floor, back.floor);
+  const headroom = Math.min(front.ceiling, back.ceiling) - top;
+  return top - floor > maxStep || headroom < playerHeight;
 }
 
 const playerHeight = 56;
