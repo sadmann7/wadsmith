@@ -944,10 +944,9 @@ export function LineInspector({
               step={1}
               min={0}
               max={rawSpecialLimit}
-              isTypedOnCommit
               onChange={(special) => {
-                // A step can pass through a special that takes no tag, so the
-                // line keeps its tag for the next one.
+                // Typing or stepping passes through specials that take no tag,
+                // so the line keeps its tag for the number after.
                 const tag = action?.tag ?? raw?.tag ?? 0;
                 const known = actionForSpecial(special);
                 onLineChange(
@@ -1482,8 +1481,6 @@ interface NumberSettingProps {
   onChange: (value: number) => void;
   // A step from an empty field, which moves each room from where it is.
   onShift?: (delta: number) => void;
-  // Typing takes effect on Enter or leaving the field, not on each keystroke.
-  isTypedOnCommit?: boolean;
 }
 
 function NumberSetting({
@@ -1494,7 +1491,6 @@ function NumberSetting({
   max,
   onChange,
   onShift,
-  isTypedOnCommit,
 }: NumberSettingProps) {
   return (
     <FieldItem>
@@ -1508,7 +1504,6 @@ function NumberSetting({
         max={max}
         onValueChange={(next, details) => {
           if (next === null) return;
-          if (isTypedOnCommit && details.reason === "input-change") return;
           const typed =
             details.reason === "input-change" ||
             details.reason === "input-commit";
