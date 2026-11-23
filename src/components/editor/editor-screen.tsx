@@ -1640,7 +1640,7 @@ export function EditorScreen({
       {pickedSurfaces.length > 1
         ? `${pickedSurfaces.length} surfaces picked. Shift-click adds or removes one.`
         : sceneInfo
-          ? `${sceneInfo.thing ? thingLabel(sceneInfo.thing, customThings) : sceneInfo.label}${sceneInfo.texture ? ` · ${sceneInfo.texture}` : ""}${sceneInfo.height !== null ? ` · height ${sceneInfo.height}` : ""}`
+          ? `Selected: ${sceneInfo.thing ? thingLabel(sceneInfo.thing, customThings) : sceneInfo.label}${sceneInfo.texture ? ` · ${sceneInfo.texture}` : ""}${sceneInfo.height !== null ? ` · height ${sceneInfo.height}` : ""}`
           : "Click a floor, ceiling, wall or thing. Drag a wall to move its texture."}
     </p>
   );
