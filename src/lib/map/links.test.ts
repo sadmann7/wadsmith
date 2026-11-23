@@ -11,9 +11,10 @@ import {
   setLineTarget,
   updateLine,
 } from "./edit";
-import { wallKey } from "./geometry";
+import { sectorAt, wallKey } from "./geometry";
 import { lineLinks, sectorLinks } from "./links";
-import { testMap } from "./test-map";
+import { setWallsAction } from "./many-lines";
+import { islandMap, testMap } from "./test-map";
 
 const openWall = wallKey("v3", "v4");
 const action = (kind: LineAction["kind"]): LineAction => ({
@@ -95,6 +96,35 @@ describe("links from a line to what it acts on", () => {
       }),
       openWall,
     );
+    expect(
+      map.things.filter((thing) => thing.kind === "teleport-destination"),
+    ).toHaveLength(1);
+  });
+
+  it("lands beside a room drawn in the middle of the one aimed at", () => {
+    const edge = wallKey("a", "b");
+    const map = setLineTarget(
+      updateLine(islandMap, edge, { action: action("teleport") }),
+      edge,
+      "yard",
+    );
+    const spot = defined(
+      map.things.find((thing) => thing.kind === "teleport-destination"),
+    );
+    expect(sectorAt(map, spot)?.id).toBe("yard");
+  });
+
+  it("places nothing in a door, which is shut", () => {
+    const map = setLineTarget(
+      updateLine(testMap, openWall, { action: action("teleport") }),
+      openWall,
+      "sector-4",
+    );
+    expect(map.things).toEqual(testMap.things);
+  });
+
+  it("lands teleporters given an action together", () => {
+    const map = setWallsAction(aimed("floor-lower"), [openWall], "teleport");
     expect(
       map.things.filter((thing) => thing.kind === "teleport-destination"),
     ).toHaveLength(1);
