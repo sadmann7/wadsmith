@@ -136,6 +136,7 @@ interface MapEditorOptions {
   findCameraRequest?: number;
   fitRequest?: number;
   fitSelectionRequest?: number;
+  selectAllRequest?: number;
   drawRequest?: { id: number; point: Point } | null;
   focusRequest?: { id: number; point: Point } | null;
   lookAtRequest?: { id: number; clientX: number; clientY: number } | null;
@@ -284,6 +285,7 @@ export const mapEditor = definePrimitive({
     findCameraRequest: "number",
     fitRequest: "number",
     fitSelectionRequest: "number",
+    selectAllRequest: "number",
     drawRequest: "value",
     focusRequest: "value",
     lookAtRequest: "value",
@@ -493,6 +495,7 @@ export const mapEditor = definePrimitive({
     let lookRequest = context.options().lookAtRequest?.id ?? 0;
     let fitRequest = context.options().fitRequest ?? 0;
     let fitSelectionRequest = context.options().fitSelectionRequest ?? 0;
+    let selectAllRequest = context.options().selectAllRequest ?? 0;
     let drawRequest = context.options().drawRequest?.id ?? 0;
     let focusRequest = context.options().focusRequest?.id ?? 0;
     let touchPress: { event: PointerEvent; held: boolean } | null = null;
@@ -927,6 +930,12 @@ export const mapEditor = definePrimitive({
       }
       applyPicked(invert ? all.filter((key) => !current.has(key)) : all);
     };
+    context.onOptions((options) => {
+      const request = options.selectAllRequest ?? 0;
+      if (request === selectAllRequest) return;
+      selectAllRequest = request;
+      if (store.get().tool === "select") selectEverything(false);
+    });
 
     // Selects these keys, through the inspector's wall when they are walls.
     const applyPicked = (keys: string[]) => {
