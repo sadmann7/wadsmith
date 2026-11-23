@@ -146,6 +146,15 @@ function groups(): { title: string; items: Shortcut[] }[] {
           keys: [key("Insert"), key("Double-click")],
           does: "Add a corner on the wall under the pointer",
         },
+        {
+          keys: [key("Insert")],
+          does: "Place the chosen thing at the pointer, in thing mode",
+        },
+        {
+          keys: [key("1–9", "1 to 9")],
+          does: "Select a saved group, with Shift to add it to the selection",
+        },
+        { keys: [chord("alt+1")], does: "Save the selection as group 1" },
         { keys: [key("+"), key("−", "minus")], does: "Zoom in or out" },
         { keys: [key("0")], does: "Reset the zoom" },
         { keys: [key("C")], does: "Wire the focused switch to a door" },

@@ -27,7 +27,13 @@ import * as React from "react";
 
 import type { LivePeer } from "@/lib/episodes/live";
 import type { FindKind } from "@/lib/map/similar";
-import type { GameMap, Point, ThingCategory, ThingKind } from "@/lib/map/types";
+import type {
+  GameMap,
+  Point,
+  Sector,
+  ThingCategory,
+  ThingKind,
+} from "@/lib/map/types";
 
 import { GameView, type PlayerSpot } from "@/components/play/play-panel";
 import { type HostedGame, PlayTogether } from "@/components/play/play-together";
@@ -134,6 +140,7 @@ import {
   loopEdges,
   sectorAt,
   sectorLoops,
+  sectorVertices,
   wallKey,
   wallOwners,
 } from "@/lib/map/geometry";
@@ -358,6 +365,12 @@ const saveLabels: Record<AppProps["saveStatus"], string> = {
   session: "Browser storage is off: saved for this session only",
 };
 
+interface SelectionGroup {
+  mode: EditMode;
+  keys: string[];
+  sector: string | null;
+}
+
 export function EditorScreen({
   initialMap,
   mapName,
@@ -468,6 +481,11 @@ export function EditorScreen({
   const [layout, setLayout] = React.useState(initialLayout.view);
   const [findCameraRequest, setFindCameraRequest] = React.useState(0);
   const [fitRequest, setFitRequest] = React.useState(0);
+  const [fitSelectionRequest, setFitSelectionRequest] = React.useState(0);
+  const [groups, setGroups] = React.useState<Record<string, SelectionGroup>>(
+    {},
+  );
+  const [lastPrefab, setLastPrefab] = React.useState<GameMap | null>(null);
   const [focusRequest, setFocusRequest] = React.useState<{
     id: number;
     point: Point;
@@ -1107,6 +1125,87 @@ export function EditorScreen({
     shortcut("pane", mapKeys),
   );
 
+  useShortcut(
+    editorShortcuts.fitSelection.keys,
+    () => setFitSelectionRequest((request) => request + 1),
+    shortcut("fitSelection", () => modeKeys() && visibleLayout !== "scene"),
+  );
+
+  const toggleDoors = () => {
+    const making = selectedRooms.some((room) => !room.door);
+    commitTool(
+      selectedRooms.reduce(
+        (next, room) =>
+          making
+            ? room.door
+              ? next
+              : setRoomDoor(next, room.id, defaultDoor)
+            : setRoomDoor(next, room.id, undefined),
+        map,
+      ),
+      making
+        ? "A door can't hold a player start, or be too big to open."
+        : "These doors can't turn back into rooms here.",
+    );
+  };
+  useShortcut(
+    editorShortcuts.makeDoor.keys,
+    toggleDoors,
+    shortcut("makeDoor", () => modeKeys() && selectedRooms.length > 0),
+  );
+
+  // Rooms in the order they were picked, which a gradient runs along.
+  const pickOrder = (room: Sector) =>
+    selection.findIndex(
+      (key) =>
+        key === `${roomKeyPrefix}${room.id}` || room.vertices.includes(key),
+    );
+  const roomsInPickOrder = () =>
+    selectedRooms.toSorted((a, b) => pickOrder(a) - pickOrder(b));
+  const slopeRooms = (kind: "floor" | "ceiling" | "light") => {
+    const keys = roomsInPickOrder().map((room) =>
+      surfaceKey({ kind: kind === "light" ? "floor" : kind, sector: room.id }),
+    );
+    const what = kind === "light" ? "light" : "height";
+    const ends = gradientEnds(map, keys, what);
+    if (!ends) return;
+    const next = gradient(map, keys, what, ends[0], ends[1]);
+    if (next === map) {
+      setNotice("These rooms already make an even slope.");
+      return;
+    }
+    setNotice("");
+    commit(next);
+  };
+  const canSlope = () => notTyping() && modeKeys() && selectedRooms.length > 2;
+  useShortcut(
+    editorShortcuts.floorGradient.keys,
+    () => slopeRooms("floor"),
+    shortcut("floorGradient", canSlope),
+  );
+  useShortcut(
+    editorShortcuts.ceilingGradient.keys,
+    () => slopeRooms("ceiling"),
+    shortcut("ceilingGradient", canSlope),
+  );
+  useShortcut(
+    editorShortcuts.lightGradient.keys,
+    () => slopeRooms("light"),
+    shortcut("lightGradient", canSlope),
+  );
+
+  useShortcut(
+    editorShortcuts.placePrefab.keys,
+    () => {
+      if (!lastPrefab) {
+        setNotice("Place a prefab from the map's menu first.");
+        return;
+      }
+      pasteFragment({ fragment: lastPrefab, origin: null }, pastePoint());
+    },
+    shortcut("placePrefab", () => modeKeys() && visibleLayout !== "scene"),
+  );
+
   const findCameraOnMap = () => {
     if (visibleLayout === "scene") changeLayout(narrow ? "map" : "split");
     setFindCameraRequest((request) => request + 1);
@@ -1174,6 +1273,83 @@ export function EditorScreen({
       setActiveSector(describeSurface(map, key)?.sector?.id ?? null);
     }
   };
+
+  // Digits recall a saved selection, Shift adds it to the current one and
+  // Alt saves the current one. Ctrl and ⌘ with a digit switch browser tabs.
+  const onGroupKey = React.useEffectEvent((event: KeyboardEvent) => {
+    const slot = /^Digit([1-9])$/.exec(event.code)?.[1];
+    if (
+      !slot ||
+      event.repeat ||
+      event.ctrlKey ||
+      event.metaKey ||
+      (event.altKey && event.shiftKey) ||
+      event.defaultPrevented ||
+      !notTyping() ||
+      !modeKeys() ||
+      document.activeElement?.closest('[role="dialog"]') ||
+      document.querySelector(".game-stage")
+    ) {
+      return;
+    }
+    event.preventDefault();
+    if (event.altKey) {
+      const saved = { mode: editMode, keys: selection, sector: activeSector };
+      setGroups((current) => ({ ...current, [slot]: saved }));
+      setNotice(
+        selection.length > 0 || activeSector
+          ? `Saved the selection as group ${slot}.`
+          : `Cleared group ${slot}.`,
+      );
+      return;
+    }
+    const group = groups[slot];
+    const keys = group?.keys.filter((key) => getIsLiveKey(map, key)) ?? [];
+    const sector =
+      group?.sector && map.sectors.some((room) => room.id === group.sector)
+        ? group.sector
+        : null;
+    if (!group || (keys.length === 0 && !sector)) {
+      setNotice(`Group ${slot} is empty. Press Alt+${slot} to save one.`);
+      return;
+    }
+    setNotice("");
+    setScenePicked([]);
+    chooseMode(group.mode);
+    if (event.shiftKey && group.mode === editMode) {
+      // A room picked on its own is held as the active room, so both rooms
+      // join the selection as keys.
+      const rooms = [pickedRoom, sector].flatMap((id) =>
+        roomKeys(map, group.mode, id),
+      );
+      const merged = [...new Set([...selection, ...rooms, ...keys])];
+      const [only] = merged;
+      const single = merged.length === 1 && only.startsWith(roomKeyPrefix);
+      setSurface(null);
+      setActiveSector(single ? only.slice(roomKeyPrefix.length) : null);
+      setSelection(single ? [] : merged);
+      return;
+    }
+    const wall = keys
+      .findLast((key) => key.startsWith(wallKeyPrefix))
+      ?.slice(wallKeyPrefix.length);
+    const owner = wall ? wallOwners(map).get(wall)?.[0] : undefined;
+    if (group.mode === "lines" && wall && owner) {
+      selectSurface(
+        surfaceKey({ kind: "wall", sector: owner.id, wall, part: "middle" }),
+      );
+      setSelection(keys);
+      return;
+    }
+    setSurface(null);
+    setActiveSector(sector);
+    setSelection(keys);
+  });
+
+  React.useEffect(() => {
+    window.addEventListener("keydown", onGroupKey);
+    return () => window.removeEventListener("keydown", onGroupKey);
+  }, []);
 
   const selectTarget = (target: MapTarget) => {
     if (target.keepSelection) return;
@@ -2036,6 +2212,7 @@ export function EditorScreen({
                       }
                       findCameraRequest={findCameraRequest}
                       fitRequest={fitRequest}
+                      fitSelectionRequest={fitSelectionRequest}
                       focusRequest={focusRequest}
                       callouts={callouts}
                       links={links}
@@ -2906,12 +3083,13 @@ export function EditorScreen({
         <PrefabsDialog
           selected={prefabsAt.selected}
           suggestedName={prefabsAt.selected?.sectors[0]?.name ?? "Prefab"}
-          onPlace={(fragment) =>
+          onPlace={(fragment) => {
+            setLastPrefab(fragment);
             pasteFragment(
               { fragment, origin: null },
               prefabsAt.point ?? pastePoint(),
-            )
-          }
+            );
+          }}
           onClose={() => setPrefabsAt(null)}
         />
       ) : null}
@@ -3095,6 +3273,35 @@ const sceneGroups: Partial<Record<string, string>> = {
   "offset-key": "scene-offsets",
   "height-key": "scene-heights",
 };
+
+function getIsLiveKey(map: GameMap, key: string) {
+  if (key.startsWith(wallKeyPrefix)) {
+    return key
+      .slice(wallKeyPrefix.length)
+      .split("|")
+      .every((id) => map.vertices[id]);
+  }
+  if (key.startsWith(roomKeyPrefix)) {
+    const id = key.slice(roomKeyPrefix.length);
+    return map.sectors.some((room) => room.id === id);
+  }
+  if (key.startsWith(thingKeyPrefix)) {
+    const id = key.slice(thingKeyPrefix.length);
+    return map.things.some((thing) => thing.id === id);
+  }
+  if (key.startsWith(switchKeyPrefix)) {
+    const id = key.slice(switchKeyPrefix.length);
+    return map.switches.some((item) => item.id === id);
+  }
+  return Boolean(map.vertices[key]);
+}
+
+function roomKeys(map: GameMap, mode: EditMode, id: string | null) {
+  const room = map.sectors.find((sector) => sector.id === id);
+  if (!room) return [];
+  if (mode === "sectors") return [`${roomKeyPrefix}${room.id}`];
+  return mode === "vertices" ? sectorVertices(room) : [];
+}
 
 function modeKeys() {
   return mapKeys() && !document.activeElement?.closest(".scene");
