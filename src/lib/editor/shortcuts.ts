@@ -59,6 +59,37 @@ export const editorShortcuts = {
     description: "Join the selected rooms into one",
     area: "map",
   },
+  makeDoor: {
+    keys: "o",
+    description: "Make the selected rooms doors, or rooms again",
+    area: "map",
+  },
+  floorGradient: {
+    keys: "shift+g",
+    description:
+      "Slope the floors of the selected rooms from the first to the last",
+    area: "map",
+  },
+  ceilingGradient: {
+    keys: "alt+shift+g",
+    description: "Slope their ceilings",
+    area: "map",
+  },
+  lightGradient: {
+    keys: "alt+g",
+    description: "Fade their light",
+    area: "map",
+  },
+  placePrefab: {
+    keys: "p",
+    description: "Place the last prefab again at the pointer",
+    area: "map",
+  },
+  fitSelection: {
+    keys: "z",
+    description: "Zoom to the selection, or to the whole map",
+    area: "map",
+  },
   flipOver: {
     keys: "shift+v",
     description: "Flip the selection top to bottom",

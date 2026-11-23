@@ -133,6 +133,7 @@ interface MapEditorOptions {
   highlightedWall?: string | null;
   findCameraRequest?: number;
   fitRequest?: number;
+  fitSelectionRequest?: number;
   drawRequest?: { id: number; point: Point } | null;
   focusRequest?: { id: number; point: Point } | null;
   lookAtRequest?: { id: number; clientX: number; clientY: number } | null;
@@ -279,6 +280,7 @@ export const mapEditor = definePrimitive({
     highlightedWall: "value",
     findCameraRequest: "number",
     fitRequest: "number",
+    fitSelectionRequest: "number",
     drawRequest: "value",
     focusRequest: "value",
     lookAtRequest: "value",
@@ -487,6 +489,7 @@ export const mapEditor = definePrimitive({
     let findRequest = context.options().findCameraRequest ?? 0;
     let lookRequest = context.options().lookAtRequest?.id ?? 0;
     let fitRequest = context.options().fitRequest ?? 0;
+    let fitSelectionRequest = context.options().fitSelectionRequest ?? 0;
     let drawRequest = context.options().drawRequest?.id ?? 0;
     let focusRequest = context.options().focusRequest?.id ?? 0;
     let touchPress: { event: PointerEvent; held: boolean } | null = null;
@@ -526,6 +529,12 @@ export const mapEditor = definePrimitive({
       if (request === fitRequest) return;
       fitRequest = request;
       fitMap();
+    });
+    context.onOptions((options) => {
+      const request = options.fitSelectionRequest ?? 0;
+      if (request === fitSelectionRequest) return;
+      fitSelectionRequest = request;
+      fitSelection();
     });
     context.onOptions(({ contextMenuOpen }) => {
       if (!contextMenuOpen || !touchPress) return;
@@ -779,6 +788,14 @@ export const mapEditor = definePrimitive({
       select([split.id]);
       return true;
     };
+    const insertThing = (point: Point) => {
+      const { map, editMode, tool, thingKind } = store.get();
+      if (editMode !== "things" && tool !== "thing") return false;
+      const placed = addThing(map, thingKind, snapPoint(point, grid()), 0, 1);
+      change("map", placed.map, { reason: "place" });
+      select([`${thingKeyPrefix}${placed.id}`]);
+      return true;
+    };
     let pointer: Point | null = null;
     let spaceHeld = false;
 
@@ -1013,8 +1030,7 @@ export const mapEditor = definePrimitive({
       );
     };
 
-    const fitMap = () => {
-      const points = Object.values(store.get().positions);
+    const fitPoints = (points: Point[], maxZoom: number) => {
       if (points.length === 0) return;
       viewport.fit(
         {
@@ -1023,8 +1039,27 @@ export const mapEditor = definePrimitive({
           right: Math.max(...points.map((point) => point.x)),
           bottom: Math.max(...points.map((point) => point.y)),
         },
-        { padding: 56, maxZoom: 1.25 },
+        { padding: 56, maxZoom },
       );
+    };
+    const fitMap = () => fitPoints(Object.values(store.get().positions), 1.25);
+    const fitSelection = () => {
+      const { map, positions, selection } = store.get();
+      const { sectors, things } = pickedParts();
+      const keys = [
+        ...selection.flatMap((key) =>
+          key.startsWith(wallKeyPrefix)
+            ? key.slice(wallKeyPrefix.length).split("|")
+            : [key],
+        ),
+        ...map.sectors
+          .filter((sector) => sectors.includes(sector.id))
+          .flatMap(sectorVertices),
+        ...things.map((id) => `${thingKeyPrefix}${id}`),
+      ];
+      const points = keys.flatMap((key) => positions[key] ?? []);
+      if (points.length === 0) fitMap();
+      else fitPoints(points, 4);
     };
 
     const selectedTarget = (): MapTarget => {
@@ -1492,9 +1527,10 @@ export const mapEditor = definePrimitive({
           ((event.key === "Delete" || event.key === "Backspace") &&
             deleteSelection()) ||
           (event.key === "Insert" &&
-            tool === "select" &&
             pointer !== null &&
-            insertCorner(pointer)) ||
+            ((tool === "select" && insertCorner(pointer)) ||
+              ((tool === "select" || tool === "thing") &&
+                insertThing(pointer)))) ||
           (tool === "select" && nudgeSelection(event))
         ) {
           event.preventDefault();

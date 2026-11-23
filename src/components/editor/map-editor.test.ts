@@ -359,6 +359,28 @@ describe("map editor parts", () => {
     expect(defined(result).sectors[0].light).toBe(160);
   });
 
+  it("place a thing of the chosen kind with Insert in thing mode", () => {
+    let result = null as GameMap | null;
+    let picked: string[] = [];
+    const instance = mapEditor({
+      id,
+      map: testMap,
+      editMode: "things",
+      thingKind: "shotgun",
+      onMapChange: (next) => {
+        result = next;
+      },
+      onSelectionChange: (next) => {
+        picked = next;
+      },
+    });
+    instance.api.pointermove({ clientX: 0, clientY: 0 } as PointerEvent);
+    instance.api.keydown(press("Insert"));
+    const placed = defined(result).things.at(-1);
+    expect(placed?.kind).toBe("shotgun");
+    expect(picked).toEqual([`thing:${placed?.id}`]);
+  });
+
   it("clear the selection with Escape", () => {
     let picked: string[] | null = null;
     const instance = mapEditor({
