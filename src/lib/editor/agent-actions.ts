@@ -2,6 +2,7 @@ import type {
   Complevel,
   DoorSettings,
   GameMap,
+  LineActionKind,
   LineTrigger,
   Point,
   Sector,
@@ -70,6 +71,7 @@ import {
   describeLine,
   fitLineAction,
   keyColors,
+  keysFor,
   lineActionKinds,
   lineActions,
   lineTriggers,
@@ -819,7 +821,11 @@ export const agentActions: AgentAction[] = [
           "What sets it off: pressing the wall as a switch, walking over it, shooting it, or pressing a door's own face.",
         choices: lineTriggers,
       }),
-      optional(room("The room the action moves or lands in.")),
+      optional(
+        room(
+          "The room the action moves or lands in, for a trigger that listCatalog of line-actions says needs one.",
+        ),
+      ),
       optional({
         name: "key",
         type: "string",
@@ -854,14 +860,24 @@ export const agentActions: AgentAction[] = [
         );
       }
       const acted = updateLine(map, key, { ...soleSpecial, action });
-      if (!lineUsesTag(action)) {
+      const { label } = lineActions[kind];
+      const roomTriggers = triggersOf(kind).filter((trigger) =>
+        takesRoom(kind, trigger),
+      );
+      if (!takesRoom(kind, action.trigger)) {
         if (args.room !== undefined) {
-          throw new Error(`${lineActions[kind].label} takes no target room.`);
+          throw new Error(
+            roomTriggers.length > 0
+              ? `${label} set off by ${action.trigger} takes no target room, since it moves the door the wall belongs to. Only ${roomTriggers.join(" or ")} takes one.`
+              : `${label} takes no target room.`,
+          );
         }
         return { map: acted };
       }
       if (args.room === undefined) {
-        throw new Error(`${lineActions[kind].label} needs a target room.`);
+        throw new Error(
+          `${label} set off by ${action.trigger} needs a target room.`,
+        );
       }
       return { map: setLineTarget(acted, key, findRoom(map, args.room).id) };
     },
@@ -1731,19 +1747,24 @@ function catalog(of: string) {
     kind,
     label: lineActions[kind].label,
     group: lineActions[kind].group,
-    triggers: Object.keys(lineActions[kind].triggers),
-    // Pressing a door's own face moves the door behind it. Any other
-    // trigger finds the room to move by its tag.
-    needsRoom: Object.keys(lineActions[kind].triggers).some((trigger) =>
-      lineUsesTag({
-        kind,
-        trigger: trigger as LineTrigger,
-        repeat: true,
-        tag: 0,
-      }),
-    ),
+    triggers: triggersOf(kind).map((trigger) => {
+      const keys = keysFor(kind, trigger);
+      return {
+        trigger,
+        needsRoom: takesRoom(kind, trigger),
+        ...(keys.length > 0 && { keys }),
+      };
+    }),
   }));
 }
+
+const triggersOf = (kind: LineActionKind) =>
+  Object.keys(lineActions[kind].triggers) as LineTrigger[];
+
+// Pressing a door's own face moves the door behind it. Any other trigger
+// finds the room to move by its tag.
+const takesRoom = (kind: LineActionKind, trigger: LineTrigger) =>
+  lineUsesTag({ kind, trigger, repeat: true, tag: 0 });
 
 function countBy(values: string[]) {
   const counts: Record<string, number> = {};

@@ -257,6 +257,15 @@ describe("agent actions", () => {
       tag: 0,
     });
     expect(locked.todo.join(" ")).toMatch(/place the blue key/);
+    expect(() =>
+      runAgentAction(testMap, "setLineAction", {
+        wall: "v13|v14",
+        kind: "door-raise",
+        trigger: "door",
+        key: "blue",
+        room: "Arena door",
+      }),
+    ).toThrow(/set off by door takes no target room.*Only switch or walk/);
     const keyed = runAgentAction(locked.map, "placeThing", [
       "blue-key",
       "Start room",
@@ -466,9 +475,22 @@ describe("agent actions", () => {
       next: 2,
     });
     const catalog = runAgentAction(testMap, "listCatalog", ["line-actions"])
-      .result as { kind: string; needsRoom: boolean }[];
-    expect(catalog.find((item) => item.kind === "exit")?.needsRoom).toBe(false);
-    expect(catalog.find((item) => item.kind === "lift")?.needsRoom).toBe(true);
+      .result as {
+      kind: string;
+      triggers: { trigger: string; needsRoom: boolean; keys?: string[] }[];
+    }[];
+    const triggers = (kind: string) =>
+      catalog.find((item) => item.kind === kind)?.triggers;
+    expect(triggers("exit")).toEqual([
+      { trigger: "switch", needsRoom: false },
+      { trigger: "walk", needsRoom: false },
+    ]);
+    expect(triggers("lift")?.every((item) => item.needsRoom)).toBe(true);
+    expect(triggers("door-raise")).toEqual([
+      { trigger: "door", needsRoom: false, keys: ["blue", "yellow", "red"] },
+      { trigger: "switch", needsRoom: true },
+      { trigger: "walk", needsRoom: true },
+    ]);
     const help = runAgentAction(testMap, "help").result as { name: string }[];
     expect(help.map((item) => item.name)).toEqual(agentActionNames);
   });
