@@ -25,7 +25,7 @@ import {
   wallOwners,
 } from "./geometry";
 import { MapFileError, maxFileBytes, parseMap } from "./storage";
-import { type MapIssue, newProblems } from "./validate";
+import { issuesSince, type MapIssue } from "./validate";
 
 // What a selection stands for: whole rooms and things.
 export interface SelectedParts {
@@ -496,39 +496,55 @@ export function transformParts(
 
 // Runs the steps carrying doors as far as the map allows. A door whose far
 // wall can't stay straight bends it instead, and when that fails too the doors
-// stay behind and only stretch. Without a clean result it gives the last one.
+// stay behind and only stretch, named in `stranded`. Without a clean result it
+// gives the one with the fewest new errors, then new warnings.
 export function transformKeepingDoors(
   map: GameMap,
   keys: string[],
   steps: Transform[],
   grid: number,
-): { map: GameMap | null; problems: MapIssue[] } {
-  let last: { map: GameMap | null; problems: MapIssue[] } = {
-    map: null,
-    problems: [],
-  };
+): { map: GameMap | null; problems: MapIssue[]; stranded: string[] } {
+  let best: {
+    map: GameMap | null;
+    problems: MapIssue[];
+    warnings: MapIssue[];
+    carry: DoorCarry;
+  } = { map: null, problems: [], warnings: [], carry: "walls" };
+  const better = (errors: number, warnings: number) =>
+    !best.map ||
+    errors < best.problems.length ||
+    (errors === best.problems.length && warnings < best.warnings.length);
+  const newIssues = issuesSince(map);
   const attempt = (carry: DoorCarry) => {
     let next: GameMap | null = map;
     for (const step of steps) {
       next = next && transformParts(next, keys, step, grid, carry);
     }
     if (!next) return false;
-    last = { map: next, problems: newProblems(map, next) };
-    return last.problems.length === 0;
+    const { errors, warnings } = newIssues(next);
+    if (better(errors.length, warnings.length)) {
+      best = { map: next, problems: errors, warnings, carry };
+    }
+    return errors.length === 0 && warnings.length === 0;
   };
-  if (attempt("walls")) return last;
-  if (!steps.some((step) => step.kind === "scale")) return last;
   const moved = Object.fromEntries(keys.map((key) => [key, map.vertices[key]]));
-  const doors = map.sectors
-    .filter((sector) => sector.door && farFace(sector.vertices, moved))
-    .map((sector) => sector.id);
+  const doors = steps.some((step) => step.kind === "scale")
+    ? map.sectors
+        .filter((sector) => sector.door && farFace(sector.vertices, moved))
+        .map((sector) => sector.id)
+    : [];
+  const result = () => ({
+    map: best.map,
+    problems: best.problems,
+    stranded: best.map && best.carry === "none" ? doors : [],
+  });
+  if (attempt("walls") || doors.length === 0) return result();
   const straight = new Set(doors.filter((id) => attempt(new Set([id]))));
   if (straight.size > 0 && straight.size < doors.length && attempt(straight)) {
-    return last;
+    return result();
   }
-  if (attempt("doors")) return last;
-  attempt("none");
-  return last;
+  if (!attempt("doors")) attempt("none");
+  return result();
 }
 
 // `origin` names the map a piece was copied from, so a paste can tell its own

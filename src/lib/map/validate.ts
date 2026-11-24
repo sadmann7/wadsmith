@@ -213,14 +213,27 @@ export function validateMap(map: GameMap, context?: CheckContext): MapIssue[] {
 // Problems are counted by kind, since an edit can rename walls and rooms.
 // An old problem that keeps its id uses up its count first.
 export function newProblems(before: GameMap, after: GameMap): MapIssue[] {
-  const old = validateMap(before);
+  return freshIssues(validateMap(before), validateMap(after));
+}
+
+export function issuesSince(before: GameMap) {
+  const old = inspectMap(before);
+  return (after: GameMap) => {
+    const found = inspectMap(after);
+    return {
+      errors: freshIssues(old.errors, found.errors),
+      warnings: freshIssues(old.warnings, found.warnings),
+    };
+  };
+}
+
+function freshIssues(old: MapIssue[], found: MapIssue[]): MapIssue[] {
   const oldIds = new Set(old.map((issue) => issue.id));
   const counts = new Map<string, number>();
   for (const issue of old) {
     const kind = issueKind(issue);
     counts.set(kind, (counts.get(kind) ?? 0) + 1);
   }
-  const found = validateMap(after);
   return [
     ...found.filter((issue) => oldIds.has(issue.id)),
     ...found.filter((issue) => !oldIds.has(issue.id)),

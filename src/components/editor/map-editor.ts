@@ -476,9 +476,25 @@ export const mapEditor = definePrimitive({
     context.onDestroy(stopCorners);
 
     let lastDraft: MoveDraft | null = null;
+    let lastPositions = store.get().positions;
     const stopWatching = store.subscribe(() => {
       const { moving, map, positions } = store.get();
-      if (moving === lastDraft) return;
+      const isRemapped = positions !== lastPositions;
+      lastPositions = positions;
+      if (moving === lastDraft && !(moving && isRemapped)) return;
+      // Someone editing with you can delete what you're dragging.
+      if (moving?.keys.some((key) => !(key in positions))) {
+        const keys = moving.keys.filter((key) => key in positions);
+        if (keys.length > 0) {
+          store.set({ moving: { ...moving, keys } });
+          return;
+        }
+        lastDraft = null;
+        carried = null;
+        store.set({ moving: null });
+        context.options().onDraftMapChange?.(null);
+        return;
+      }
       // The drop commits right after the draft clears; a cancelled drag
       // commits nothing, so the keys are let go once that moment has passed.
       if (!moving && lastDraft) {

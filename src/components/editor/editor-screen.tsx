@@ -832,12 +832,11 @@ export function EditorScreen({
 
   const transformSelection = (steps: Transform[], keys = transformKeys) => {
     if (keys.length === 0 || steps.length === 0) return;
-    const { map: next, problems } = transformKeepingDoors(
-      map,
-      keys,
-      steps,
-      grid,
-    );
+    const {
+      map: next,
+      problems,
+      stranded,
+    } = transformKeepingDoors(map, keys, steps, grid);
     if (!next) {
       setNotice(
         "That would press two corners of a room together, or change nothing.",
@@ -849,7 +848,14 @@ export function EditorScreen({
       setNotice(`That would give the map a new problem. ${problem.message}`);
       return;
     }
-    setNotice("");
+    const doors = map.sectors
+      .filter((sector) => stranded.includes(sector.id))
+      .map((sector) => sector.name);
+    setNotice(
+      doors.length === 0
+        ? ""
+        : `${new Intl.ListFormat("en").format(doors)} couldn't move with the room, so ${doors.length === 1 ? "its depth" : "their depths"} changed.`,
+    );
     commit(next);
     // Corners that met others on the way are gone, and so are the walls and
     // rooms they ended.
