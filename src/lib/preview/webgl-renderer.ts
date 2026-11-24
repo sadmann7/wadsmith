@@ -28,12 +28,9 @@ import {
 
 const far = 65536;
 const skyCapRows = 64;
-const atlasSize = 4096;
+
 const rectColumns = 256;
 const markColumns = 1024;
-const maxRows = 1440;
-const maxWidth = 3840;
-const noMovers: readonly string[] = [];
 
 const marks = { selected: 1, hovered: 2, seeThrough: 4 } as const;
 
@@ -42,6 +39,7 @@ uniform sampler2D uAtlas;
 uniform sampler2D uRects;
 uniform vec3 uEye;
 uniform vec2 uForward;
+uniform vec3 uLook;
 in vec3 vWorld;
 in vec2 vTexel;
 flat in int vSlot;
@@ -82,13 +80,79 @@ export function createWebglRenderer(
   canvas: HTMLCanvasElement,
   width: number,
   height: number,
+  onRestored?: () => void,
 ): SceneRenderer | null {
   // A canvas that took a WebGL context can't fall back to a 2D one, so
   // support is settled on a canvas of its own first.
   if (!getCanRunWebgl()) return null;
   const gl = contextOf(canvas);
-  const programs = gl ? createPrograms(gl) : null;
-  if (!gl || !programs) return null;
+  let inner = gl ? buildRenderer(canvas, gl, width, height) : null;
+  if (!gl || !inner) return null;
+  let isLost = false;
+  // Everything made on a lost context is gone, so a restored one starts over.
+  const lose = (event: Event) => {
+    event.preventDefault();
+    isLost = true;
+  };
+  const restore = () => {
+    const next = inner && buildRenderer(canvas, gl, inner.width, inner.height);
+    if (!next) return;
+    inner = next;
+    isLost = false;
+    onRestored?.();
+  };
+  canvas.addEventListener("webglcontextlost", lose);
+  canvas.addEventListener("webglcontextrestored", restore);
+  const current = () => defined(inner);
+  return {
+    kind: "webgl",
+    tilts: true,
+    get width() {
+      return current().width;
+    },
+    get height() {
+      return current().height;
+    },
+    get focal() {
+      return current().focal;
+    },
+    sizeFor: (...args) => current().sizeFor(...args),
+    resize: (...args) => {
+      if (!isLost) current().resize(...args);
+    },
+    render: (...args) => {
+      if (!isLost) current().render(...args);
+    },
+    surfaceAt: (...args) =>
+      isLost ? { key: null, distance: Infinity } : current().surfaceAt(...args),
+    surfaceCounts: () => (isLost ? new Map() : current().surfaceCounts()),
+    destroy() {
+      canvas.removeEventListener("webglcontextlost", lose);
+      canvas.removeEventListener("webglcontextrestored", restore);
+      if (!isLost) current().destroy();
+    },
+  };
+}
+
+const atlasSize = 4096;
+
+const maxRows = 1440;
+const maxWidth = 3840;
+const noMovers: readonly string[] = [];
+
+const eyeBack = 0.01;
+
+function buildRenderer(
+  canvas: HTMLCanvasElement,
+  gl: WebGL2RenderingContext,
+  width: number,
+  height: number,
+): SceneRenderer | null {
+  // Extensions are switched on per context, a restored one included.
+  const programs = gl.getExtension("EXT_color_buffer_float")
+    ? createPrograms(gl)
+    : null;
+  if (!programs) return null;
   const { world, span, composite } = programs;
 
   const meshBuffer = defined(gl.createBuffer());
@@ -130,13 +194,7 @@ export function createWebglRenderer(
   const atlasRects = new Map<string, AtlasRect>();
   let shelf = { x: 0, y: 0, height: 0 };
   let lastSurfaces: string[] = [""];
-  let isLost = false;
   const pixel = new Float32Array(4);
-
-  canvas.addEventListener("webglcontextlost", (event) => {
-    event.preventDefault();
-    isLost = true;
-  });
 
   const allocate = (frameSize: { width: number; height: number }) => {
     for (const [texture, format] of [
@@ -376,6 +434,13 @@ export function createWebglRenderer(
     gl.uniform3f(program.uniform("uEye"), camera.x, camera.y, eye);
     gl.uniform2f(program.uniform("uForward"), forward.x, forward.y);
     gl.uniform2f(program.uniform("uRight"), right.x, right.y);
+    const tilt = tiltOf(camera);
+    gl.uniform3f(
+      program.uniform("uLook"),
+      forward.x * Math.cos(tilt),
+      forward.y * Math.cos(tilt),
+      Math.sin(tilt),
+    );
     bindTexture(gl, program, "uAtlas", 0, atlas);
     bindTexture(gl, program, "uRects", 1, rects);
   };
@@ -394,14 +459,14 @@ export function createWebglRenderer(
     },
     sizeFor(clientWidth, clientHeight) {
       const ratio = globalThis.devicePixelRatio || 1;
+      const wide = clientWidth / (clientHeight || 1);
       const rows = Math.max(
         1,
-        Math.min(maxRows, Math.round(clientHeight * ratio)),
+        Math.min(maxRows, maxWidth / wide, Math.round(clientHeight * ratio)),
       );
-      const wide = clientWidth / (clientHeight || 1);
       return {
-        width: Math.max(1, Math.min(maxWidth, Math.round(rows * wide))),
-        height: rows,
+        width: Math.max(1, Math.round(rows * wide)),
+        height: Math.round(rows),
       };
     },
     resize(nextWidth, nextHeight) {
@@ -410,7 +475,6 @@ export function createWebglRenderer(
       allocate(size);
     },
     render(sourceMap, camera, options, crosshair) {
-      if (isLost) return;
       if (canvas.width !== size.width) canvas.width = size.width;
       if (canvas.height !== size.height) canvas.height = size.height;
       const map = withMovers(
@@ -518,7 +582,6 @@ export function createWebglRenderer(
       gl.bindVertexArray(null);
     },
     surfaceAt(x, y) {
-      if (isLost) return { key: null, distance: Infinity };
       gl.bindFramebuffer(gl.READ_FRAMEBUFFER, sceneFrame);
       gl.readBuffer(gl.COLOR_ATTACHMENT1);
       gl.readPixels(x, size.height - 1 - y, 1, 1, gl.RGBA, gl.FLOAT, pixel);
@@ -530,7 +593,6 @@ export function createWebglRenderer(
     },
     surfaceCounts() {
       const counts = new Map<string, number>();
-      if (isLost) return counts;
       const data = new Float32Array(size.width * size.height * 4);
       gl.bindFramebuffer(gl.READ_FRAMEBUFFER, sceneFrame);
       gl.readBuffer(gl.COLOR_ATTACHMENT1);
@@ -570,8 +632,6 @@ export function createWebglRenderer(
     },
   };
 }
-
-const eyeBack = 0.01;
 
 // The average color of a sky's top row.
 function skyCapOf(heavens: Picture | null, shades: Uint32Array) {
@@ -711,7 +771,8 @@ void main() {
   }
   int index = int(texel.r * 255.0 + 0.5);
   oColor = mix(texelFetch(uShades, ivec2(index, level), 0), uSkyCap, capped);
-  oPick = vec4(vId, ahead, 0.0, 1.0);
+  // Picks report the depth along the view, as the column renderer's do.
+  oPick = vec4(vId, dot(toward, uLook), 0.0, 1.0);
 }`;
 
 const spanFragment = `#version 300 es
@@ -722,10 +783,10 @@ ${shared}
 uniform sampler2D uPick;
 layout(location = 0) out vec4 oExtent;
 void main() {
-  float ahead = dot(vWorld.xy - uEye.xy, uForward);
+  float depth = dot(vWorld - uEye, uLook);
   float scene = texelFetch(uPick, ivec2(gl_FragCoord.xy), 0).g;
-  if (scene < ahead - 0.5) discard;
-  oExtent = vec4(vId, ahead, 0.0, 1.0);
+  if (scene < depth - 0.5) discard;
+  oExtent = vec4(vId, depth, 0.0, 1.0);
 }`;
 
 const screenVertex = `#version 300 es

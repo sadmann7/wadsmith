@@ -1005,6 +1005,7 @@ const sceneEditor = definePrimitive({
           context.options().renderer ?? "columns",
           width,
           height,
+          scheduleDraw,
         );
         if (target) element.dataset.renderer = target.kind;
         const stopStore = store.subscribe(scheduleDraw);

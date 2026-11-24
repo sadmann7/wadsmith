@@ -41,9 +41,10 @@ export function createSceneRenderer(
   kind: SceneRendererKind,
   width: number,
   height: number,
+  onRestored?: () => void,
 ): SceneRenderer | null {
   if (kind === "webgl") {
-    const renderer = createWebglRenderer(canvas, width, height);
+    const renderer = createWebglRenderer(canvas, width, height, onRestored);
     if (renderer) return renderer;
   }
   return createColumnRenderer(canvas, width, height);
