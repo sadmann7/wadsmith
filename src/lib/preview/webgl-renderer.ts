@@ -120,7 +120,7 @@ export function createWebglRenderer(
       return current().focal;
     },
     sizeFor: (...args) => current().sizeFor(...args),
-    // A lost context ignores the calls, and keeps the size for its restore.
+    // GL calls on a lost context do nothing, and the size kept here seeds the restore.
     resize: (...args) => current().resize(...args),
     render: (...args) => {
       if (!isLost) current().render(...args);
