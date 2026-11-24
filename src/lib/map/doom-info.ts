@@ -486,3 +486,27 @@ export const vanillaThings: [
   [2017, 1016, 20, 10, "i"],
   [14165, 968, 16, 16, "d"],
 ];
+
+// The monsters' hit points by editor number, as info.c starts them.
+export const vanillaHealth: Record<number, number> = {
+  3004: 20,
+  9: 30,
+  64: 700,
+  66: 300,
+  67: 600,
+  65: 70,
+  3001: 60,
+  3002: 150,
+  58: 150,
+  3005: 400,
+  3003: 1000,
+  69: 500,
+  3006: 100,
+  7: 3000,
+  68: 500,
+  16: 4000,
+  71: 400,
+  84: 50,
+  72: 100,
+  88: 250,
+};

@@ -43,6 +43,7 @@ describe("parseDehacked", () => {
         radius: 20,
         height: 56,
         category: "enemy",
+        health: 0,
         sprite: "ZOMBB",
         isMbf21: false,
       },
@@ -52,6 +53,7 @@ describe("parseDehacked", () => {
         radius: 20,
         height: 16,
         category: "item",
+        health: 0,
         sprite: "POSSA",
         isMbf21: false,
       },
@@ -66,10 +68,18 @@ describe("parseDehacked", () => {
         radius: 20,
         height: 56,
         category: "enemy",
+        health: 60,
         sprite: "TROOA",
         isMbf21: false,
       },
     ]);
+  });
+
+  it("reads a thing's hit points, or the ones its slot starts with", () => {
+    const health = (text: string) => parseDehacked(text)[0]?.health;
+    expect(health("Thing 12 (Imp)\nID # = 30000\nHit points = 90\n")).toBe(90);
+    expect(health("Thing 22 (Cyberdemon)\nID # = 30000\n")).toBe(4000);
+    expect(health("Thing 151 (New)\nID # = 30000\n")).toBe(0);
   });
 
   it("adds a thing's fields up across blocks, and leaves out what can't be saved", () => {

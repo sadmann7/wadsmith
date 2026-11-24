@@ -209,6 +209,7 @@ import { compileMap } from "@/lib/wad/compile";
 import {
   customThingsOf,
   customThingWarnings,
+  thingCategory,
   thingLabel,
 } from "@/lib/wad/custom-things";
 
@@ -578,10 +579,6 @@ export function EditorScreen({
     () => customThingsOf(iwad ? texturesOf(iwad).resources : []),
     [iwad],
   );
-  const customList = React.useMemo(
-    () => [...customThings.values()].toSorted((a, b) => a.type - b.type),
-    [customThings],
-  );
   const customSprites = React.useMemo(
     () =>
       new Map([...customThings].map(([type, thing]) => [type, thing.sprite])),
@@ -593,8 +590,12 @@ export function EditorScreen({
     customThings,
   );
   const context = React.useMemo(
-    () => ({ game: iwad?.game, names: iwad ? assets.names : undefined }),
-    [assets, iwad],
+    () => ({
+      game: iwad?.game,
+      names: iwad ? assets.names : undefined,
+      custom: customThings,
+    }),
+    [assets, customThings, iwad],
   );
   // Doom II's things don't exist in a Doom 1 game.
   const placeable = iwadGame.doom2
@@ -1762,17 +1763,15 @@ export function EditorScreen({
     map.sectors.find((room) => room.id === activeSector) ??
     (playerStart ? sectorAt(map, playerStart) : undefined);
   const soundReached =
-    sound && soundRoom ? soundReach(map, soundRoom.id, sound) : null;
+    sound && soundRoom
+      ? soundReach(map, soundRoom.id, { ...sound, custom: customThings })
+      : null;
 
   const thingRoom = thing ? sectorAt(map, thing) : null;
   const thingMeta = thing
     ? [
         `Thing ${String(map.things.indexOf(thing) + 1).padStart(2, "0")}`,
-        thingCategoryLabels[
-          thing.kind === "custom"
-            ? (customThings.get(thing.type ?? 0)?.category ?? "decor")
-            : thingCatalog[thing.kind].category
-        ],
+        thingCategoryLabels[thingCategory(thing, customThings)],
         ...(thingRoom ? [thingRoom.name] : []),
       ].join(" · ")
     : "";
@@ -2842,7 +2841,7 @@ export function EditorScreen({
                     : null
                 }
                 kinds={placeable}
-                custom={customList}
+                custom={customThings}
                 grid={grid}
                 onChange={(patch) =>
                   commit(

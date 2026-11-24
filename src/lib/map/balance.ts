@@ -1,3 +1,5 @@
+import type { CustomThings } from "@/lib/wad/custom-things";
+
 import type { GameMap, KeyColor, ThingKind, ThingSkill } from "./types";
 
 import { keyThings, thingCatalog } from "./catalog";
@@ -66,11 +68,18 @@ export function appearsOn(skills: ThingSkill[] | undefined, skill: ThingSkill) {
   return !skills || skills.includes(skill);
 }
 
-export function mapBalance(map: GameMap, skill: ThingSkill) {
-  const kinds = map.things
-    .filter((thing) => appearsOn(thing.skills, skill))
-    .map((thing) => thing.kind);
-  const enemies = kinds.filter((kind) => enemyStats[kind]);
+export function mapBalance(
+  map: GameMap,
+  skill: ThingSkill,
+  custom: CustomThings = new Map(),
+) {
+  const placed = map.things.filter((thing) => appearsOn(thing.skills, skill));
+  const kinds = placed.map((thing) => thing.kind);
+  const enemies = placed.flatMap((thing) => {
+    if (thing.kind !== "custom") return enemyStats[thing.kind] ?? [];
+    const patched = custom.get(thing.type ?? 0);
+    return patched?.category === "enemy" ? [customStats(patched.health)] : [];
+  });
   const health = kinds.filter((kind) => healing[kind]);
   const ammo = kinds.filter((kind) => ammoDamage[kind]);
   const keys = kinds.filter((kind) => thingCatalog[kind].category === "key");
@@ -80,11 +89,11 @@ export function mapBalance(map: GameMap, skill: ThingSkill) {
     ),
   );
   const healthGap =
-    sumOf(enemies.map((kind) => enemyStats[kind]?.threat)) -
+    sumOf(enemies.map((enemy) => enemy.threat)) -
     startingHealth -
     sumOf(health.map((kind) => healing[kind]));
   const damageGap =
-    sumOf(enemies.map((kind) => enemyStats[kind]?.health)) * ammoMargin -
+    sumOf(enemies.map((enemy) => enemy.health)) * ammoMargin -
     startingDamage -
     sumOf(ammo.map((kind) => ammoDamage[kind]));
   return {
@@ -99,6 +108,12 @@ export function mapBalance(map: GameMap, skill: ThingSkill) {
     healthShort: Math.max(0, Math.ceil(healthGap / healthPerPickup)),
     ammoShort: Math.max(0, Math.ceil(damageGap / damagePerPickup)),
   };
+}
+
+// A custom monster's threat grows with its hit points about as the stock
+// monsters' does.
+function customStats(health: number) {
+  return { health, threat: Math.round(1.5 * Math.sqrt(Math.max(0, health))) };
 }
 
 function sumOf(values: (number | undefined)[]) {

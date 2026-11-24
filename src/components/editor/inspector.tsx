@@ -122,6 +122,7 @@ import { describeWalls, type LineFlag } from "@/lib/map/many-lines";
 import { describeSurface, surfaceKey, type WallPart } from "@/lib/map/surfaces";
 import { flatUse, type TextureUse, wallUse } from "@/lib/map/textures";
 import { rankByQuery } from "@/lib/search";
+import { type CustomThings, thingCategory } from "@/lib/wad/custom-things";
 
 import { TextureSwatch } from "./surface-panel";
 import { type TextureKind, TexturePicker } from "./texture-picker";
@@ -1148,7 +1149,7 @@ interface ThingInspectorProps {
   placing: ThingPick | null;
   kinds?: readonly ThingKind[];
   // The things the added DEHACKED patches number.
-  custom?: readonly CustomThing[];
+  custom?: CustomThings;
   grid?: number;
   onChange: (change: ThingChange) => void;
   onPlace: (pick: ThingPick | null) => void;
@@ -1170,6 +1171,7 @@ export function ThingInspector({
         <ThingFields
           key={things.map((thing) => thing.id).join()}
           things={things}
+          custom={custom}
           grid={grid}
           onChange={onChange}
         />
@@ -1180,7 +1182,7 @@ export function ThingInspector({
         custom={custom}
         onPick={onPlace}
       />
-      <BalancePanel map={map} />
+      <BalancePanel map={map} custom={custom} />
     </>
   );
 }
@@ -1855,19 +1857,19 @@ const thingFlags: {
 
 interface ThingFieldsProps {
   things: Thing[];
+  custom: CustomThings;
   grid: number;
   onChange: (change: ThingChange) => void;
 }
 
-function ThingFields({ things, grid, onChange }: ThingFieldsProps) {
+function ThingFields({ things, custom, grid, onChange }: ThingFieldsProps) {
   const [first] = things;
   const single = things.length === 1 ? first : null;
   const placed = things.filter(
     (thing) => thingCatalog[thing.kind].category !== "start",
   );
-  const enemies = things.filter(
-    (thing) => thingCatalog[thing.kind].category === "enemy",
-  );
+  const getIsEnemy = (thing: Thing) => thingCategory(thing, custom) === "enemy";
+  const enemies = things.filter(getIsEnemy);
   const pressed = allSkills.filter((skill) =>
     placed.every((thing) => appearsOn(thing.skills, skill)),
   );
@@ -1967,7 +1969,7 @@ function ThingFields({ things, grid, onChange }: ThingFieldsProps) {
                 checked={enemies.every((thing) => thing.ambush)}
                 onCheckedChange={(checked) =>
                   onChange((thing) =>
-                    thingCatalog[thing.kind].category === "enemy"
+                    getIsEnemy(thing)
                       ? { ambush: checked === true || undefined }
                       : {},
                   )
@@ -1986,7 +1988,7 @@ function ThingFields({ things, grid, onChange }: ThingFieldsProps) {
                     checked={applies.every((thing) => thing[flag])}
                     onCheckedChange={(checked) =>
                       onChange((thing) =>
-                        !only || thingCatalog[thing.kind].category === "enemy"
+                        !only || getIsEnemy(thing)
                           ? { [flag]: checked === true || undefined }
                           : {},
                       )
@@ -2049,7 +2051,7 @@ function CompactNumber({
   );
 }
 
-const noCustomThings: CustomThing[] = [];
+const noCustomThings: CustomThings = new Map();
 const customColors: Record<CustomThing["category"], string> = {
   enemy: "var(--color-thing-enemy)",
   item: "var(--color-thing-item)",
@@ -2066,7 +2068,7 @@ const thingTabs: { value: ThingTab; label: string }[] = [
 interface PlaceThingsProps {
   picked: ThingPick | null;
   kinds: readonly ThingKind[];
-  custom: readonly CustomThing[];
+  custom: CustomThings;
   onPick: (pick: ThingPick | null) => void;
 }
 
@@ -2096,17 +2098,19 @@ function PlaceThings({ picked, kinds, custom, onPick }: PlaceThingsProps) {
       tab: tabOf(kind),
       ...thingIcons[kind],
     })),
-    ...custom.map((thing) => ({
-      key: `custom:${thing.type}`,
-      pick: { kind: "custom" as const, type: thing.type },
-      label: thing.name,
-      tab: "custom" as const,
-      icon: thingIcons.custom.icon,
-      color: customColors[thing.category],
-    })),
+    ...[...custom.values()]
+      .toSorted((a, b) => a.type - b.type)
+      .map((thing) => ({
+        key: `custom:${thing.type}`,
+        pick: { kind: "custom" as const, type: thing.type },
+        label: thing.name,
+        tab: "custom" as const,
+        icon: thingIcons.custom.icon,
+        color: customColors[thing.category],
+      })),
   ];
-  const tabs = custom.length > 0 ? [...thingTabs, customTab] : thingTabs;
-  const shownTab = tab === "custom" && custom.length === 0 ? "enemy" : tab;
+  const tabs = custom.size > 0 ? [...thingTabs, customTab] : thingTabs;
+  const shownTab = tab === "custom" && custom.size === 0 ? "enemy" : tab;
   const shown = query.trim()
     ? rankByQuery(entries, query, (entry) => [
         entry.label,
@@ -2185,10 +2189,11 @@ const playtestSkill: ThingSkill = "medium";
 
 interface BalancePanelProps {
   map: GameMap;
+  custom: CustomThings;
 }
 
-function BalancePanel({ map }: BalancePanelProps) {
-  const balance = mapBalance(map, playtestSkill);
+function BalancePanel({ map, custom }: BalancePanelProps) {
+  const balance = mapBalance(map, playtestSkill, custom);
   const { enemies, health, ammo, keys, keysMissing, healthShort, ammoShort } =
     balance;
   const advice = [
