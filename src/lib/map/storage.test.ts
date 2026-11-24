@@ -37,6 +37,15 @@ describe("map files", () => {
     expect(parseMapFile(serializeMap(map))).toEqual(map);
   });
 
+  it("keeps a door that wears a wall texture", () => {
+    const map = setRoomDoor(testMap, "sector-4", {
+      opensBy: "use",
+      closes: true,
+      texture: "METAL",
+    });
+    expect(parseMapFile(serializeMap(map))).toEqual(map);
+  });
+
   it("keeps line settings and sector behaviour", () => {
     const wall = "v3|v4";
     const map = updateSector(

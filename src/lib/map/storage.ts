@@ -18,12 +18,7 @@ import type {
   ThingSkill,
 } from "./types";
 
-import {
-  doorTextures,
-  sectorEffects,
-  switchTextures,
-  thingKinds,
-} from "./catalog";
+import { sectorEffects, switchTextures, thingKinds } from "./catalog";
 import { complevels } from "./complevel";
 import {
   getIsLineActionKind,
@@ -292,7 +287,7 @@ function parseDoor(value: unknown, label: string): DoorSettings {
     opensBy: door.opensBy,
     closes: door.closes,
     ...(door.fast ? { fast: true } : {}),
-    texture: texture(door.texture, doorTextures, label),
+    texture: texture(door.texture, null, label),
   };
 }
 

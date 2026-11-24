@@ -371,6 +371,26 @@ describe("agent actions", () => {
     });
   });
 
+  it("dresses a door in any wall texture the game has", () => {
+    const { map } = runAgentAction(testMap, "makeDoor", [
+      "Arena door",
+      "use",
+      true,
+      false,
+      "metal",
+    ]);
+    expect(map.sectors[3].door?.texture).toBe("METAL");
+    expect(() =>
+      runAgentAction(testMap, "makeDoor", [
+        "Arena door",
+        "use",
+        true,
+        false,
+        "NOTATEX",
+      ]),
+    ).toThrow(/No wall texture "NOTATEX"/);
+  });
+
   it("names rooms, walls and choices it doesn't know", () => {
     expect(() => runAgentAction(testMap, "describeRoom", ["Vault"])).toThrow(
       /No room "Vault"\. Rooms: sector-1 \(Start room\)/,

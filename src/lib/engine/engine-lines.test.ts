@@ -75,6 +75,24 @@ describe.skipIf(!ready)("doors and line actions in the engine", () => {
     expect(game.sectorCeiling(doorIndex)).toBe(doorFloor);
   }, 30_000);
 
+  it("opens a secret door dressed as the corridor's wall", async () => {
+    const map = playerAt(
+      setRoomDoor(testMap, "sector-4", {
+        opensBy: "use",
+        closes: false,
+        texture: testMap.sectors[1].wallTexture,
+      }),
+      450,
+      160,
+      0,
+    );
+    const game = await launch({ ...map, switches: [] });
+    await waitForPlay(game);
+    await pressUse(game);
+    await play(game, 2000);
+    expect(game.sectorCeiling(doorIndex)).toBe(92);
+  }, 30_000);
+
   it("lets the player shoot a monster through an opened door", async () => {
     const door = defined(testMap.sectors[doorIndex].door);
     const map = playerAt(
