@@ -1,7 +1,7 @@
 import type { GameMap } from "@/lib/map/types";
 
 import { parseMapFile, serializeMap } from "@/lib/map/storage";
-import { type CheckContext, validateMap } from "@/lib/map/validate";
+import { type CheckContext, doorDepth, validateMap } from "@/lib/map/validate";
 import { compileMap } from "@/lib/wad/compile";
 
 import {
@@ -41,7 +41,7 @@ const invalidParams = -32602;
 const instructions = [
   "Build a Doom map room by room, then save it for the Wadsmith editor or as a WAD.",
   "Coordinates are map units: x runs east and y runs south. A player is 32 wide and 56 tall, and climbs steps up to 24.",
-  "Rooms that share a wall open onto each other. A door is a thin room, 16 to 32 deep, between two rooms, made with makeDoor.",
+  `Rooms that share a wall open onto each other. A door is a thin room, ${doorDepth.min} to ${doorDepth.max} deep, between two rooms, made with makeDoor.`,
   "Every map needs a player start (addThing with kind player) and an exit (setLineAction with kind exit on a solid wall, trigger switch).",
   "An edit that would break the map is refused and changes nothing. Each edit answers with what was fixed for you and what the map still needs.",
   "Start with describeMap, look names up with listCatalog, and finish with checkMap before saveMap or exportWad.",

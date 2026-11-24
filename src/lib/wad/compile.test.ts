@@ -65,6 +65,8 @@ import {
   updateThings,
   wallNear,
 } from "@/lib/map/edit";
+import { featuredMaps } from "@/lib/map/featured";
+import { partKeys, selectedParts, transformParts } from "@/lib/map/fragment";
 import { freedoomFlats, freedoomWalls } from "@/lib/map/freedoom-textures";
 import {
   containerOf,
@@ -84,6 +86,7 @@ import {
   triggerChoices,
   triggersFor,
 } from "@/lib/map/lines";
+import { starterMap } from "@/lib/map/starter-map";
 import { parseMapFile, serializeMap } from "@/lib/map/storage";
 import { describeSurface, paintSurface, surfaceKey } from "@/lib/map/surfaces";
 import { islandMap, testMap } from "@/lib/map/test-map";
@@ -1244,6 +1247,41 @@ describe("validateMap", () => {
     expect(checkMap(low)).toContainEqual(
       expect.objectContaining({ id: "door-low:sector-4", severity: "warning" }),
     );
+  });
+
+  it("warns about doors stretched deeper than a door is built", () => {
+    const keys = partKeys(
+      starterMap,
+      selectedParts(starterMap, [], "sector-3"),
+    );
+    const shrunk = defined(
+      transformParts(starterMap, keys, { kind: "scale", factor: 0.5 }, 32),
+    );
+    const { errors, warnings } = inspectMap(shrunk);
+    expect(errors).toEqual([]);
+    expect(
+      warnings.filter((issue) => issue.id.startsWith("door-deep")),
+    ).toEqual([
+      expect.objectContaining({
+        id: "door-deep:sector-4",
+        message:
+          "Arena door: the door is 144 deep. A door is usually 16 to 32, and no more than 96.",
+      }),
+      expect.objectContaining({ id: "door-deep:sector-7" }),
+    ]);
+    expect(checkMap(shrunk)).toContainEqual(
+      expect.objectContaining({
+        id: "door-deep:sector-4",
+        severity: "warning",
+      }),
+    );
+  });
+
+  it("finds no deep doors in the starter and featured maps", () => {
+    for (const map of [starterMap, ...featuredMaps.map((item) => item.map)]) {
+      const ids = inspectMap(map).warnings.map((issue) => issue.id);
+      expect(ids.filter((id) => id.startsWith("door-deep"))).toEqual([]);
+    }
   });
 
   it("rejects a switch on a wall that became an opening", () => {
