@@ -515,14 +515,15 @@ function drawOver(
   const crossed = joined.sectors.filter(
     (sector) => sector !== drawn && getIsCrossing(joined, drawn, sector),
   );
-  if (crossed.length === 0) return { ...overlapping, pieces: [added.id] };
   if (
-    crossed.some(
-      (sector) => sector.door || getIsOverPillar(joined, drawn, sector),
+    crossed.some((sector) => sector.door) ||
+    joined.sectors.some(
+      (sector) => sector !== drawn && getIsOverPillar(joined, drawn, sector),
     )
   ) {
     return overlapping;
   }
+  if (crossed.length === 0) return { ...overlapping, pieces: [added.id] };
   const outline = sectorPolygon(joined, drawn);
   const own = new Set(
     loopEdges(drawn.vertices).map(({ from, to }) => wallKey(from, to)),

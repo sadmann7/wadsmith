@@ -25,7 +25,7 @@ import {
 } from "./reshape";
 import { shapeCorners } from "./shapes";
 import { starterMap } from "./starter-map";
-import { testMap } from "./test-map";
+import { pillarMap, testMap } from "./test-map";
 import { validateMap } from "./validate";
 import { splitIntoSteps } from "./wall-tools";
 
@@ -378,6 +378,19 @@ describe("drawing a room against the wall of the room it's in, around obstacles"
     expect(sameSide?.message).toContain(
       `Move ${defined(bridge.map.sectors.find((room) => room.id === bridge.id)).name} off`,
     );
+  });
+
+  it("cuts no room when it covers a pillar of the room it's in", () => {
+    for (const corners of [
+      box(176, 160, 528, 424),
+      box(160, 192, 640, 352),
+      box(160, 160, 640, 512),
+    ]) {
+      const drawn = drawRoom(pillarMap, corners, {}, 1);
+      const plain = addRoom(pillarMap, corners, {}, 1);
+      expect(drawn.map).toEqual(joinWalls(plain.map, [plain.id]));
+      expect(drawn.map.sectors).toHaveLength(pillarMap.sectors.length + 1);
+    }
   });
 
   it("cuts the outer room round a bridge that only reaches a pillar", () => {
