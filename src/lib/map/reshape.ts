@@ -633,15 +633,25 @@ function getIsCrossing(map: GameMap, first: Sector, second: Sector) {
 
 function getIsOverPillar(map: GameMap, drawn: Sector, room: Sector) {
   const polygon = sectorPolygon(map, drawn);
+  const inside = (edge: Edge, shape: Point[], shared: Set<string>) =>
+    !shared.has(wallKey(edge.from, edge.to)) &&
+    pointInPolygon(
+      midpoint(map.vertices[edge.from], map.vertices[edge.to]),
+      shape,
+    );
   return (room.holes ?? []).some((hole) => {
     const pillar = loopPolygon(map, hole);
+    const walls = new Set(
+      loopEdges(hole).map(({ from, to }) => wallKey(from, to)),
+    );
+    const shared = new Set(
+      loopEdges(drawn.vertices)
+        .map(({ from, to }) => wallKey(from, to))
+        .filter((key) => walls.has(key)),
+    );
     return (
-      loopEdges(hole).some(({ from, to }) =>
-        pointInPolygon(midpoint(map.vertices[from], map.vertices[to]), polygon),
-      ) ||
-      loopEdges(drawn.vertices).some(({ from, to }) =>
-        pointInPolygon(midpoint(map.vertices[from], map.vertices[to]), pillar),
-      )
+      loopEdges(hole).some((edge) => inside(edge, polygon, shared)) ||
+      loopEdges(drawn.vertices).some((edge) => inside(edge, pillar, shared))
     );
   });
 }

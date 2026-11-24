@@ -498,7 +498,7 @@ function validateNeighbors(map: GameMap, issues: MapIssue[]) {
         : [a.sector, b.sector];
     issues.push({
       id: `same-side:${key}`,
-      message: `${inner.name} and ${outer.name} are on the same side of one wall. Move ${inner.name} off that wall, or remove it and draw it again so it cuts ${outer.name}.`,
+      message: `${inner.name} and ${outer.name} are on the same side of one wall. Move ${inner.name} off that wall, or remove it and draw it again so it cuts ${outer.name}${outer.holes?.length ? " without lying over its pillars" : ""}.`,
       target: inner.id,
     });
   }

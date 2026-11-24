@@ -287,9 +287,25 @@ describe("drawing a room against the wall of the room it's in, around obstacles"
       issue.id.startsWith("same-side:"),
     );
     expect(sameSide?.target).toBe(bridge.id);
+    expect(sameSide?.message).toContain("without lying over its pillars");
     expect(sameSide?.message).toContain(
       `Move ${defined(bridge.map.sectors.find((room) => room.id === bridge.id)).name} off`,
     );
+  });
+
+  it("cuts the outer room round a bridge that only reaches a pillar", () => {
+    const post = drawRoom(hall.map, box(200, 96, 232, 128), {}, 1);
+    const pillared = defined(makePillar(post.map, post.id));
+    for (const corners of [
+      box(0, 96, 200, 128),
+      box(232, 96, 512, 128),
+      box(200, 0, 232, 96),
+      box(200, 128, 232, 256),
+    ]) {
+      const bridge = drawRoom(pillared, corners, {}, 1);
+      expect(problems(bridge.map)).toEqual([]);
+      expect(() => compileMap(bridge.map)).not.toThrow();
+    }
   });
 
   it("cuts a room drawn round an earlier one against its wall", () => {
