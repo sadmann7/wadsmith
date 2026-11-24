@@ -4,7 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GameMap } from "@/lib/map/types";
 
 import { defined } from "@/lib/defined";
+import { applyPositions } from "@/lib/map/edit";
 import { pickedRooms } from "@/lib/map/fragment";
+import { roomPoint } from "@/lib/map/geometry";
 import { drawRoom } from "@/lib/map/reshape";
 import { testMap } from "@/lib/map/test-map";
 import { SceneCamera } from "@/lib/preview/scene-camera";
@@ -64,6 +66,63 @@ describe("map editor parts", () => {
     expect(parts.heard()).toEqual(dragged);
     store.set({ moving: null });
     expect(parts.heard()).toEqual(dragged);
+  });
+
+  it("keep a room's name with the room while it's dragged, even beside a pillar", () => {
+    const hall: GameMap = {
+      ...testMap,
+      vertices: {
+        a: { x: 0, y: 0 },
+        b: { x: 512, y: 0 },
+        c: { x: 512, y: 512 },
+        d: { x: 0, y: 512 },
+        e: { x: 64, y: 8 },
+        f: { x: 448, y: 8 },
+        g: { x: 448, y: 448 },
+        h: { x: 64, y: 448 },
+      },
+      sectors: [
+        {
+          ...testMap.sectors[0],
+          name: "Hall of the long walkway",
+          vertices: ["a", "b", "c", "d"],
+          holes: [["e", "f", "g", "h"]],
+        },
+      ],
+      things: [],
+      lines: {},
+      switches: [],
+    };
+    const instance = mapEditor({ id, map: hall });
+    const props = {
+      value: "sector-1",
+      corners: ["a", "b", "c", "d"],
+      holes: [["e", "f", "g", "h"]],
+    };
+    const leftOf = () =>
+      parseFloat(
+        String(partAttrs(instance.part("caption", props)).style).match(
+          /left:\s*([-\d.]+)px/,
+        )?.[1] ?? "NaN",
+      );
+    const before = leftOf();
+    const { store } = instance.part("handle", { value: "a" });
+    store.set({
+      moving: {
+        keys: ["a", "b", "c", "d", "e", "f", "g", "h"],
+        dx: 256,
+        dy: 0,
+      },
+    });
+    expect(leftOf()).toBeCloseTo(before + 256);
+    store.set({ moving: { keys: ["e", "h"], dx: 56, dy: 0 } });
+    const reshaped = applyPositions(hall, {
+      e: { x: 120, y: 8 },
+      h: { x: 120, y: 448 },
+    });
+    const spot = roomPoint(reshaped, reshaped.sectors[0]).x;
+    expect(spot).not.toBeCloseTo(roomPoint(hall, hall.sectors[0]).x);
+    expect(leftOf()).toBeCloseTo(spot);
   });
 
   it("wake a part for its own selection and highlight", () => {

@@ -21,6 +21,7 @@ import {
   labelPoint,
 } from "@/lib/editor/map-labels";
 import { thingIcons } from "@/lib/editor/thing-icons";
+import { zoomStep } from "@/lib/editor/zoom";
 import { generalizedTrigger, getIsGeneralized } from "@/lib/map/boom";
 import { doorKeyPrefix, switchKeyPrefix, thingKeyPrefix } from "@/lib/map/edit";
 import {
@@ -572,12 +573,6 @@ function TrailMark({ mark, size }: TrailMarkProps) {
   return (
     <circle className={`map-trail-${kind}`} cx={x} cy={y} r={size * grown} />
   );
-}
-
-// Zoom in quarter octaves, rounded up, so the canvas renders again only when
-// the zoom crosses a step.
-function zoomStep(zoom: number) {
-  return 2 ** (Math.ceil(Math.log2(zoom) * 4) / 4);
 }
 
 // The view grown by a cell of at least half its size on every side and

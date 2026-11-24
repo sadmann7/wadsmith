@@ -41,7 +41,12 @@ import {
   targetForKeys,
   wallTarget,
 } from "@/lib/editor/map-target";
-import { createWheelZoom, minZoom, steppedZoom } from "@/lib/editor/zoom";
+import {
+  createWheelZoom,
+  minZoom,
+  steppedZoom,
+  zoomStep,
+} from "@/lib/editor/zoom";
 import { getIsPlayerStart } from "@/lib/map/catalog";
 import {
   addSwitch,
@@ -2349,19 +2354,64 @@ function lineAttrs(a: Point, b: Point) {
   };
 }
 
+// Placed at the zoom step the canvas hides overlapping names with, so both
+// agree on where a name is.
 function captionPoint(state: MapEditorState, props: CaptionProps): Point {
   const loops = [props.corners, ...(props.holes ?? [])].map((loop) =>
     loop.map((key) => pointOf(state, key)),
   );
   const sector = sectorById(state.map, props.value);
-  return (
-    labelPoint(
-      loops,
-      state.viewport.zoom,
-      estimateLabelWidth(sector?.name ?? ""),
-    ) ??
-    (sector ? roomPoint(state.map, sector) : centroid(state, props.corners))
+  if (!sector) return centroid(state, props.corners);
+  const at = labelPoint(
+    loops,
+    zoomStep(state.viewport.zoom),
+    estimateLabelWidth(sector.name),
   );
+  if (at) return at;
+  const spot = roomPoint(state.map, sector);
+  const { moving } = state;
+  if (!moving) return spot;
+  const keys = movedKeys(moving);
+  const corners = sectorCorners(props);
+  const count = corners.filter((key) => keys.has(key)).length;
+  if (count === 0) return spot;
+  if (count === corners.length) {
+    return { x: spot.x + moving.dx, y: spot.y + moving.dy };
+  }
+  return roomPoint(draftMap(state, moving), sector);
+}
+
+// A drag keeps one key list, and each frame is a new draft, so the names
+// moved in a frame share one map, and with it the caches keyed by that map. A
+// remote edit can replace the map partway through a drag.
+const draftKeys = new WeakMap<MoveDraft["keys"], Set<string>>();
+
+function movedKeys(moving: MoveDraft) {
+  const cached = draftKeys.get(moving.keys);
+  if (cached) return cached;
+  const keys = new Set(moving.keys);
+  draftKeys.set(moving.keys, keys);
+  return keys;
+}
+
+const draftMaps = new WeakMap<GameMap, WeakMap<MoveDraft, GameMap>>();
+
+function draftMap(state: MapEditorState, moving: MoveDraft) {
+  const drafts = draftMaps.get(state.map) ?? new WeakMap<MoveDraft, GameMap>();
+  draftMaps.set(state.map, drafts);
+  const cached = drafts.get(moving);
+  if (cached) return cached;
+  const map = applyPositions(
+    state.map,
+    Object.fromEntries(
+      moving.keys.map((key) => {
+        const base = state.positions[key] ?? { x: 0, y: 0 };
+        return [key, { x: base.x + moving.dx, y: base.y + moving.dy }];
+      }),
+    ),
+  );
+  drafts.set(moving, map);
+  return map;
 }
 
 const cameraOverlap = 28;
