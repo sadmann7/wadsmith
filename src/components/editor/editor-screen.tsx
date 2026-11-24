@@ -227,7 +227,7 @@ import type {
 } from "./map-editor";
 
 import { AgentCard } from "./agent-card";
-import { BuildDialog } from "./build-dialog";
+import { BuildDialog, mapFileName } from "./build-dialog";
 import { MapContextMenu, selectionTransforms } from "./context-menu";
 import { FindDialog } from "./find-dialog";
 import { GradientPanel } from "./gradient-panel";
@@ -1976,7 +1976,7 @@ export function EditorScreen({
     else if (action === "open") fileInput.current?.click();
     else if (action === "save") {
       downloadFile(
-        "wadsmith-map.json",
+        mapFileName(mapName),
         serializeMap({ ...map, name: mapName }),
         "application/json",
       );
