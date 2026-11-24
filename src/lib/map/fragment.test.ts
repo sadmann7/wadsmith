@@ -21,6 +21,7 @@ import {
   removeParts,
   selectedParts,
   serializeFragment,
+  transformKeepingDoors,
   transformParts,
 } from "./fragment";
 import { wallKey, wallOwners } from "./geometry";
@@ -622,6 +623,166 @@ describe("turning, flipping and resizing", () => {
       .map((sector) => sector.id);
     expect(named).toEqual(expect.arrayContaining(doors));
     expect(named).not.toContain(broken.id);
+  });
+
+  it("carries a resized room's doors along, bending a far wall in the way", () => {
+    const arenaKeys = partKeys(
+      starterMap,
+      selectedParts(starterMap, [], "sector-3"),
+    );
+    const halve: Transform = { kind: "scale", factor: 0.5 };
+    const { map: shrunk, problems } = transformKeepingDoors(
+      starterMap,
+      arenaKeys,
+      [halve],
+      32,
+    );
+    expect(problems).toEqual([]);
+    const at = (id: string) => defined(shrunk).vertices[id];
+    for (const [near, far] of [
+      ["v7", "v13"],
+      ["v8", "v14"],
+      ["v17", "v19"],
+      ["v18", "v20"],
+    ]) {
+      expect(Math.abs(at(near).x - at(far).x)).toBe(16);
+      expect(at(far).y).toBe(at(near).y);
+    }
+    expect(at("v3")).toEqual(starterMap.vertices.v3);
+    expect(at("v21")).toEqual(starterMap.vertices.v21);
+    const straight = defined(
+      transformParts(starterMap, arenaKeys, halve, 32, "walls"),
+    );
+    expect(straight.vertices.v21.x).toBe(straight.vertices.v19.x);
+    expect(newProblems(starterMap, straight)).not.toEqual([]);
+    const plain = defined(
+      transformParts(starterMap, arenaKeys, halve, 32, "none"),
+    );
+    expect(plain.vertices.v13).toEqual(starterMap.vertices.v13);
+  });
+
+  it("keeps the far room's wall straight around a door set into it", () => {
+    const corridor = defined(
+      starterMap.sectors.find((sector) => sector.id === "sector-2"),
+    );
+    const door = defined(
+      starterMap.sectors.find((sector) => sector.id === "sector-4"),
+    );
+    const map: GameMap = {
+      ...starterMap,
+      vertices: {
+        ...starterMap.vertices,
+        top: { x: 496, y: 64 },
+        middle: { x: 496, y: 160 },
+        bottom: { x: 496, y: 256 },
+      },
+      sectors: starterMap.sectors.map((sector) =>
+        sector === corridor
+          ? {
+              ...sector,
+              vertices: ["v3", "top", "v13", "middle", "v14", "bottom", "v4"],
+            }
+          : sector === door
+            ? { ...sector, vertices: ["v13", "v7", "v8", "v14", "middle"] }
+            : sector,
+      ),
+    };
+    expect(validateMap(map)).toEqual([]);
+    const { map: shrunk, problems } = transformKeepingDoors(
+      map,
+      partKeys(map, selectedParts(map, [], "sector-3")),
+      [{ kind: "scale", factor: 0.5 }],
+      32,
+    );
+    expect(problems).toEqual([]);
+    const face = ["top", "v13", "middle", "v14", "bottom"].map(
+      (id) => defined(shrunk).vertices[id],
+    );
+    expect(new Set(face.map((point) => point.x)).size).toBe(1);
+    expect(face.map((point) => point.y)).toEqual([64, 128, 160, 192, 256]);
+    expect(defined(shrunk).vertices.v7.x - face[0].x).toBe(16);
+  });
+
+  it("carries two doors set into one far wall", () => {
+    const box = (id: string, vertices: string[], door = false) => ({
+      ...defined(starterMap.sectors.find((sector) => sector.id === "sector-2")),
+      id,
+      name: id,
+      vertices,
+      floor: 0,
+      ceiling: 128,
+      effect: undefined,
+      ...(door
+        ? {
+            door: {
+              opensBy: "use" as const,
+              closes: true,
+              texture: "BIGDOOR2",
+            },
+          }
+        : {}),
+    });
+    const map: GameMap = {
+      vertices: {
+        f1: { x: 256, y: 0 },
+        f2: { x: 496, y: 0 },
+        f3: { x: 496, y: 512 },
+        f4: { x: 256, y: 512 },
+        a1: { x: 512, y: 0 },
+        a2: { x: 960, y: 0 },
+        a3: { x: 960, y: 512 },
+        a4: { x: 512, y: 512 },
+        d1: { x: 496, y: 64 },
+        d2: { x: 496, y: 128 },
+        n1: { x: 512, y: 64 },
+        n2: { x: 512, y: 128 },
+        d3: { x: 496, y: 320 },
+        d4: { x: 496, y: 384 },
+        n3: { x: 512, y: 320 },
+        n4: { x: 512, y: 384 },
+      },
+      sectors: [
+        box("far", ["f1", "f2", "d1", "d2", "d3", "d4", "f3", "f4"]),
+        box("arena", ["a1", "a2", "a3", "a4", "n4", "n3", "n2", "n1"]),
+        box("door1", ["d1", "n1", "n2", "d2"], true),
+        box("door2", ["d3", "n3", "n4", "d4"], true),
+      ],
+      things: [{ id: "player-1", kind: "player", x: 384, y: 256, angle: 0 }],
+      switches: [],
+    };
+    expect(validateMap(map)).toEqual([]);
+    const { map: shrunk, problems } = transformKeepingDoors(
+      map,
+      partKeys(map, selectedParts(map, [], "arena")),
+      [{ kind: "scale", factor: 0.5 }],
+      32,
+    );
+    expect(problems).toEqual([]);
+    const at = (id: string) => defined(shrunk).vertices[id];
+    for (const [near, far] of [
+      ["n1", "d1"],
+      ["n4", "d4"],
+    ]) {
+      expect(at(near).x - at(far).x).toBe(16);
+    }
+    expect(at("f2").x).toBe(at("d1").x);
+    expect(at("f3").x).toBe(at("d4").x);
+  });
+
+  it("leaves doors alone when a turn or flip moves a room", () => {
+    const arenaKeys = partKeys(
+      starterMap,
+      selectedParts(starterMap, [], "sector-3"),
+    );
+    const turned = defined(
+      transformParts(
+        starterMap,
+        arenaKeys,
+        { kind: "mirror", axis: "vertical" },
+        32,
+      ),
+    );
+    expect(turned.vertices.v13).toEqual(starterMap.vertices.v13);
   });
 
   it("finds nothing new when a room joined to no other turns", () => {
