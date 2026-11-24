@@ -838,6 +838,11 @@ describe("drawing over the starter maps", () => {
           fresh(`line ${label}`, line.map);
           keepsPillars(`line ${label}`, line.map);
         }
+        const loop = drawLines(base, [...corners, corners[0]], 1);
+        if (loop) {
+          fresh(`loop ${label}`, loop.map);
+          keepsPillars(`loop ${label}`, loop.map);
+        }
       }
       for (const first of base.sectors) {
         for (const second of base.sectors) {
