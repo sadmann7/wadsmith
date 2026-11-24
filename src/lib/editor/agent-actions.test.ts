@@ -426,7 +426,7 @@ describe("agent actions", () => {
         trigger: "door",
       }),
     ).toThrow(
-      'can\'t be set off by "door" on this wall: a press-to-open door needs a door room right behind the line. It takes: switch, walk.',
+      'can\'t be set off by "door" on this wall: pressing the wall only works when a door room is right behind it. It takes: switch, walk.',
     );
     expect(() =>
       runAgentAction(testMap, "setLineAction", [
@@ -434,7 +434,25 @@ describe("agent actions", () => {
         "door-close-wait",
         "walk",
       ]),
-    ).toThrow("Nothing sets it off on this wall.");
+    ).toThrow(
+      'can\'t be set off by "walk" on this wall: nothing can walk over a solid wall. It takes nothing else, so no trigger works on this wall.',
+    );
+    expect(() =>
+      runAgentAction(starterMap, "setLineAction", {
+        wall: "v25|v26",
+        kind: "exit",
+        trigger: "door",
+      }),
+    ).toThrow('End the level never takes "door". It takes: switch, walk.');
+    expect(() =>
+      runAgentAction(testMap, "setLineAction", [
+        "v1|v6",
+        "door-close-wait",
+        "switch",
+      ]),
+    ).toThrow(
+      'Door: close, wait, open never takes "switch". It takes only walk: nothing can walk over a solid wall.',
+    );
   });
 
   it("locks a door behind a key and waits for the key to be placed", () => {

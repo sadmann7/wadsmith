@@ -1555,19 +1555,30 @@ function refusedTrigger(
   sides: LineSides,
 ) {
   const { label, triggers } = lineActions[kind];
-  const reason = !triggers[trigger]
-    ? ""
-    : trigger === "walk"
-      ? ": nothing can walk over a solid wall"
-      : sides.twoSided
-        ? ": a press-to-open door needs a door room right behind the line"
-        : ": a press-to-open door needs a sector behind the line";
   const allowed = triggersFor(kind, sides);
-  return `${label} can't be set off by "${trigger}" on this wall${reason}. ${
-    allowed.length > 0
-      ? `It takes: ${allowed.join(", ")}.`
-      : "Nothing sets it off on this wall."
-  }`;
+  const refusal = triggers[trigger]
+    ? `${label} can't be set off by "${trigger}" on this wall: ${wallRefusal(trigger, sides)}.`
+    : `${label} never takes "${trigger}".`;
+  if (allowed.length > 0) return `${refusal} It takes: ${allowed.join(", ")}.`;
+  const others = lineTriggers.filter(
+    (each) => triggers[each] && each !== trigger,
+  );
+  if (others.length === 0) {
+    return `${refusal} It takes nothing else, so no trigger works on this wall.`;
+  }
+  const lead = triggers[trigger]
+    ? "Its other triggers don't fit either"
+    : `It takes only ${others.join(" or ")}`;
+  return `${refusal} ${lead}: ${others
+    .map((each) => wallRefusal(each, sides))
+    .join("; ")}.`;
+}
+
+function wallRefusal(trigger: LineTrigger, { twoSided }: LineSides) {
+  if (trigger === "walk") return "nothing can walk over a solid wall";
+  return twoSided
+    ? "pressing the wall only works when a door room is right behind it"
+    : "a press-to-open door needs a sector behind the line";
 }
 
 function humanize(name: string) {
