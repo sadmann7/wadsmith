@@ -1,18 +1,10 @@
-import type { NumberInputValueChangeReason } from "@ui-sdk/react/number-input";
-
 import { FieldItem, Label } from "@/components/ui/field";
 import { NumberField } from "@/components/ui/number-field";
 import { Slider } from "@/components/ui/slider";
+import { stepWay } from "@/lib/editor/step-way";
 
 const lightStep = 16;
 const lightMax = 255;
-
-const stepReasons: NumberInputValueChangeReason[] = [
-  "increment-press",
-  "decrement-press",
-  "step-key",
-  "wheel",
-];
 
 interface LightSettingProps {
   value: number;
@@ -31,7 +23,13 @@ export function LightSetting({ value, onChange }: LightSettingProps) {
           min={0}
           max={lightMax}
           step={1}
+          largeStep={lightStep}
           onValueChange={(light) => onChange(light as number)}
+          onClick={(event) =>
+            event.currentTarget
+              .querySelector<HTMLInputElement>('input[type="range"]')
+              ?.focus()
+          }
         />
         <NumberField
           label="Light level"
@@ -44,26 +42,24 @@ export function LightSetting({ value, onChange }: LightSettingProps) {
           smallStep={1}
           onValueChange={(next, details) => {
             if (next === null) return;
-            const event = details.event;
-            const key = event instanceof KeyboardEvent ? event.key : "";
+            const way = stepWay(details);
             const fine =
-              event instanceof MouseEvent || event instanceof KeyboardEvent
-                ? event.shiftKey
+              details.event instanceof MouseEvent ||
+              details.event instanceof KeyboardEvent
+                ? details.event.shiftKey
                 : false;
             // The field steps by 1 so typed levels never snap; a plain step
             // moves by Doom's light steps of 16 instead.
-            const coarse =
-              stepReasons.includes(details.reason) &&
-              key !== "Home" &&
-              key !== "End" &&
-              !fine;
-            const light = coarse
-              ? value + Math.sign(next - value) * lightStep
-              : next;
-            onChange(Math.min(lightMax, Math.max(0, Math.round(light))));
+            const light =
+              way && !fine ? clamp(next - way) + way * lightStep : next;
+            onChange(clamp(Math.round(light)));
           }}
         />
       </div>
     </FieldItem>
   );
+}
+
+function clamp(light: number) {
+  return Math.min(lightMax, Math.max(0, light));
 }

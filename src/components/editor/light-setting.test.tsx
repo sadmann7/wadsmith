@@ -75,6 +75,27 @@ it("takes a typed level as it is", () => {
   expect(changes.at(-1)).toBe(255);
 });
 
+it("steps from a typed level that is not yet committed", () => {
+  render(160);
+  typeOnly("100");
+  key(field(), "ArrowUp");
+  expect(changes.at(-1)).toBe(116);
+  render(160);
+  typeOnly("300");
+  key(field(), "ArrowUp");
+  expect(field().value).toBe("255");
+  render(160);
+  typeOnly("300");
+  key(field(), "ArrowDown");
+  expect(field().value).toBe("239");
+});
+
+it("moves the slider by 16 with Shift", () => {
+  render(160);
+  key(slider(), "ArrowRight", true);
+  expect(slider().value).toBe("176");
+});
+
 it("focuses the slider when its thumb is clicked", () => {
   render(160);
   const thumb = slider().closest<HTMLElement>('[data-slot="slider-thumb"]');
@@ -82,11 +103,20 @@ it("focuses the slider when its thumb is clicked", () => {
   expect(document.activeElement).toBe(slider());
 });
 
+let mounts = 0;
+
 function render(initial: number) {
-  React.act(() => root.render(<Harness key={initial} initial={initial} />));
+  React.act(() =>
+    root.render(<Harness key={(mounts += 1)} initial={initial} />),
+  );
 }
 
 function type(text: string) {
+  typeOnly(text);
+  key(field(), "Enter");
+}
+
+function typeOnly(text: string) {
   const input = field();
   React.act(() => {
     input.focus();
@@ -104,7 +134,6 @@ function type(text: string) {
       }),
     );
   });
-  key(input, "Enter");
 }
 
 function press(target: HTMLElement, shiftKey = false) {
