@@ -37,6 +37,7 @@ export interface SceneMesh {
   // Sprite vertices, which stand where the camera faces.
   sprites: Float32Array;
   pictures: { key: string; picture: Picture }[];
+  heavens: Picture | null;
   surfaces: string[];
   ids: Map<string, number>;
   seeThrough: number[];
@@ -310,6 +311,7 @@ export function buildSceneMesh(
     maskedCount: masked.length / vertexFloats,
     sprites: Float32Array.from(sprites),
     pictures,
+    heavens,
     surfaces,
     ids,
     seeThrough: [...seeThrough],

@@ -27,6 +27,7 @@ import {
 } from "./scene-mesh";
 
 const far = 65536;
+const skyCapRows = 64;
 const atlasSize = 4096;
 const rectColumns = 256;
 const markColumns = 1024;
@@ -35,46 +36,6 @@ const maxWidth = 3840;
 const noMovers: readonly string[] = [];
 
 const marks = { selected: 1, hovered: 2, seeThrough: 4 } as const;
-
-const worldVertex = `#version 300 es
-layout(location = 0) in vec3 aPosition;
-layout(location = 1) in vec2 aTexel;
-layout(location = 2) in float aSlot;
-layout(location = 3) in float aId;
-layout(location = 4) in float aLight;
-layout(location = 5) in float aContrast;
-layout(location = 6) in float aFlags;
-layout(location = 7) in vec2 aOffset;
-uniform mat4 uView;
-uniform vec3 uEye;
-uniform vec2 uForward;
-uniform vec2 uRight;
-out vec3 vWorld;
-out vec2 vTexel;
-flat out int vSlot;
-flat out float vId;
-flat out int vLight;
-flat out int vContrast;
-flat out int vFlags;
-void main() {
-  vec3 world = aPosition;
-  vFlags = int(aFlags);
-  if ((vFlags & ${meshFlags.sprite}) != 0) {
-    if (dot(aPosition.xy - uEye.xy, uForward) <= 8.0) {
-      gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
-      return;
-    }
-    world.xy += uRight * aOffset.x;
-    world.z += aOffset.y;
-  }
-  vWorld = world;
-  vTexel = aTexel;
-  vSlot = int(aSlot);
-  vId = aId;
-  vLight = int(aLight);
-  vContrast = int(aContrast);
-  gl_Position = uView * vec4(world, 1.0);
-}`;
 
 const shared = `
 uniform sampler2D uAtlas;
@@ -95,147 +56,6 @@ vec4 rectOf(int slot) {
   return texelFetch(uRects, ivec2(slot % ${rectColumns}, slot / ${rectColumns}), 0);
 }`;
 
-const worldFragment = `#version 300 es
-precision highp float;
-precision highp int;
-precision highp sampler2D;
-${shared}
-uniform sampler2D uShades;
-uniform bool uFullbright;
-layout(location = 0) out vec4 oColor;
-layout(location = 1) out vec4 oPick;
-int lightStart(int light, int contrast) {
-  int band = clamp((light >> 4) + contrast, 0, 15);
-  return (15 - band) * 4;
-}
-void main() {
-  vec4 rect = rectOf(vSlot);
-  ivec2 origin = ivec2(rect.xy);
-  int width = int(rect.z);
-  int height = int(rect.w);
-  vec3 toward = vWorld - uEye;
-  float ahead = dot(toward.xy, uForward);
-  int column;
-  int row;
-  int level = 0;
-  if ((vFlags & ${meshFlags.sky}) != 0) {
-    float turn = atan(-toward.y, toward.x) / 6.28318530718;
-    if (turn < 0.0) turn += 1.0;
-    column = wrapped(turn * ${skyTurn.toFixed(1)}, width);
-    float rise = toward.z / max(length(toward.xy), 0.001);
-    row = wrapped(${skyHorizon.toFixed(1)} - rise * ${(skyView / 2).toFixed(1)}, height);
-  } else {
-    bool cut = (vFlags & ${meshFlags.masked | meshFlags.sprite}) != 0;
-    float down = floor(vTexel.y);
-    if (cut && (down < 0.0 || down >= float(height))) discard;
-    if ((vFlags & ${meshFlags.sprite}) != 0) {
-      column = clamp(int(floor(vTexel.x)), 0, width - 1);
-      row = clamp(int(down), 0, height - 1);
-    } else {
-      column = wrapped(vTexel.x, width);
-      row = cut ? int(down) : wrapped(vTexel.y, height);
-    }
-    float distance = max(ahead, 0.001);
-    if ((vFlags & ${meshFlags.flat}) != 0) {
-      int band = min(127, int(floor(distance / 16.0)));
-      level = lightStart(vLight, 0) - ((160 / (band + 1)) >> 1);
-    } else {
-      int scale = min(47, int(floor(2560.0 / distance)));
-      level = lightStart(vLight, vContrast) - (scale >> 1);
-    }
-    level = uFullbright ? 0 : clamp(level, 0, ${shadeLevels - 1});
-  }
-  vec2 texel = texelFetch(uAtlas, origin + ivec2(column, row), 0).rg;
-  if ((vFlags & ${meshFlags.masked | meshFlags.sprite}) != 0 && texel.g < 0.5) {
-    discard;
-  }
-  int index = int(texel.r * 255.0 + 0.5);
-  oColor = texelFetch(uShades, ivec2(index, level), 0);
-  oPick = vec4(vId, ahead, 0.0, 1.0);
-}`;
-
-const spanFragment = `#version 300 es
-precision highp float;
-precision highp int;
-precision highp sampler2D;
-${shared}
-uniform sampler2D uPick;
-layout(location = 0) out vec4 oExtent;
-void main() {
-  float ahead = dot(vWorld.xy - uEye.xy, uForward);
-  float scene = texelFetch(uPick, ivec2(gl_FragCoord.xy), 0).g;
-  if (scene < ahead - 0.5) discard;
-  oExtent = vec4(vId, ahead, 0.0, 1.0);
-}`;
-
-const screenVertex = `#version 300 es
-void main() {
-  vec2 corner = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
-  gl_Position = vec4(corner * 2.0 - 1.0, 0.0, 1.0);
-}`;
-
-const compositeFragment = `#version 300 es
-precision highp float;
-precision highp int;
-precision highp sampler2D;
-uniform sampler2D uColor;
-uniform sampler2D uPick;
-uniform sampler2D uExtent;
-uniform sampler2D uMarks;
-uniform ivec2 uSize;
-uniform int uOutline;
-uniform bool uCrosshair;
-uniform vec4 uCrosshairColor;
-uniform int uCrosshairScale;
-out vec4 oColor;
-int markOf(float id) {
-  int at = int(id + 0.5);
-  if (at <= 0) return 0;
-  return int(texelFetch(uMarks, ivec2(at % ${markColumns}, at / ${markColumns}), 0).r * 255.0 + 0.5);
-}
-void main() {
-  ivec2 at = ivec2(gl_FragCoord.xy);
-  vec4 color = texelFetch(uColor, at, 0);
-  vec4 shown = texelFetch(uPick, at, 0);
-  vec4 span = texelFetch(uExtent, at, 0);
-  int shownMark = markOf(shown.r);
-  int spanMark = markOf(span.r);
-  bool spanCan = (spanMark & ${marks.selected | marks.hovered}) != 0;
-  bool shownCan = (shownMark & ${marks.selected | marks.hovered}) != 0 &&
-    (shownMark & ${marks.seeThrough}) == 0;
-  if (spanCan || shownCan) {
-    bool spanEdge = false;
-    bool shownEdge = false;
-    for (int step = 1; step <= 4; step += 1) {
-      if (step > uOutline) break;
-      for (int side = 0; side < 4; side += 1) {
-        ivec2 way = side == 0 ? ivec2(-1, 0) : side == 1 ? ivec2(1, 0) : side == 2 ? ivec2(0, -1) : ivec2(0, 1);
-        ivec2 next = at + way * step;
-        if (next.x < 0 || next.y < 0 || next.x >= uSize.x || next.y >= uSize.y) continue;
-        if (spanCan && texelFetch(uExtent, next, 0).r != span.r) spanEdge = true;
-        if (shownCan) {
-          vec4 beside = texelFetch(uPick, next, 0);
-          bool veiled = (markOf(beside.r) & ${marks.seeThrough}) != 0 && beside.g < shown.g;
-          if (beside.r != shown.r && !veiled) shownEdge = true;
-        }
-      }
-    }
-    bool isMarked = (spanEdge && (spanMark & ${marks.selected}) != 0) ||
-      (shownEdge && (shownMark & ${marks.selected}) != 0);
-    if (isMarked) color = vec4(1.0, 106.0 / 255.0, 43.0 / 255.0, 1.0);
-    else if (spanEdge || shownEdge) color = vec4(1.0);
-  }
-  if (uCrosshair) {
-    ivec2 middle = ivec2(uSize.x / 2, uSize.y - 1 - uSize.y / 2);
-    ivec2 away = at - middle;
-    int arm = 6 * uCrosshairScale;
-    bool across = abs(away.x) <= arm && away.y > -uCrosshairScale && away.y <= 0;
-    bool upright = abs(away.y) <= arm && away.x >= 0 && away.x < uCrosshairScale;
-    if (across || upright) color = uCrosshairColor;
-  }
-  oColor = color;
-}`;
-
 interface Program {
   program: WebGLProgram;
   uniform: (name: string) => WebGLUniformLocation | null;
@@ -248,6 +68,7 @@ interface Uploaded {
   customSprites: ReadonlyMap<number, string | null> | undefined;
   mesh: SceneMesh;
   slotCount: number;
+  skyCap: Float32Array;
 }
 
 interface AtlasRect {
@@ -262,18 +83,13 @@ export function createWebglRenderer(
   width: number,
   height: number,
 ): SceneRenderer | null {
-  const gl = canvas.getContext("webgl2", {
-    antialias: false,
-    depth: false,
-    alpha: false,
-    preserveDrawingBuffer: false,
-  });
-  if (!gl || !gl.getExtension("EXT_color_buffer_float")) return null;
-
-  const world = createProgram(gl, worldVertex, worldFragment);
-  const span = createProgram(gl, worldVertex, spanFragment);
-  const composite = createProgram(gl, screenVertex, compositeFragment);
-  if (!world || !span || !composite) return null;
+  // A canvas that took a WebGL context can't fall back to a 2D one, so
+  // support is settled on a canvas of its own first.
+  if (!getCanRunWebgl()) return null;
+  const gl = contextOf(canvas);
+  const programs = gl ? createPrograms(gl) : null;
+  if (!gl || !programs) return null;
+  const { world, span, composite } = programs;
 
   const meshBuffer = defined(gl.createBuffer());
   const spriteBuffer = defined(gl.createBuffer());
@@ -510,6 +326,7 @@ export function createWebglRenderer(
       customSprites,
       mesh,
       slotCount: mesh.pictures.length,
+      skyCap: skyCapOf(mesh.heavens, assets.shades),
     };
     return uploaded;
   };
@@ -539,9 +356,17 @@ export function createWebglRenderer(
     );
   };
 
-  const bindWorld = (program: Program, map: GameMap, camera: Camera) => {
-    const { forward, right } = cameraBasis(camera);
-    const eye = eyeOf(map, camera);
+  const bindWorld = (program: Program, map: GameMap, source: Camera) => {
+    const { forward, right } = cameraBasis(source);
+    const eye = eyeOf(map, source);
+    // A corner exactly level with the eye has no depth, and SwiftShader then
+    // smears the textures of the triangles it starts. Cameras stand on the
+    // same grid as corners, so the eye stands a hair behind where it is.
+    const camera = {
+      ...source,
+      x: source.x - forward.x * eyeBack,
+      y: source.y - forward.y * eyeBack,
+    };
     gl.useProgram(program.program);
     gl.uniformMatrix4fv(
       program.uniform("uView"),
@@ -621,6 +446,7 @@ export function createWebglRenderer(
       bindWorld(world, map, camera);
       bindTexture(gl, world, "uShades", 2, shadesTexture);
       gl.uniform1i(world.uniform("uFullbright"), options.fullbright ? 1 : 0);
+      gl.uniform4fv(world.uniform("uSkyCap"), current.skyCap);
       gl.bindVertexArray(meshArray);
       gl.enable(gl.CULL_FACE);
       gl.drawArrays(gl.TRIANGLES, 0, mesh.flatStart);
@@ -711,9 +537,262 @@ export function createWebglRenderer(
       return counts;
     },
     destroy() {
-      gl.getExtension("WEBGL_lose_context")?.loseContext();
+      for (const buffer of [meshBuffer, spriteBuffer, ghostBuffer]) {
+        gl.deleteBuffer(buffer);
+      }
+      for (const array of [meshArray, spriteArray, ghostArray, screenArray]) {
+        gl.deleteVertexArray(array);
+      }
+      for (const texture of [
+        atlas,
+        rects,
+        shadesTexture,
+        marksTexture,
+        color,
+        pick,
+        extent,
+      ]) {
+        gl.deleteTexture(texture);
+      }
+      gl.deleteRenderbuffer(sceneDepth);
+      gl.deleteRenderbuffer(spanDepth);
+      gl.deleteFramebuffer(sceneFrame);
+      gl.deleteFramebuffer(spanFrame);
+      for (const { program } of [world, span, composite]) {
+        gl.deleteProgram(program);
+      }
     },
   };
+}
+
+const eyeBack = 0.01;
+
+// The average color of a sky's top row.
+function skyCapOf(heavens: Picture | null, shades: Uint32Array) {
+  const sum = [0, 0, 0];
+  const width = heavens?.width ?? 0;
+  for (let column = 0; heavens && column < width; column += 1) {
+    const color = shades[heavens.pixels[column * heavens.height]];
+    sum[0] += color & 255;
+    sum[1] += (color >>> 8) & 255;
+    sum[2] += (color >>> 16) & 255;
+  }
+  const scale = 1 / 255 / Math.max(1, width);
+  return Float32Array.of(sum[0] * scale, sum[1] * scale, sum[2] * scale, 1);
+}
+
+let canRunWebgl: boolean | undefined;
+
+function getCanRunWebgl() {
+  if (canRunWebgl === undefined) {
+    const gl = contextOf(document.createElement("canvas"));
+    canRunWebgl = Boolean(gl && createPrograms(gl));
+    gl?.getExtension("WEBGL_lose_context")?.loseContext();
+  }
+  return canRunWebgl;
+}
+
+function contextOf(canvas: HTMLCanvasElement) {
+  const gl = canvas.getContext("webgl2", {
+    antialias: false,
+    depth: false,
+    alpha: false,
+  });
+  return gl?.getExtension("EXT_color_buffer_float") ? gl : null;
+}
+
+const worldVertex = `#version 300 es
+layout(location = 0) in vec3 aPosition;
+layout(location = 1) in vec2 aTexel;
+layout(location = 2) in float aSlot;
+layout(location = 3) in float aId;
+layout(location = 4) in float aLight;
+layout(location = 5) in float aContrast;
+layout(location = 6) in float aFlags;
+layout(location = 7) in vec2 aOffset;
+uniform mat4 uView;
+uniform vec3 uEye;
+uniform vec2 uForward;
+uniform vec2 uRight;
+out vec3 vWorld;
+out vec2 vTexel;
+flat out int vSlot;
+flat out float vId;
+flat out int vLight;
+flat out int vContrast;
+flat out int vFlags;
+void main() {
+  vec3 world = aPosition;
+  vFlags = int(aFlags);
+  if ((vFlags & ${meshFlags.sprite}) != 0) {
+    if (dot(aPosition.xy - uEye.xy, uForward) <= 8.0) {
+      gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+      return;
+    }
+    world.xy += uRight * aOffset.x;
+    world.z += aOffset.y;
+  }
+  vWorld = world;
+  vTexel = aTexel;
+  vSlot = int(aSlot);
+  vId = aId;
+  vLight = int(aLight);
+  vContrast = int(aContrast);
+  gl_Position = uView * vec4(world, 1.0);
+}`;
+
+const worldFragment = `#version 300 es
+precision highp float;
+precision highp int;
+precision highp sampler2D;
+${shared}
+uniform sampler2D uShades;
+uniform bool uFullbright;
+uniform vec4 uSkyCap;
+layout(location = 0) out vec4 oColor;
+layout(location = 1) out vec4 oPick;
+int lightStart(int light, int contrast) {
+  int band = clamp((light >> 4) + contrast, 0, 15);
+  return (15 - band) * 4;
+}
+void main() {
+  vec4 rect = rectOf(vSlot);
+  ivec2 origin = ivec2(rect.xy);
+  int width = int(rect.z);
+  int height = int(rect.w);
+  vec3 toward = vWorld - uEye;
+  float ahead = dot(toward.xy, uForward);
+  int column;
+  int row;
+  int level = 0;
+  float capped = 0.0;
+  if ((vFlags & ${meshFlags.sky}) != 0) {
+    float turn = atan(-toward.y, toward.x) / 6.28318530718;
+    if (turn < 0.0) turn += 1.0;
+    column = wrapped(turn * ${skyTurn.toFixed(1)}, width);
+    float rise = toward.z / max(length(toward.xy), 0.001);
+    float down = ${skyHorizon.toFixed(1)} - rise * ${(skyView / 2).toFixed(1)};
+    // Above its top row the sky fades into one color, which a view that
+    // looks straight up would otherwise see wrapped into rings.
+    capped = clamp(-down / ${skyCapRows.toFixed(1)}, 0.0, 1.0);
+    row = down < 0.0 ? 0 : wrapped(down, height);
+  } else {
+    bool cut = (vFlags & ${meshFlags.masked | meshFlags.sprite}) != 0;
+    float down = floor(vTexel.y);
+    if (cut && (down < 0.0 || down >= float(height))) discard;
+    if ((vFlags & ${meshFlags.sprite}) != 0) {
+      column = clamp(int(floor(vTexel.x)), 0, width - 1);
+      row = clamp(int(down), 0, height - 1);
+    } else {
+      column = wrapped(vTexel.x, width);
+      row = cut ? int(down) : wrapped(vTexel.y, height);
+    }
+    float distance = max(ahead, 0.001);
+    if ((vFlags & ${meshFlags.flat}) != 0) {
+      int band = min(127, int(floor(distance / 16.0)));
+      level = lightStart(vLight, 0) - ((160 / (band + 1)) >> 1);
+    } else {
+      int scale = min(47, int(floor(2560.0 / distance)));
+      level = lightStart(vLight, vContrast) - (scale >> 1);
+    }
+    level = uFullbright ? 0 : clamp(level, 0, ${shadeLevels - 1});
+  }
+  vec2 texel = texelFetch(uAtlas, origin + ivec2(column, row), 0).rg;
+  if ((vFlags & ${meshFlags.masked | meshFlags.sprite}) != 0 && texel.g < 0.5) {
+    discard;
+  }
+  int index = int(texel.r * 255.0 + 0.5);
+  oColor = mix(texelFetch(uShades, ivec2(index, level), 0), uSkyCap, capped);
+  oPick = vec4(vId, ahead, 0.0, 1.0);
+}`;
+
+const spanFragment = `#version 300 es
+precision highp float;
+precision highp int;
+precision highp sampler2D;
+${shared}
+uniform sampler2D uPick;
+layout(location = 0) out vec4 oExtent;
+void main() {
+  float ahead = dot(vWorld.xy - uEye.xy, uForward);
+  float scene = texelFetch(uPick, ivec2(gl_FragCoord.xy), 0).g;
+  if (scene < ahead - 0.5) discard;
+  oExtent = vec4(vId, ahead, 0.0, 1.0);
+}`;
+
+const screenVertex = `#version 300 es
+void main() {
+  vec2 corner = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
+  gl_Position = vec4(corner * 2.0 - 1.0, 0.0, 1.0);
+}`;
+
+const compositeFragment = `#version 300 es
+precision highp float;
+precision highp int;
+precision highp sampler2D;
+uniform sampler2D uColor;
+uniform sampler2D uPick;
+uniform sampler2D uExtent;
+uniform sampler2D uMarks;
+uniform ivec2 uSize;
+uniform int uOutline;
+uniform bool uCrosshair;
+uniform vec4 uCrosshairColor;
+uniform int uCrosshairScale;
+out vec4 oColor;
+int markOf(float id) {
+  int at = int(id + 0.5);
+  if (at <= 0) return 0;
+  return int(texelFetch(uMarks, ivec2(at % ${markColumns}, at / ${markColumns}), 0).r * 255.0 + 0.5);
+}
+void main() {
+  ivec2 at = ivec2(gl_FragCoord.xy);
+  vec4 color = texelFetch(uColor, at, 0);
+  vec4 shown = texelFetch(uPick, at, 0);
+  vec4 span = texelFetch(uExtent, at, 0);
+  int shownMark = markOf(shown.r);
+  int spanMark = markOf(span.r);
+  bool spanCan = (spanMark & ${marks.selected | marks.hovered}) != 0;
+  bool shownCan = (shownMark & ${marks.selected | marks.hovered}) != 0 &&
+    (shownMark & ${marks.seeThrough}) == 0;
+  if (spanCan || shownCan) {
+    bool spanEdge = false;
+    bool shownEdge = false;
+    for (int step = 1; step <= 4; step += 1) {
+      if (step > uOutline) break;
+      for (int side = 0; side < 4; side += 1) {
+        ivec2 way = side == 0 ? ivec2(-1, 0) : side == 1 ? ivec2(1, 0) : side == 2 ? ivec2(0, -1) : ivec2(0, 1);
+        ivec2 next = at + way * step;
+        if (next.x < 0 || next.y < 0 || next.x >= uSize.x || next.y >= uSize.y) continue;
+        if (spanCan && texelFetch(uExtent, next, 0).r != span.r) spanEdge = true;
+        if (shownCan) {
+          vec4 beside = texelFetch(uPick, next, 0);
+          bool veiled = (markOf(beside.r) & ${marks.seeThrough}) != 0 && beside.g < shown.g;
+          if (beside.r != shown.r && !veiled) shownEdge = true;
+        }
+      }
+    }
+    bool isMarked = (spanEdge && (spanMark & ${marks.selected}) != 0) ||
+      (shownEdge && (shownMark & ${marks.selected}) != 0);
+    if (isMarked) color = vec4(1.0, 106.0 / 255.0, 43.0 / 255.0, 1.0);
+    else if (spanEdge || shownEdge) color = vec4(1.0);
+  }
+  if (uCrosshair) {
+    ivec2 middle = ivec2(uSize.x / 2, uSize.y - 1 - uSize.y / 2);
+    ivec2 away = at - middle;
+    int arm = 6 * uCrosshairScale;
+    bool across = abs(away.x) <= arm && away.y > -uCrosshairScale && away.y <= 0;
+    bool upright = abs(away.y) <= arm && away.x >= 0 && away.x < uCrosshairScale;
+    if (across || upright) color = uCrosshairColor;
+  }
+  oColor = color;
+}`;
+
+function createPrograms(gl: WebGL2RenderingContext) {
+  const world = createProgram(gl, worldVertex, worldFragment);
+  const span = createProgram(gl, worldVertex, spanFragment);
+  const composite = createProgram(gl, screenVertex, compositeFragment);
+  return world && span && composite ? { world, span, composite } : null;
 }
 
 const near = 0.5;

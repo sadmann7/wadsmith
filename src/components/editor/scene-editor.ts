@@ -961,7 +961,7 @@ const sceneEditor = definePrimitive({
           width,
           height,
         );
-        element.dataset.renderer = target?.kind;
+        if (target) element.dataset.renderer = target.kind;
         const stopStore = store.subscribe(scheduleDraw);
         const stopCamera = context.options().camera?.subscribe(scheduleDraw);
         const stopDraft = context
