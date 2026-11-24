@@ -588,11 +588,14 @@ const sceneEditor = definePrimitive({
           const current = store.get().map;
           if (!current || !standable(current, snapped)) return;
           moved = snapped.x !== thing.x || snapped.y !== thing.y;
-          draft((next) =>
-            next.things.some((item) => item.id === thing.id)
+          draft((next) => {
+            const now = next.things.find((item) => item.id === thing.id);
+            return now &&
+              standable(next, snapped) &&
+              (now.x !== snapped.x || now.y !== snapped.y)
               ? updateThing(next, thing.id, snapped)
-              : next,
-          );
+              : next;
+          });
         },
         onEnd: (end, canceled) => {
           stopDrag = undefined;
