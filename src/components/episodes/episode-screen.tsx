@@ -112,6 +112,7 @@ import {
 import { type CheckContext, validateMap } from "@/lib/map/validate";
 import { readWadAssets } from "@/lib/wad/assets";
 import { compileEpisode, compileMap } from "@/lib/wad/compile";
+import { customThingsOf } from "@/lib/wad/custom-things";
 import { decompileMap } from "@/lib/wad/decompile";
 import {
   type GameFile,
@@ -185,7 +186,11 @@ export function EpisodeScreen() {
     [iwad],
   );
   const context = React.useMemo<CheckContext>(
-    () => ({ game: iwad?.game, names }),
+    () => ({
+      game: iwad?.game,
+      names,
+      custom: customThingsOf(iwad ? texturesOf(iwad).resources : []),
+    }),
     [iwad, names],
   );
   const currentContext = React.useEffectEvent(() => context);

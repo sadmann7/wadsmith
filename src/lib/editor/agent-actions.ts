@@ -431,7 +431,11 @@ export const agentActions: AgentAction[] = [
         result: {
           errors: of("error"),
           warnings: of("warning"),
-          balance: mapBalance(map, choice(args, "skill", skills, "medium")),
+          balance: mapBalance(
+            map,
+            choice(args, "skill", skills, "medium"),
+            context.custom,
+          ),
         },
       };
     },

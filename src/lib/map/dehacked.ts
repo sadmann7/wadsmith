@@ -1,4 +1,9 @@
-import { spriteNames, stateFrames, vanillaThings } from "./doom-info";
+import {
+  spriteNames,
+  stateFrames,
+  vanillaHealth,
+  vanillaThings,
+} from "./doom-info";
 
 export type CustomCategory = "enemy" | "item" | "decor";
 
@@ -9,6 +14,7 @@ export interface CustomThing {
   radius: number;
   height: number;
   category: CustomCategory;
+  health: number;
   // Its first frame's sprite and frame letter, like "SP00A".
   sprite: string | null;
   // Whether its frames run MBF21 code pointers, which the engine skips below
@@ -205,6 +211,11 @@ export function parseDehacked(...patches: string[]): CustomThing[] {
         radius: fixedOf(thing.get("width")) ?? vanilla?.[2] ?? 20,
         height: fixedOf(thing.get("height")) ?? vanilla?.[3] ?? 16,
         category,
+        // Most of info.c's other things start at 1000, and a slot a patch adds
+        // past them at 0.
+        health:
+          numberOf(thing.get("hit points")) ??
+          (vanilla ? (vanillaHealth[vanilla[0]] ?? 1000) : 0),
         sprite: state === null ? null : spriteOf(state),
         isMbf21:
           number > vanillaThings.length

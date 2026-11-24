@@ -1,5 +1,5 @@
 import type { CheckedIssue } from "@/lib/map/checks";
-import type { GameMap, Thing } from "@/lib/map/types";
+import type { GameMap, Thing, ThingCategory } from "@/lib/map/types";
 
 import { thingCatalog } from "@/lib/map/catalog";
 import { atLeast } from "@/lib/map/complevel";
@@ -88,6 +88,16 @@ export function thingLabel(
   if (thing.kind !== "custom") return thingCatalog[thing.kind].label;
   const type = thing.type ?? 0;
   return custom.get(type)?.name ?? `Thing ${type}`;
+}
+
+// A custom thing is what its patch makes it, and scenery when nothing added
+// numbers it.
+export function thingCategory(
+  thing: Pick<Thing, "kind" | "type">,
+  custom: CustomThings,
+): ThingCategory {
+  if (thing.kind !== "custom") return thingCatalog[thing.kind].category;
+  return custom.get(thing.type ?? 0)?.category ?? "decor";
 }
 
 // The numbers the engine knows without a patch, like Boom's pushers and

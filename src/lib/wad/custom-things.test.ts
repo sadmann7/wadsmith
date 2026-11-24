@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import type { GameMap } from "@/lib/map/types";
 
+import { mapBalance } from "@/lib/map/balance";
+import { checkMap } from "@/lib/map/checks";
 import { addThing, changeThings, duplicateThings } from "@/lib/map/edit";
+import { soundReach } from "@/lib/map/sound";
 import { parseMapFile, serializeMap } from "@/lib/map/storage";
 import { testMap } from "@/lib/map/test-map";
 
@@ -12,6 +15,7 @@ import {
   customThingWarnings,
   modLumps,
   resourceSprites,
+  thingCategory,
   thingLabel,
 } from "./custom-things";
 import { readLumps } from "./inspect";
@@ -44,6 +48,101 @@ describe("custom things", () => {
       "Plasma Zombie",
     );
     expect(thingLabel({ kind: "custom", type: 5 }, things)).toBe("Thing 5");
+  });
+
+  it("judges a custom thing by what its patch makes it", () => {
+    const things = customThingsOf([mod]);
+    expect(thingCategory({ kind: "custom", type: 20001 }, things)).toBe(
+      "enemy",
+    );
+    expect(thingCategory({ kind: "custom", type: 5 }, things)).toBe("decor");
+    expect(thingCategory({ kind: "imp" }, things)).toBe("enemy");
+  });
+
+  it("wakes, counts and balances custom monsters like stock ones", () => {
+    const custom = customThingsOf([mod]);
+    const map: GameMap = {
+      ...testMap,
+      things: testMap.things.map((thing) =>
+        thing.id === "imp-1"
+          ? {
+              id: thing.id,
+              kind: "custom",
+              type: 20001,
+              x: thing.x,
+              y: thing.y,
+              angle: 0,
+            }
+          : thing,
+      ),
+    };
+    const open = { doorsOpen: true };
+    expect(soundReach(map, "sector-1", open).woken).toEqual(["zombieman-1"]);
+    expect(soundReach(map, "sector-1", { ...open, custom }).woken).toEqual([
+      "zombieman-1",
+      "imp-1",
+    ]);
+    expect(mapBalance(map, "medium").enemies).toBe(1);
+    expect(mapBalance(map, "medium", custom).enemies).toBe(2);
+  });
+
+  it("balances a custom monster by its hit points", () => {
+    const tough = customThingsOf([
+      packWad([
+        {
+          name: "DEHACKED",
+          data: encoder.encode(
+            "Thing 151 (Brute)\nID # = 20001\nBits = COUNTKILL\nHit points = 4000\n",
+          ),
+        },
+      ]),
+    ]);
+    const crowd: GameMap = {
+      ...testMap,
+      things: [
+        ...testMap.things.filter((thing) => thing.kind === "player"),
+        ...Array.from({ length: 3 }, (_, index) => ({
+          id: `brute-${index}`,
+          kind: "custom" as const,
+          type: 20001,
+          x: 704,
+          y: 160,
+          angle: 0,
+        })),
+      ],
+    };
+    expect(tough.get(20001)?.health).toBe(4000);
+    expect(mapBalance(crowd, "medium", tough).enemies).toBe(3);
+    expect(mapBalance(crowd, "medium", tough).ammoShort).toBeGreaterThan(100);
+    expect(mapBalance(crowd, "medium").ammoShort).toBe(0);
+  });
+
+  it("asks a deathmatch map with custom monsters for an exit", () => {
+    const arena: GameMap = {
+      ...testMap,
+      lines: {},
+      things: [
+        ...[64, 96, 128, 160].map((x) => ({
+          id: `dm-${x}`,
+          kind: "deathmatch-start" as const,
+          x,
+          y: 64,
+          angle: 0,
+        })),
+        {
+          id: "monster",
+          kind: "custom",
+          type: 20001,
+          x: 704,
+          y: 160,
+          angle: 0,
+        },
+      ],
+    };
+    const ids = (custom?: ReturnType<typeof customThingsOf>) =>
+      checkMap(arena, { custom }).map((issue) => issue.id);
+    expect(ids()).not.toContain("no-exit");
+    expect(ids(customThingsOf([mod]))).toContain("no-exit");
   });
 
   it("carries a mod's patch, sprites and sounds", () => {
