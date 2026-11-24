@@ -31,12 +31,14 @@ import {
 } from "@/lib/engine/mouse-capture";
 import { hostPeer, type RoomPlayer } from "@/lib/engine/room";
 import {
+  type Cheats,
   doomKeys,
   type GameFiles,
   type GameStatus,
   keysByCode,
   maxVolume,
   type NetworkMode,
+  noCheats,
   type Screen,
   screenSize,
   type Skill,
@@ -134,6 +136,7 @@ export function GameView({
   const [fullscreen, setFullscreen] = React.useState(false);
   const [sound, setSound] = React.useState(loadSound);
   const [screen, setScreen] = React.useState(loadScreen);
+  const [cheats, setCheats] = React.useState(noCheats);
 
   React.useEffect(() => {
     const update = () => setFullscreen(Boolean(document.fullscreenElement));
@@ -176,6 +179,8 @@ export function GameView({
           setScreen(next);
           saveScreen(next);
         }}
+        cheats={cheats}
+        onCheatsChange={setCheats}
         fullscreen={fullscreen}
         onRestart={() => setRun((value) => value + 1)}
         onToggleFullscreen={toggleFullscreen}
@@ -262,6 +267,8 @@ type GameSessionProps = Omit<Level, "map"> & {
   onSoundChange: (sound: SoundSettings) => void;
   screen: Screen;
   onScreenChange: (screen: Screen) => void;
+  cheats: Cheats;
+  onCheatsChange: (cheats: Cheats) => void;
   fullscreen: boolean;
   onRestart: () => void;
   onToggleFullscreen: () => void;
@@ -290,6 +297,8 @@ function GameSession({
   onSoundChange,
   screen,
   onScreenChange,
+  cheats: chosenCheats,
+  onCheatsChange,
   fullscreen,
   onRestart,
   onToggleFullscreen,
@@ -303,6 +312,10 @@ function GameSession({
   lastLevel,
 }: GameSessionProps) {
   const canEdit = !coop && !episode && Boolean(map && onAddNote && onEditSpot);
+  // Only the editor's own solo playtest takes cheats, never a co-op room or a
+  // published map.
+  const cheats = canEdit ? chosenCheats : noCheats;
+  const cheatsRef = React.useRef(cheats);
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   const gameRef = React.useRef<GameClient | null>(null);
   const heldKeys = React.useRef(new HeldKeys());
@@ -371,6 +384,12 @@ function GameSession({
     gameRef.current?.setSound(sound);
   }, [sound]);
 
+  React.useEffect(() => {
+    cheatsRef.current = cheats;
+    gameRef.current?.setCheats(cheats);
+    if (cheats.god || cheats.noclip) recorderRef.current?.markCheated();
+  }, [cheats]);
+
   React.useEffect(() => () => clearTimeout(noteTimer.current), []);
 
   React.useEffect(() => {
@@ -389,6 +408,9 @@ function GameSession({
     // maps the editor isn't showing.
     const recorder = map && !episode && !files ? new RunRecorder() : null;
     recorderRef.current = recorder;
+    if (cheatsRef.current.god || cheatsRef.current.noclip) {
+      recorder?.markCheated();
+    }
     const showStall = (peers: number[]) =>
       setStall((current) =>
         current.peers.join() === peers.join()
@@ -545,6 +567,7 @@ function GameSession({
         coop?.listen((from, data) => running.receive(from, data));
         gameRef.current = client;
         client.setHeld(gameHeldRef.current);
+        client.setCheats(cheatsRef.current);
         for (const key of heldKeys.current.keys()) client.key(true, key);
       })
       .catch((loadError: Error) => {
@@ -797,8 +820,10 @@ function GameSession({
         episode={episode !== null}
         exit={gameExit}
         screen={screen}
+        cheats={canEdit ? cheats : null}
         onSoundChange={onSoundChange}
         onScreenChange={onScreenChange}
+        onCheatsChange={onCheatsChange}
         onRestart={onRestart}
         onToggleFullscreen={onToggleFullscreen}
         onExit={requestExit}
@@ -867,6 +892,7 @@ function GameSession({
             }
             exit={gameExit}
             canEdit={canEdit}
+            cheats={canEdit ? cheats : null}
             noteOpen={noteSpot !== null}
             mouseMode={capture.mode}
             noteSaved={noteSaved}

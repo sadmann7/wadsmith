@@ -31,6 +31,7 @@ const run = (tics: number | null, id = "run-1"): PlaytestRun => ({
           secrets: 1,
           totalSecrets: 1,
         },
+  cheated: false,
 });
 
 describe("playtest results", () => {
@@ -47,6 +48,7 @@ describe("playtest results", () => {
     expect(keepRun(null, run(null)).best).toBeNull();
     expect(keepRun(slower, run(null)).best).toBe(3000);
     expect(keepRun(slower, run(100), false).best).toBe(3000);
+    expect(keepRun(slower, { ...run(100), cheated: true }).best).toBe(3000);
   });
 
   it("suggests a par on the game's five-second steps", () => {
@@ -91,6 +93,10 @@ describe("playtest results", () => {
   it("reads a stored playtest and refuses what isn't one", () => {
     const saved = keepRun(null, run(3000));
     expect(parsePlaytest(JSON.parse(JSON.stringify(saved)))).toEqual(saved);
+    const older = JSON.parse(
+      JSON.stringify({ run: { ...saved.run, cheated: undefined } }),
+    );
+    expect(parsePlaytest(older)?.run.cheated).toBe(false);
     expect(parsePlaytest(null)).toBeNull();
     expect(parsePlaytest({ run: { ...run(1), paths: "x" } })).toBeNull();
     expect(

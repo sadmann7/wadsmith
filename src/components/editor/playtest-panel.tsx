@@ -80,6 +80,11 @@ export function PlaytestPanel({
           </React.Fragment>
         ))}
       </dl>
+      {run.cheated ? (
+        <p className="m-0 text-muted-foreground">
+          Played with cheats, so it sets no best time.
+        </p>
+      ) : null}
       {run.players.length > 1 ? (
         <ul className="m-0 flex list-none flex-wrap gap-x-3 gap-y-1 p-0">
           {run.players.map((player) => (

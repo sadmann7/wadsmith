@@ -1,11 +1,13 @@
 import { NetInbox } from "./net-inbox";
 import {
+  type Cheats,
   type CreateDoom,
   type DoomGame,
   type EngineIwad,
   type GameFiles,
   type GameStatus,
   type NetworkMode,
+  noCheats,
   type Screen,
   screenSize,
   type Skill,
@@ -48,6 +50,7 @@ type DoomWorkerRequest =
   | { type: "display" }
   | { type: "sound"; sound: SoundLevel }
   | { type: "pause"; paused: boolean }
+  | { type: "cheats"; cheats: Cheats }
   | { type: "recycle"; buffer: ArrayBuffer };
 
 type DoomWorkerResponse =
@@ -69,6 +72,7 @@ let stage: "load" | "start" | "run" = "load";
 let sound: SoundLevel = { volume: 8, muted: false };
 let paused = false;
 let networked = false;
+let cheats = noCheats;
 const heldKeys = new Set<number>();
 
 const errors: string[] = [];
@@ -92,6 +96,9 @@ scope.addEventListener("message", (event) => {
   } else if (request.type === "pause") {
     paused = request.paused && !networked;
     game?.setPaused(paused);
+  } else if (request.type === "cheats") {
+    cheats = request.cheats;
+    game?.setCheats(cheats);
   } else if (request.type === "launch") {
     game?.launchNetGame();
   } else {
@@ -142,6 +149,7 @@ async function start(request: Extract<DoomWorkerRequest, { type: "start" }>) {
   stage = "run";
   game = running;
   if (paused) running.setPaused(true);
+  running.setCheats(cheats);
   for (const key of heldKeys) running.key(true, key);
   if (request.audioPort) {
     running.setSound(sound.volume, sound.muted);

@@ -25,6 +25,8 @@ interface DoomModule {
   _wadsmith_key(pressed: number, key: number): void;
   _wadsmith_mouse_turn(amount: number): void;
   _wadsmith_set_paused(paused: number): void;
+  _wadsmith_set_cheats(cheats: number): void;
+  _wadsmith_cheats(): number;
   _wadsmith_game_state(): number;
   _wadsmith_game_tic(): number;
   _wadsmith_game_map(): number;
@@ -275,6 +277,16 @@ export const doomKeys = {
   run: 0x8c,
 } as const;
 
+/** The cheats a solo playtest can turn on. */
+export interface Cheats {
+  god: boolean;
+  noclip: boolean;
+}
+
+export const noCheats: Cheats = { god: false, noclip: false };
+
+const cheatFlags = { noclip: 1, god: 2 } as const;
+
 export const keysByCode: Record<string, number> = {
   ArrowUp: doomKeys.up,
   ArrowDown: doomKeys.down,
@@ -382,6 +394,22 @@ export class DoomGame {
 
   setPaused(paused: boolean) {
     this.module._wadsmith_set_paused(paused ? 1 : 0);
+  }
+
+  // A network game ignores them.
+  setCheats(cheats: Cheats) {
+    this.module._wadsmith_set_cheats(
+      (cheats.god ? cheatFlags.god : 0) |
+        (cheats.noclip ? cheatFlags.noclip : 0),
+    );
+  }
+
+  cheats(): Cheats {
+    const flags = this.module._wadsmith_cheats();
+    return {
+      god: (flags & cheatFlags.god) !== 0,
+      noclip: (flags & cheatFlags.noclip) !== 0,
+    };
   }
 
   setSound(volume: number, muted: boolean) {
