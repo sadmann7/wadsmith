@@ -96,7 +96,10 @@ export function createWebglRenderer(
   };
   const restore = () => {
     const next = inner && buildRenderer(canvas, gl, inner.width, inner.height);
-    if (!next) return;
+    if (!next) {
+      console.warn("The 3D view couldn't set WebGL up again.");
+      return;
+    }
     inner = next;
     isLost = false;
     onRestored?.();
@@ -117,9 +120,8 @@ export function createWebglRenderer(
       return current().focal;
     },
     sizeFor: (...args) => current().sizeFor(...args),
-    resize: (...args) => {
-      if (!isLost) current().resize(...args);
-    },
+    // A lost context ignores the calls, and keeps the size for its restore.
+    resize: (...args) => current().resize(...args),
     render: (...args) => {
       if (!isLost) current().render(...args);
     },
