@@ -404,15 +404,33 @@ describe("drawing a room against the wall of the room it's in, around obstacles"
   });
 
   it("still cuts round a room with a pillar that it's drawn round", () => {
-    for (const corners of [
-      box(-64, -64, 832, 576),
-      box(0, 0, 1024, 576),
-      box(0, 0, 832, 512),
-    ]) {
-      const drawn = drawRoom(pillarMap, corners, {}, 1);
+    const around = drawRoom(pillarMap, box(-200, -200, 1100, 700), {}, 1).map;
+    for (const [base, corners] of [
+      [pillarMap, box(-64, -64, 832, 576)],
+      [pillarMap, box(0, 0, 1024, 576)],
+      [pillarMap, box(0, 0, 832, 512)],
+      [around, box(-100, -100, 1500, 650)],
+    ] as const) {
+      const drawn = drawRoom(base, corners, {}, 1);
       expect(problems(drawn.map)).toEqual([]);
+      expect(
+        drawn.map.sectors.find((room) => room.id === "hall")?.holes,
+      ).toHaveLength(1);
       expect(() => compileMap(drawn.map)).not.toThrow();
     }
+  });
+
+  it("cuts no room when it crosses a room with a pillar it covers", () => {
+    const corners = [
+      { x: -64, y: -64 },
+      { x: 832, y: -64 },
+      { x: 832, y: 400 },
+      { x: 640, y: 576 },
+      { x: -64, y: 576 },
+    ];
+    const drawn = drawRoom(pillarMap, corners, {}, 1);
+    const plain = addRoom(pillarMap, corners, {}, 1);
+    expect(drawn.map).toEqual(joinWalls(plain.map, [plain.id]));
   });
 
   it("cuts the outer room round a bridge that only reaches a pillar", () => {
