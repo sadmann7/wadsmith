@@ -65,6 +65,8 @@ import {
   updateThings,
   wallNear,
 } from "@/lib/map/edit";
+import { featuredMaps } from "@/lib/map/featured";
+import { partKeys, selectedParts, transformParts } from "@/lib/map/fragment";
 import { freedoomFlats, freedoomWalls } from "@/lib/map/freedoom-textures";
 import {
   containerOf,
@@ -84,6 +86,7 @@ import {
   triggerChoices,
   triggersFor,
 } from "@/lib/map/lines";
+import { blankMap, starterMap } from "@/lib/map/starter-map";
 import { parseMapFile, serializeMap } from "@/lib/map/storage";
 import { describeSurface, paintSurface, surfaceKey } from "@/lib/map/surfaces";
 import { islandMap, testMap } from "@/lib/map/test-map";
@@ -1244,6 +1247,92 @@ describe("validateMap", () => {
     expect(checkMap(low)).toContainEqual(
       expect.objectContaining({ id: "door-low:sector-4", severity: "warning" }),
     );
+  });
+
+  it("warns about doors stretched deeper than a door is built", () => {
+    const keys = partKeys(
+      starterMap,
+      selectedParts(starterMap, [], "sector-3"),
+    );
+    const shrunk = defined(
+      transformParts(starterMap, keys, { kind: "scale", factor: 0.5 }, 32),
+    );
+    const { errors, warnings } = inspectMap(shrunk);
+    expect(errors).toEqual([]);
+    expect(
+      warnings.filter((issue) => issue.id.startsWith("door-deep")),
+    ).toEqual([
+      expect.objectContaining({
+        id: "door-deep:sector-4",
+        message:
+          "Arena door: the door is 144 deep. A door is usually 16 to 32, and no more than 96.",
+      }),
+      expect.objectContaining({ id: "door-deep:sector-7" }),
+    ]);
+    expect(checkMap(shrunk)).toContainEqual(
+      expect.objectContaining({
+        id: "door-deep:sector-4",
+        severity: "warning",
+      }),
+    );
+  });
+
+  it("measures a wide door's depth across it, not along a split face", () => {
+    const door = (
+      split: { x: number; y: number },
+      slope: number,
+      wrapped = false,
+    ): GameMap => ({
+      ...blankMap,
+      vertices: {
+        a: { x: 0, y: 0 },
+        b: split,
+        c: { x: 256, y: slope },
+        d: { x: 256, y: slope + 16 },
+        e: { x: 0, y: 16 },
+        f: { x: 0, y: -128 },
+        g: { x: split.x, y: -128 },
+        h: { x: 256, y: -128 },
+        i: { x: 256, y: 160 },
+        j: { x: 0, y: 160 },
+        k: { x: -64, y: -128 },
+        l: { x: -64, y: 16 },
+      },
+      sectors: [
+        {
+          ...testMap.sectors[0],
+          id: "west",
+          vertices: wrapped
+            ? ["k", "g", "b", "a", "e", "l"]
+            : ["f", "g", "b", "a"],
+        },
+        { ...testMap.sectors[0], id: "east", vertices: ["g", "h", "c", "b"] },
+        { ...testMap.sectors[0], id: "south", vertices: ["e", "d", "i", "j"] },
+        {
+          ...testMap.sectors[3],
+          id: "door",
+          vertices: ["a", "b", "c", "d", "e"],
+          door: { opensBy: "use", closes: true, texture: "DOOR3" },
+        },
+      ],
+      things: [{ id: "player-1", kind: "player", x: 64, y: -64, angle: 0 }],
+      switches: [],
+    });
+    for (const map of [
+      door({ x: 128, y: 0 }, 0),
+      door({ x: 128, y: 33 }, 64),
+    ]) {
+      const { errors, warnings } = inspectMap(map);
+      expect(errors).toEqual([]);
+      expect(warnings.map((issue) => issue.id)).not.toContain("door-deep:door");
+    }
+  });
+
+  it("finds no deep doors in the starter and featured maps", () => {
+    for (const map of [starterMap, ...featuredMaps.map((item) => item.map)]) {
+      const ids = inspectMap(map).warnings.map((issue) => issue.id);
+      expect(ids.filter((id) => id.startsWith("door-deep"))).toEqual([]);
+    }
   });
 
   it("rejects a switch on a wall that became an opening", () => {

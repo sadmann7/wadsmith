@@ -35,6 +35,7 @@ import {
   onSegment,
   pointInPolygon,
   pointInSector,
+  pointSegmentDistance,
   sectorAt,
   sectorDetails,
   sectorEdges,
@@ -79,6 +80,8 @@ interface Wall {
   from: string;
   to: string;
 }
+
+export const doorDepth = { min: 16, max: 32 };
 
 export function activeLineActions(map: GameMap) {
   const owners = wallOwners(map);
@@ -654,6 +657,9 @@ function meets(a: Box, b: Box) {
 const playerHeight = 56;
 const doorClearance = 4;
 
+// Hand-made maps, Doom's own among them, build doors up to 80 deep on purpose.
+const deepDoor = 96;
+
 function validateDoors(
   map: GameMap,
   issues: MapIssue[],
@@ -680,6 +686,14 @@ function validateDoors(
     if (neighbors.some((neighbor) => neighbor.door)) {
       add("door-pair", "a door can't touch another door.");
       continue;
+    }
+    const depth = measureDoorDepth(map, sector, owners);
+    if (depth > deepDoor) {
+      add(
+        "door-deep",
+        `the door is ${Math.ceil(depth)} deep. A door is usually ${doorDepth.min} to ${doorDepth.max}, and no more than ${deepDoor}.`,
+        warnings,
+      );
     }
     const opening =
       Math.min(...neighbors.map((neighbor) => neighbor.ceiling)) -
@@ -746,6 +760,56 @@ function validateDoors(
       add("switch-target", "the room it opens is not a door.");
     }
   }
+}
+
+// For each pair of rooms on different faces of a door, the furthest a corner
+// on one side is from the other side's walls, taken from the side that gives
+// less. Walls on opposite faces run opposite ways around the door's loop.
+function measureDoorDepth(
+  map: GameMap,
+  sector: Sector,
+  owners: Map<string, Sector[]>,
+) {
+  const sides = new Map<Sector, [Point, Point][]>();
+  for (const { from, to } of sectorEdges(sector)) {
+    for (const owner of owners.get(wallKey(from, to)) ?? []) {
+      if (owner === sector) continue;
+      const walls = sides.get(owner) ?? [];
+      walls.push([map.vertices[from], map.vertices[to]]);
+      sides.set(owner, walls);
+    }
+  }
+  const rooms = [...sides.values()];
+  let depth = 0;
+  for (let first = 0; first < rooms.length; first += 1) {
+    for (let second = first + 1; second < rooms.length; second += 1) {
+      if (!facesApart(rooms[first], rooms[second])) continue;
+      const gap = Math.min(
+        wallReach(rooms[first], rooms[second]),
+        wallReach(rooms[second], rooms[first]),
+      );
+      depth = Math.max(depth, gap);
+    }
+  }
+  return depth;
+}
+
+function facesApart(first: [Point, Point][], second: [Point, Point][]) {
+  return first.some(([a, b]) =>
+    second.some(
+      ([c, d]) => (b.x - a.x) * (d.x - c.x) + (b.y - a.y) * (d.y - c.y) < 0,
+    ),
+  );
+}
+
+function wallReach(from: [Point, Point][], to: [Point, Point][]) {
+  return Math.max(
+    ...from
+      .flat()
+      .map((point) =>
+        Math.min(...to.map(([a, b]) => pointSegmentDistance(point, a, b))),
+      ),
+  );
 }
 
 // A closed door can't be crossed, and its track walls are out of reach.

@@ -158,6 +158,20 @@ export function segmentsIntersect(a: Point, b: Point, c: Point, d: Point) {
   );
 }
 
+export function pointSegmentDistance(point: Point, a: Point, b: Point) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const length = dx * dx + dy * dy;
+  const t =
+    length === 0
+      ? 0
+      : Math.max(
+          0,
+          Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / length),
+        );
+  return Math.hypot(point.x - a.x - t * dx, point.y - a.y - t * dy);
+}
+
 // A point strictly inside a simple polygon: the corner furthest left is
 // convex, so the middle of its ear is inside unless another corner pokes into
 // the ear, and then the way to the corner poking in deepest is.
