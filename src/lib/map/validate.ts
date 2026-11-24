@@ -183,25 +183,8 @@ export function inspectMap(map: GameMap, context: CheckContext = {}) {
     });
   }
   if (issues.length === 0) {
-    for (const thing of map.things) {
-      const room = sectorAt(map, thing);
-      if (room?.door) {
-        (getIsPlayerStart(thing.kind) ? issues : warnings).push({
-          id: `in-door:${thing.id}`,
-          message: `${thing.id} is inside a closed door.`,
-          target: thing.id,
-        });
-      }
-      if (!room) {
-        issues.push({
-          id: `outside:${thing.id}`,
-          message: `${thing.id} is outside every room.`,
-          target: thing.id,
-        });
-      }
-    }
+    validateStanding(map, issues, warnings, context.custom);
     layers.things = issues.map((issue) => issue.id);
-    if (issues.length === 0) validateReach(map, warnings, context.custom);
   }
   return { errors: issues, warnings, layers };
 }
@@ -217,14 +200,51 @@ export function newProblems(before: GameMap, after: GameMap): MapIssue[] {
 }
 
 export function issuesSince(before: GameMap) {
-  const old = inspectMap(before);
+  const old = inspectStanding(before);
   return (after: GameMap) => {
-    const found = inspectMap(after);
+    const found = inspectStanding(after);
     return {
       errors: freshIssues(old.errors, found.errors),
       warnings: freshIssues(old.warnings, found.warnings),
     };
   };
+}
+
+function validateStanding(
+  map: GameMap,
+  issues: MapIssue[],
+  warnings: MapIssue[],
+  custom?: CustomThings,
+) {
+  for (const thing of map.things) {
+    const room = sectorAt(map, thing);
+    if (room?.door) {
+      (getIsPlayerStart(thing.kind) ? issues : warnings).push({
+        id: `in-door:${thing.id}`,
+        message: `${thing.id} is inside a closed door.`,
+        target: thing.id,
+      });
+    }
+    if (!room) {
+      issues.push({
+        id: `outside:${thing.id}`,
+        message: `${thing.id} is outside every room.`,
+        target: thing.id,
+      });
+    }
+  }
+  if (issues.length === 0) validateReach(map, warnings, custom);
+}
+
+// Where things stand is still checked on a map whose only errors leave its
+// rooms sound, such as one with no player start yet.
+function inspectStanding(map: GameMap) {
+  const found = inspectMap(map);
+  if (found.layers.things || found.layers.rooms?.length !== 0) return found;
+  const errors: MapIssue[] = [];
+  const warnings = [...found.warnings];
+  validateStanding(map, errors, warnings);
+  return { errors: [...found.errors, ...errors], warnings };
 }
 
 function freshIssues(old: MapIssue[], found: MapIssue[]): MapIssue[] {

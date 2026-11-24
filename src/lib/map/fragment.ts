@@ -38,9 +38,15 @@ export type Transform =
   | { kind: "mirror"; axis: "horizontal" | "vertical" }
   | { kind: "scale"; factor: number };
 
+export type DoorMove = "straight" | "bent";
+
 // How far a resize carries joined doors: with the far wall each meets kept
-// straight, with only the doors named, alone, or not at all.
-export type DoorCarry = "walls" | ReadonlySet<string> | "doors" | "none";
+// straight, alone, not at all, or only the doors named, each as it says.
+export type DoorCarry =
+  | "walls"
+  | "doors"
+  | "none"
+  | ReadonlyMap<string, DoorMove>;
 
 // A piece read back from text, and the map it says it was copied from.
 export interface CopiedPiece {
@@ -433,11 +439,12 @@ export function transformParts(
   );
   const carried =
     transform.kind === "scale" && carry !== "none"
-      ? carryDoors(
-          map,
-          landed,
-          (id) =>
-            carry === "walls" || (typeof carry !== "string" && carry.has(id)),
+      ? carryDoors(map, landed, (id) =>
+          carry === "walls"
+            ? "straight"
+            : carry === "doors"
+              ? "bent"
+              : carry.get(id),
         )
       : {};
   if (!carried) return null;
@@ -494,57 +501,85 @@ export function transformParts(
   return changed ? mergeCorners(next, corners) : null;
 }
 
-// Runs the steps carrying doors as far as the map allows. A door whose far
-// wall can't stay straight bends it instead, and when that fails too the doors
-// stay behind and only stretch, named in `stranded`. Without a clean result it
-// gives the one with the fewest new errors, then new warnings.
+// Runs the steps carrying doors as far as the map allows. Each door in turn is
+// carried with the far wall it meets kept straight, or bent, or left behind to
+// stretch, whichever adds the fewest new errors, then new warnings, in that
+// order on a tie. Doors left behind are named in `stranded`.
 export function transformKeepingDoors(
   map: GameMap,
   keys: string[],
   steps: Transform[],
   grid: number,
-): { map: GameMap | null; problems: MapIssue[]; stranded: string[] } {
-  let best: {
-    map: GameMap | null;
-    problems: MapIssue[];
-    warnings: MapIssue[];
-    carry: DoorCarry;
-  } = { map: null, problems: [], warnings: [], carry: "walls" };
-  const better = (errors: number, warnings: number) =>
-    !best.map ||
-    errors < best.problems.length ||
-    (errors === best.problems.length && warnings < best.warnings.length);
+): {
+  map: GameMap | null;
+  problems: MapIssue[];
+  warnings: MapIssue[];
+  stranded: string[];
+} {
   const newIssues = issuesSince(map);
-  const attempt = (carry: DoorCarry) => {
+  const run = (carry: DoorCarry) => {
     let next: GameMap | null = map;
     for (const step of steps) {
       next = next && transformParts(next, keys, step, grid, carry);
     }
-    if (!next) return false;
+    if (!next) return null;
     const { errors, warnings } = newIssues(next);
-    if (better(errors.length, warnings.length)) {
-      best = { map: next, problems: errors, warnings, carry };
-    }
-    return errors.length === 0 && warnings.length === 0;
+    return { map: next, problems: errors, warnings };
   };
+  const rank = (result: ReturnType<typeof run>) =>
+    result
+      ? [result.problems.length, result.warnings.length]
+      : [Infinity, Infinity];
+  const better = (
+    result: ReturnType<typeof run>,
+    than: ReturnType<typeof run>,
+  ) => {
+    const [errors, warnings] = rank(result);
+    const [fewestErrors, fewestWarnings] = rank(than);
+    return (
+      errors < fewestErrors ||
+      (errors === fewestErrors && warnings < fewestWarnings)
+    );
+  };
+  const carried = run("walls");
   const moved = Object.fromEntries(keys.map((key) => [key, map.vertices[key]]));
   const doors = steps.some((step) => step.kind === "scale")
     ? map.sectors
         .filter((sector) => sector.door && farFace(sector.vertices, moved))
         .map((sector) => sector.id)
     : [];
-  const result = () => ({
-    map: best.map,
-    problems: best.problems,
-    stranded: best.map && best.carry === "none" ? doors : [],
-  });
-  if (attempt("walls") || doors.length === 0) return result();
-  const straight = new Set(doors.filter((id) => attempt(new Set([id]))));
-  if (straight.size > 0 && straight.size < doors.length && attempt(straight)) {
-    return result();
+  const empty = { map: null, problems: [], warnings: [] };
+  if (
+    doors.length === 0 ||
+    (carried?.problems.length === 0 && carried.warnings.length === 0)
+  ) {
+    return { ...(carried ?? empty), stranded: [] };
   }
-  if (!attempt("doors")) attempt("none");
-  return result();
+  let plan = new Map<string, DoorMove>(doors.map((door) => [door, "straight"]));
+  let best = carried;
+  for (const door of doors) {
+    for (const move of ["bent", "stays"] as const) {
+      const next = new Map(plan);
+      if (move === "bent") next.set(door, move);
+      else next.delete(door);
+      const tried = run(next);
+      if (!better(tried, best)) continue;
+      plan = next;
+      best = tried;
+    }
+  }
+  for (const fallback of [
+    new Map(doors.map((door) => [door, "bent" as const])),
+    new Map<string, DoorMove>(),
+  ]) {
+    if (best) break;
+    best = run(fallback);
+    plan = fallback;
+  }
+  return {
+    ...(best ?? empty),
+    stranded: best ? doors.filter((door) => !plan.has(door)) : [],
+  };
 }
 
 // `origin` names the map a piece was copied from, so a paste can tell its own
@@ -591,7 +626,7 @@ export function parseFragment(text: string): CopiedPiece | null {
 function carryDoors(
   map: GameMap,
   landed: Record<string, Point>,
-  straight: (door: string) => boolean,
+  move: (door: string) => DoorMove | undefined,
 ): Record<string, Point> | null {
   const carried: Record<string, Point> = {};
   const doorCorners = new Set(
@@ -605,7 +640,8 @@ function carryDoors(
   };
   const corner = (id: string) => map.vertices[id];
   for (const door of map.sectors) {
-    if (!door.door) continue;
+    const how = door.door && move(door.id);
+    if (!how) continue;
     const face = farFace(door.vertices, landed);
     if (!face) continue;
     const { chain, before, after } = face;
@@ -636,7 +672,7 @@ function carryDoors(
       x: Math.round(moveX - along * (b.x - a.x)),
       y: Math.round(moveY - along * (b.y - a.y)),
     };
-    if (!straight(door.id)) continue;
+    if (how === "bent") continue;
     for (const end of [chain[0], chain[chain.length - 1]]) {
       for (const room of map.sectors) {
         if (room.door) continue;
