@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { defined } from "@/lib/defined";
 
-import type { LineAction } from "./types";
+import type { GameMap, LineAction } from "./types";
 
 import {
   addThing,
@@ -112,6 +112,58 @@ describe("links from a line to what it acts on", () => {
       map.things.find((thing) => thing.kind === "teleport-destination"),
     );
     expect(sectorAt(map, spot)?.id).toBe("yard");
+  });
+
+  it("faces a destination down the gallery it lands in", () => {
+    const gallery: GameMap = {
+      ...testMap,
+      vertices: {
+        ...testMap.vertices,
+        g1: { x: 0, y: 512 },
+        g2: { x: 640, y: 512 },
+        g3: { x: 640, y: 576 },
+        g4: { x: 0, y: 576 },
+      },
+      sectors: [
+        ...testMap.sectors,
+        {
+          ...testMap.sectors[0],
+          id: "gallery",
+          vertices: ["g1", "g2", "g3", "g4"],
+        },
+      ],
+    };
+    const map = setLineTarget(
+      updateLine(gallery, openWall, { action: action("teleport") }),
+      openWall,
+      "gallery",
+    );
+    const spot = defined(
+      map.things.find((thing) => thing.kind === "teleport-destination"),
+    );
+    expect(sectorAt(map, spot)?.id).toBe("gallery");
+    expect([0, 180]).toContain(spot.angle);
+  });
+
+  it("keeps a hand-set facing when the teleporter is aimed again", () => {
+    const map = aimed("teleport");
+    const turned = {
+      ...map,
+      things: map.things.map((thing) =>
+        thing.kind === "teleport-destination"
+          ? { ...thing, angle: 135 }
+          : thing,
+      ),
+    };
+    const again = setLineTarget(
+      setLineTarget(turned, openWall, null),
+      openWall,
+      "sector-3",
+    );
+    expect(
+      again.things.find((thing) => thing.kind === "teleport-destination")
+        ?.angle,
+    ).toBe(135);
   });
 
   it("places nothing in a door, which is shut", () => {
