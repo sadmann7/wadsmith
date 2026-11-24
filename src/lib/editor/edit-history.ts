@@ -63,10 +63,10 @@ export function createEditHistory({ limit, groupDelay }: EditHistoryOptions) {
       done.push({ undo, redo, group, batch, at: now });
       if (done.length > limit) {
         const oldest = done.shift();
-        const next = done[0];
-        // A batch's oldest step joins the next one rather than drop out of
+        const next = done.find((step) => step.batch === oldest?.batch);
+        // A batch's oldest step joins its next one rather than drop out of
         // what undoing the batch takes back.
-        if (oldest?.batch && next?.batch === oldest.batch) {
+        if (oldest?.batch && next) {
           next.redo = combinePatches(oldest.redo, next.redo);
           next.undo = combinePatches(next.undo, oldest.undo);
         }
@@ -91,21 +91,19 @@ export function createEditHistory({ limit, groupDelay }: EditHistoryOptions) {
       return next;
     },
     // Takes back every step of one batch, wherever it sits in the history.
-    // Nothing changes if that would bring a room back on lost corners.
+    // Nothing changes if none of it is left, or if that would bring a room
+    // back on lost corners.
     undoBatch(batch: string, current: GameMap) {
       const steps = done.filter((step) => step.batch === batch).toReversed();
-      if (steps.length === 0) {
-        const kept = undone.filter((step) => step.batch !== batch);
-        undone.splice(0, undone.length, ...kept);
-        return current;
-      }
+      const undoneSteps = undone.filter((step) => step.batch === batch);
+      if (steps.length === 0 && undoneSteps.length === 0) return undefined;
       const next = steps.reduce(
         (map, step) => keepCorners(map, applyPatch(map, step.undo)),
         current,
       );
       if (getHasLostCorners(current, next)) return undefined;
       for (const step of steps) done.splice(done.indexOf(step), 1);
-      undone.length = 0;
+      for (const step of undoneSteps) undone.splice(undone.indexOf(step), 1);
       return next;
     },
     canUndo: () => done.length > 0,

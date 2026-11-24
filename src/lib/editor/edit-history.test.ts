@@ -184,6 +184,53 @@ describe("an edit history", () => {
     expect(imp(back)).toBe(14);
     expect(history.undoBatch("agent-1", back)).toEqual(testMap);
   });
+
+  it("keeps a batch whole when hand edits push its steps past the limit", () => {
+    const history = createEditHistory({ limit: 3, groupDelay: 60_000 });
+    const first = updateThing(testMap, "imp-1", { x: 800 });
+    history.record(testMap, first, { batch: "agent-1" });
+    const mine = updateThing(first, "player-1", { x: 120 });
+    history.record(first, mine);
+    const second = updateSector(mine, "sector-3", { light: 90 });
+    history.record(mine, second, { batch: "agent-1" });
+    let map = second;
+    for (let x = 10; x < 12; x += 1) {
+      const next = updateThing(map, "player-1", { x });
+      history.record(map, next);
+      map = next;
+    }
+    const undone = defined(history.undoBatch("agent-1", map));
+    expect(imp(undone)).toBe(imp(testMap));
+    expect(undone.sectors[2].light).toBe(testMap.sectors[2].light);
+    expect(player(undone)).toBe(11);
+  });
+
+  it("won't undo a batch none of whose steps are left", () => {
+    const history = createEditHistory({ limit: 2, groupDelay: 60_000 });
+    const first = updateThing(testMap, "imp-1", { x: 800 });
+    history.record(testMap, first, { batch: "agent-1" });
+    let map = first;
+    for (let x = 10; x < 12; x += 1) {
+      const next = updateThing(map, "player-1", { x });
+      history.record(map, next);
+      map = next;
+    }
+    expect(history.undoBatch("agent-1", map)).toBeUndefined();
+    history.clear();
+    expect(history.undoBatch("agent-1", map)).toBeUndefined();
+  });
+
+  it("keeps the redo of a hand edit when undoing a batch", () => {
+    const history = createEditHistory({ limit: 10, groupDelay: 60_000 });
+    const first = updateThing(testMap, "imp-1", { x: 800 });
+    history.record(testMap, first, { batch: "agent-1" });
+    const mine = updateThing(first, "player-1", { x: 120 });
+    history.record(first, mine);
+    const back = defined(history.undo(mine));
+    const undone = defined(history.undoBatch("agent-1", back));
+    expect(imp(undone)).toBe(imp(testMap));
+    expect(player(defined(history.redo(undone)))).toBe(120);
+  });
 });
 
 function imp(map: GameMap) {
