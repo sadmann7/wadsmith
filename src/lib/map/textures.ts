@@ -1,5 +1,11 @@
 import type { GameMap } from "./types";
 
+import { doorTextures, switchTextures } from "./catalog";
+import {
+  freedoomFlats,
+  freedoomWalls,
+  middleTextures,
+} from "./freedoom-textures";
 import { wallOwners, wallPartTexture } from "./geometry";
 
 export type TextureUse = Map<string, number>;
@@ -14,6 +20,15 @@ export interface TextureNames {
   textures: readonly string[];
   custom: readonly string[];
 }
+
+// Freedoom's names, for when the game's own aren't loaded.
+export const freedoomNames: TextureNames = {
+  walls: freedoomWalls,
+  flats: freedoomFlats,
+  middles: middleTextures,
+  textures: [...middleTextures, ...doorTextures, ...switchTextures],
+  custom: [],
+};
 
 export function flatUse(map: GameMap) {
   const use: TextureUse = new Map();
