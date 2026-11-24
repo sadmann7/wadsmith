@@ -228,7 +228,7 @@ interface WallProps {
   from: string;
   to: string;
 }
-interface LabelProps {
+interface CaptionProps {
   value: string;
   corners: string[];
 }
@@ -1954,9 +1954,9 @@ export const mapEditor = definePrimitive({
         connectingAttrs(state),
       ),
     }),
-    label: slot<LabelProps>({
+    caption: slot<CaptionProps>({
       props: { value: "string", corners: "list" },
-      selects: selects<MapEditorState, unknown, LabelProps>({
+      selects: selects<MapEditorState, unknown, CaptionProps>({
         ...readsNothing,
         positions: ({ props }) => props.corners,
         moving: whole,
@@ -1972,7 +1972,7 @@ export const mapEditor = definePrimitive({
           }),
         };
       },
-      live: live<MapEditorState, unknown, LabelProps>((state, { props }) => {
+      live: live<MapEditorState, unknown, CaptionProps>((state, { props }) => {
         const at = labelPoint(state, props.corners);
         return { style: `left:${at.x}px;top:${at.y}px` };
       }),
@@ -2362,7 +2362,7 @@ const parts = createParts(mapEditor, {
   port: "button",
   wire: "line",
   connecting: "line",
-  label: "div",
+  caption: "div",
   marker: "div",
   camera: "button",
   findCamera: "button",
@@ -2384,7 +2384,7 @@ export const MapPort = React.memo(parts.Port);
 export const MapWire = React.memo(parts.Wire);
 export const MapConnecting = parts.Connecting;
 export const MapFit = parts.Fit;
-export const MapLabel = parts.Label;
+export const MapCaption = parts.Caption;
 export const MapMarker = parts.Marker;
 export const MapCamera = parts.Camera;
 export const MapFindCamera = parts.FindCamera;
