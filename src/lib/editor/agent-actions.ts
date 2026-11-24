@@ -434,7 +434,7 @@ export const agentActions: AgentAction[] = [
   {
     name: "listCatalog",
     description:
-      "The names an action takes: thing kinds, wall textures, flats, line actions or sector effects. Walls and flats are every one the game has, a page at a time.",
+      "The names an action takes: thing kinds, wall textures, flats, line actions or sector effects. Walls and flats are every one the game has, a page at a time, and walls also names the see-through textures for the middle of an open line.",
     reads: true,
     params: [
       {
@@ -1762,19 +1762,17 @@ function catalog(of: string, args: Args, context: CheckContext) {
     }));
   }
   const names = context.names ?? freedoomNames;
-  const found = (list: readonly string[]) => {
-    const search =
-      args.search === undefined ? "" : text(args, "search").toUpperCase();
-    return page(
-      list.filter((name) => name.toUpperCase().includes(search)),
-      args,
-      namePageSize,
-      namePageLimit,
-    );
-  };
+  const search =
+    args.search === undefined ? "" : text(args, "search").trim().toUpperCase();
+  const matching = (list: readonly string[]) =>
+    list.filter((name) => name.toUpperCase().includes(search));
+  const found = (list: readonly string[]) =>
+    page(matching(list), args, namePageSize, namePageLimit);
   if (of === "walls") {
+    const solid = new Set(names.walls);
     return {
       ...found(names.walls),
+      seeThrough: matching(names.middles.filter((name) => !solid.has(name))),
       doors: doorTextures,
       switches: switchTextures,
     };

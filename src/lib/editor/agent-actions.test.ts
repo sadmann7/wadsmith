@@ -538,6 +538,11 @@ describe("agent actions", () => {
       items: ["NUKAGE1", "NUKAGE2", "NUKAGE3"],
       sky: "F_SKY1",
     });
+    const grates = runAgentAction(testMap, "listCatalog", {
+      of: "walls",
+      search: " midgrat ",
+    }).result;
+    expect(grates).toMatchObject({ total: 0, seeThrough: ["MIDGRATE"] });
     const custom = runAgentAction(testMap, "listCatalog", ["flats"], {
       names: { ...freedoomNames, flats: ["MYFLAT"] },
     }).result;
