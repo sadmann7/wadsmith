@@ -541,6 +541,30 @@ describe("cutting a room that touches a pillar or room inside it at a corner", (
     }
   });
 
+  it("cuts along a pillar that touches the room's wall at a corner", () => {
+    const diamond = [
+      { x: 0, y: 128 },
+      { x: 64, y: 64 },
+      { x: 128, y: 128 },
+      { x: 64, y: 192 },
+    ];
+    const inner = drawRoom(room.map, diamond, {}, 1);
+    const touching = defined(makePillar(inner.map, inner.id));
+    const line = [
+      { x: 64, y: 64 },
+      { x: 200, y: 96 },
+      { x: 128, y: 128 },
+    ];
+    for (const points of [line, line.toReversed()]) {
+      const split = defined(drawLines(touching, points, 1));
+      expect(problems(split.map)).toEqual([]);
+      expect(split.map.sectors).toHaveLength(2);
+      expect(sectorAt(split.map, { x: 64, y: 128 })).toBeUndefined();
+      expect(sectorAt(split.map, { x: 120, y: 100 })?.id).not.toBe(room.id);
+      expect(() => compileMap(split.map)).not.toThrow();
+    }
+  });
+
   it("cuts round a room drawn against its wall when a pillar touches a room inside it", () => {
     const inner = drawRoom(pillared, box(160, 160, 224, 224), {}, 1);
     const drawn = drawRoom(inner.map, box(320, 0, 448, 64), {}, 1);
