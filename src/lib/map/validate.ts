@@ -871,8 +871,8 @@ function doorlessMessage({ front, back }: ReturnType<typeof describeLine>) {
 
 // A map set to one engine's compatibility can't use what a later one added,
 // and a Boom special on a wall nothing can cross or press from behind does
-// nothing. Lines are numbered only once every room is whole, since numbering
-// reads the walls.
+// nothing. Lines are named by their rooms only once every room is whole, since
+// naming reads the walls.
 function validateLevels(
   map: GameMap,
   issues: MapIssue[],

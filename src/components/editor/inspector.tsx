@@ -644,7 +644,10 @@ export function LineInspector({
                 ? {
                     kind: "wall",
                     use: wallUse(map),
-                    context: lineRooms(line),
+                    context:
+                      line.back && line.back !== line.front
+                        ? `${lineRooms(line)}, ${line.sector.name} side`
+                        : lineRooms(line),
                   }
                 : undefined
             }
