@@ -1640,7 +1640,7 @@ export function EditorScreen({
       {pickedSurfaces.length > 1
         ? `${pickedSurfaces.length} surfaces picked. Shift-click adds or removes one.`
         : sceneInfo
-          ? `${sceneInfo.thing ? thingLabel(sceneInfo.thing, customThings) : sceneInfo.label}${sceneInfo.texture ? ` · ${sceneInfo.texture}` : ""}${sceneInfo.height !== null ? ` · height ${sceneInfo.height}` : ""}`
+          ? `Selected: ${sceneInfo.thing ? thingLabel(sceneInfo.thing, customThings) : sceneInfo.label}${sceneInfo.texture ? ` · ${sceneInfo.texture}` : ""}${sceneInfo.height !== null ? ` · height ${sceneInfo.height}` : ""}`
           : "Click a floor, ceiling, wall or thing. Drag a wall to move its texture."}
     </p>
   );
@@ -2491,8 +2491,12 @@ export function EditorScreen({
                       </h2>
                       <p className="text-sm text-muted-foreground">
                         Build Doom maps in your browser and play them on the
-                        spot. This starter map is ready, so play it, then change
-                        anything and play again.
+                        spot.{" "}
+                        {map.sectors.length === 0
+                          ? "Draw a room to start, place a player start in it, then play it."
+                          : canPlay
+                            ? "This map is ready, so play it, then change anything and play again."
+                            : "Fix what the map check lists, then play it."}
                       </p>
                       <div className="flex gap-2">
                         <Button
@@ -3087,12 +3091,16 @@ export function EditorScreen({
               </Menu>
             ) : null}
             <span className="max-2xl:hidden">
-              {Object.keys(map.vertices).length} vertices · {lineCount} lines
+              {countOf(Object.keys(map.vertices).length, "vertex", "vertices")}{" "}
+              · {countOf(lineCount, "line", "lines")}
             </span>
             <span>
-              {map.sectors.length} sectors · {map.things.length} things
+              {countOf(map.sectors.length, "sector", "sectors")} ·{" "}
+              {countOf(map.things.length, "thing", "things")}
             </span>
-            <span ref={pointerStatus}>X - Y -</span>
+            <span ref={pointerStatus} title="Doom coordinates, Y grows north">
+              X - Y -
+            </span>
             <Menu>
               <MenuTrigger
                 className={buttonVariants({
@@ -3632,4 +3640,8 @@ function downloadFile(name: string, data: BlobPart, type: string) {
   link.download = name;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+function countOf(count: number, one: string, many: string) {
+  return `${count} ${count === 1 ? one : many}`;
 }

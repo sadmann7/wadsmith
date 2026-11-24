@@ -1,3 +1,4 @@
+import type { Box } from "@/lib/map/geometry";
 import type { WallPart } from "@/lib/map/surfaces";
 import type {
   GameMap,
@@ -12,12 +13,16 @@ import type {
 import { defined } from "@/lib/defined";
 import { doorTrackTexture, thingCatalog } from "@/lib/map/catalog";
 import {
+  boxOf,
+  interiorPoint,
   loopEdges,
   loopPolygon,
+  pointInSector,
   sectorAt,
   sectorDetails,
   sectorEdges,
   sectorLoops,
+  sectorPolygon,
   signedArea,
   wallKey,
   wallOwners,
@@ -660,8 +665,64 @@ export function renderScene(
 export function startCamera(map: GameMap): Camera {
   const player = map.things.find((thing) => thing.kind === "player");
   if (player) return { x: player.x, y: player.y, angle: player.angle };
-  const first = Object.values(map.vertices)[0] ?? { x: 0, y: 0 };
-  return { ...first, angle: 0 };
+  const room = map.sectors.find(
+    (sector) => !sector.door && sector.vertices.length >= 3,
+  );
+  if (!room) {
+    const first = Object.values(map.vertices)[0] ?? { x: 0, y: 0 };
+    return { ...first, angle: 0 };
+  }
+  const box = boxOf(sectorPolygon(map, room));
+  const at = spotInside(map, room, box);
+  const [from, to] = loopEdges(room.vertices)
+    .map(({ from, to }) => [map.vertices[from], map.vertices[to]])
+    .toSorted(
+      ([a, b], [c, d]) =>
+        Math.hypot(d.x - c.x, d.y - c.y) - Math.hypot(b.x - a.x, b.y - a.y),
+    )[0];
+  const side = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
+  return {
+    ...at,
+    angle: (Math.atan2(at.y - side.y, side.x - at.x) * 180) / Math.PI,
+  };
+}
+
+const spotSteps = 16;
+const wallInset = 16;
+
+function spotInside(map: GameMap, room: Sector, box: Box): Point {
+  const middle = {
+    x: (box.left + box.right) / 2,
+    y: (box.top + box.bottom) / 2,
+  };
+  if (pointInSector(map, room, middle)) return middle;
+  const width = (box.right - box.left) / spotSteps;
+  const height = (box.bottom - box.top) / spotSteps;
+  const spots = Array.from({ length: spotSteps ** 2 }, (_, index) => ({
+    x: box.left + ((index % spotSteps) + 0.5) * width,
+    y: box.top + (Math.floor(index / spotSteps) + 0.5) * height,
+  })).toSorted(
+    (a, b) =>
+      Math.hypot(a.x - middle.x, a.y - middle.y) -
+      Math.hypot(b.x - middle.x, b.y - middle.y),
+  );
+  const nearWalls = loopEdges(room.vertices).flatMap(({ from, to }) => {
+    const a = map.vertices[from];
+    const b = map.vertices[to];
+    const length = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    const nx = ((a.y - b.y) / length) * wallInset;
+    const ny = ((b.x - a.x) / length) * wallInset;
+    const x = (a.x + b.x) / 2;
+    const y = (a.y + b.y) / 2;
+    return [
+      { x: x + nx, y: y + ny },
+      { x: x - nx, y: y - ny },
+    ];
+  });
+  return (
+    [...spots, ...nearWalls].find((spot) => pointInSector(map, room, spot)) ??
+    interiorPoint(sectorPolygon(map, room))
+  );
 }
 
 const eyeHeight = 41;
