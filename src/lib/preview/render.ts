@@ -31,6 +31,7 @@ import {
   gameWallShade,
   type Picture,
   type SceneAssets,
+  textureHeightOf,
 } from "@/lib/wad/assets";
 
 import { withMovers } from "./movers";
@@ -205,7 +206,7 @@ export function renderScene(
   const { width, height, colors, pick, extent, reach, focal } = target;
   const depths = target.depth;
   const { shades } = assets;
-  const map = withMovers(sourceMap, opened);
+  const map = withMovers(sourceMap, opened, textureHeightOf(assets));
   const skyPicture = sky ? assets.texture(sky) : null;
   const heavens = skyPicture && skyPicture.width > 1 ? skyPicture : null;
   colors.fill(skyColor);
