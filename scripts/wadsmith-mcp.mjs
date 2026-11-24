@@ -1,7 +1,10 @@
 // The wadsmith MCP server: lets an agent outside the page build a map with
 // the editor's own actions, over standard input and output.
 //   node --experimental-transform-types scripts/wadsmith-mcp.mjs [--map file]
+//     [--mod file]...
 // With --map, the file is opened when it exists and saved after every edit.
+// Each --mod adds a WAD or DEHACKED patch whose numbered things the map can
+// place, and a built WAD carries the ones it uses.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import { dirname, resolve } from "node:path";
@@ -30,6 +33,7 @@ const { createMcpServer } = await import("@/lib/editor/mcp-server");
 const { parseMapFile } = await import("@/lib/map/storage");
 const { readWadAssets } = await import("@/lib/wad/assets");
 const { defaultGame } = await import("@/lib/engine/game");
+const { packWad } = await import("@/lib/wad/pack");
 
 // Freedoom's textures, once pnpm setup:engine has fetched it, so the map
 // uses only names the game has.
@@ -40,6 +44,29 @@ const context = existsSync(iwad)
 
 const flag = process.argv.indexOf("--map");
 const autosave = flag > 0 ? process.argv[flag + 1] : undefined;
+
+const modPaths = process.argv.flatMap((arg, index) =>
+  arg === "--mod" ? [process.argv[index + 1]] : [],
+);
+// A mod's textures replace the game's own list, so a build needs the IWAD.
+if (modPaths.length > 0 && !existsSync(iwad)) {
+  process.stderr.write("--mod needs Freedoom. Run pnpm setup:engine first.\n");
+  process.exit(1);
+}
+const mods = modPaths.map((path) => {
+  if (!path || !existsSync(resolve(path))) {
+    process.stderr.write(`--mod: no file ${path ?? ""}\n`);
+    process.exit(1);
+  }
+  const data = new Uint8Array(readFileSync(resolve(path)));
+  return /\.(deh|bex)$/i.test(path)
+    ? packWad([{ name: "DEHACKED", data }])
+    : data;
+});
+const textures =
+  mods.length > 0
+    ? { iwad: new Uint8Array(readFileSync(iwad)), resources: mods }
+    : undefined;
 const files = {
   read: (path) => readFileSync(resolve(path), "utf8"),
   write: (path, data) => {
@@ -51,6 +78,7 @@ const server = createMcpServer({
   files,
   autosave,
   context,
+  textures,
   map:
     autosave && existsSync(resolve(autosave))
       ? parseMapFile(files.read(autosave))
