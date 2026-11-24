@@ -852,7 +852,7 @@ export const agentActions: AgentAction[] = [
   {
     name: "setLineAction",
     description:
-      "Gives a wall an action, like a lift, a remote door, a teleporter or the level's exit. Actions that move a room need the room as their target. For a locked door, give the wall in front of a door the kind door-raise with the trigger door and a key.",
+      "Gives a wall an action, like a lift, a remote door, a teleporter or the level's exit. Actions that move a room need the room as their target. To lock a whole door, give makeDoor a key instead. To lock one side, give the wall in front of the door the kind door-raise with the trigger door and a key.",
     params: [
       wall,
       {
