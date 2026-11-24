@@ -201,6 +201,35 @@ describe("agent actions", () => {
     });
   });
 
+  it("starts a room drawn against Exit at Exit's heights", () => {
+    const corners = [
+      [976, 256],
+      [1168, 256],
+      [1168, 384],
+      [976, 384],
+    ];
+    const drawn = runAgentAction(starterMap, "addRoom", [corners]);
+    expect(drawn.map.sectors.at(-1)).toMatchObject({
+      floor: -32,
+      ceiling: 96,
+      wallTexture: "TEKWALL4",
+    });
+    const raised = runAgentAction(starterMap, "addRoom", [
+      { corners, ceiling: 128 },
+    ]);
+    expect(raised.map.sectors.at(-1)).toMatchObject({
+      floor: -32,
+      ceiling: 128,
+    });
+    const stepped = runAgentAction(starterMap, "addRoom", [
+      { corners, floor: 112 },
+    ]);
+    expect(stepped.map.sectors.at(-1)).toMatchObject({
+      floor: 112,
+      ceiling: 240,
+    });
+  });
+
   it("splits a ring round a room inside, or refuses and changes nothing", () => {
     const { map } = build(blank, [
       [
