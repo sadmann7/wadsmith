@@ -66,12 +66,13 @@ describe("soundReach", () => {
   });
 
   it("stops at a floor once it has raised to the ceiling", () => {
-    const raising = corridorMover(testMap, "floor-raise");
+    // The door, made a plain room here, would otherwise stay shut at -16.
+    const raising = corridorMover(
+      updateSector(testMap, "sector-4", { door: undefined }),
+      "floor-raise",
+    );
     expect(soundReach(raising, "sector-1").rooms.get("sector-2")).toBe("heard");
-    const raised = soundReach(raising, "sector-1", {
-      doorsOpen: true,
-      floorsMoved: true,
-    });
+    const raised = soundReach(raising, "sector-1", { floorsMoved: true });
     expect([...raised.rooms.keys()]).toEqual(["sector-1"]);
     expect(raised.woken).toEqual([]);
   });

@@ -17,7 +17,14 @@ const shown = new WeakMap<GameMap, Map<string, GameMap>>();
 // the lowest ceiling beside it, and floors and ceilings rest where Doom's
 // EV_DoFloor, EV_DoPlat and EV_DoCeiling stop them.
 export function withMovers(map: GameMap, opened: readonly string[]): GameMap {
-  const key = opened.toSorted().join(",");
+  const kinds = moverKinds(map);
+  const wanted = new Set(opened);
+  const open = new Set(
+    map.sectors
+      .filter((sector) => wanted.has(sector.id) && moves(sector, kinds))
+      .map((sector) => sector.id),
+  );
+  const key = [...open].toSorted().join(",");
   let cached = shown.get(map);
   if (!cached) {
     cached = new Map();
@@ -25,13 +32,15 @@ export function withMovers(map: GameMap, opened: readonly string[]): GameMap {
   }
   const known = cached.get(key);
   if (known) return known;
-  const open = new Set(opened.filter((id) => getIsMover(map, id)));
   const beside = open.size > 0 ? neighbours(map) : null;
-  const kinds = moverKinds(map);
   const moved = {
     ...map,
     sectors: map.sectors.map((sector) => {
-      const around = (open.has(sector.id) && beside?.get(sector.id)) || [];
+      // Doom reads the heights beside a mover with every door still shut.
+      const around = (
+        (open.has(sector.id) && beside?.get(sector.id)) ||
+        []
+      ).map((item) => (item.door ? { ...item, ceiling: item.floor } : item));
       if (sector.door) {
         const ceiling =
           around.length > 0
@@ -51,9 +60,7 @@ export function withMovers(map: GameMap, opened: readonly string[]): GameMap {
 // action moves.
 export function getIsMover(map: GameMap, id: string) {
   const sector = map.sectors.find((item) => item.id === id);
-  return Boolean(
-    sector && (sector.door || moverKinds(map).has(sector.tag ?? 0)),
-  );
+  return Boolean(sector && moves(sector, moverKinds(map)));
 }
 
 // The mover a surface belongs to. A wall stands for the mover behind
@@ -93,6 +100,10 @@ const moverKindList = [
 ] as const satisfies readonly LineActionKind[];
 
 type MoverKind = (typeof moverKindList)[number];
+
+function moves(sector: Sector, kinds: Map<number, MoverKind>) {
+  return Boolean(sector.door) || kinds.has(sector.tag ?? 0);
+}
 
 function worked(sector: Sector, kind: MoverKind, around: Sector[]): Sector {
   const floors = around.map((item) => item.floor);
