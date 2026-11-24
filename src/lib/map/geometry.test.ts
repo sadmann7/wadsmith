@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { GameMap, Point, Sector } from "./types";
 
 import {
+  clearView,
   pointInPolygon,
   pointInSector,
   roomPoint,
@@ -254,25 +255,61 @@ describe("roomPoint", () => {
   });
 });
 
-function shape(outline: number[][], holes: number[][][] = []): GameMap {
-  const vertices: Record<string, Point> = {};
-  const loop = (points: number[][], prefix: string) =>
-    points.map(([x, y], index) => {
-      vertices[`${prefix}${index}`] = { x, y };
-      return `${prefix}${index}`;
-    });
-  return {
-    vertices,
-    sectors: [
-      {
-        ...room("room", loop(outline, "o")),
-        holes: holes.map((hole, index) => loop(hole, `h${index}-`)),
-      },
-    ],
-    things: [],
-    switches: [],
-  };
-}
+describe("clearView", () => {
+  it.each([
+    [{ x: 64, y: 32 }, 0],
+    [{ x: 448, y: 32 }, 180],
+  ])("looks down a long gallery from %o", (at, angle) => {
+    const gallery = shape([
+      [0, 0],
+      [512, 0],
+      [512, 64],
+      [0, 64],
+    ]);
+    expect(clearView(gallery, gallery.sectors[0], at)).toBe(angle);
+  });
+
+  it("turns north or south with y running south", () => {
+    const tower = shape([
+      [0, 0],
+      [64, 0],
+      [64, 512],
+      [0, 512],
+    ]);
+    expect(clearView(tower, tower.sectors[0], { x: 32, y: 448 })).toBe(90);
+    expect(clearView(tower, tower.sectors[0], { x: 32, y: 64 })).toBe(270);
+  });
+
+  it("looks along the walkway round a pillar, not into it", () => {
+    const map = shape(
+      [
+        [0, 0],
+        [512, 0],
+        [512, 512],
+        [0, 512],
+      ],
+      [
+        [
+          [64, 64],
+          [448, 64],
+          [448, 448],
+          [64, 448],
+        ],
+      ],
+    );
+    expect(clearView(map, map.sectors[0], { x: 32, y: 256 })).toBe(90);
+  });
+
+  it("keeps the first of equal views", () => {
+    const map = shape([
+      [0, 0],
+      [256, 0],
+      [256, 64],
+      [0, 64],
+    ]);
+    expect(clearView(map, map.sectors[0], { x: 128, y: 32 })).toBe(0);
+  });
+});
 
 function clearance(map: GameMap, point: Point) {
   const sector = map.sectors[0];
@@ -298,6 +335,26 @@ function clearance(map: GameMap, point: Point) {
       }),
     ),
   );
+}
+
+function shape(outline: number[][], holes: number[][][] = []): GameMap {
+  const vertices: Record<string, Point> = {};
+  const loop = (points: number[][], prefix: string) =>
+    points.map(([x, y], index) => {
+      vertices[`${prefix}${index}`] = { x, y };
+      return `${prefix}${index}`;
+    });
+  return {
+    vertices,
+    sectors: [
+      {
+        ...room("room", loop(outline, "o")),
+        holes: holes.map((hole, index) => loop(hole, `h${index}-`)),
+      },
+    ],
+    things: [],
+    switches: [],
+  };
 }
 
 function room(id: string, corners: string[]): Sector {
