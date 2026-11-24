@@ -45,11 +45,16 @@ interface Pending {
   at: number;
 }
 
-// Whether the card has something to show: a question, a step to undo, or a
-// stopped request to close.
-export function getHasAgentCard({ question, request }: AgentSessionState) {
+// Whether the card has something to show: a question, a step still on the
+// map, or a stopped request to close.
+export function getHasAgentCard(
+  { question, request }: AgentSessionState,
+  done: ReadonlySet<number>,
+) {
   return Boolean(
-    question || (request && (request.steps.length > 0 || request.stopped)),
+    question ||
+    (request &&
+      (getAgentStepsOnMap(request.steps, done).length > 0 || request.stopped)),
   );
 }
 

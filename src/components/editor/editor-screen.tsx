@@ -1974,7 +1974,7 @@ export function EditorScreen({
     agentSession.getSnapshot,
     () => idleAgentSession,
   );
-  const hasAgentCard = getHasAgentCard(agentState);
+  const hasAgentCard = getHasAgentCard(agentState, undoable.done);
   const showWelcome = !welcomed && !hasAgentCard;
   const showMapDock = visibleLayout === "map" && showDock && !narrow;
   const agentAsk = agentState.question

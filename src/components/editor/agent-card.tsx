@@ -42,7 +42,7 @@ export function AgentCard({
       />
     );
   }
-  if (!request || !getHasAgentCard(session)) return null;
+  if (!request || !getHasAgentCard(session, doneEdits)) return null;
   const working = status === "working";
   const steps = getAgentStepsOnMap(request.steps, doneEdits);
   const changes = steps.length;

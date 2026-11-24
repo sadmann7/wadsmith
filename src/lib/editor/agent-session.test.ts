@@ -6,7 +6,11 @@ import { defined } from "@/lib/defined";
 import { updateThing } from "@/lib/map/edit";
 import { testMap } from "@/lib/map/test-map";
 
-import { createAgentSession, getAgentStepsOnMap } from "./agent-session";
+import {
+  createAgentSession,
+  getAgentStepsOnMap,
+  getHasAgentCard,
+} from "./agent-session";
 import { createEditHistory } from "./edit-history";
 
 const step = (action: string, args: unknown[] = []): AgentAction => ({
@@ -174,6 +178,26 @@ describe("an agent session", () => {
     map = defined(history.undoBatch("agent-1", map));
     expect(map).toEqual(testMap);
     expect(labels()).toEqual([]);
+  });
+
+  it("hides the card once every edit is undone, until a redo", () => {
+    const session = createAgentSession();
+    const history = createEditHistory({ limit: 10, groupDelay: 500 });
+    void session.allow(step("updateThing", [1]));
+    const moved = updateThing(testMap, "imp-1", { x: 1 });
+    const id = history.record(testMap, moved, { batch: "agent-1" });
+    session.record("updateThing", [], summary, id);
+    const hasCard = () =>
+      getHasAgentCard(session.getSnapshot(), history.getDoneIds());
+    expect(hasCard()).toBe(true);
+    const back = defined(history.undo(moved));
+    expect(hasCard()).toBe(false);
+    history.redo(back);
+    expect(hasCard()).toBe(true);
+    history.clear();
+    expect(hasCard()).toBe(false);
+    session.stop();
+    expect(hasCard()).toBe(true);
   });
 
   it("leaves a step whose edit changed nothing off the list", () => {
