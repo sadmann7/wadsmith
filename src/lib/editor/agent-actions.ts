@@ -237,13 +237,14 @@ const customType: AgentParam = {
   name: "type",
   type: "number",
   description:
-    "A custom thing's editor number, from listCatalog of things, in place of kind.",
+    "A custom thing's editor number, from listCatalog of things, with kind custom.",
 };
-const thingKindParam = optional({
+const thingKindParam: AgentParam = {
   name: "kind",
   type: "string",
-  description: "The thing. listCatalog of things names them.",
-});
+  description:
+    "The thing. listCatalog of things names them, and custom takes a type.",
+};
 
 const pageLimit = 50;
 
@@ -2018,19 +2019,23 @@ interface ThingChoice {
 // filter may also ask for every custom thing at once.
 function thingChoice(args: Args, allowsAnyCustom = false): ThingChoice {
   if (args.type === undefined) {
-    return { kind: thingKind(args, "kind", allowsAnyCustom) };
+    const kind = thingKind(args);
+    if (kind === "custom" && !allowsAnyCustom) {
+      throw new Error(
+        `A custom thing needs "type", its editor number. listCatalog of things names them.`,
+      );
+    }
+    return { kind };
   }
   if (args.kind !== undefined && args.kind !== "custom") {
-    throw new Error(
-      `"type" picks a custom thing, so "kind" has to be custom or left out.`,
-    );
+    throw new Error(`"type" picks a custom thing, so "kind" has to be custom.`);
   }
   return { kind: "custom", type: number(args, "type", 1, 32767) };
 }
 
-function thingKind(args: Args, name: string, allowsCustom = false) {
-  const kind = text(args, name) as ThingKind;
-  if (!thingKinds.includes(kind) && !(allowsCustom && kind === "custom")) {
+function thingKind(args: Args) {
+  const kind = text(args, "kind") as ThingKind;
+  if (!thingKinds.includes(kind) && kind !== "custom") {
     throw new Error(
       `No thing "${kind}". listCatalog of things names them, like: ${thingKinds.slice(0, 8).join(", ")}.`,
     );

@@ -314,7 +314,7 @@ describe("custom things by number", () => {
     const placed = runAgentAction(
       map,
       "placeThing",
-      { type: 20002, room: "Start room" },
+      { kind: "custom", type: 20002, room: "Start room" },
       context,
     );
     expect(placed.map.things.at(-1)).toMatchObject({
@@ -324,7 +324,7 @@ describe("custom things by number", () => {
     const added = runAgentAction(
       map,
       "addThing",
-      { type: 20001, x: 64, y: 64 },
+      { kind: "custom", type: 20001, x: 64, y: 64 },
       context,
     );
     expect(added.map.things.at(-1)).toMatchObject({
@@ -339,6 +339,9 @@ describe("custom things by number", () => {
         y: 64,
       }),
     ).toThrow(/custom/);
+    expect(() =>
+      runAgentAction(map, "addThing", { kind: "custom", x: 64, y: 64 }),
+    ).toThrow(/needs "type"/);
     const swapped = runAgentAction(
       map,
       "updateThing",
