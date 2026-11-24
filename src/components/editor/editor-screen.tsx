@@ -1862,7 +1862,9 @@ export function EditorScreen({
       : thing
         ? thingLabel(thing, customThings)
         : line
-          ? `Line ${line.wall}`
+          ? selectedWalls.length > 1
+            ? `${selectedWalls.length} lines`
+            : `Line ${line.wall}`
           : surfaceInfo && !surfaceInfo.thing
             ? surfaceInfo.label
             : placingThings
@@ -1880,21 +1882,23 @@ export function EditorScreen({
           ? tool === "thing"
             ? `Placing ${placingLabel}`
             : "Pick a thing to place"
-          : line
-            ? `${
-                line.back === line.front
-                  ? "Inside a room"
-                  : line.back
-                    ? "Two-sided"
-                    : "One-sided"
-              } · ${line.length} long · ${
-                line.back && line.back !== line.front
-                  ? `${line.front.name} to ${line.back.name}`
-                  : line.front.name
-              }`
-            : sector
-              ? `${sector.door ? "Door" : "Sector"} · ${sectorLoops(sector).flatMap(loopEdges).length} walls`
-              : "Click a room, line or thing on the map";
+          : line && selectedWalls.length > 1
+            ? "Changes apply to every selected line"
+            : line
+              ? `${
+                  line.back === line.front
+                    ? "Inside a room"
+                    : line.back
+                      ? "Two-sided"
+                      : "One-sided"
+                } · ${line.length} long · ${
+                  line.back && line.back !== line.front
+                    ? `${line.front.name} to ${line.back.name}`
+                    : line.front.name
+                }`
+              : sector
+                ? `${sector.door ? "Door" : "Sector"} · ${sectorLoops(sector).flatMap(loopEdges).length} walls`
+                : "Click a room, line or thing on the map";
 
   const play = () => {
     if (canPlay && !buildProblem()) {
