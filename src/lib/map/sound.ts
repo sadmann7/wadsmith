@@ -1,3 +1,4 @@
+import { withMovers } from "@/lib/preview/movers";
 import { type CustomThings, thingCategory } from "@/lib/wad/custom-things";
 
 import type { GameMap, Sector } from "./types";
@@ -16,20 +17,28 @@ export interface SoundReach {
 
 // Where a noise made in one room carries, the way P_RecursiveSound floods it
 // in Doom: through every two-sided line with a gap between the rooms' floors
-// and ceilings, and past a sound-blocking line only once. Doors start shut.
+// and ceilings, and past a sound-blocking line only once. Doors start shut,
+// and lifts and moving floors and ceilings where the map holds them.
 export function soundReach(
-  map: GameMap,
+  source: GameMap,
   from: string,
   {
     doorsOpen = false,
+    floorsMoved = false,
     custom = new Map(),
-  }: { doorsOpen?: boolean; custom?: CustomThings } = {},
+  }: { doorsOpen?: boolean; floorsMoved?: boolean; custom?: CustomThings } = {},
 ): SoundReach {
+  const map = withMovers(
+    source,
+    source.sectors
+      .filter((sector) => (sector.door ? doorsOpen : floorsMoved))
+      .map((sector) => sector.id),
+  );
   const rooms = new Map<string, Hearing>();
   const neighbours = new Map<string, { room: Sector; blocks: boolean }[]>();
   for (const [wall, owners] of wallOwners(map)) {
     const [a, b] = owners;
-    if (!a || !b || a === b || !hasGap(a, b, doorsOpen)) continue;
+    if (!a || !b || a === b || !hasGap(a, b)) continue;
     const blocks = !!map.lines?.[wall]?.soundBlock;
     neighbours.set(a.id, [
       ...(neighbours.get(a.id) ?? []),
@@ -68,8 +77,6 @@ export function soundReach(
   return { rooms, woken, deaf };
 }
 
-function hasGap(a: Sector, b: Sector, doorsOpen: boolean) {
-  const ceiling = (room: Sector) =>
-    room.door && !doorsOpen ? room.floor : room.ceiling;
-  return Math.min(ceiling(a), ceiling(b)) > Math.max(a.floor, b.floor);
+function hasGap(a: Sector, b: Sector) {
+  return Math.min(a.ceiling, b.ceiling) > Math.max(a.floor, b.floor);
 }

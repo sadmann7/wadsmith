@@ -480,7 +480,10 @@ export function EditorScreen({
   const [mapVersion, setMapVersion] = React.useState(0);
   const [fileError, setFileError] = React.useState<string | null>(null);
   const [welcomed, setWelcomed] = React.useState(loadWelcomed);
-  const [sound, setSound] = React.useState<{ doorsOpen: boolean } | null>(null);
+  const [sound, setSound] = React.useState<{
+    doorsOpen: boolean;
+    floorsMoved: boolean;
+  } | null>(null);
   const playButton = React.useRef<HTMLButtonElement>(null);
   const fileInput = React.useRef<HTMLInputElement>(null);
   const [notice, setNotice] = React.useState("");
@@ -1789,7 +1792,9 @@ export function EditorScreen({
     else if (action === "collapseDock") collapseDock(!isDockCollapsed);
     else if (action === "camera") findCameraOnMap();
     else if (action === "sound") {
-      setSound((current) => (current ? null : { doorsOpen: false }));
+      setSound((current) =>
+        current ? null : { doorsOpen: false, floorsMoved: false },
+      );
     } else changeLayout(action as ViewLayout);
   };
 
@@ -2547,7 +2552,13 @@ export function EditorScreen({
                       reach={soundReached}
                       source={soundRoom.name}
                       doorsOpen={sound.doorsOpen}
-                      onDoorsOpenChange={(doorsOpen) => setSound({ doorsOpen })}
+                      floorsMoved={sound.floorsMoved}
+                      onDoorsOpenChange={(doorsOpen) =>
+                        setSound({ ...sound, doorsOpen })
+                      }
+                      onFloorsMovedChange={(floorsMoved) =>
+                        setSound({ ...sound, floorsMoved })
+                      }
                       onClose={() => setSound(null)}
                     />
                   ) : null}
@@ -3612,7 +3623,7 @@ function sceneLabel(keys: Record<EditorShortcut, string>) {
       keys.scenePrevious &&
       `${keyText(keys.sceneNext)} and ${keyText(keys.scenePrevious)} step through surfaces`,
     keys.sceneOpen &&
-      `${keyText(keys.sceneOpen)} opens the door or lift under the pointer`,
+      `${keyText(keys.sceneOpen)} works the door, lift or moving floor under the pointer`,
   ].filter(Boolean);
   return `3D view. Click a surface to select it, and drag a wall or press the arrows to move its texture. ${clauses.join(", ")}.`;
 }
