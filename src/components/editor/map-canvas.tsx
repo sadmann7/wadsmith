@@ -15,11 +15,21 @@ import type { SoundReach } from "@/lib/map/sound";
 import type { GameMap, LineSettings, Point, ThingKind } from "@/lib/map/types";
 
 import { buttonVariants } from "@/components/ui/button";
-import { clearLabels } from "@/lib/editor/map-labels";
+import {
+  clearLabels,
+  estimateLabelWidth,
+  labelPoint,
+} from "@/lib/editor/map-labels";
 import { thingIcons } from "@/lib/editor/thing-icons";
+import { zoomStep } from "@/lib/editor/zoom";
 import { generalizedTrigger, getIsGeneralized } from "@/lib/map/boom";
 import { doorKeyPrefix, switchKeyPrefix, thingKeyPrefix } from "@/lib/map/edit";
-import { paintOrder, wallOwners } from "@/lib/map/geometry";
+import {
+  loopPolygon,
+  paintOrder,
+  roomPoint,
+  wallOwners,
+} from "@/lib/map/geometry";
 import { actionForSpecial } from "@/lib/map/lines";
 import { type CustomThings, thingLabel } from "@/lib/wad/custom-things";
 
@@ -176,6 +186,14 @@ export function MapCanvas({
         name: sector.name,
         detail: `S${number} ${sector.floor}/${sector.ceiling}`,
         box: boxOf(map, sector),
+        at:
+          labelPoint(
+            [sector.vertices, ...(sector.holes ?? [])].map((loop) =>
+              loopPolygon(map, loop),
+            ),
+            step,
+            estimateLabelWidth(sector.name),
+          ) ?? roomPoint(map, sector),
       };
     });
 
@@ -197,6 +215,7 @@ export function MapCanvas({
       key={sector.id}
       value={sector.id}
       corners={sector.vertices}
+      holes={sector.holes}
       className="map-label"
       style={{ "--room-width": box.right - box.left } as React.CSSProperties}
     >
@@ -554,12 +573,6 @@ function TrailMark({ mark, size }: TrailMarkProps) {
   return (
     <circle className={`map-trail-${kind}`} cx={x} cy={y} r={size * grown} />
   );
-}
-
-// Zoom in quarter octaves, rounded up, so the canvas renders again only when
-// the zoom crosses a step.
-function zoomStep(zoom: number) {
-  return 2 ** (Math.ceil(Math.log2(zoom) * 4) / 4);
 }
 
 // The view grown by a cell of at least half its size on every side and

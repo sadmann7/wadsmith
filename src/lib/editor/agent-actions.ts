@@ -95,6 +95,12 @@ import {
   type MapIssue,
 } from "@/lib/map/validate";
 import { compileLumps } from "@/lib/wad/compile";
+import {
+  type CustomThings,
+  customThingWarnings,
+  thingKindKey,
+  thingLabel,
+} from "@/lib/wad/custom-things";
 import { vanillaWarnings } from "@/lib/wad/vanilla-check";
 
 type ParamType = "string" | "number" | "boolean" | "points" | "strings";
@@ -145,6 +151,7 @@ const catalogs = [
 ] as const;
 
 const depthLimit = 4096;
+const noCustomThings: CustomThings = new Map();
 
 const maxNameLength = 80;
 const maxNoteLength = 200;
@@ -226,6 +233,19 @@ const thingFlags: AgentParam[] = [
   })),
 ].map((param) => optional(param as AgentParam));
 
+const customType: AgentParam = {
+  name: "type",
+  type: "number",
+  description:
+    "A custom thing's editor number, from listCatalog of things, with kind custom.",
+};
+const thingKindParam: AgentParam = {
+  name: "kind",
+  type: "string",
+  description:
+    "The thing. listCatalog of things names them, and custom takes a type.",
+};
+
 const pageLimit = 50;
 
 const paging: AgentParam[] = [
@@ -285,7 +305,7 @@ export const agentActions: AgentAction[] = [
           name: sector.name,
           center: roomCenter(map, sector),
         })),
-        things: countBy(map.things.map((thing) => thing.kind)),
+        things: countBy(map.things.map(thingKindKey)),
         switches: map.switches.length,
         notes: map.notes?.length ?? 0,
         todo: problems(inspectMap(map, context).errors),
@@ -355,24 +375,35 @@ export const agentActions: AgentAction[] = [
       optional({
         name: "kind",
         type: "string",
-        description: "Only things of this kind.",
+        description:
+          "Only things of this kind. custom takes every custom thing.",
       }),
       ...paging,
+      optional({
+        ...customType,
+        description: "Only the custom things with this editor number.",
+      }),
     ],
-    run: (map, args) => {
+    run: (map, args, context) => {
       const only = args.room === undefined ? null : findRoom(map, args.room).id;
-      const kind = args.kind === undefined ? null : thingKind(args, "kind");
+      const picked =
+        args.kind === undefined && args.type === undefined
+          ? null
+          : thingChoice(args, true);
+      const custom = context.custom ?? noCustomThings;
       const things = map.things
-        .map((thing) => ({
-          ...thing,
-          label: thingCatalog[thing.kind].label,
-          room: sectorAt(map, thing)?.id ?? null,
-        }))
         .filter(
           (thing) =>
-            (only === null || thing.room === only) &&
-            (kind === null || thing.kind === kind),
-        );
+            picked === null ||
+            (thing.kind === picked.kind &&
+              (picked.type === undefined || thing.type === picked.type)),
+        )
+        .map((thing) => ({
+          ...thing,
+          label: thingLabel(thing, custom),
+          room: sectorAt(map, thing)?.id ?? null,
+        }))
+        .filter((thing) => only === null || thing.room === only);
       return { result: page(things, args, 50) };
     },
   },
@@ -418,7 +449,11 @@ export const agentActions: AgentAction[] = [
       }),
     ],
     run: (map, args, context) => {
-      const issues = [...checkMap(map, context), ...builtWarnings(map)];
+      const issues = [
+        ...checkMap(map, context),
+        ...customThingWarnings(map, context.custom ?? noCustomThings),
+        ...builtWarnings(map),
+      ];
       const of = (severity: "error" | "warning") =>
         issues
           .filter((issue) => issue.severity === severity)
@@ -1127,22 +1162,20 @@ export const agentActions: AgentAction[] = [
     name: "placeThing",
     description:
       "Puts a thing in a room, at its middle or the closest spot to it where the thing fits clear of walls and other things.",
-    params: [
-      {
-        name: "kind",
-        type: "string",
-        description: "The thing. listCatalog of things names them.",
-      },
-      room(),
-      ...thingFlags,
-    ],
-    run: (map, args) => {
+    params: [thingKindParam, room(), ...thingFlags, optional(customType)],
+    run: (map, args, context) => {
       const sector = findRoom(map, args.room);
-      const kind = thingKind(args, "kind");
+      const custom = context.custom ?? noCustomThings;
       return placed(
         map,
         args,
-        freeSpot(map, sector, kind, roomCenter(map, sector)),
+        freeSpot(
+          map,
+          sector,
+          thingChoice(args),
+          roomCenter(map, sector),
+          custom,
+        ),
       );
     },
   },
@@ -1150,14 +1183,11 @@ export const agentActions: AgentAction[] = [
     name: "addThing",
     description: "Puts a thing at a point, which has to be inside a room.",
     params: [
-      {
-        name: "kind",
-        type: "string",
-        description: "The thing. listCatalog of things names them.",
-      },
+      thingKindParam,
       { name: "x", type: "number", description: "Where, across." },
       { name: "y", type: "number", description: "Where, down." },
       ...thingFlags,
+      optional(customType),
     ],
     run: (map, args) => placed(map, args, pointOf(args)),
   },
@@ -1174,6 +1204,10 @@ export const agentActions: AgentAction[] = [
         description: "What it becomes.",
       }),
       ...thingFlags,
+      optional({
+        ...customType,
+        description: "The custom thing it becomes, by its editor number.",
+      }),
     ],
     run: (map, args) => {
       const thing = findThing(map, args.thing);
@@ -1181,11 +1215,17 @@ export const agentActions: AgentAction[] = [
         x: args.x === undefined ? thing.x : coordinate(args, "x"),
         y: args.y === undefined ? thing.y : coordinate(args, "y"),
       };
-      const kind =
-        args.kind === undefined ? thing.kind : thingKind(args, "kind");
-      standsIn(map, kind, moved);
+      const becomes =
+        args.kind === undefined && args.type === undefined
+          ? { kind: thing.kind, type: thing.type }
+          : thingChoice(args);
+      standsIn(map, becomes.kind, moved);
       return {
-        map: updateThing(map, thing.id, { ...moved, kind, ...flagsOf(args) }),
+        map: updateThing(map, thing.id, {
+          ...moved,
+          ...becomes,
+          ...flagsOf(args),
+        }),
       };
     },
   },
@@ -1421,6 +1461,7 @@ export function agentRisk(
   map: GameMap,
   name: string,
   input: unknown[] | Args = [],
+  custom: CustomThings = noCustomThings,
 ): AgentRisk {
   const fallback = {
     title: `Let the agent run ${humanize(name).toLowerCase()}?`,
@@ -1480,7 +1521,7 @@ export function agentRisk(
       const thing = findThing(map, args.thing);
       const room = sectorAt(map, thing);
       return {
-        title: `Remove the ${thingCatalog[thing.kind].label.toLowerCase()}?`,
+        title: `Remove the ${thingLabel(thing, custom).toLowerCase()}?`,
         detail: `${room ? `It stands in ${room.name}. ` : ""}Undo brings it back.`,
         confirm: "Remove thing",
       };
@@ -1549,6 +1590,7 @@ export function agentStepSummary(
   name: string,
   input: unknown[] | Args,
   result: unknown,
+  custom: CustomThings = noCustomThings,
 ): AgentStepSummary {
   const made = map.sectors.find((sector) => sector.id === result);
   const placed = map.things.find((thing) => thing.id === result);
@@ -1570,7 +1612,7 @@ export function agentStepSummary(
   }
   if (thing) {
     return {
-      label: `${label} · ${thingCatalog[thing.kind].label}`,
+      label: `${label} · ${thingLabel(thing, custom)}`,
       at: { x: thing.x, y: thing.y },
     };
   }
@@ -1827,11 +1869,22 @@ const skyFlat = "F_SKY1";
 
 function catalog(of: string, args: Args, context: CheckContext) {
   if (of === "things") {
-    return thingKinds.map((kind) => ({
-      kind,
-      label: thingCatalog[kind].label,
-      category: thingCatalog[kind].category,
-    }));
+    const custom = [...(context.custom ?? noCustomThings).values()]
+      .toSorted((a, b) => a.type - b.type)
+      .map((thing) => ({
+        kind: "custom",
+        type: thing.type,
+        label: thing.name,
+        category: thing.category,
+      }));
+    return [
+      ...thingKinds.map((kind) => ({
+        kind,
+        label: thingCatalog[kind].label,
+        category: thingCatalog[kind].category,
+      })),
+      ...custom,
+    ];
   }
   const names = context.names ?? freedoomNames;
   const search =
@@ -1970,14 +2023,84 @@ function holeIndex(args: Args, sector: Sector) {
   return number(args, "index", 0, count - 1);
 }
 
-function thingKind(args: Args, name: string) {
-  const kind = text(args, name) as ThingKind;
-  if (!thingKinds.includes(kind)) {
+interface ThingChoice {
+  kind: ThingKind;
+  type?: number;
+}
+
+// A custom thing is picked by its editor number, any other by its kind. A
+// filter may also ask for every custom thing at once.
+function thingChoice(args: Args, allowsAnyCustom = false): ThingChoice {
+  if (args.type === undefined) {
+    const kind = thingKind(args);
+    if (kind === "custom" && !allowsAnyCustom) {
+      throw new Error(
+        `A custom thing needs "type", its editor number. listCatalog of things names them.`,
+      );
+    }
+    return { kind };
+  }
+  if (args.kind !== undefined && args.kind !== "custom") {
+    throw new Error(`"type" picks a custom thing, so "kind" has to be custom.`);
+  }
+  return { kind: "custom", type: number(args, "type", 1, 32767) };
+}
+
+function thingKind(args: Args) {
+  const kind = text(args, "kind") as ThingKind;
+  if (!thingKinds.includes(kind) && kind !== "custom") {
     throw new Error(
       `No thing "${kind}". listCatalog of things names them, like: ${thingKinds.slice(0, 8).join(", ")}.`,
     );
   }
   return kind;
+}
+
+const spotStep = 16;
+const spotRings = 40;
+
+// The closest point to `start` where the thing `placing` fits inside the room
+// and clear of the things there. Doom collides things as squares, and a
+// monster that starts overlapping a wall or another thing can't move.
+function freeSpot(
+  map: GameMap,
+  sector: Sector,
+  placing: ThingChoice,
+  start: Point,
+  custom: CustomThings,
+): Point {
+  const radius = thingRadius(placing, custom);
+  const fits = (point: Point) =>
+    [-1, 0, 1]
+      .flatMap((sx) => [-1, 0, 1].map((sy) => ({ sx, sy })))
+      .every(
+        ({ sx, sy }) =>
+          sectorAt(map, { x: point.x + sx * radius, y: point.y + sy * radius })
+            ?.id === sector.id,
+      ) &&
+    map.things.every((thing) => {
+      const reach = radius + thingRadius(thing, custom);
+      return (
+        Math.abs(thing.x - point.x) >= reach ||
+        Math.abs(thing.y - point.y) >= reach
+      );
+    });
+  const spots: Point[] = [];
+  for (let dx = -spotRings; dx <= spotRings; dx += 1) {
+    for (let dy = -spotRings; dy <= spotRings; dy += 1) {
+      spots.push({ x: start.x + dx * spotStep, y: start.y + dy * spotStep });
+    }
+  }
+  const distance = (point: Point) =>
+    Math.hypot(point.x - start.x, point.y - start.y);
+  spots.sort((a, b) => distance(a) - distance(b));
+  const spot = spots.find(fits);
+  if (!spot) {
+    throw new Error(
+      `No room left in ${sector.name} for a ${thingLabel(placing, custom).toLowerCase()}. Pick a bigger room, or use addThing with a point.`,
+    );
+  }
+  return spot;
 }
 
 // Doom's thing radii, for the kinds bigger or smaller than an imp's 20.
@@ -2001,51 +2124,9 @@ const thingRadii: Partial<Record<ThingKind, number>> = {
   arachnotron: 64,
   "spider-mastermind": 128,
 };
-const thingRadius = (kind: ThingKind) => thingRadii[kind] ?? 20;
-const spotStep = 16;
-const spotRings = 40;
-
-// The closest point to `start` where a thing of `kind` fits inside the room
-// and clear of the things there. Doom collides things as squares, and a
-// monster that starts overlapping a wall or another thing can't move.
-function freeSpot(
-  map: GameMap,
-  sector: Sector,
-  kind: ThingKind,
-  start: Point,
-): Point {
-  const radius = thingRadius(kind);
-  const fits = (point: Point) =>
-    [-1, 0, 1]
-      .flatMap((sx) => [-1, 0, 1].map((sy) => ({ sx, sy })))
-      .every(
-        ({ sx, sy }) =>
-          sectorAt(map, { x: point.x + sx * radius, y: point.y + sy * radius })
-            ?.id === sector.id,
-      ) &&
-    map.things.every((thing) => {
-      const reach = radius + thingRadius(thing.kind);
-      return (
-        Math.abs(thing.x - point.x) >= reach ||
-        Math.abs(thing.y - point.y) >= reach
-      );
-    });
-  const spots: Point[] = [];
-  for (let dx = -spotRings; dx <= spotRings; dx += 1) {
-    for (let dy = -spotRings; dy <= spotRings; dy += 1) {
-      spots.push({ x: start.x + dx * spotStep, y: start.y + dy * spotStep });
-    }
-  }
-  const distance = (point: Point) =>
-    Math.hypot(point.x - start.x, point.y - start.y);
-  spots.sort((a, b) => distance(a) - distance(b));
-  const spot = spots.find(fits);
-  if (!spot) {
-    throw new Error(
-      `No room left in ${sector.name} for a ${thingCatalog[kind].label.toLowerCase()}. Pick a bigger room, or use addThing with a point.`,
-    );
-  }
-  return spot;
+function thingRadius(thing: ThingChoice, custom: CustomThings) {
+  if (thing.kind === "custom") return custom.get(thing.type ?? 0)?.radius ?? 20;
+  return thingRadii[thing.kind] ?? 20;
 }
 
 // A thing outside every room never spawns, and a player can't start inside a
@@ -2092,9 +2173,9 @@ function flagsOf(args: Args): Partial<Thing> {
 }
 
 function placed(map: GameMap, args: Args, point: Point) {
-  const kind = thingKind(args, "kind");
+  const { kind, type } = thingChoice(args);
   standsIn(map, kind, point);
-  const added = addThing(map, kind, point, 0, 1);
+  const added = addThing(map, kind, point, 0, 1, type);
   return {
     map: updateThing(added.map, added.id, flagsOf(args)),
     result: added.id,

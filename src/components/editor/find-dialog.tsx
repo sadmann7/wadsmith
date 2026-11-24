@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import type { GameMap } from "@/lib/map/types";
+import type { CustomThings } from "@/lib/wad/custom-things";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -34,13 +35,22 @@ const kinds: { value: FindKind; label: string }[] = [
 
 interface FindDialogProps {
   map: GameMap;
+  custom: CustomThings;
   onSelect: (kind: FindKind, keys: string[]) => void;
   onClose: () => void;
 }
 
-export function FindDialog({ map, onSelect, onClose }: FindDialogProps) {
+export function FindDialog({
+  map,
+  custom,
+  onSelect,
+  onClose,
+}: FindDialogProps) {
   const [kind, setKind] = React.useState<FindKind>("wall");
-  const choices = React.useMemo(() => findChoices(map, kind), [map, kind]);
+  const choices = React.useMemo(
+    () => findChoices(map, kind, custom),
+    [map, kind, custom],
+  );
   const [picked, setPicked] = React.useState<string | null>(null);
   const value =
     picked && choices.some((choice) => choice.value === picked)

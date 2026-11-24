@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 
+import type { TextureSource } from "@/lib/wad/resources";
+
 import { parseMapFile } from "@/lib/map/storage";
 import { testMap } from "@/lib/map/test-map";
+import { readLumps } from "@/lib/wad/inspect";
+import { packWad } from "@/lib/wad/pack";
 
 import { agentActionNames } from "./agent-actions";
-import { createMcpServer } from "./mcp-server";
+import { createMcpServer, type McpServerOptions } from "./mcp-server";
 
 describe("the wadsmith MCP server", () => {
   it("introduces itself and lists every action as a tool", () => {
@@ -117,6 +121,36 @@ describe("the wadsmith MCP server", () => {
     expect(call("saveMap").text).toMatch(/saveMap needs "path"/);
   });
 
+  it("places a mod's things and builds its patch into the WAD", () => {
+    const mod = packWad([
+      {
+        name: "DEHACKED",
+        data: new TextEncoder().encode(
+          "Thing 151 (Plasma Zombie)\nID # = 20001\nBits = COUNTKILL\n",
+        ),
+      },
+    ]);
+    const textures: TextureSource = { iwad: packWad([]), resources: [mod] };
+    const { call, disk } = start(testMap, undefined, { textures });
+    expect(
+      call("placeThing", { kind: "custom", type: 20001, room: "Arena" }).failed,
+    ).toBe(false);
+    expect(call("listThings", { kind: "custom" }).text).toMatch(
+      /"label": "Plasma Zombie"/,
+    );
+    expect(call("checkMap").text).not.toMatch(/custom-unknown/);
+    call("exportWad", { path: "out/mod.wad" });
+    const names = readLumps({
+      name: "mod.wad",
+      data: disk.get("out/mod.wad") as Uint8Array,
+    }).map((lump) => lump.name);
+    expect(names).toContain("DEHACKED");
+
+    const bare = start(testMap);
+    bare.call("placeThing", { kind: "custom", type: 20001, room: "Arena" });
+    expect(bare.call("checkMap").text).toMatch(/custom-unknown:20001/);
+  });
+
   it("saves after every edit when given a file to keep", () => {
     const { call, disk } = start(testMap, "kept.json");
     expect(disk.has("kept.json")).toBe(false);
@@ -128,9 +162,14 @@ describe("the wadsmith MCP server", () => {
   });
 });
 
-function start(map?: typeof testMap, autosave?: string) {
+function start(
+  map?: typeof testMap,
+  autosave?: string,
+  options: Partial<McpServerOptions> = {},
+) {
   const disk = new Map<string, string | Uint8Array>();
   const server = createMcpServer({
+    ...options,
     map,
     autosave,
     files: {

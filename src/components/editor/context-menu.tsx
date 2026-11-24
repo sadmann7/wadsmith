@@ -132,6 +132,11 @@ import {
 } from "@/lib/map/surfaces";
 import { alignWalls } from "@/lib/map/texture-tools";
 import { validateMap } from "@/lib/map/validate";
+import {
+  type CustomThings,
+  thingLabel as labelOfThing,
+  thingKindKey,
+} from "@/lib/wad/custom-things";
 
 import type { EditMode } from "./map-editor";
 
@@ -176,6 +181,7 @@ interface MapContextMenuProps {
   // A custom thing's editor number and name, when one is picked.
   thingType?: number;
   thingLabel: string;
+  customThings: CustomThings;
   edit: EditActions;
   textures: TextureActions;
   onOpenChange: MenuProps["onOpenChange"];
@@ -268,12 +274,15 @@ function ThingsMenu({ ids, ...props }: ThingsMenuProps) {
   );
   const number = map.things.indexOf(first) + 1;
   const sameKind = things.every((thing) => thing.kind === first.kind);
+  const sameType = things.every(
+    (thing) => thingKindKey(thing) === thingKindKey(first),
+  );
   const sameAngle = things.every((thing) => thing.angle === first.angle);
   return (
     <>
       <Heading>
         {single
-          ? `${thingCatalog[first.kind].label} · Thing ${String(number).padStart(2, "0")}`
+          ? `${labelOfThing(first, props.customThings)} · Thing ${String(number).padStart(2, "0")}`
           : `${things.length} things`}
       </Heading>
       <SubMenu icon={Replace} label="Change type" disabled={kinds.length === 0}>
@@ -308,7 +317,7 @@ function ThingsMenu({ ids, ...props }: ThingsMenuProps) {
           })
         }
       >
-        {sameKind ? "Select all of this type" : "Select all of these types"}
+        {sameType ? "Select all of this type" : "Select all of these types"}
       </Item>
       <Rule />
       {single ? (

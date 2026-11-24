@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { defined } from "@/lib/defined";
+import { type CustomThings, customThingsOf } from "@/lib/wad/custom-things";
+import { packWad } from "@/lib/wad/pack";
 
 import type { GameMap, LineSettings } from "./types";
 
@@ -259,6 +261,43 @@ describe("reachable rooms", () => {
     expect(reachWarnings(starterMap)).toEqual([]);
   });
 
+  it("warns about a patch's item behind a step the player can't climb", () => {
+    const mod = packWad([
+      {
+        name: "DEHACKED",
+        data: new TextEncoder().encode(
+          "Thing 152 (Plasma Pack)\nID # = 20003\nBits = SPECIAL\n\nThing 153 (Tall Lamp)\nID # = 20004\nBits = SOLID\n",
+        ),
+      },
+    ]);
+    const custom = customThingsOf([mod]);
+    const base = twoRooms(25);
+    const map: GameMap = {
+      ...base,
+      things: [
+        ...base.things.filter((thing) => thing.kind === "player"),
+        ...[20003, 20004].map((type) => ({
+          id: `custom-${type}`,
+          kind: "custom" as const,
+          type,
+          x: 192,
+          y: type === 20003 ? 64 : 96,
+          angle: 0,
+        })),
+      ],
+    };
+    expect(reachWarnings(map)).toEqual([]);
+    expect(reachWarnings(map, custom)).toEqual([
+      "Ledge: the player can't get here from the start.",
+      "Ledge: the player can't reach the plasma pack here.",
+    ]);
+    expect(
+      checkMap(map, { custom })
+        .filter((issue) => issue.id.startsWith("unreachable-thing"))
+        .map((issue) => issue.target),
+    ).toEqual(["custom-20003"]);
+  });
+
   it("warns about a room drawn against the Exit with its floor 32 higher", () => {
     const exit = starterMap.sectors.find((sector) => sector.name === "Exit");
     const map: GameMap = {
@@ -314,8 +353,8 @@ function room(
   };
 }
 
-function reachWarnings(map: GameMap) {
-  return inspectMap(map)
+function reachWarnings(map: GameMap, custom?: CustomThings) {
+  return inspectMap(map, { custom })
     .warnings.filter((issue) => issue.id.startsWith("unreachable"))
     .map((issue) => issue.message);
 }

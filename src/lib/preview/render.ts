@@ -12,6 +12,7 @@ import type {
 import { defined } from "@/lib/defined";
 import { doorTrackTexture, thingCatalog } from "@/lib/map/catalog";
 import {
+  clearView,
   loopEdges,
   loopPolygon,
   roomPoint,
@@ -669,17 +670,7 @@ export function startCamera(map: GameMap): Camera {
     return { ...first, angle: 0 };
   }
   const at = roomPoint(map, room);
-  const [from, to] = loopEdges(room.vertices)
-    .map(({ from, to }) => [map.vertices[from], map.vertices[to]])
-    .toSorted(
-      ([a, b], [c, d]) =>
-        Math.hypot(d.x - c.x, d.y - c.y) - Math.hypot(b.x - a.x, b.y - a.y),
-    )[0];
-  const side = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
-  return {
-    ...at,
-    angle: (Math.atan2(at.y - side.y, side.x - at.x) * 180) / Math.PI,
-  };
+  return { ...at, angle: clearView(map, room, at) };
 }
 
 const eyeHeight = 41;

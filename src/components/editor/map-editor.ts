@@ -31,6 +31,7 @@ import {
 } from "@/lib/editor/agent-actions";
 import { boundsOf, fitView } from "@/lib/editor/fit-view";
 import { currentKeys } from "@/lib/editor/keymap";
+import { estimateLabelWidth, labelPoint } from "@/lib/editor/map-labels";
 import {
   getIsDragging,
   getIsKeyboardMenu,
@@ -40,7 +41,12 @@ import {
   targetForKeys,
   wallTarget,
 } from "@/lib/editor/map-target";
-import { createWheelZoom, minZoom, steppedZoom } from "@/lib/editor/zoom";
+import {
+  createWheelZoom,
+  minZoom,
+  steppedZoom,
+  zoomStep,
+} from "@/lib/editor/zoom";
 import { getIsPlayerStart } from "@/lib/map/catalog";
 import {
   addSwitch,
@@ -74,6 +80,7 @@ import {
   boxOf,
   holeAt,
   loopsPath,
+  roomPoint,
   sectorAt,
   sectorVertices,
   wallKey,
@@ -239,6 +246,7 @@ interface WallProps {
 interface CaptionProps {
   value: string;
   corners: string[];
+  holes?: string[][];
 }
 
 const none: readonly never[] = [];
@@ -1998,15 +2006,15 @@ export const mapEditor = definePrimitive({
       ),
     }),
     caption: slot<CaptionProps>({
-      props: { value: "string", corners: "list" },
+      props: { value: "string", corners: "list", holes: "value" },
       selects: selects<MapEditorState, unknown, CaptionProps>({
         ...readsNothing,
-        positions: ({ props }) => props.corners,
+        positions: ({ props }) => sectorCorners(props),
         moving: whole,
         viewport: whole,
       }),
       attrs: (state, { props }) => {
-        const at = labelPoint(state, props.corners);
+        const at = captionPoint(state, props);
         return {
           style: css({
             position: "absolute",
@@ -2016,7 +2024,7 @@ export const mapEditor = definePrimitive({
         };
       },
       live: live<MapEditorState, unknown, CaptionProps>((state, { props }) => {
-        const at = labelPoint(state, props.corners);
+        const at = captionPoint(state, props);
         return { style: `left:${at.x}px;top:${at.y}px` };
       }),
     }),
@@ -2157,7 +2165,10 @@ function lookTarget(state: MapEditorState): Point | null {
   return sector && !sector.door ? roomCenter(map, sector) : null;
 }
 
-function sectorCorners({ corners, holes = [] }: SectorProps) {
+function sectorCorners({
+  corners,
+  holes = [],
+}: Pick<SectorProps, "corners" | "holes">) {
   return [...corners, ...holes.flat()];
 }
 
@@ -2343,44 +2354,64 @@ function lineAttrs(a: Point, b: Point) {
   };
 }
 
-const labelInset = 24;
-
-// A label sits near the top of its room, on a part of that band the room
-// covers, so an L-shaped room doesn't label the room tucked into its corner.
-function labelPoint(state: MapEditorState, corners: readonly string[]): Point {
-  const center = centroid(state, corners);
-  const points = corners.map((key) => pointOf(state, key));
-  const y =
-    Math.min(...points.map((point) => point.y)) +
-    labelInset / state.viewport.zoom;
-  const spans = spansAt(points, y);
-  const span =
-    spans.find(([left, right]) => left <= center.x && center.x <= right) ??
-    spans.toSorted((a, b) => b[1] - b[0] - (a[1] - a[0]))[0];
-  return {
-    x:
-      !span || (span[0] <= center.x && center.x <= span[1])
-        ? center.x
-        : (span[0] + span[1]) / 2,
-    y,
-  };
+// Placed at the zoom step the canvas hides overlapping names with, so both
+// agree on where a name is.
+function captionPoint(state: MapEditorState, props: CaptionProps): Point {
+  const loops = [props.corners, ...(props.holes ?? [])].map((loop) =>
+    loop.map((key) => pointOf(state, key)),
+  );
+  const sector = sectorById(state.map, props.value);
+  if (!sector) return centroid(state, props.corners);
+  const at = labelPoint(
+    loops,
+    zoomStep(state.viewport.zoom),
+    estimateLabelWidth(sector.name),
+  );
+  if (at) return at;
+  const spot = roomPoint(state.map, sector);
+  const { moving } = state;
+  if (!moving) return spot;
+  const keys = movedKeys(moving);
+  const corners = sectorCorners(props);
+  const count = corners.filter((key) => keys.has(key)).length;
+  if (count === 0) return spot;
+  if (count === corners.length) {
+    return { x: spot.x + moving.dx, y: spot.y + moving.dy };
+  }
+  return roomPoint(draftMap(state, moving), sector);
 }
 
-// The parts of a horizontal line that fall inside a polygon, left to right.
-function spansAt(points: Point[], y: number) {
-  const crossings: number[] = [];
-  points.forEach((a, index) => {
-    const b = points[(index + 1) % points.length];
-    if (a.y <= y !== b.y <= y) {
-      crossings.push(a.x + ((y - a.y) * (b.x - a.x)) / (b.y - a.y));
-    }
-  });
-  crossings.sort((left, right) => left - right);
-  const spans: [number, number][] = [];
-  for (let index = 0; index + 1 < crossings.length; index += 2) {
-    spans.push([crossings[index], crossings[index + 1]]);
-  }
-  return spans;
+// A drag keeps one key list, and each frame is a new draft, so the names
+// moved in a frame share one map, and with it the caches keyed by that map. A
+// remote edit can replace the map partway through a drag.
+const draftKeys = new WeakMap<MoveDraft["keys"], Set<string>>();
+
+function movedKeys(moving: MoveDraft) {
+  const cached = draftKeys.get(moving.keys);
+  if (cached) return cached;
+  const keys = new Set(moving.keys);
+  draftKeys.set(moving.keys, keys);
+  return keys;
+}
+
+const draftMaps = new WeakMap<GameMap, WeakMap<MoveDraft, GameMap>>();
+
+function draftMap(state: MapEditorState, moving: MoveDraft) {
+  const drafts = draftMaps.get(state.map) ?? new WeakMap<MoveDraft, GameMap>();
+  draftMaps.set(state.map, drafts);
+  const cached = drafts.get(moving);
+  if (cached) return cached;
+  const map = applyPositions(
+    state.map,
+    Object.fromEntries(
+      moving.keys.map((key) => {
+        const base = state.positions[key] ?? { x: 0, y: 0 };
+        return [key, { x: base.x + moving.dx, y: base.y + moving.dy }];
+      }),
+    ),
+  );
+  drafts.set(moving, map);
+  return map;
 }
 
 const cameraOverlap = 28;

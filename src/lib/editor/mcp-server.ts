@@ -1,8 +1,10 @@
 import type { GameMap } from "@/lib/map/types";
+import type { TextureSource } from "@/lib/wad/resources";
 
 import { parseMapFile, serializeMap } from "@/lib/map/storage";
 import { type CheckContext, doorDepth, validateMap } from "@/lib/map/validate";
 import { compileMap } from "@/lib/wad/compile";
+import { customThingsOf } from "@/lib/wad/custom-things";
 
 import {
   agentActions,
@@ -22,6 +24,9 @@ export interface McpServerOptions {
   map?: GameMap;
   // The game the map is for and its texture names, checked on every edit.
   context?: CheckContext;
+  // The game's IWAD and the mods whose numbered things the map can place. A
+  // built WAD carries the patches, sprites and sounds of the ones it uses.
+  textures?: TextureSource;
   // A file the map is written to after every edit.
   autosave?: string;
 }
@@ -92,8 +97,13 @@ export function createMcpServer({
   files,
   map,
   autosave,
-  context = {},
+  context: given = {},
+  textures,
 }: McpServerOptions) {
+  const context: CheckContext = {
+    ...given,
+    custom: given.custom ?? customThingsOf(textures?.resources ?? []),
+  };
   let current = map ?? blankMap;
 
   const change = (next: GameMap) => {
@@ -124,7 +134,7 @@ export function createMcpServer({
         `The map has errors, so no WAD was built. ${errors.map((issue) => issue.message).join(" ")}`,
       );
     }
-    const wad = compileMap(current);
+    const wad = compileMap(current, undefined, {}, textures);
     files.write(target, wad);
     return `Built ${target}, ${wad.length} bytes. It plays as MAP01.`;
   };

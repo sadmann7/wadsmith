@@ -1,6 +1,11 @@
-import type { GameMap, LineActionKind, Sector, ThingKind } from "./types";
+import {
+  type CustomThings,
+  thingKindKey,
+  thingLabel,
+} from "@/lib/wad/custom-things";
 
-import { thingCatalog } from "./catalog";
+import type { GameMap, LineActionKind, Sector } from "./types";
+
 import { roomKeyPrefix, thingKeyPrefix, wallKeyPrefix } from "./edit";
 import { wallKey, wallOwners, wallPartTexture } from "./geometry";
 import { lineActions } from "./lines";
@@ -53,12 +58,10 @@ export function similarWalls(
 
 export function similarThings(map: GameMap, ids: string[]): string[] {
   const kinds = new Set(
-    map.things
-      .filter((thing) => ids.includes(thing.id))
-      .map((thing) => thing.kind),
+    map.things.filter((thing) => ids.includes(thing.id)).map(thingKindKey),
   );
   return map.things
-    .filter((thing) => kinds.has(thing.kind))
+    .filter((thing) => kinds.has(thingKindKey(thing)))
     .map((thing) => thing.id);
 }
 
@@ -72,8 +75,13 @@ export interface FindChoice {
 
 // What a search can look for, as the map uses it, with how many places each
 // one turns up in.
-export function findChoices(map: GameMap, kind: FindKind): FindChoice[] {
+export function findChoices(
+  map: GameMap,
+  kind: FindKind,
+  custom: CustomThings = new Map(),
+): FindChoice[] {
   const counts = new Map<string, number>();
+  const labels = new Map<string, string>();
   const count = (value: string) =>
     counts.set(value, (counts.get(value) ?? 0) + 1);
   if (kind === "wall") {
@@ -99,12 +107,16 @@ export function findChoices(map: GameMap, kind: FindKind): FindChoice[] {
       if (action) count(action);
     }
   } else {
-    for (const thing of map.things) count(thing.kind);
+    for (const thing of map.things) {
+      const value = thingKindKey(thing);
+      count(value);
+      labels.set(value, thingLabel(thing, custom));
+    }
   }
   return [...counts]
     .map(([value, total]) => ({
       value,
-      label: findLabel(kind, value),
+      label: labels.get(value) ?? findLabel(kind, value),
       count: total,
     }))
     .toSorted((a, b) =>
@@ -126,7 +138,7 @@ export function findKeys(map: GameMap, kind: FindKind, value: string) {
   }
   if (kind === "thing") {
     return map.things
-      .filter((thing) => thing.kind === value)
+      .filter((thing) => thingKindKey(thing) === value)
       .map((thing) => `${thingKeyPrefix}${thing.id}`);
   }
   return map.sectors
@@ -140,7 +152,6 @@ export function findKeys(map: GameMap, kind: FindKind, value: string) {
 
 function findLabel(kind: FindKind, value: string) {
   if (kind === "tag") return `Tag ${value}`;
-  if (kind === "thing") return thingCatalog[value as ThingKind]?.label ?? value;
   if (kind === "action") {
     if (value === "switch") return "Door switch";
     if (value.startsWith("raw:")) return `Special ${value.slice(4)}`;

@@ -1,7 +1,10 @@
 // The wadsmith MCP server: lets an agent outside the page build a map with
 // the editor's own actions, over standard input and output.
 //   node --experimental-transform-types scripts/wadsmith-mcp.mjs [--map file]
+//     [--mod file]...
 // With --map, the file is opened when it exists and saved after every edit.
+// Each --mod adds a WAD or DEHACKED patch whose numbered things the map can
+// place, and a built WAD carries the ones it uses.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import { dirname, resolve } from "node:path";
@@ -30,16 +33,49 @@ const { createMcpServer } = await import("@/lib/editor/mcp-server");
 const { parseMapFile } = await import("@/lib/map/storage");
 const { readWadAssets } = await import("@/lib/wad/assets");
 const { defaultGame } = await import("@/lib/engine/game");
-
-// Freedoom's textures, once pnpm setup:engine has fetched it, so the map
-// uses only names the game has.
-const iwad = resolve(root, "public/engine/freedoom2.wad");
-const context = existsSync(iwad)
-  ? { game: defaultGame, names: readWadAssets(readFileSync(iwad)).names }
-  : {};
+const { packWad } = await import("@/lib/wad/pack");
+const { readLumps } = await import("@/lib/wad/inspect");
 
 const flag = process.argv.indexOf("--map");
 const autosave = flag > 0 ? process.argv[flag + 1] : undefined;
+
+const fail = (message) => {
+  process.stderr.write(`${message}\n`);
+  process.exit(1);
+};
+
+// Freedoom's textures, once pnpm setup:engine has fetched it, so the map
+// uses only names the game has.
+const iwadPath = resolve(root, "public/engine/freedoom2.wad");
+const iwad = existsSync(iwadPath)
+  ? new Uint8Array(readFileSync(iwadPath))
+  : undefined;
+
+const modPaths = process.argv.flatMap((arg, index) =>
+  arg === "--mod" ? [process.argv[index + 1]] : [],
+);
+// A mod's textures replace the game's own list, so a build needs the IWAD.
+if (modPaths.length > 0 && !iwad) {
+  fail("--mod needs Freedoom. Run pnpm setup:engine first.");
+}
+const mods = modPaths.map((path) => {
+  if (!path || !existsSync(resolve(path))) fail(`--mod: no file ${path ?? ""}`);
+  const data = new Uint8Array(readFileSync(resolve(path)));
+  if (/\.(deh|bex)$/i.test(path)) {
+    return packWad([{ name: "DEHACKED", data }]);
+  }
+  try {
+    readLumps({ name: path, data });
+  } catch (error) {
+    fail(`--mod: ${error.message}`);
+  }
+  return data;
+});
+const context = iwad
+  ? { game: defaultGame, names: readWadAssets(iwad, mods).names }
+  : {};
+const textures =
+  iwad && mods.length > 0 ? { iwad, resources: mods } : undefined;
 const files = {
   read: (path) => readFileSync(resolve(path), "utf8"),
   write: (path, data) => {
@@ -51,6 +87,7 @@ const server = createMcpServer({
   files,
   autosave,
   context,
+  textures,
   map:
     autosave && existsSync(resolve(autosave))
       ? parseMapFile(files.read(autosave))
