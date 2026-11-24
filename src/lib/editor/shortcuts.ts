@@ -95,6 +95,16 @@ export const editorShortcuts = {
     description: "Zoom to the selection, or to the whole map",
     area: "map",
   },
+  zoomIn: {
+    keys: "=",
+    description: "Zoom in at the pointer, as + does too",
+    area: "map",
+  },
+  zoomOut: {
+    keys: "-",
+    description: "Zoom out at the pointer",
+    area: "map",
+  },
   flipOver: {
     keys: "shift+v",
     description: "Flip the selection top to bottom",

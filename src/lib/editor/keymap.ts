@@ -79,14 +79,24 @@ let cached: { text: string | null; keys: SavedKeys } = {
   keys: defaultKeys,
 };
 
+// A key someone chose keeps working when a later default wants it too.
 export function resolveKeys(saved: SavedKeys): Keymap {
   const preset = keyPresets[saved.preset].keys;
   const names = Object.keys(editorShortcuts) as EditorShortcut[];
+  const getIsChosenElsewhere = (name: EditorShortcut, keys: string) =>
+    names.some(
+      (other) =>
+        other !== name &&
+        saved.keys[other] === keys &&
+        getIsScopeShared(scopeOf(name), scopeOf(other)),
+    );
   return Object.fromEntries(
-    names.map((name) => [
-      name,
-      saved.keys[name] ?? preset[name] ?? editorShortcuts[name].keys,
-    ]),
+    names.map((name) => {
+      const chosen = saved.keys[name];
+      if (chosen !== undefined) return [name, chosen];
+      const keys = preset[name] ?? editorShortcuts[name].keys;
+      return [name, keys && getIsChosenElsewhere(name, keys) ? "" : keys];
+    }),
   ) as Keymap;
 }
 
