@@ -571,11 +571,13 @@ const eyeBack = 0.01;
 function skyCapOf(heavens: Picture | null, shades: Uint32Array) {
   const sum = [0, 0, 0];
   const width = heavens?.width ?? 0;
-  for (let column = 0; heavens && column < width; column += 1) {
-    const color = shades[heavens.pixels[column * heavens.height]];
-    sum[0] += color & 255;
-    sum[1] += (color >>> 8) & 255;
-    sum[2] += (color >>> 16) & 255;
+  if (heavens) {
+    for (let column = 0; column < width; column += 1) {
+      const color = shades[heavens.pixels[column * heavens.height]];
+      sum[0] += color & 255;
+      sum[1] += (color >>> 8) & 255;
+      sum[2] += (color >>> 16) & 255;
+    }
   }
   const scale = 1 / 255 / Math.max(1, width);
   return Float32Array.of(sum[0] * scale, sum[1] * scale, sum[2] * scale, 1);
