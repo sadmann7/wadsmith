@@ -320,7 +320,9 @@ export function SectorInspector({
         />
         {door ? (
           <DoorFields
+            map={map}
             door={door}
+            context={sector.name}
             assets={assets}
             light={sector.light}
             onChange={(next) => onChange({ door: next })}
@@ -514,6 +516,7 @@ export function RoomsInspector({
               label="Door texture"
               value={door("texture") ?? mixed}
               options={doorTextures}
+              browse={{ kind: "wall", use: wallUse(map), context }}
               picture={assets.texture}
               assets={assets}
               light={light ?? first.light}
@@ -638,7 +641,7 @@ export function LineInspector({
             light={line.sector.light}
             whole={info.paints === "door" || info.paints === "switch"}
             browse={
-              info.paints === "wall"
+              info.paints === "wall" || info.paints === "door"
                 ? {
                     kind: "wall",
                     use: wallUse(map),
@@ -1486,6 +1489,17 @@ function TextureCombobox({
             spellCheck={false}
             className="font-mono uppercase"
             onFocus={(event) => event.currentTarget.select()}
+            onBlur={(event) => {
+              const next = event.relatedTarget;
+              if (
+                !(next instanceof Element && next.closest('[role="listbox"]'))
+              ) {
+                setQuery(value);
+              }
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && shown.length === 0) setQuery(value);
+            }}
           />
           <ComboboxTrigger aria-label={`Show ${label.toLowerCase()} textures`}>
             <span aria-hidden="true">▾</span>
@@ -1739,13 +1753,22 @@ function BoomSectorFields({
 }
 
 interface DoorFieldsProps {
+  map: GameMap;
   door: DoorSettings;
+  context: string;
   assets: SceneAssets;
   light: number;
   onChange: (door: DoorSettings) => void;
 }
 
-function DoorFields({ door, assets, light, onChange }: DoorFieldsProps) {
+function DoorFields({
+  map,
+  door,
+  context,
+  assets,
+  light,
+  onChange,
+}: DoorFieldsProps) {
   return (
     <>
       <ChoiceField
@@ -1768,6 +1791,7 @@ function DoorFields({ door, assets, light, onChange }: DoorFieldsProps) {
         label="Door texture"
         value={door.texture}
         options={doorTextures}
+        browse={{ kind: "wall", use: wallUse(map), context }}
         picture={assets.texture}
         assets={assets}
         light={light}

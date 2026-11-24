@@ -647,8 +647,8 @@ export const agentActions: AgentAction[] = [
       optional({
         name: "texture",
         type: "string",
-        description: "The texture on the door's face.",
-        choices: doorTextures,
+        description:
+          "The texture on the door's face, like BIGDOOR2, or the wall's own to hide a secret door.",
       }),
       optional({
         name: "key",
@@ -658,7 +658,7 @@ export const agentActions: AgentAction[] = [
         choices: keyColors,
       }),
     ],
-    run: (map, args) => {
+    run: (map, args, context) => {
       const door: DoorSettings = {
         ...defaultDoor,
         opensBy: choice(args, "opensBy", ["use", "switch"], "use"),
@@ -666,7 +666,7 @@ export const agentActions: AgentAction[] = [
         closes: flag(args, "closes") ?? true,
         ...(flag(args, "fast") && { fast: true }),
         ...(args.texture !== undefined && {
-          texture: choice(args, "texture", doorTextures),
+          texture: textureName(args, "texture", "wall", context),
         }),
       };
       if (door.key && door.opensBy === "switch") {

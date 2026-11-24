@@ -371,6 +371,26 @@ describe("agent actions", () => {
     });
   });
 
+  it("dresses a door in any wall texture the game has", () => {
+    const { map } = runAgentAction(testMap, "makeDoor", [
+      "Arena door",
+      "use",
+      true,
+      false,
+      "metal",
+    ]);
+    expect(map.sectors[3].door?.texture).toBe("METAL");
+    expect(() =>
+      runAgentAction(testMap, "makeDoor", [
+        "Arena door",
+        "use",
+        true,
+        false,
+        "NOTATEX",
+      ]),
+    ).toThrow(/No wall texture "NOTATEX"/);
+  });
+
   it("locks a door room behind a key", () => {
     const { map } = build(testMap, [["removeSwitch", ["switch-1"]]]);
     const locked = runAgentAction(map, "makeDoor", {
