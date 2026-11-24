@@ -8,6 +8,7 @@ import { addDetail, updateLine, updateLineSide } from "@/lib/map/edit";
 import { sectorAt, sectorEdges, wallKey } from "@/lib/map/geometry";
 import { islandMap, pillarMap, testMap } from "@/lib/map/test-map";
 import { freedoomNames } from "@/lib/map/textures";
+import { textureHeightOf } from "@/lib/wad/assets";
 
 import { withMovers } from "./movers";
 import {
@@ -85,9 +86,12 @@ describe("buildSceneMesh", () => {
     const target = createRenderTarget(320, 200);
     const camera = startCamera(islandMap);
     renderScene(target, islandMap, camera, { assets: texelAssets });
-    const mesh = buildSceneMesh(withMovers(islandMap, []), {
-      assets: texelAssets,
-    });
+    const mesh = buildSceneMesh(
+      withMovers(islandMap, [], textureHeightOf(texelAssets)),
+      {
+        assets: texelAssets,
+      },
+    );
     for (const key of new Set(target.surfaces.slice(1))) {
       expect(mesh.ids.has(key), key).toBe(true);
     }
@@ -136,7 +140,10 @@ function compareWalls(map: GameMap, camera: Camera) {
     fullbright: true,
     things: false,
   });
-  const mesh = buildSceneMesh(withMovers(map, []), { assets: texelAssets });
+  const mesh = buildSceneMesh(
+    withMovers(map, [], textureHeightOf(texelAssets)),
+    { assets: texelAssets },
+  );
   const { forward, right } = cameraBasis(camera);
   const eye = eyeOf(map, camera);
   const { vertices } = mesh;

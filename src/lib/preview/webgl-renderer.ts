@@ -2,7 +2,7 @@ import type { GameMap } from "@/lib/map/types";
 import type { Picture, SceneAssets } from "@/lib/wad/assets";
 
 import { defined } from "@/lib/defined";
-import { shadeLevels } from "@/lib/wad/assets";
+import { shadeLevels, textureHeightOf } from "@/lib/wad/assets";
 
 import type { SceneRenderer } from "./scene-renderer";
 
@@ -413,7 +413,11 @@ export function createWebglRenderer(
       if (isLost) return;
       if (canvas.width !== size.width) canvas.width = size.width;
       if (canvas.height !== size.height) canvas.height = size.height;
-      const map = withMovers(sourceMap, options.opened ?? noMovers);
+      const map = withMovers(
+        sourceMap,
+        options.opened ?? noMovers,
+        textureHeightOf(options.assets),
+      );
       const current = meshFor(map, options);
       const { mesh } = current;
       lastSurfaces = mesh.surfaces;
@@ -502,10 +506,12 @@ export function createWebglRenderer(
         Math.min(4, Math.max(2, 2 * scale)),
       );
       gl.uniform1i(composite.uniform("uCrosshair"), crosshair ? 1 : 0);
-      gl.uniform4fv(
-        composite.uniform("uCrosshairColor"),
-        cssColor(crosshair ?? "#fff"),
-      );
+      if (crosshair) {
+        gl.uniform4fv(
+          composite.uniform("uCrosshairColor"),
+          cssColor(crosshair),
+        );
+      }
       gl.uniform1i(composite.uniform("uCrosshairScale"), scale);
       gl.bindVertexArray(screenArray);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
