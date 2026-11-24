@@ -20,12 +20,7 @@ import {
   readWadTextures,
   takenNames,
 } from "./resources";
-import { packTestWad } from "./test-wad";
-
-// A gray ramp, so a color's index is its brightness.
-const palette = Uint8Array.from({ length: 768 }, (_, index) =>
-  Math.floor(index / 3),
-);
+import { fakeIwad, packTestWad, palette, solid } from "./test-wad";
 
 describe("images as textures", () => {
   it("matches each pixel to the nearest color and leaves faint ones out", () => {
@@ -499,37 +494,6 @@ describe("animations and switches", () => {
   });
 });
 
-// The least a WAD needs to stand in for a game: a palette, a colormap, a
-// placeholder texture, one wall and one flat.
-function fakeIwad(more: { name: string; image: IndexedImage }[] = []) {
-  const textures = buildTextureWad([
-    { name: "AASHITTY", image: solid(8, 8, 1) },
-    { name: "STARTAN3", image: solid(16, 32, 100) },
-    { name: "FLOOR4_8", image: solid(64, 64, 50) },
-    ...more,
-  ]);
-  return packTestWad(
-    [
-      { name: "PLAYPAL", data: palette },
-      {
-        name: "COLORMAP",
-        data: Uint8Array.from({ length: 34 * 256 }, (_, index) => index % 256),
-      },
-      ...readLumps({ name: "textures.wad", data: textures }),
-    ],
-    "IWAD",
-  );
-}
-
 function names(wad: Uint8Array) {
   return readLumps({ name: "built.wad", data: wad }).map((lump) => lump.name);
-}
-
-function solid(width: number, height: number, color: number): IndexedImage {
-  return {
-    width,
-    height,
-    pixels: new Uint8Array(width * height).fill(color),
-    opaque: new Uint8Array(width * height).fill(1),
-  };
 }

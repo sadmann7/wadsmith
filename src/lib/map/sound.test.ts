@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import type { GameMap } from "./types";
+import type { GameMap, LineActionKind } from "./types";
 
-import { wallOwners } from "./geometry";
+import { setLineTarget, updateLine, updateSector } from "./edit";
+import { wallKey, wallOwners } from "./geometry";
 import { soundReach } from "./sound";
 import { testMap } from "./test-map";
 
@@ -51,4 +52,40 @@ describe("soundReach", () => {
     expect(reach.woken).toEqual(["zombieman-1"]);
     expect(reach.deaf).toEqual(["imp-1"]);
   });
+
+  it("passes a lift once it has lowered", () => {
+    const lift = corridorMover(
+      updateSector(testMap, "sector-2", { floor: 96 }),
+      "lift",
+    );
+    expect([...soundReach(lift, "sector-1").rooms.keys()]).toEqual([
+      "sector-1",
+    ]);
+    const lowered = soundReach(lift, "sector-1", { floorsMoved: true });
+    expect(lowered.rooms.get("sector-2")).toBe("heard");
+  });
+
+  it("stops at a floor once it has raised to the ceiling", () => {
+    // The door, made a plain room here, would otherwise stay shut at -16.
+    const raising = corridorMover(
+      updateSector(testMap, "sector-4", { door: undefined }),
+      "floor-raise",
+    );
+    expect(soundReach(raising, "sector-1").rooms.get("sector-2")).toBe("heard");
+    const raised = soundReach(raising, "sector-1", { floorsMoved: true });
+    expect([...raised.rooms.keys()]).toEqual(["sector-1"]);
+    expect(raised.woken).toEqual([]);
+  });
 });
+
+// The corridor, sector-2, worked by a switch on its wall to the start room.
+function corridorMover(map: GameMap, kind: LineActionKind) {
+  const wall = wallKey("v3", "v4");
+  return setLineTarget(
+    updateLine(map, wall, {
+      action: { kind, trigger: "switch", repeat: true, tag: 0 },
+    }),
+    wall,
+    "sector-2",
+  );
+}
