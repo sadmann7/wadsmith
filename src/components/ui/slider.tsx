@@ -23,6 +23,9 @@ function Slider({ label, className, children, ...props }: SliderProps) {
           <SliderPrimitive.SliderIndicator className="h-full rounded-full bg-primary" />
           <SliderPrimitive.SliderThumb
             aria-label={label}
+            onClick={(event) =>
+              event.currentTarget.querySelector("input")?.focus()
+            }
             className="size-4 rounded-full border border-primary bg-foreground shadow-sm transition-[box-shadow] hover:ring-4 hover:ring-ring/50 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ring data-[dragging]:ring-4 data-[dragging]:ring-ring/50"
           />
         </SliderPrimitive.SliderTrack>

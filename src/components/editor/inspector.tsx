@@ -56,7 +56,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Slider, SliderValue } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Toggle, ToggleGroup } from "@/components/ui/toggle";
 import { thingIcons } from "@/lib/editor/thing-icons";
@@ -124,6 +123,7 @@ import { flatUse, type TextureUse, wallUse } from "@/lib/map/textures";
 import { rankByQuery } from "@/lib/search";
 import { type CustomThings, thingCategory } from "@/lib/wad/custom-things";
 
+import { LightSetting } from "./light-setting";
 import { TextureSwatch } from "./surface-panel";
 import { type TextureKind, TexturePicker } from "./texture-picker";
 
@@ -249,19 +249,10 @@ export function SectorInspector({
         />
       </InspectorSection>
       <InspectorSection title="Behaviour">
-        <Slider
-          label="Light level"
+        <LightSetting
           value={sector.light}
-          min={0}
-          max={255}
-          step={1}
-          onValueChange={(light) => onChange({ light: light as number })}
-        >
-          <div className="flex justify-between tabular-nums">
-            <Label>Light level</Label>
-            <SliderValue />
-          </div>
-        </Slider>
+          onChange={(light) => onChange({ light })}
+        />
         {atLeast(level, "boom") || special > vanillaSectorTypes ? (
           <BoomSectorFields
             special={special}
