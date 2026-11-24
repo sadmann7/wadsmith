@@ -446,7 +446,7 @@ export const agentActions: AgentAction[] = [
   {
     name: "addRoom",
     description:
-      "Draws a room from its corners, in order. Corners that land on another room's wall join it, so the two rooms open onto each other. A room drawn inside another sits in it like a platform or a pit, and one drawn partly over another cuts it, the overlap staying part of the old room.",
+      "Draws a room from its corners, in order. Corners that land on another room's wall join it, so the two rooms open onto each other. A room drawn inside another sits in it like a platform or a pit. One drawn inside another against its wall, like a bridge from the wall to an island, cuts the outer room round it, and splits it in two when it runs from wall to wall. One drawn partly over another cuts it, the overlap staying part of the old room.",
     params: [
       {
         name: "corners",
