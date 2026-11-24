@@ -14,7 +14,13 @@ interface Step {
   undo: MapPatch;
   redo: MapPatch;
   group?: string;
+  batch?: string;
   at: number;
+}
+
+interface RecordOptions {
+  group?: string;
+  batch?: string;
 }
 
 interface EditHistoryOptions {
@@ -28,13 +34,20 @@ interface EditHistoryOptions {
 export function createEditHistory({ limit, groupDelay }: EditHistoryOptions) {
   const done: Step[] = [];
   const undone: Step[] = [];
+  // Steps of a batch past the limit, which only undoing the whole batch
+  // takes back, as long as some of its steps are still in the history.
+  let evicted: Step[] = [];
+  const getHasBatch = (batch: string) =>
+    done.some((step) => step.batch === batch) ||
+    undone.some((step) => step.batch === batch);
   return {
     // Edits of one group close together join one step, like a drag's moves.
+    // Edits of one batch stay separate steps that can still be undone
+    // together.
     record(
       before: GameMap,
       after: GameMap,
-      group?: string,
-      delay = groupDelay,
+      { group, batch }: RecordOptions = {},
     ) {
       const redo = diffMaps(before, after);
       if (getIsEmptyPatch(redo)) return;
@@ -42,14 +55,26 @@ export function createEditHistory({ limit, groupDelay }: EditHistoryOptions) {
       const now = Date.now();
       const last = done.at(-1);
       undone.length = 0;
-      if (group && last?.group === group && now - last.at < delay) {
+      evicted = evicted.filter((step) => step.batch && getHasBatch(step.batch));
+      if (
+        group &&
+        last?.group === group &&
+        last.batch === batch &&
+        now - last.at < groupDelay
+      ) {
         last.redo = combinePatches(last.redo, redo);
         last.undo = combinePatches(undo, last.undo);
         last.at = now;
         return;
       }
-      done.push({ undo, redo, group, at: now });
-      if (done.length > limit) done.shift();
+      done.push({ undo, redo, group, batch, at: now });
+      const oldest = done.length > limit ? done.shift() : undefined;
+      // A batch's last step out takes its evicted steps with it.
+      if (oldest?.batch) {
+        const { batch } = oldest;
+        if (getHasBatch(batch)) evicted.push(oldest);
+        else evicted = evicted.filter((step) => step.batch !== batch);
+      }
     },
     undo(current: GameMap) {
       const step = done.pop();
@@ -69,26 +94,38 @@ export function createEditHistory({ limit, groupDelay }: EditHistoryOptions) {
       done.push({ ...step, group: undefined });
       return next;
     },
-    // Takes back every step of one group, wherever it sits in the history.
-    // Nothing changes if that would bring a room back on lost corners.
-    undoGroup(group: string, current: GameMap) {
-      const steps = done.filter((step) => step.group === group).toReversed();
-      if (steps.length === 0) return undefined;
-      const next = steps.reduce(
-        (map, step) => keepCorners(map, applyPatch(map, step.undo)),
-        current,
-      );
+    // Takes back every step of one batch, wherever it sits in the history.
+    // Nothing changes if none of it is left, or if that would bring a room
+    // back on lost corners.
+    undoBatch(batch: string, current: GameMap) {
+      if (!getHasBatch(batch)) return undefined;
+      const ofBatch = (step: Step) => step.batch === batch;
+      const steps = [...evicted.filter(ofBatch), ...done.filter(ofBatch)];
+      const next = steps
+        .toReversed()
+        .reduce(
+          (map, step) => keepCorners(map, applyPatch(map, step.undo)),
+          current,
+        );
       if (getHasLostCorners(current, next)) return undefined;
-      for (const step of steps) done.splice(done.indexOf(step), 1);
-      undone.length = 0;
+      evicted = evicted.filter((step) => !ofBatch(step));
+      done.splice(0, done.length, ...done.filter((step) => !ofBatch(step)));
+      undone.splice(
+        0,
+        undone.length,
+        ...undone.filter((step) => !ofBatch(step)),
+      );
       return next;
     },
+    // Whether any step of one batch is still in the history.
+    hasBatch: getHasBatch,
     canUndo: () => done.length > 0,
     canRedo: () => undone.length > 0,
     // Forgets every step, as when the whole map was swapped for another.
     clear() {
       done.length = 0;
       undone.length = 0;
+      evicted = [];
     },
   };
 }
