@@ -1,6 +1,7 @@
+import { type CustomThings, thingCategory } from "@/lib/wad/custom-things";
+
 import type { GameMap, Sector } from "./types";
 
-import { thingCatalog } from "./catalog";
 import { sectorAt, wallOwners } from "./geometry";
 
 // How a room hears a noise: straight through open lines, or past one line
@@ -19,7 +20,10 @@ export interface SoundReach {
 export function soundReach(
   map: GameMap,
   from: string,
-  { doorsOpen = false }: { doorsOpen?: boolean } = {},
+  {
+    doorsOpen = false,
+    custom = new Map(),
+  }: { doorsOpen?: boolean; custom?: CustomThings } = {},
 ): SoundReach {
   const rooms = new Map<string, Hearing>();
   const neighbours = new Map<string, { room: Sector; blocks: boolean }[]>();
@@ -56,7 +60,7 @@ export function soundReach(
   const woken: string[] = [];
   const deaf: string[] = [];
   for (const thing of map.things) {
-    if (thingCatalog[thing.kind].category !== "enemy") continue;
+    if (thingCategory(thing, custom) !== "enemy") continue;
     const room = sectorAt(map, thing);
     if (!room || !rooms.has(room.id)) continue;
     (thing.ambush ? deaf : woken).push(thing.id);

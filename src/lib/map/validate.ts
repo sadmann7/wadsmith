@@ -1,4 +1,5 @@
 import type { GameInfo } from "@/lib/engine/game";
+import type { CustomThings } from "@/lib/wad/custom-things";
 
 import { defined } from "@/lib/defined";
 
@@ -61,6 +62,7 @@ import { findUnreachable } from "./reach";
 export interface CheckContext {
   game?: GameInfo;
   names?: TextureNames;
+  custom?: CustomThings;
 }
 
 export interface MapIssue {

@@ -1,3 +1,5 @@
+import { type CustomThings, thingCategory } from "@/lib/wad/custom-things";
+
 import type { GameMap, KeyColor } from "./types";
 
 import { mapBalance } from "./balance";
@@ -14,9 +16,13 @@ import {
 export type CheckedIssue = MapIssue & { severity: "error" | "warning" };
 
 const defaultRoomHeight = 96;
+const noCustomThings: CustomThings = new Map();
 const solidLine = { twoSided: false, doorBehind: false };
 
-export function mapWarnings(map: GameMap): CheckedIssue[] {
+export function mapWarnings(
+  map: GameMap,
+  custom: CustomThings = noCustomThings,
+): CheckedIssue[] {
   const warnings: CheckedIssue[] = [];
   const actions = activeLineActions(map);
   const usedKeys = new Set(actions.map(({ action }) => action.key));
@@ -55,7 +61,7 @@ export function mapWarnings(map: GameMap): CheckedIssue[] {
       });
     }
   }
-  const balance = mapBalance(map, "medium");
+  const balance = mapBalance(map, "medium", custom);
   if (balance.healthShort > 0) {
     warnings.push({
       id: "low-health",
@@ -93,7 +99,7 @@ export function mapWarnings(map: GameMap): CheckedIssue[] {
       detail: `${listPlayers(missing)} ${missing.length === 1 ? "has" : "have"} none`,
     });
   }
-  if (!getHasExit(map) && !getIsArena(map)) {
+  if (!getHasExit(map) && !getIsArena(map, custom)) {
     warnings.push({
       id: "no-exit",
       severity: "warning",
@@ -133,11 +139,11 @@ function listPlayers(players: number[]) {
 }
 
 // A deathmatch arena ends on the frag limit, so it needs no exit.
-function getIsArena(map: GameMap) {
+function getIsArena(map: GameMap, custom: CustomThings) {
   return (
     map.things.filter((thing) => thing.kind === "deathmatch-start").length >=
       deathmatchStarts &&
-    !map.things.some((thing) => thingCatalog[thing.kind].category === "enemy")
+    !map.things.some((thing) => thingCategory(thing, custom) === "enemy")
   );
 }
 
@@ -247,7 +253,7 @@ export function checkMap(map: GameMap, context?: CheckContext): CheckedIssue[] {
   return [
     ...errors.map((issue) => ({ ...issue, severity: "error" as const })),
     ...warnings.map((issue) => ({ ...issue, severity: "warning" as const })),
-    ...mapWarnings(map),
+    ...mapWarnings(map, context?.custom),
   ];
 }
 
