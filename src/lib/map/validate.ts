@@ -48,14 +48,13 @@ import {
 } from "./geometry";
 import {
   describeLine,
-  endsLevel,
   getIsTeleport,
   lineName,
   lineUsesTag,
   movesSector,
   opensDoor,
 } from "./lines";
-import { reachableRooms } from "./reach";
+import { findUnreachable } from "./reach";
 
 // What the browser plays on, which a map can outgrow after it was saved.
 export interface CheckContext {
@@ -177,7 +176,7 @@ export function inspectMap(map: GameMap, context: CheckContext = {}) {
       }
     }
     layers.things = issues.map((issue) => issue.id);
-    if (issues.length === 0) validateReach(map, warnings, lineActions());
+    if (issues.length === 0) validateReach(map, warnings);
   }
   return { errors: issues, warnings, layers };
 }
@@ -762,43 +761,30 @@ function lineOpensDoor(
   );
 }
 
-// Only clear cases are named, so anything an action could open counts as open.
-function validateReach(
-  map: GameMap,
-  warnings: MapIssue[],
-  actions: LineActions,
-) {
-  const reached = reachableRooms(map);
-  if (!reached) return;
-  for (const sector of map.sectors) {
-    if (reached.has(sector) || sector.door) continue;
-    // A player can't stand in a room this low, like a window or a ledge.
-    if (sector.ceiling - sector.floor < playerHeight) continue;
+function validateReach(map: GameMap, warnings: MapIssue[]) {
+  const found = findUnreachable(map);
+  if (!found) return;
+  for (const sector of found.rooms) {
     warnings.push({
       id: `unreachable:${sector.id}`,
       message: `${sector.name}: the player can't get here from the start.`,
       target: sector.id,
     });
   }
-  for (const thing of map.things) {
-    const { category, label } = thingCatalog[thing.kind];
-    if (category !== "item" && category !== "key") continue;
-    const room = sectorAt(map, thing);
-    if (!room || room.door || reached.has(room)) continue;
+  for (const { thing, room } of found.things) {
     warnings.push({
       id: `unreachable-thing:${thing.id}`,
-      message: `${room.name}: the player can't reach the ${label.toLowerCase()} here.`,
+      message: `${room.name}: the player can't reach the ${thingCatalog[thing.kind].label.toLowerCase()} here.`,
       target: thing.id,
     });
   }
-  for (const { wall, action, line } of actions) {
-    if (!endsLevel(action.kind)) continue;
-    if (reached.has(line.front) || (line.back && reached.has(line.back))) {
-      continue;
-    }
+  const owners = wallOwners(map);
+  for (const { wall } of found.exits) {
+    const owner = owners.get(wall)?.[0];
+    if (!owner) continue;
     warnings.push({
       id: `unreachable-exit:${wall}`,
-      message: `${lineName(line)}: the player can't reach this exit.`,
+      message: `${lineName(describeLine(map, wall, owner.id))}: the player can't reach this exit.`,
       target: wall,
     });
   }

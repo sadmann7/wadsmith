@@ -41,10 +41,14 @@ describe("reachable rooms", () => {
         room("Crawlspace", 128, 0, 55),
         room("Far room", 256, 0, 128),
       ],
-      things: [{ kind: "player", at: [64, 64] }],
+      things: [
+        { kind: "player", at: [64, 64] },
+        { kind: "stimpack", at: [320, 64] },
+      ],
     });
     expect(reachWarnings(map)).toEqual([
       "Far room: the player can't get here from the start.",
+      "Far room: the player can't reach the stimpack here.",
     ]);
   });
 
@@ -91,6 +95,7 @@ describe("reachable rooms", () => {
       things: [
         { kind: "player", at: [64, 64] },
         { kind: "teleport-destination", at: [576, 64] },
+        { kind: "stimpack", at: [600, 96] },
       ],
     });
     const hall = map.sectors[0];
@@ -110,6 +115,7 @@ describe("reachable rooms", () => {
     };
     expect(reachWarnings(map)).toEqual([
       "Island: the player can't get here from the start.",
+      "Island: the player can't reach the stimpack here.",
     ]);
     expect(inspectMap(linked).errors).toEqual([]);
     expect(reachWarnings(linked)).toEqual([]);
@@ -126,7 +132,10 @@ describe("reachable rooms", () => {
     const ledge = map.sectors[1];
     const exitWall = defined(
       [...wallOwners(map)].find(
-        ([, owners]) => owners.length === 1 && owners[0] === ledge,
+        ([wall, owners]) =>
+          owners.length === 1 &&
+          owners[0] === ledge &&
+          wall.split("|").every((id) => map.vertices[id].x === 256),
       ),
     )[0];
     const withExit = {
@@ -146,6 +155,69 @@ describe("reachable rooms", () => {
     expect(reachWarnings(withExit)).toContain(
       `Wall of Ledge (${exitWall}): the player can't reach this exit.`,
     );
+  });
+
+  it("lets the player step over a trench narrower than itself", () => {
+    const map = buildMap({
+      name: "Trench",
+      rooms: [
+        room("Hall", 0, 0, 128),
+        { ...room("Trench", 128, -64, 128), points: rect(128, 0, 16, 128) },
+        room("Far room", 144, 0, 128),
+      ],
+      things: [
+        { kind: "player", at: [64, 64] },
+        { kind: "stimpack", at: [208, 64] },
+      ],
+    });
+    expect(reachWarnings(map)).toEqual([]);
+  });
+
+  it("lets the player pick up an item at the edge of a ledge", () => {
+    const map = buildMap({
+      name: "Edge",
+      rooms: [room("Hall", 0, 0, 128), room("Ledge", 128, 48, 192)],
+      things: [
+        { kind: "player", at: [64, 64] },
+        { kind: "stimpack", at: [136, 64] },
+      ],
+    });
+    expect(reachWarnings(map)).toEqual([]);
+  });
+
+  it("lets the player press an exit switch within reach", () => {
+    const map = buildMap({
+      name: "Alcove",
+      rooms: [
+        room("Hall", 0, 0, 128),
+        {
+          ...room("Alcove", 128, 48, 128),
+          points: rect(128, 32, 16, 64),
+        },
+      ],
+      things: [{ kind: "player", at: [64, 64] }],
+      lines: [
+        {
+          wall: [
+            [144, 32],
+            [144, 96],
+          ],
+          settings: {
+            action: { kind: "exit", trigger: "switch", repeat: false, tag: 0 },
+          },
+        },
+      ],
+    });
+    expect(reachWarnings(map)).toEqual([]);
+  });
+
+  it("leaves out an empty room out of reach, like a crate", () => {
+    const map = buildMap({
+      name: "Crate",
+      rooms: [room("Hall", 0, 0, 128), room("Crate", 128, 64, 128)],
+      things: [{ kind: "player", at: [64, 64] }],
+    });
+    expect(reachWarnings(map)).toEqual([]);
   });
 
   it("finds nothing to warn about on the starter map", () => {
