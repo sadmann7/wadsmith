@@ -207,8 +207,17 @@ export function drawRoom(
   grid = gridSize,
 ): { map: GameMap; id: string } {
   const drawn = drawOver(map, corners, patch, grid);
+  const within = drawn.map.sectors.filter((sector) => {
+    const container = containerOf(drawn.map, sector);
+    return container && drawn.pieces.includes(container.id);
+  });
   return {
-    map: pruneUnused(cutAround(drawn.map, drawn.pieces)),
+    map: pruneUnused(
+      cutAround(drawn.map, [
+        ...drawn.pieces,
+        ...within.map((sector) => sector.id),
+      ]),
+    ),
     id: drawn.id,
   };
 }
@@ -476,19 +485,20 @@ function drawOver(
 ): { map: GameMap; id: string; pieces: string[] } {
   const added = addRoom(map, corners, patch, grid);
   const joined = joinWalls(added.map, [added.id]);
-  const unchanged = { map: joined, id: added.id, pieces: [added.id] };
+  // A room left lying over another is flagged by the checks and cut no more.
+  const overlapping = { map: joined, id: added.id, pieces: [] };
   const drawn = joined.sectors.find((sector) => sector.id === added.id);
-  if (!drawn) return unchanged;
+  if (!drawn) return overlapping;
   const crossed = joined.sectors.filter(
     (sector) => sector !== drawn && getIsCrossing(joined, drawn, sector),
   );
+  if (crossed.length === 0) return { ...overlapping, pieces: [added.id] };
   if (
-    crossed.length === 0 ||
     crossed.some(
       (sector) => sector.door || getIsOverPillar(joined, drawn, sector),
     )
   ) {
-    return unchanged;
+    return overlapping;
   }
   const outline = sectorPolygon(joined, drawn);
   const own = new Set(
@@ -512,7 +522,7 @@ function drawOver(
     [drawn.id, ...crossed.map((sector) => sector.id)],
     { weak: drawn.id, keep: covered.map((sector) => sector.id) },
   );
-  if (!rebuilt) return unchanged;
+  if (!rebuilt) return overlapping;
   const covering =
     rebuilt.rooms.find((room) => room.id === drawn.id) ??
     rebuilt.rooms
@@ -534,7 +544,9 @@ function cutAround(map: GameMap, ids: string[]): GameMap {
   for (const id of ids) {
     const room = map.sectors.find((sector) => sector.id === id);
     const outer = room && containerOf(map, room);
-    if (!room || !outer || outer.door) continue;
+    if (!room || !outer || outer.door || getIsOverPillar(map, room, outer)) {
+      continue;
+    }
     const outline = new Set(
       loopEdges(outer.vertices).map(({ from, to }) => wallKey(from, to)),
     );
