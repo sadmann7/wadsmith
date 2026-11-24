@@ -1278,7 +1278,11 @@ describe("validateMap", () => {
   });
 
   it("measures a wide door's depth across it, not along a split face", () => {
-    const door = (split: { x: number; y: number }, slope: number): GameMap => ({
+    const door = (
+      split: { x: number; y: number },
+      slope: number,
+      wrapped = false,
+    ): GameMap => ({
       ...blankMap,
       vertices: {
         a: { x: 0, y: 0 },
@@ -1291,9 +1295,17 @@ describe("validateMap", () => {
         h: { x: 256, y: -128 },
         i: { x: 256, y: 160 },
         j: { x: 0, y: 160 },
+        k: { x: -64, y: -128 },
+        l: { x: -64, y: 16 },
       },
       sectors: [
-        { ...testMap.sectors[0], id: "west", vertices: ["f", "g", "b", "a"] },
+        {
+          ...testMap.sectors[0],
+          id: "west",
+          vertices: wrapped
+            ? ["k", "g", "b", "a", "e", "l"]
+            : ["f", "g", "b", "a"],
+        },
         { ...testMap.sectors[0], id: "east", vertices: ["g", "h", "c", "b"] },
         { ...testMap.sectors[0], id: "south", vertices: ["e", "d", "i", "j"] },
         {
