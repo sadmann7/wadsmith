@@ -255,6 +255,35 @@ const sceneEditor = definePrimitive({
       return draftMap ?? map;
     };
 
+    // A drag's edit is made again on the map as it stands, on every move,
+    // drop and co-op change, so it never undoes someone else's edit.
+    let drafting: ((map: GameMap) => GameMap) | null = null;
+    const draft = (edit: (map: GameMap) => GameMap) => {
+      drafting = edit;
+      const { map } = store.get();
+      store.set({ draftMap: map ? edit(map) : null });
+    };
+    const dropDraft = (
+      details: { reason: SceneChangeReason; event: Event } | null,
+    ) => {
+      const edit = drafting;
+      drafting = null;
+      const { map } = store.get();
+      store.set({ draftMap: null });
+      if (!details || !edit || !map) return;
+      const next = edit(map);
+      if (next !== map) change("map", next, details);
+    };
+    let draftedMap = store.get().map;
+    context.onDestroy(
+      store.subscribe(() => {
+        const { map } = store.get();
+        if (map === draftedMap) return;
+        draftedMap = map;
+        if (drafting && map) store.set({ draftMap: drafting(map) });
+      }),
+    );
+
     // The map as the frame shows it, with the opened doors and lifts where
     // they stand. What a press means is read from this one, and edits go to
     // the map itself.
@@ -556,18 +585,21 @@ const sceneEditor = definePrimitive({
           );
           if (!point) return;
           const snapped = snapPoint(point, grid());
-          if (!standable(map, snapped)) return;
+          const current = store.get().map;
+          if (!current || !standable(current, snapped)) return;
           moved = snapped.x !== thing.x || snapped.y !== thing.y;
-          store.set({ draftMap: updateThing(map, thing.id, snapped) });
+          draft((next) =>
+            next.things.some((item) => item.id === thing.id)
+              ? updateThing(next, thing.id, snapped)
+              : next,
+          );
         },
         onEnd: (end, canceled) => {
-          const { draftMap } = store.get();
           stopDrag = undefined;
           dragging = false;
-          store.set({ draftMap: null });
-          if (!canceled && moved && draftMap) {
-            change("map", draftMap, { reason: "thing-drag", event: end });
-          }
+          dropDraft(
+            !canceled && moved ? { reason: "thing-drag", event: end } : null,
+          );
         },
       });
     };
@@ -799,31 +831,31 @@ const sceneEditor = definePrimitive({
           moved =
             offsetX !== (side?.offsetX ?? 0) ||
             offsetY !== (side?.offsetY ?? 0);
-          const shifted = updateLineSide(map, wall, sector, {
-            offsetX: offsetX || undefined,
-            offsetY: offsetY || undefined,
-          });
-          // With Shift held the walls beside this one follow, so the texture
-          // stays unbroken along the room as it moves.
-          store.set({
-            draftMap: shiftHeld
+          const isAligned = shiftHeld;
+          draft((next) => {
+            if (describeSurface(next, key)?.sector?.id !== sector) return next;
+            const shifted = updateLineSide(next, wall, sector, {
+              offsetX: offsetX || undefined,
+              offsetY: offsetY || undefined,
+            });
+            // With Shift held the walls beside this one follow, so the
+            // texture stays unbroken along the room as it moves.
+            return isAligned
               ? alignWalls(
                   shifted,
                   sector,
                   wall,
                   (name) => store.get().assets?.texture(name).width ?? 1,
                 )
-              : shifted,
+              : shifted;
           });
         },
         onEnd: (end, canceled) => {
-          const { draftMap } = store.get();
           stopDrag = undefined;
           dragging = false;
-          store.set({ draftMap: null });
-          if (!canceled && moved && draftMap) {
-            change("map", draftMap, { reason: "offset-drag", event: end });
-          }
+          dropDraft(
+            !canceled && moved ? { reason: "offset-drag", event: end } : null,
+          );
           if (!canceled && !started) onTap?.();
         },
       });
@@ -1202,18 +1234,16 @@ const sceneEditor = definePrimitive({
           onMove: ({ y }) => {
             const units = (startY - y) * rowsPerPixel * unitsPerRow;
             const delta = Math.round(units / gridSize) * gridSize;
-            const draftMap = moveSurfaceHeight(map, key, delta);
-            moved = draftMap !== map;
-            store.set({ draftMap });
+            moved = delta !== 0;
+            draft((next) => moveSurfaceHeight(next, key, delta));
           },
           onEnd: (end, canceled) => {
-            const { draftMap } = store.get();
             stopDrag = undefined;
             dragging = false;
-            store.set({ draftMap: null, frozenEye: null });
-            if (!canceled && moved && draftMap) {
-              change("map", draftMap, { reason: "height-drag", event: end });
-            }
+            store.set({ frozenEye: null });
+            dropDraft(
+              !canceled && moved ? { reason: "height-drag", event: end } : null,
+            );
           },
         });
       },
