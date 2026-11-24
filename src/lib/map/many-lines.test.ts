@@ -127,6 +127,27 @@ describe("aiming several walls", () => {
     );
   });
 
+  it("gives an untagged room the tag its walls already share", () => {
+    const stray = setWallsTag(teleporters, padWalls, 7);
+    const one = setLinesTarget(stray, [padWalls[0]], landing.id);
+    expect(one.sectors.find((sector) => sector.id === landing.id)?.tag).toBe(7);
+    expect(describeWalls(one, padWalls).tag).toBe(7);
+  });
+
+  it("takes a free tag where another kind of line has the walls' tag", () => {
+    const stray = setWallsTag(teleporters, padWalls, 7);
+    const landingWall = sectorEdges(
+      defined(stray.sectors.find((sector) => sector.id === landing.id)),
+    ).map((edge) => wallKey(edge.from, edge.to))[0];
+    const lift = updateLine(stray, landingWall, {
+      action: { kind: "lift", trigger: "switch", repeat: true, tag: 7 },
+    });
+    const one = setLinesTarget(lift, [padWalls[0]], landing.id);
+    expect(
+      one.sectors.find((sector) => sector.id === landing.id)?.tag,
+    ).not.toBe(7);
+  });
+
   it("shows the side they work from, and Mixed where they differ", () => {
     const look = describeWalls(teleporters, padWalls);
     expect(look.sides?.map((sector) => sector.name).sort()).toEqual([

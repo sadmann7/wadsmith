@@ -247,7 +247,7 @@ export function setLinesTarget(
   });
   if (aiming.length === 0) return map;
   const sector = map.sectors.find((item) => item.id === sectorId);
-  const tag = sector ? sector.tag || freeTag(map) : 0;
+  const tag = sector ? sector.tag || strayTag(map, aiming) || freeTag(map) : 0;
   const tagged = sector ? updateSector(map, sector.id, { tag }) : map;
   return aiming.reduce((next, wall) => {
     const { action, raw } = next.lines?.[wall] ?? {};
@@ -805,6 +805,28 @@ export function addRoom(
 }
 
 export type RoomSide = "north" | "east" | "south" | "west";
+
+// A tag the walls share that no room has, and that only lines doing the same
+// thing carry, so aiming one of them at an untagged room keeps the others with
+// it.
+function strayTag(map: GameMap, walls: string[]) {
+  const aim = (wall: string) => {
+    const { action, raw } = map.lines?.[wall] ?? {};
+    return {
+      tag: action?.tag ?? raw?.tag ?? 0,
+      does: action?.kind ?? raw?.special,
+    };
+  };
+  const [first, ...rest] = walls.map(aim);
+  if (!first?.tag || rest.some((item) => item.tag !== first.tag)) return 0;
+  const sharing = Object.keys(map.lines ?? {})
+    .map(aim)
+    .filter((item) => item.tag === first.tag);
+  return sharing.every((item) => item.does === first.does) &&
+    !map.sectors.some((sector) => sector.tag === first.tag)
+    ? first.tag
+    : 0;
+}
 
 // The grid point nearest the room's middle with a player's width of the room
 // around it, so a room nested inside it or a wall doesn't take the landing.
