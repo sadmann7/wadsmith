@@ -26,8 +26,6 @@ import { Input } from "@/components/ui/input";
 import { engineSlot, type GameInfo } from "@/lib/engine/game";
 import { buildChecks, type CheckedIssue, issueText } from "@/lib/map/checks";
 
-const maxNameLength = 64;
-
 const statusIcons = {
   passed: { icon: CircleCheck, className: "text-success", label: "Passed" },
   warning: { icon: TriangleAlert, className: "text-warning", label: "Warning" },
@@ -40,12 +38,12 @@ const statusIcons = {
 };
 
 export function wadFileName(name: string) {
-  const stem = name.trim().replace(/\.wad\.*$/i, "");
-  const safe = stem
-    .replace(/[^A-Za-z0-9._-]+/g, "-")
-    .replace(/^[-.]+|[-.]+$/g, "")
-    .slice(0, maxNameLength);
-  return `${safe || "wadsmith-map01"}.wad`;
+  const stem = safeFileStem(name.trim().replace(/\.wad\.*$/i, ""));
+  return `${stem || "wadsmith-map01"}.wad`;
+}
+
+export function mapFileName(name: string) {
+  return `${safeFileStem(name.trim().toLowerCase()) || "wadsmith-map"}.json`;
 }
 
 interface BuildDialogProps {
@@ -199,6 +197,15 @@ export function BuildDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+const maxNameLength = 64;
+
+function safeFileStem(name: string) {
+  return name
+    .replace(/[^A-Za-z0-9._-]+/g, "-")
+    .replace(/^[-.]+|[-.]+$/g, "")
+    .slice(0, maxNameLength);
 }
 
 function defaultFileName(name: string) {
