@@ -58,7 +58,7 @@ describe("startCamera", () => {
     });
   });
 
-  it("stands in the middle of the first room facing its longest wall", () => {
+  it("stands in the middle of the first room facing down its length", () => {
     const map: GameMap = {
       ...testMap,
       vertices: {
@@ -72,14 +72,14 @@ describe("startCamera", () => {
       lines: {},
       switches: [],
     };
-    expect(startCamera(map)).toEqual({ x: 256, y: 128, angle: 90 });
+    expect(startCamera(map)).toEqual({ x: 256, y: 128, angle: 0 });
   });
 
   it.each([
     [512, 64],
     [2048, 48],
   ])(
-    "stands clear of a pillar in a room %i wide, %i from its walls",
+    "stands clear of a pillar in a room %i wide, %i from its walls, facing along the walkway",
     (size, gap) => {
       const far = size - gap;
       const map: GameMap = {
@@ -105,7 +105,10 @@ describe("startCamera", () => {
         lines: {},
         switches: [],
       };
-      expect(sectorAt(map, startCamera(map))?.id).toBe("sector-1");
+      const camera = startCamera(map);
+      expect(sectorAt(map, camera)?.id).toBe("sector-1");
+      const isSideWalk = camera.x < gap || camera.x > far;
+      expect(camera.angle % 180).toBe(isSideWalk ? 90 : 0);
     },
   );
 });

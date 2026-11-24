@@ -1,6 +1,6 @@
 import type { GameMap, Point } from "@/lib/map/types";
 
-import { sectorAt } from "@/lib/map/geometry";
+import { clearView, sectorAt } from "@/lib/map/geometry";
 
 import { type Camera, startCamera } from "./render";
 
@@ -75,7 +75,7 @@ export class SceneCamera {
     if (!sector || sector.door) return false;
     const angle = target
       ? (Math.atan2(from.y - target.y, target.x - from.x) * 180) / Math.PI
-      : this.current.angle;
+      : clearView(map, sector, from);
     this.walked = true;
     this.position = { ...this.current, ...from, angle };
     return true;
