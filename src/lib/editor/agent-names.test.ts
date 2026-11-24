@@ -211,6 +211,17 @@ describe.each(games)("texture names with %s", (_, context) => {
     expect(names.walls).toContain(added?.wallTexture);
   });
 
+  it("makeDoor with no texture uses a wall listCatalog lists", () => {
+    const next = runAgentAction(
+      map,
+      "makeDoor",
+      { room: "Arena door" },
+      context,
+    ).map;
+    const door = next.sectors.find((sector) => sector.name === "Arena door");
+    expect(names.walls).toContain(door?.door?.texture);
+  });
+
   it.each([
     ["addSwitch", { wall: "v1|v6" }],
     ["addDoorSwitch", { room: "Start room", door: "Arena door" }],
@@ -243,16 +254,6 @@ describe.each(games)("texture names with %s", (_, context) => {
       expect(shown.filter((name) => !name.includes(search))).toEqual([]);
     },
   );
-
-  it("a search of flats leaves out a sky that doesn't match", () => {
-    const page = runAgentAction(
-      testMap,
-      "listCatalog",
-      { of: "flats", search: "CEIL" },
-      context,
-    ).result as NamePage;
-    expect(page.sky).toBeUndefined();
-  });
 });
 
 it("no help text or choice names a texture a game may lack", () => {

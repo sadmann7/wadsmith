@@ -184,7 +184,8 @@ const roomLooks: AgentParam[] = [
   {
     name: "ceilingTexture",
     type: "string",
-    description: 'The ceiling\'s flat. "F_SKY1" opens it to the sky.',
+    description:
+      "The ceiling's flat. The sky that listCatalog of flats gives opens it to the sky.",
   },
   {
     name: "wallTexture",
@@ -522,14 +523,14 @@ export const agentActions: AgentAction[] = [
       if (corners.length < 3) throw new Error("A room needs three corners.");
       const isFloorOnly =
         args.floor !== undefined && args.ceiling === undefined;
+      const starter = newRoomLooks(map, corners);
       const added = drawRoom(
         map,
         corners,
-        looks(
-          args,
-          context,
-          isFloorOnly ? undefined : newRoomLooks(map, corners),
-        ),
+        {
+          ...texturesInGame(starter, context),
+          ...looks(args, context, isFloorOnly ? undefined : starter),
+        },
         1,
       );
       return { map: added.map, result: added.id };
@@ -683,7 +684,7 @@ export const agentActions: AgentAction[] = [
         name: "texture",
         type: "string",
         description:
-          "The texture on the door's face, like BIGDOOR2, or the wall's own to hide a secret door.",
+          "The texture on the door's face, one of the doors listCatalog of walls names, or the wall's own to hide a secret door. The first door when left out.",
       }),
       optional({
         name: "key",
@@ -700,9 +701,10 @@ export const agentActions: AgentAction[] = [
         ...(args.key !== undefined && { key: choice(args, "key", keyColors) }),
         closes: flag(args, "closes") ?? true,
         ...(flag(args, "fast") && { fast: true }),
-        ...(args.texture !== undefined && {
-          texture: textureName(args, "texture", "wall", context),
-        }),
+        texture:
+          args.texture === undefined
+            ? doorTexture(context)
+            : textureName(args, "texture", "wall", context),
       };
       if (door.key && door.opensBy === "switch") {
         throw new Error("A door opened by a switch can't need a key.");
@@ -1242,12 +1244,16 @@ export const agentActions: AgentAction[] = [
     description:
       "Puts a switch on a room's longest free wall and wires it to a door. Answers with the switch's id and its wall.",
     params: [room("The room the switch goes in."), doorParam()],
-    run: (map, args) => {
+    run: (map, args, context) => {
       const source = findRoom(map, args.room);
       const target = findDoor(map, args.door);
+      const texture = switchTexture(args, context);
       const added = addSwitchInRoom(map, source.id, target.id);
       if (!added) throw new Error(`${source.name} has no free wall.`);
-      return { map: added.map, result: placedSwitch(added.map, added.id) };
+      return {
+        map: updateSwitch(added.map, added.id, { texture }),
+        result: placedSwitch(added.map, added.id),
+      };
     },
   },
   {
@@ -1260,11 +1266,12 @@ export const agentActions: AgentAction[] = [
       optional({
         name: "texture",
         type: "string",
-        description: "The switch's texture.",
-        choices: switchTextures,
+        description:
+          "The switch's texture, one of the switches listCatalog of walls names. The first of them when left out.",
       }),
     ],
-    run: (map, args) => {
+    run: (map, args, context) => {
+      const texture = switchTexture(args, context);
       const key = findWall(map, args.wall);
       const free = freeWallAt(map, key);
       if (!free) {
@@ -1280,12 +1287,7 @@ export const agentActions: AgentAction[] = [
         door?.id ?? null,
       );
       return {
-        map:
-          args.texture === undefined
-            ? added.map
-            : updateSwitch(added.map, added.id, {
-                texture: choice(args, "texture", switchTextures),
-              }),
+        map: updateSwitch(added.map, added.id, { texture }),
         result: placedSwitch(added.map, added.id),
       };
     },
@@ -1864,8 +1866,9 @@ function roomDetail(map: GameMap, sector: Sector) {
   };
 }
 
-const namePageSize = 200;
 const skyFlat = "F_SKY1";
+
+const namePageSize = 200;
 
 function catalog(of: string, args: Args, context: CheckContext) {
   if (of === "things") {
@@ -1895,16 +1898,16 @@ function catalog(of: string, args: Args, context: CheckContext) {
     page(matching(list), args, namePageSize, namePageLimit);
   if (of === "walls") {
     const solid = new Set(names.walls);
-    const textures = new Set(names.textures);
-    const had = (list: readonly string[]) =>
-      list.filter((name) => textures.has(name));
     return {
       ...found(names.walls),
       seeThrough: matching(
-        had(names.middles.filter((name) => !solid.has(name))),
+        inGame(
+          names.middles.filter((name) => !solid.has(name)),
+          context,
+        ),
       ),
-      doors: had(doorTextures),
-      switches: had(switchTextures),
+      doors: matching(inGame(doorTextures, context)),
+      switches: matching(inGame(switchTextures, context)),
     };
   }
   if (of === "flats") {
@@ -1913,6 +1916,7 @@ function catalog(of: string, args: Args, context: CheckContext) {
       ...(names.flats.includes(skyFlat) && { sky: skyFlat }),
     };
   }
+
   if (of === "sector-effects") {
     return Object.entries(sectorEffects).map(([effect, { label }]) => ({
       effect,
@@ -2182,8 +2186,6 @@ function placed(map: GameMap, args: Args, point: Point) {
   };
 }
 
-const closestShown = 5;
-
 // A texture or flat the game has, matched whatever its case.
 function textureName(
   args: Args,
@@ -2197,14 +2199,69 @@ function textureName(
   const wanted = value.toUpperCase();
   const match = known.find((item) => item.toUpperCase() === wanted);
   if (match) return match;
-  const closest = known
+  throw new Error(
+    `No ${kind === "flat" ? "flat" : "wall texture"} "${value}" for ${name}. The closest are ${closestTo(wanted, known).join(", ")}. listCatalog of ${kind}s names them all.`,
+  );
+}
+
+const closestShown = 5;
+
+function closestTo(wanted: string, known: readonly string[]) {
+  return known
     .map((item) => ({ item, distance: editDistance(wanted, item) }))
     .toSorted((a, b) => a.distance - b.distance)
     .slice(0, closestShown)
     .map(({ item }) => item);
-  throw new Error(
-    `No ${kind === "flat" ? "flat" : "wall texture"} "${value}" for ${name}. The closest are ${closest.join(", ")}. listCatalog of ${kind}s names them all.`,
+}
+
+function inGame<T extends string>(list: readonly T[], context: CheckContext) {
+  const textures = new Set((context.names ?? freedoomNames).textures);
+  return list.filter((name) => textures.has(name));
+}
+
+function doorTexture(context: CheckContext) {
+  const [door] = inGame(doorTextures, context);
+  return (
+    door ?? (context.names ?? freedoomNames).walls[0] ?? defaultDoor.texture
   );
+}
+
+function switchTexture(args: Args, context: CheckContext) {
+  const known = inGame(switchTextures, context);
+  const [first] = known;
+  if (first === undefined) {
+    throw new Error("The game has no switch textures, so a switch can't show.");
+  }
+  if (args.texture === undefined) return first;
+  const value = text(args, "texture").trim();
+  const wanted = value.toUpperCase();
+  const match = known.find((item) => item === wanted);
+  if (match) return match;
+  throw new Error(
+    `No switch texture "${value}". The closest are ${closestTo(wanted, known).join(", ")}. listCatalog of walls names the switches the game has.`,
+  );
+}
+
+type RoomTextures = Pick<
+  Sector,
+  "floorTexture" | "ceilingTexture" | "wallTexture"
+>;
+
+// The textures a new room starts with that the game lacks, swapped for the
+// first the game lists.
+function texturesInGame(
+  { floorTexture, ceilingTexture, wallTexture }: RoomTextures,
+  context: CheckContext,
+): Partial<RoomTextures> {
+  const names = context.names ?? freedoomNames;
+  const flat = names.flats.find((name) => name !== skyFlat);
+  const [wall] = names.walls;
+  return {
+    ...(flat && !names.flats.includes(floorTexture) && { floorTexture: flat }),
+    ...(flat &&
+      !names.flats.includes(ceilingTexture) && { ceilingTexture: flat }),
+    ...(wall && !names.textures.includes(wallTexture) && { wallTexture: wall }),
+  };
 }
 
 function editDistance(a: string, b: string) {
