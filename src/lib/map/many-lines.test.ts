@@ -1,11 +1,21 @@
 import { describe, expect, it } from "vitest";
 
-import { freeTag, shiftRooms, updateLine, updateSector } from "./edit";
+import { defined } from "@/lib/defined";
+
+import {
+  freeTag,
+  setLinesTarget,
+  shiftRooms,
+  updateLine,
+  updateSector,
+} from "./edit";
+import { sectorEdges, wallKey } from "./geometry";
 import {
   describeWalls,
   paintWalls,
   setWallsAction,
   setWallsTag,
+  updateWalls,
   updateWallSides,
 } from "./many-lines";
 import { drawRoom } from "./reshape";
@@ -81,6 +91,90 @@ describe("actions on several walls", () => {
   });
 });
 
+describe("aiming several walls", () => {
+  const empty = { vertices: {}, sectors: [], things: [], switches: [] };
+  const hall = drawRoom(empty, box(0, 256), { name: "Hall" }, 1);
+  const pad = drawRoom(hall.map, box(96, 64), { name: "Pad" }, 1);
+  const landing = drawRoom(pad.map, box(512, 128), { name: "Landing" }, 1);
+  const padWalls = sectorEdges(
+    defined(landing.map.sectors.find((sector) => sector.id === pad.id)),
+  ).map((edge) => wallKey(edge.from, edge.to));
+  const teleporters = setWallsAction(landing.map, padWalls, "teleport");
+
+  it("sends every wall to one room with one tag", () => {
+    const aimed = setLinesTarget(teleporters, padWalls, landing.id);
+    const tag = aimed.sectors.find((sector) => sector.id === landing.id)?.tag;
+    expect(tag).toBeGreaterThan(0);
+    expect(padWalls.map((wall) => aimed.lines?.[wall]?.action?.tag)).toEqual(
+      padWalls.map(() => tag),
+    );
+    expect(describeWalls(aimed, padWalls).tag).toBe(tag);
+    expect(
+      aimed.things.filter((thing) => thing.kind === "teleport-destination"),
+    ).toHaveLength(1);
+  });
+
+  it("keeps a room's tag when walls already aim at it", () => {
+    const [first, ...rest] = padWalls;
+    const one = setLinesTarget(teleporters, [first], landing.id);
+    const all = setLinesTarget(one, rest, landing.id);
+    const tags = new Set(
+      padWalls.map((wall) => all.lines?.[wall]?.action?.tag),
+    );
+    expect(tags.size).toBe(1);
+    expect(describeWalls(all, padWalls).tag).toBe(
+      one.lines?.[first]?.action?.tag,
+    );
+  });
+
+  it("gives an untagged room the tag its walls already share", () => {
+    const stray = setWallsTag(teleporters, padWalls, 7);
+    const one = setLinesTarget(stray, [padWalls[0]], landing.id);
+    expect(one.sectors.find((sector) => sector.id === landing.id)?.tag).toBe(7);
+    expect(describeWalls(one, padWalls).tag).toBe(7);
+  });
+
+  it("takes a free tag where another kind of line has the walls' tag", () => {
+    const stray = setWallsTag(teleporters, padWalls, 7);
+    const landingWall = sectorEdges(
+      defined(stray.sectors.find((sector) => sector.id === landing.id)),
+    ).map((edge) => wallKey(edge.from, edge.to))[0];
+    const lift = updateLine(stray, landingWall, {
+      action: { kind: "lift", trigger: "switch", repeat: true, tag: 7 },
+    });
+    const one = setLinesTarget(lift, [padWalls[0]], landing.id);
+    expect(
+      one.sectors.find((sector) => sector.id === landing.id)?.tag,
+    ).not.toBe(7);
+  });
+
+  it("shows the side they work from, and Mixed where they differ", () => {
+    const look = describeWalls(teleporters, padWalls);
+    expect(look.sides?.map((sector) => sector.name).sort()).toEqual([
+      "Hall",
+      "Pad",
+    ]);
+    const fromHall = updateWalls(teleporters, padWalls, { front: hall.id });
+    expect(describeWalls(fromHall, padWalls).front).toBe(hall.id);
+    const turned = updateWalls(fromHall, [padWalls[0]], { front: pad.id });
+    expect(describeWalls(turned, padWalls).front).toBeNull();
+  });
+
+  it("offers no side for walls between different rooms", () => {
+    const hallWall = sectorEdges(
+      defined(teleporters.sectors.find((sector) => sector.id === hall.id)),
+    ).map((edge) => wallKey(edge.from, edge.to))[0];
+    const mixedRooms = setWallsAction(teleporters, [hallWall], "teleport");
+    expect(describeWalls(mixedRooms, [...padWalls, hallWall]).sides).toBeNull();
+  });
+
+  it("leaves walls whose action takes no tag alone", () => {
+    const exits = setWallsAction(landing.map, padWalls, "exit");
+    expect(describeWalls(exits, padWalls).action).toBe("exit");
+    expect(setLinesTarget(exits, padWalls, landing.id)).toBe(exits);
+  });
+});
+
 describe("room numbers and tags", () => {
   it("moves each room from where it is, within the limits", () => {
     const moved = shiftRooms(testMap, ["sector-1", "sector-2"], "floor", 8);
@@ -132,5 +226,14 @@ function square(left: number) {
     { x: left + 128, y: 0 },
     { x: left + 128, y: 128 },
     { x: left, y: 128 },
+  ];
+}
+
+function box(left: number, size: number) {
+  return [
+    { x: left, y: left },
+    { x: left + size, y: left },
+    { x: left + size, y: left + size },
+    { x: left, y: left + size },
   ];
 }

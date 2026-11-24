@@ -1,4 +1,12 @@
-import type { GameMap, LineActionKind, LineSettings, LineSide } from "./types";
+import { defined } from "@/lib/defined";
+
+import type {
+  GameMap,
+  LineActionKind,
+  LineSettings,
+  LineSide,
+  Sector,
+} from "./types";
 
 import { landTeleport, updateLine, updateLineSide } from "./edit";
 import { wallOwners } from "./geometry";
@@ -9,6 +17,7 @@ import {
   lineUsesTag,
   newLineAction,
   triggersFor,
+  usedFromFront,
 } from "./lines";
 import { describeSurface, paintSurface, surfaceKey } from "./surfaces";
 
@@ -38,6 +47,11 @@ export interface WallsLook {
   // one.
   tag: number | null;
   tagged: boolean;
+  // The two rooms every wall lies between, where all of them act only from
+  // their front and none borders a door.
+  sides: [Sector, Sector] | null;
+  // The room the walls act from, or null where they differ.
+  front: string | null;
   twoSided: boolean;
   flags: Record<LineFlag, boolean>;
 }
@@ -110,6 +124,7 @@ export function describeWalls(map: GameMap, walls: string[]): WallsLook {
     ),
     tag: agreed(tags),
     tagged: tags.length > 0,
+    ...sharedSides(map, walls),
     twoSided: walls.some(
       (wall) => (wallOwners(map).get(wall)?.length ?? 0) > 1,
     ),
@@ -205,6 +220,36 @@ export function setWallsTag(map: GameMap, walls: string[], tag: number) {
       ? updateLine(next, wall, { action: { ...action, tag } })
       : next;
   }, map);
+}
+
+function sharedSides(map: GameMap, walls: string[]) {
+  const described = walls.map((wall) => {
+    const line = describeLine(map, wall, "");
+    const { action } = line.settings;
+    return action &&
+      usedFromFront(action) &&
+      line.back &&
+      line.back !== line.front &&
+      !line.front.door &&
+      !line.back.door
+      ? { front: line.front, back: line.back }
+      : null;
+  });
+  const first = described[0];
+  const shared =
+    first &&
+    described.every(
+      (line) =>
+        line &&
+        [line.front, line.back].includes(first.front) &&
+        [line.front, line.back].includes(first.back),
+    );
+  return shared
+    ? {
+        sides: [first.front, first.back] as [Sector, Sector],
+        front: agreed(described.map((line) => defined(line).front.id)),
+      }
+    : { sides: null, front: null };
 }
 
 function agreed<T>(values: T[]) {
