@@ -1,21 +1,21 @@
 import { formatShortcut } from "@ui-sdk/core";
 import { Check } from "lucide-react";
 
-import type { GameMap } from "@/lib/map/types";
+import type { GameMap, Point } from "@/lib/map/types";
 
 import { useEditorKeys } from "@/hooks/use-editor-keys";
 import { getHasExit } from "@/lib/map/checks";
-import { roomDefaults } from "@/lib/map/edit";
+import { newRoomLooks } from "@/lib/map/edit";
 import { sectorAt } from "@/lib/map/geometry";
 
 interface NewMapPanelProps {
   map: GameMap;
-  corners: number;
+  corners: Point[];
   drawing: boolean;
 }
 
 export function NewMapPanel({ map, corners, drawing }: NewMapPanelProps) {
-  const room = roomDefaults(map.sectors.length + 1);
+  const room = newRoomLooks(map, corners);
   const thingsKey = useEditorKeys().things;
   const steps = [
     {
@@ -55,7 +55,7 @@ export function NewMapPanel({ map, corners, drawing }: NewMapPanelProps) {
           <h2>
             This sector will use
             <span>
-              {corners} {corners === 1 ? "corner" : "corners"}
+              {corners.length} {corners.length === 1 ? "corner" : "corners"}
             </span>
           </h2>
           <dl className="m-0 grid grid-cols-[1fr_auto] gap-x-3 gap-y-1.5">

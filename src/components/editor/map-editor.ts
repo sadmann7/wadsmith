@@ -150,7 +150,7 @@ interface MapEditorOptions {
   onAgentAction?: (action: string, outcome: AgentReport) => void;
   // The game's texture names, so an agent's edit can't use one it lacks.
   checkContext?: CheckContext;
-  onDrawingChange?: (corners: number) => void;
+  onDrawingChange?: (corners: Point[]) => void;
   contextMenuOpen?: boolean;
   grid?: number;
   drawShape?: DrawShape;
@@ -449,9 +449,9 @@ export const mapEditor = definePrimitive({
         ),
     });
 
-    let lastCorners = 0;
+    let lastCorners = store.get().drawing;
     const stopCorners = store.subscribe(() => {
-      const corners = store.get().drawing.length;
+      const corners = store.get().drawing;
       if (corners === lastCorners) return;
       lastCorners = corners;
       context.options().onDrawingChange?.(corners);

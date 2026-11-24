@@ -1,7 +1,21 @@
 import { describe, expect, it } from "vitest";
 
-import { applyPositions, positionsOf, updateSector, wallNear } from "./edit";
+import type { GameMap, Point } from "./types";
+
+import {
+  addRoom,
+  addRoomOnSide,
+  applyPositions,
+  defaultDoor,
+  newRoomLooks,
+  positionsOf,
+  setRoomDoor,
+  updateSector,
+  wallNear,
+} from "./edit";
 import { testMap } from "./test-map";
+
+const blank: GameMap = { vertices: {}, sectors: [], things: [], switches: [] };
 
 describe("applyPositions", () => {
   it("keeps every thing and corner that didn't move", () => {
@@ -65,3 +79,117 @@ describe("wallNear", () => {
     });
   });
 });
+
+describe("addRoom", () => {
+  it("keeps the starter looks for a room drawn on its own", () => {
+    const { map, id } = addRoom(blank, box(0, 0, 128, 128));
+    expect(map.sectors.find((sector) => sector.id === id)).toMatchObject({
+      light: 160,
+      wallTexture: "STARTAN3",
+      floorTexture: "FLOOR4_8",
+      ceilingTexture: "CEIL3_5",
+    });
+  });
+
+  it("gives a door between two rooms their looks and keeps its face", () => {
+    const { map, id } = addRoom(rockRooms(), box(256, 96, 272, 160));
+    const door = setRoomDoor(map, id, defaultDoor).sectors.find(
+      (sector) => sector.id === id,
+    );
+    expect(door).toMatchObject({
+      light: 192,
+      wallTexture: "ROCKRED1",
+      floorTexture: "RROCK19",
+      ceilingTexture: "FLAT5_7",
+      door: { texture: "BIGDOOR2" },
+    });
+  });
+
+  it("follows the neighbour it shares the most wall with", () => {
+    const rooms = addRoom(rockRooms(), box(0, 256, 128, 384), {
+      wallTexture: "MARBLE1",
+      floorTexture: "FLAT1",
+    }).map;
+    const below = addRoom(rooms, box(128, 256, 528, 320));
+    expect(below.map.sectors.at(-1)).toMatchObject({
+      wallTexture: "ROCKRED1",
+      floorTexture: "RROCK19",
+    });
+    const beside = addRoom(rooms, box(128, 256, 192, 384));
+    expect(beside.map.sectors.at(-1)).toMatchObject({
+      wallTexture: "MARBLE1",
+      floorTexture: "FLAT1",
+    });
+  });
+
+  it("keeps a door between sky rooms under a solid ceiling", () => {
+    const yard = { ceilingTexture: "F_SKY1", wallTexture: "ROCKRED1" };
+    const west = addRoom(blank, box(0, 0, 256, 256), yard);
+    const yards = addRoom(west.map, box(272, 0, 528, 256), yard).map;
+    const { map, id } = addRoom(yards, box(256, 96, 272, 160));
+    expect(map.sectors.find((sector) => sector.id === id)).toMatchObject({
+      wallTexture: "ROCKRED1",
+      ceilingTexture: "CEIL3_5",
+    });
+  });
+
+  it("lets textures passed in win over the neighbour's", () => {
+    const { map, id } = addRoom(rockRooms(), box(256, 96, 272, 160), {
+      wallTexture: "METAL",
+    });
+    expect(map.sectors.find((sector) => sector.id === id)).toMatchObject({
+      wallTexture: "METAL",
+      floorTexture: "RROCK19",
+    });
+  });
+});
+
+describe("newRoomLooks", () => {
+  it("previews a room's looks from the corners placed so far", () => {
+    const map = rockRooms();
+    expect(newRoomLooks(map, [])).toMatchObject({ wallTexture: "STARTAN3" });
+    expect(
+      newRoomLooks(map, [
+        { x: 256, y: 96 },
+        { x: 256, y: 160 },
+      ]),
+    ).toMatchObject({ wallTexture: "ROCKRED1", light: 192 });
+  });
+});
+
+describe("addRoomOnSide", () => {
+  it("copies the room it builds from over a wider neighbour", () => {
+    const rooms = addRoom(rockRooms(), box(528, -512, 640, 512), {
+      wallTexture: "MARBLE1",
+    }).map;
+    const added = addRoomOnSide(rooms, "sector-2", "south", 512);
+    expect(added?.map.sectors.at(-1)).toMatchObject({
+      wallTexture: "ROCKRED1",
+      light: 192,
+    });
+  });
+});
+
+function box(left: number, top: number, right: number, bottom: number) {
+  return [
+    { x: left, y: top },
+    { x: right, y: top },
+    { x: right, y: bottom },
+    { x: left, y: bottom },
+  ] satisfies Point[];
+}
+
+function rockRooms() {
+  const west = addRoom(blank, box(0, 0, 256, 256), {
+    light: 192,
+    wallTexture: "ROCKRED1",
+    floorTexture: "RROCK19",
+    ceilingTexture: "FLAT5_7",
+  });
+  return addRoom(west.map, box(272, 0, 528, 256), {
+    light: 192,
+    wallTexture: "ROCKRED1",
+    floorTexture: "RROCK19",
+    ceilingTexture: "FLAT5_7",
+  }).map;
+}

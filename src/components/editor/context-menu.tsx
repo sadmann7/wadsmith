@@ -715,14 +715,7 @@ function RoomMenu({ id, ...props }: RoomMenuProps) {
   const room = map.sectors.find((sector) => sector.id === id);
   if (!room) return null;
   const point = target.point ?? roomCenter(map, room);
-  const copied = {
-    floor: room.floor,
-    ceiling: room.ceiling,
-    light: room.light,
-    floorTexture: room.floorTexture,
-    ceilingTexture: room.ceilingTexture,
-    wallTexture: room.wallTexture,
-  };
+  const copied = { floor: room.floor, ceiling: room.ceiling };
   const added = (side: RoomSide) => {
     const next = addRoomOnSide(map, room.id, side, 192, copied);
     return next && addsNoProblems(map, next.map) ? next : null;
