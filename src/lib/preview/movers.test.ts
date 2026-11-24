@@ -90,11 +90,14 @@ describe("doors and lifts in the 3D view", () => {
     // The corridor runs from -16 to 96, between floors at 0 and -16 and
     // ceilings at 128 and 96, with its door made a plain room.
     const doorless = updateSector(testMap, "sector-4", { door: undefined });
-    const worked = (kind: LineActionKind) =>
+    const worked = (
+      kind: LineActionKind,
+      complevel: GameMap["complevel"] = "vanilla",
+    ) =>
       defined(
         withMovers(
           setLineTarget(
-            updateLine(doorless, openWall, {
+            updateLine({ ...doorless, complevel }, openWall, {
               action: { kind, trigger: "switch", repeat: true, tag: 0 },
             }),
             openWall,
@@ -106,7 +109,9 @@ describe("doors and lifts in the 3D view", () => {
     expect(worked("floor-raise").floor).toBe(96);
     expect(worked("floor-crush").floor).toBe(88);
     expect(worked("floor-raise-next").floor).toBe(0);
-    expect(worked("floor-raise-512").floor).toBe(96);
+    // Vanilla raises a floor through its ceiling, and Boom stops it there.
+    expect(worked("floor-raise-512").floor).toBe(496);
+    expect(worked("floor-raise-512", "boom").floor).toBe(96);
     expect(worked("floor-lower-highest").floor).toBe(0);
     expect(worked("floor-lower-fast").floor).toBe(8);
     expect(worked("ceiling-lower").ceiling).toBe(-16);
@@ -180,6 +185,30 @@ describe("stairs, donuts, platforms and crushers in the 3D view", () => {
     expect(heights(turned, ["r2"]).map(([floor]) => floor)).toEqual([0, 16, 8]);
   });
 
+  it("raises a door on a stair, held under its shut ceiling on Boom, and ends there", () => {
+    const steps = (complevel: GameMap["complevel"]) =>
+      row(
+        [
+          {},
+          { tag: 1, floorTexture: "STEP1" },
+          {
+            floorTexture: "STEP1",
+            door: { opensBy: "use", closes: true, texture: "BIGDOOR2" },
+          },
+          { floorTexture: "STEP1" },
+        ],
+        acting("stairs"),
+        complevel,
+      );
+    // A door is behind every line it shares, so no step leads on from it.
+    expect(heights(steps("vanilla"), ["r1"]).map(([floor]) => floor)).toEqual([
+      0, 8, 16, 0,
+    ]);
+    expect(heights(steps("boom"), ["r1"]).map(([floor]) => floor)).toEqual([
+      0, 8, 0, 0,
+    ]);
+  });
+
   it("builds Boom stairs down by their step, past other floors when told to", () => {
     const steps = row(
       [{}, { tag: 1 }, { floorTexture: "FLAT1" }, {}],
@@ -229,6 +258,7 @@ describe("stairs, donuts, platforms and crushers in the 3D view", () => {
     const textureHeight = (name: string) => (name === "SHORT" ? 64 : 128);
     expect(heights(map, ["r1"], textureHeight)[1]).toEqual([64, 128]);
     expect(heights(map, ["r1"])[1]).toEqual([0, 128]);
+    expect(heights(map, ["r1"], () => null)[1]).toEqual([0, 128]);
     expect(getIsMover(map, "r1")).toBe(true);
   });
 });
@@ -278,6 +308,12 @@ describe("Boom's generalized movers in the 3D view", () => {
     );
   });
 
+  it("leaves them still on a vanilla map, which the engine plays without them", () => {
+    const map = row(rooms, boom("floor", { direction: 1, target: 0 }));
+    expect(getIsMover(map, "r1")).toBe(false);
+    expect(heights(map, ["r1"])[1]).toEqual([0, 128]);
+  });
+
   it("works the room behind a pressed line, whatever its tag", () => {
     const pressed = row(
       [{}, { floor: 32 }],
@@ -319,32 +355,36 @@ describe("several movers on one room", () => {
     };
     const tied = (first: LineSettings, second: LineSettings) =>
       heights(
-        row([{}, { tag: 1 }, {}], {
-          [wallKey("b1", "b2")]: first,
-          [wallKey("t1", "t2")]: second,
-        }),
+        row(
+          [{}, { tag: 1 }, {}],
+          {
+            [wallKey("b1", "b2")]: first,
+            [wallKey("t1", "t2")]: second,
+          },
+          "boom",
+        ),
         ["r1"],
       )[1];
     expect(tied(raised, lowered)).toEqual([24, 128]);
     expect(tied(lowered, raised)).toEqual([0, 104]);
   });
 
-  it("leaves a room two opened movers reach where the first in room order leaves it", () => {
+  it("leaves a floor two opened movers reach where the first in room order puts it", () => {
     const map = row(
       [
         {},
         { tag: 1, floorTexture: "STEP1" },
-        { tag: 2, floorTexture: "STEP1" },
+        { tag: 2, floorTexture: "STEP1", floor: 32 },
       ],
       {
         ...acting("stairs"),
         [wallKey("t2", "t3")]: {
-          action: { kind: "crusher", trigger: "walk", repeat: true, tag: 2 },
+          action: { kind: "lift", trigger: "walk", repeat: true, tag: 2 },
         },
       },
     );
     expect(heights(map, ["r1", "r2"])[2]).toEqual([16, 128]);
-    expect(heights(map, ["r2"])[2]).toEqual([0, 8]);
+    expect(heights(map, ["r2"])[2]).toEqual([0, 128]);
   });
 });
 
