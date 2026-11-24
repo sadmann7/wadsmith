@@ -688,6 +688,7 @@ export function startCamera(map: GameMap): Camera {
 }
 
 const spotSteps = 16;
+const wallInset = 16;
 
 function spotInside(map: GameMap, room: Sector, box: Box): Point {
   const middle = {
@@ -705,8 +706,21 @@ function spotInside(map: GameMap, room: Sector, box: Box): Point {
       Math.hypot(a.x - middle.x, a.y - middle.y) -
       Math.hypot(b.x - middle.x, b.y - middle.y),
   );
+  const nearWalls = loopEdges(room.vertices).flatMap(({ from, to }) => {
+    const a = map.vertices[from];
+    const b = map.vertices[to];
+    const length = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    const nx = ((a.y - b.y) / length) * wallInset;
+    const ny = ((b.x - a.x) / length) * wallInset;
+    const x = (a.x + b.x) / 2;
+    const y = (a.y + b.y) / 2;
+    return [
+      { x: x + nx, y: y + ny },
+      { x: x - nx, y: y - ny },
+    ];
+  });
   return (
-    spots.find((spot) => pointInSector(map, room, spot)) ??
+    [...spots, ...nearWalls].find((spot) => pointInSector(map, room, spot)) ??
     interiorPoint(sectorPolygon(map, room))
   );
 }

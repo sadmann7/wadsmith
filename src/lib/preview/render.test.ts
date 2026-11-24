@@ -75,32 +75,39 @@ describe("startCamera", () => {
     expect(startCamera(map)).toEqual({ x: 256, y: 128, angle: 90 });
   });
 
-  it("stands clear of a pillar that fills the room's middle", () => {
-    const map: GameMap = {
-      ...testMap,
-      vertices: {
-        a: { x: 0, y: 0 },
-        b: { x: 512, y: 0 },
-        c: { x: 512, y: 512 },
-        d: { x: 0, y: 512 },
-        e: { x: 64, y: 64 },
-        f: { x: 448, y: 64 },
-        g: { x: 448, y: 448 },
-        h: { x: 64, y: 448 },
-      },
-      sectors: [
-        {
-          ...testMap.sectors[0],
-          vertices: ["a", "b", "c", "d"],
-          holes: [["e", "f", "g", "h"]],
+  it.each([
+    [512, 64],
+    [2048, 48],
+  ])(
+    "stands clear of a pillar in a room %i wide, %i from its walls",
+    (size, gap) => {
+      const far = size - gap;
+      const map: GameMap = {
+        ...testMap,
+        vertices: {
+          a: { x: 0, y: 0 },
+          b: { x: size, y: 0 },
+          c: { x: size, y: size },
+          d: { x: 0, y: size },
+          e: { x: gap, y: gap },
+          f: { x: far, y: gap },
+          g: { x: far, y: far },
+          h: { x: gap, y: far },
         },
-      ],
-      things: [],
-      lines: {},
-      switches: [],
-    };
-    expect(sectorAt(map, startCamera(map))?.id).toBe("sector-1");
-  });
+        sectors: [
+          {
+            ...testMap.sectors[0],
+            vertices: ["a", "b", "c", "d"],
+            holes: [["e", "f", "g", "h"]],
+          },
+        ],
+        things: [],
+        lines: {},
+        switches: [],
+      };
+      expect(sectorAt(map, startCamera(map))?.id).toBe("sector-1");
+    },
+  );
 });
 
 describe("renderScene", () => {
