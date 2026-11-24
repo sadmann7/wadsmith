@@ -79,6 +79,12 @@ import {
 } from "@/lib/editor/clipboard";
 import { createEditHistory } from "@/lib/editor/edit-history";
 import {
+  parseLayout,
+  type SavedLayout,
+  serializeLayout,
+  type ViewLayout,
+} from "@/lib/editor/layout";
+import {
   type MapTarget,
   normalizeControlClick,
   pointOfTarget,
@@ -221,7 +227,7 @@ import type {
 } from "./map-editor";
 
 import { AgentCard } from "./agent-card";
-import { BuildDialog } from "./build-dialog";
+import { BuildDialog, mapFileName } from "./build-dialog";
 import { MapContextMenu, selectionTransforms } from "./context-menu";
 import { FindDialog } from "./find-dialog";
 import { GradientPanel } from "./gradient-panel";
@@ -236,6 +242,7 @@ import {
 import { MapCanvas } from "./map-canvas";
 import { type EpisodeEntry, type MapHealth, MapSwitcher } from "./map-switcher";
 import { NewMapPanel } from "./new-map-panel";
+import { PlayerDock } from "./player-dock";
 import { PlaytestPanel } from "./playtest-panel";
 import { PrefabsDialog } from "./prefabs-dialog";
 import {
@@ -285,7 +292,6 @@ const noLinks: MapLink[] = [];
 // The same ranges the inspector's fields keep a single room within.
 const roomSides: RoomSide[] = ["north", "east", "south", "west"];
 
-type ViewLayout = "map" | "split" | "scene";
 type SinglePane = Exclude<ViewLayout, "split">;
 
 const thingCategoryLabels: Record<ThingCategory, string> = {
@@ -527,6 +533,9 @@ export function EditorScreen({
   const [showShortcuts, setShowShortcuts] = React.useState(false);
   const [draftCorners, setDraftCorners] = React.useState<Point[]>([]);
   const [showDock, setShowDock] = React.useState(initialLayout.dock);
+  const [isDockCollapsed, setIsDockCollapsed] = React.useState(
+    initialLayout.isDockCollapsed,
+  );
   const [editMode, setEditMode] = React.useState<EditMode>("vertices");
   const pointerStatus = React.useRef<HTMLSpanElement>(null);
   const zoomStatus = React.useRef<HTMLSpanElement>(null);
@@ -1117,9 +1126,21 @@ export function EditorScreen({
     camera.sync(map);
   }, [camera, map]);
 
+  const saveView = (changes: Partial<SavedLayout>) => {
+    savedLayout.set(
+      serializeLayout({
+        view: layout,
+        sizes: splitSizes.current,
+        dock: showDock,
+        isDockCollapsed,
+        ...changes,
+      }),
+    );
+  };
+
   const changeLayout = (next: ViewLayout) => {
     setLayout(next);
-    saveLayout(next, splitSizes.current, showDock);
+    saveView({ view: next });
     if (next === "scene") {
       setTool((current) =>
         current === "draw" || current === "line" || current === "switch"
@@ -1563,12 +1584,14 @@ export function EditorScreen({
     if (target) showTarget(target);
     const { view } = issue;
     if (!view || !camera.placeAt(map, view, view.angle)) return;
+    revealScene();
+  };
+
+  const revealScene = () => {
     if (narrow) changeLayout("scene");
-    else if (
-      visibleLayout !== "split" &&
-      !(visibleLayout === "map" && showDock)
-    ) {
-      changeLayout("split");
+    else if (visibleLayout === "map") {
+      if (!showDock) changeLayout("split");
+      else if (isDockCollapsed) collapseDock(false);
     }
   };
 
@@ -1576,9 +1599,7 @@ export function EditorScreen({
     const view = viewOfTarget(map, target);
     if (!view) return;
     camera.lookAt(map, view.from, view.at);
-    if (visibleLayout === "map" && (narrow || !showDock)) {
-      changeLayout(narrow ? "scene" : "split");
-    }
+    revealScene();
   };
 
   const scene = (
@@ -1722,14 +1743,19 @@ export function EditorScreen({
   };
 
   const toggleDock = () => {
-    const next = !showDock;
-    setShowDock(next);
-    saveLayout(layout, splitSizes.current, next);
+    setShowDock(!showDock);
+    saveView({ dock: !showDock });
+  };
+
+  const collapseDock = (next: boolean) => {
+    setIsDockCollapsed(next);
+    saveView({ isDockCollapsed: next });
   };
 
   const runViewAction = (action: string) => {
     if (action === "shortcuts") setShowShortcuts(true);
     else if (action === "dock") toggleDock();
+    else if (action === "collapseDock") collapseDock(!isDockCollapsed);
     else if (action === "camera") findCameraOnMap();
     else if (action === "sound") {
       setSound((current) => (current ? null : { doorsOpen: false }));
@@ -1898,8 +1924,7 @@ export function EditorScreen({
         ? { kind: "room", sector: room.id, point }
         : { kind: "empty", point },
     );
-    if (narrow) changeLayout("scene");
-    else if (visibleLayout === "map" && !showDock) changeLayout("split");
+    revealScene();
     requestAnimationFrame(() =>
       document.querySelector<HTMLElement>(".map")?.focus(),
     );
@@ -1951,7 +1976,7 @@ export function EditorScreen({
     else if (action === "open") fileInput.current?.click();
     else if (action === "save") {
       downloadFile(
-        "wadsmith-map.json",
+        mapFileName(mapName),
         serializeMap({ ...map, name: mapName }),
         "application/json",
       );
@@ -2180,6 +2205,11 @@ export function EditorScreen({
                 <MenuItem value="dock">
                   {showDock ? "Hide player view" : "Show player view"}
                 </MenuItem>
+                <MenuItem value="collapseDock" disabled={!showMapDock}>
+                  {isDockCollapsed
+                    ? "Expand player view"
+                    : "Collapse player view"}
+                </MenuItem>
                 <MenuItem value="camera">Find camera on map</MenuItem>
                 <MenuItem value="sound">
                   {sound ? "Hide sound" : "Show sound"}
@@ -2359,7 +2389,7 @@ export function EditorScreen({
               defaultLayout={initialLayout.sizes}
               onLayoutCommit={(sizes) => {
                 splitSizes.current = sizes;
-                saveLayout(layout, splitSizes.current, showDock);
+                saveView({ sizes });
               }}
             >
               <ResizablePanel className="view-panel map-panel" minSize="340px">
@@ -2529,10 +2559,12 @@ export function EditorScreen({
                     </section>
                   ) : null}
                   {showMapDock ? (
-                    <div className="player-dock">
-                      <div className="player-dock-bar">Player view</div>
-                      <div className="scene-frame">{scene}</div>
-                    </div>
+                    <PlayerDock
+                      isCollapsed={isDockCollapsed}
+                      onCollapsedChange={collapseDock}
+                    >
+                      {scene}
+                    </PlayerDock>
                   ) : null}
                 </section>
               </ResizablePanel>
@@ -3471,26 +3503,8 @@ function loadWelcomed() {
   return !savedWelcome.available() || savedWelcome.get() !== null;
 }
 
-const defaultSplit = [50, 50];
-
 function loadLayout() {
-  try {
-    const saved = JSON.parse(savedLayout.get() ?? "null");
-    return {
-      view: ["map", "split", "scene"].includes(saved?.view)
-        ? (saved.view as ViewLayout)
-        : ("map" as ViewLayout),
-      dock: saved?.dock !== false,
-      sizes:
-        Array.isArray(saved?.sizes) &&
-        saved.sizes.length === 2 &&
-        saved.sizes.every(Number.isFinite)
-          ? (saved.sizes as number[])
-          : defaultSplit,
-    };
-  } catch {
-    return { view: "map" as ViewLayout, dock: true, sizes: defaultSplit };
-  }
+  return parseLayout(savedLayout.get());
 }
 
 function subscribeNarrow(listener: () => void) {
@@ -3569,10 +3583,6 @@ function notTyping() {
     (focused.isContentEditable ||
       /^(INPUT|TEXTAREA|SELECT)$/.test(focused.tagName))
   );
-}
-
-function saveLayout(view: ViewLayout, sizes: number[], dock: boolean) {
-  savedLayout.set(JSON.stringify({ view, sizes, dock }));
 }
 
 // Edits from the 3D view that join one undo step while they keep coming, like

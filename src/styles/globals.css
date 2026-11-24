@@ -1098,20 +1098,39 @@
     right: 12px;
     bottom: 12px;
     display: grid;
-    grid-template-rows: 28px 162px;
     width: 284px;
     border: 1px solid var(--color-border);
     background: var(--color-card);
+  }
+
+  .player-dock > .scene-frame {
+    height: 162px;
+    border-top: 1px solid var(--color-border);
   }
 
   .player-dock-bar {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    height: 28px;
     padding: 0 9px;
-    border-bottom: 1px solid var(--color-border);
+    border: 0;
+    background: none;
     color: var(--color-muted-foreground);
     font: 11px var(--font-mono);
+    text-align: start;
+  }
+
+  .player-dock-bar:hover {
+    color: var(--color-foreground);
+  }
+
+  .player-dock-bar svg {
+    transition: rotate 0.15s ease-out;
+  }
+
+  .player-dock-bar[data-closed] svg {
+    rotate: 180deg;
   }
 
   .side {

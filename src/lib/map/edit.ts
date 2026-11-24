@@ -15,6 +15,7 @@ import type {
 
 import { getIsPlayerStart } from "./catalog";
 import {
+  clearView,
   containerOf,
   loopEdges,
   roomPoint,
@@ -246,8 +247,8 @@ export function setLineTarget(
 }
 
 // A teleporter lands on a destination thing in its room, so aiming one places
-// a destination there unless a room with its tag already has one. A door room
-// is shut, so it gets none.
+// a destination there, facing its furthest view, unless a room with its tag
+// already has one. A door room is shut, so it gets none.
 export function landTeleport(map: GameMap, wall: string): GameMap {
   const action = map.lines?.[wall]?.action;
   if (!action?.tag || !getIsTeleport(action.kind)) return map;
@@ -260,7 +261,14 @@ export function landTeleport(map: GameMap, wall: string): GameMap {
   if (landed) return map;
   for (const room of rooms) {
     const at = room.door ? null : landingSpot(map, room);
-    if (at) return addThing(map, "teleport-destination", at).map;
+    if (!at) continue;
+    const spot = snapPoint(at);
+    return addThing(
+      map,
+      "teleport-destination",
+      spot,
+      clearView(map, room, spot),
+    ).map;
   }
   return map;
 }

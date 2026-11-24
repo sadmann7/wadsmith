@@ -306,6 +306,35 @@ describe("map editor parts", () => {
     expect(pickedRooms(map, picked, null)).toEqual([first, last]);
   });
 
+  it("select a room narrower than the grid with a click inside it", () => {
+    let map = {
+      vertices: {},
+      sectors: [],
+      things: [],
+      switches: [],
+    } as GameMap;
+    for (const [left, right] of [
+      [0, 256],
+      [272, 528],
+      [256, 272],
+    ]) {
+      map = drawRoom(map, box(left, 0, right, 128), {}, 1).map;
+    }
+    const door = map.sectors[2].id;
+    let active: string | null = null;
+    const instance = mapEditor({
+      id,
+      map,
+      grid: 16,
+      editMode: "sectors",
+      onActiveSectorChange: (next) => {
+        active = next;
+      },
+    });
+    instance.api.click(pointer(264, 64));
+    expect(active).toBe(door);
+  });
+
   it("nudge a room picked whole, with what stands in it", () => {
     let result = null as GameMap | null;
     const instance = mapEditor({
@@ -627,6 +656,23 @@ function release(
   window.dispatchEvent(event);
 }
 
+function moved(map: GameMap, corner: string, dx: number): GameMap {
+  const point = map.vertices[corner];
+  return {
+    ...map,
+    vertices: { ...map.vertices, [corner]: { x: point.x + dx, y: point.y } },
+  };
+}
+
+function box(left: number, top: number, right: number, bottom: number) {
+  return [
+    { x: left, y: top },
+    { x: right, y: top },
+    { x: right, y: bottom },
+    { x: left, y: bottom },
+  ];
+}
+
 function pointer(clientX: number, clientY: number) {
   return {
     clientX,
@@ -643,23 +689,6 @@ function pointer(clientX: number, clientY: number) {
     target: { closest: () => null },
     preventDefault: () => {},
   } as unknown as PointerEvent;
-}
-
-function moved(map: GameMap, corner: string, dx: number): GameMap {
-  const point = map.vertices[corner];
-  return {
-    ...map,
-    vertices: { ...map.vertices, [corner]: { x: point.x + dx, y: point.y } },
-  };
-}
-
-function box(left: number, top: number, right: number, bottom: number) {
-  return [
-    { x: left, y: top },
-    { x: right, y: top },
-    { x: right, y: bottom },
-    { x: left, y: bottom },
-  ];
 }
 
 function press(key: string, keys: Partial<KeyboardEvent> = {}) {

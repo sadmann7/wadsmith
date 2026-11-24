@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { GameMap, LineAction } from "@/lib/map/types";
 
-import { wadFileName } from "@/components/editor/build-dialog";
+import { mapFileName, wadFileName } from "@/components/editor/build-dialog";
 import { defined } from "@/lib/defined";
 import {
   getCanStand,
@@ -1563,6 +1563,38 @@ describe("line editing", () => {
     expect(lineIssues(openWall, { tag: 99 })).toContain(`line-tag:${openWall}`);
   });
 
+  it("words a lost tag for what the action does", () => {
+    const message = (patch: Partial<LineAction>) =>
+      validateMap(
+        updateLine(testMap, openWall, { action: lowerFloor(patch) }),
+      ).find((issue) => issue.id === `line-tag:${openWall}`);
+    expect(message({ tag: 99 })?.message).toContain(
+      "the sector this action moves no longer has its tag.",
+    );
+    const teleport = message({ kind: "teleport", tag: 99 });
+    expect(teleport?.message).toContain(
+      "no room is this teleporter's destination.",
+    );
+    expect(teleport?.target).toBe(openWall);
+    expect(message({ kind: "light-max", tag: 99 })?.message).toContain(
+      "the sector whose light it changes no longer has its tag.",
+    );
+  });
+
+  it("words a missing target for what the action does", () => {
+    const message = (patch: Partial<LineAction>) =>
+      validateMap(
+        updateLine(testMap, openWall, { action: lowerFloor(patch) }),
+      ).find((issue) => issue.id === `line-target:${openWall}`)?.message;
+    expect(message({})).toContain("choose the sector this action moves.");
+    expect(message({ kind: "teleport" })).toContain(
+      "choose where it teleports to.",
+    );
+    expect(message({ kind: "light-max" })).toContain(
+      "choose the sector whose light it changes.",
+    );
+  });
+
   it("warns about a floor raise that can't rise", () => {
     const raise = (map: GameMap, target = "sector-2") => {
       const raised = setLineTarget(
@@ -2338,6 +2370,14 @@ describe("map check", () => {
     expect(wadFileName("..")).toBe("wadsmith-map01.wad");
     expect(wadFileName("level.wad.")).toBe("level.wad");
     expect(wadFileName("x".repeat(300))).toHaveLength(68);
+  });
+
+  it("names a saved map file after the map", () => {
+    expect(mapFileName("Lantern Spire")).toBe("lantern-spire.json");
+    expect(mapFileName("  The Cinder Works!  ")).toBe("the-cinder-works.json");
+    expect(mapFileName("")).toBe("wadsmith-map.json");
+    expect(mapFileName("***")).toBe("wadsmith-map.json");
+    expect(mapFileName("x".repeat(300))).toHaveLength(69);
   });
 
   it("splits room errors into a title and place", () => {
