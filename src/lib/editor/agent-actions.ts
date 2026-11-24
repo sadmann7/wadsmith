@@ -2,6 +2,7 @@ import type {
   Complevel,
   DoorSettings,
   GameMap,
+  LineActionKind,
   LineTrigger,
   Point,
   Sector,
@@ -11,18 +12,16 @@ import type {
   ThingSkill,
 } from "@/lib/map/types";
 
+import { defined } from "@/lib/defined";
 import { mapBalance } from "@/lib/map/balance";
 import { sectorSpecialPatch } from "@/lib/map/boom";
 import {
-  ceilingTextures,
   doorTextures,
-  floorTextures,
   getIsPlayerStart,
   sectorEffects,
   switchTextures,
   thingCatalog,
   thingKinds,
-  wallTextures,
 } from "@/lib/map/catalog";
 import { checkMap, fixIssue } from "@/lib/map/checks";
 import {
@@ -69,6 +68,7 @@ import {
   describeLine,
   fitLineAction,
   keyColors,
+  keysFor,
   lineActionKinds,
   lineActions,
   lineTriggers,
@@ -82,7 +82,8 @@ import {
   removeCorner,
 } from "@/lib/map/reshape";
 import { describeSurface, paintSurface } from "@/lib/map/surfaces";
-import { replaceTexture } from "@/lib/map/texture-tools";
+import { countTexture, replaceTexture } from "@/lib/map/texture-tools";
+import { freedoomNames } from "@/lib/map/textures";
 import {
   type CheckContext,
   inspectMap,
@@ -234,6 +235,8 @@ const paging: AgentParam[] = [
     description: `How many to return, up to ${pageLimit}.`,
   }),
 ];
+
+const namePageLimit = 1000;
 
 const overviewRooms = 30;
 
@@ -431,7 +434,7 @@ export const agentActions: AgentAction[] = [
   {
     name: "listCatalog",
     description:
-      "The names an action takes: thing kinds, wall textures, flats, line actions or sector effects.",
+      "The names an action takes: thing kinds, wall textures, flats, line actions or sector effects. Walls and flats are every one the game has, a page at a time, and walls also names the see-through textures for the middle of an open line.",
     reads: true,
     params: [
       {
@@ -440,8 +443,22 @@ export const agentActions: AgentAction[] = [
         description: "Which list to read.",
         choices: catalogs,
       },
+      optional({
+        name: "search",
+        type: "string",
+        description:
+          "Only the wall textures or flats whose names contain this, like STAR or NUKAGE.",
+      }),
+      optional({ ...paging[0] }),
+      optional({
+        name: "limit",
+        type: "number",
+        description: `How many wall textures or flats to return, up to ${namePageLimit}.`,
+      }),
     ],
-    run: (_map, args) => ({ result: catalog(choice(args, "of", catalogs)) }),
+    run: (_map, args, context) => ({
+      result: catalog(choice(args, "of", catalogs), args, context),
+    }),
   },
   {
     name: "addRoom",
@@ -455,10 +472,10 @@ export const agentActions: AgentAction[] = [
       },
       ...roomLooks,
     ],
-    run: (map, args) => {
+    run: (map, args, context) => {
       const corners = points(args, "corners");
       if (corners.length < 3) throw new Error("A room needs three corners.");
-      const added = drawRoom(map, corners, looks(args), 1);
+      const added = drawRoom(map, corners, looks(args, context), 1);
       return { map: added.map, result: added.id };
     },
   },
@@ -528,9 +545,9 @@ export const agentActions: AgentAction[] = [
           "A sector special by its number, for an effect the list doesn't name. 0 clears it.",
       }),
     ],
-    run: (map, args) => {
+    run: (map, args, context) => {
       const sector = findRoom(map, args.room);
-      const { wallTexture, ...patch } = looks(args, sector);
+      const { wallTexture, ...patch } = looks(args, context, sector);
       if (args.effect !== undefined && args.special !== undefined) {
         throw new Error("Give a room an effect or a special, not both.");
       }
@@ -818,7 +835,11 @@ export const agentActions: AgentAction[] = [
           "What sets it off: pressing the wall as a switch, walking over it, shooting it, or pressing a door's own face.",
         choices: lineTriggers,
       }),
-      optional(room("The room the action moves or lands in.")),
+      optional(
+        room(
+          "The room the action moves or lands in, for a trigger that listCatalog of line-actions says needs one.",
+        ),
+      ),
       optional({
         name: "key",
         type: "string",
@@ -853,14 +874,24 @@ export const agentActions: AgentAction[] = [
         );
       }
       const acted = updateLine(map, key, { ...soleSpecial, action });
-      if (!lineUsesTag(action)) {
+      const { label } = lineActions[kind];
+      const roomTriggers = triggersOf(kind).filter((trigger) =>
+        takesRoom(kind, trigger),
+      );
+      if (!takesRoom(kind, action.trigger)) {
         if (args.room !== undefined) {
-          throw new Error(`${lineActions[kind].label} takes no target room.`);
+          throw new Error(
+            roomTriggers.length > 0
+              ? `${label} set off by ${action.trigger} takes no target room, since it moves the door the wall belongs to. Only ${roomTriggers.join(" or ")} takes one.`
+              : `${label} takes no target room.`,
+          );
         }
         return { map: acted };
       }
       if (args.room === undefined) {
-        throw new Error(`${lineActions[kind].label} needs a target room.`);
+        throw new Error(
+          `${label} set off by ${action.trigger} needs a target room.`,
+        );
       }
       return { map: setLineTarget(acted, key, findRoom(map, args.room).id) };
     },
@@ -954,7 +985,7 @@ export const agentActions: AgentAction[] = [
         optional({ name, type, description }),
       ),
     ],
-    run: (map, args) => {
+    run: (map, args, context) => {
       const key = findWall(map, args.wall);
       const sector = findRoom(map, args.room);
       if (!wallOwners(map).get(key)?.includes(sector)) {
@@ -968,8 +999,14 @@ export const agentActions: AgentAction[] = [
       const textures = (["upper", "lower", "middle"] as const).flatMap(
         (name) => {
           if (args[name] === undefined) return [];
-          const texture = text(args, name);
-          return [[name, texture === "-" ? undefined : texture]];
+          return [
+            [
+              name,
+              text(args, name).trim() === "-"
+                ? undefined
+                : textureName(args, name, "wall", context),
+            ],
+          ];
         },
       );
       return {
@@ -1003,7 +1040,7 @@ export const agentActions: AgentAction[] = [
         choices: wallParts,
       }),
     ],
-    run: (map, args) => {
+    run: (map, args, context) => {
       const sector = findRoom(map, args.room);
       const kind = choice(args, "surface", ["floor", "ceiling", "wall"]);
       const key =
@@ -1014,7 +1051,18 @@ export const agentActions: AgentAction[] = [
       if (!info?.sector || !info.paints) {
         throw new Error(`${sector.name} has no such surface to paint.`);
       }
-      return { map: paintSurface(map, key, text(args, "texture")) };
+      return {
+        map: paintSurface(
+          map,
+          key,
+          textureName(
+            args,
+            "texture",
+            kind === "wall" ? "wall" : "flat",
+            context,
+          ),
+        ),
+      };
     },
   },
   {
@@ -1031,12 +1079,13 @@ export const agentActions: AgentAction[] = [
         choices: ["wall", "flat"],
       },
     ],
-    run: (map, args) => {
+    run: (map, args, context) => {
+      const kind = choice(args, "kind", ["wall", "flat"]);
       const swapped = replaceTexture(
         map,
         text(args, "from"),
-        text(args, "to"),
-        choice(args, "kind", ["wall", "flat"]),
+        textureName(args, "to", kind, context),
+        kind,
       );
       return { map: swapped.map, result: swapped.count };
     },
@@ -1118,20 +1167,20 @@ export const agentActions: AgentAction[] = [
   {
     name: "addDoorSwitch",
     description:
-      "Puts a switch on a room's longest free wall and wires it to a door.",
+      "Puts a switch on a room's longest free wall and wires it to a door. Answers with the switch's id and its wall.",
     params: [room("The room the switch goes in."), doorParam()],
     run: (map, args) => {
       const source = findRoom(map, args.room);
       const target = findDoor(map, args.door);
       const added = addSwitchInRoom(map, source.id, target.id);
       if (!added) throw new Error(`${source.name} has no free wall.`);
-      return { map: added.map, result: added.id };
+      return { map: added.map, result: placedSwitch(added.map, added.id) };
     },
   },
   {
     name: "addSwitch",
     description:
-      "Puts a switch on a solid wall, wired to a door or left for a line action on that wall.",
+      "Puts a switch on a solid wall, wired to a door or left for a line action on its own wall. The switch splits the wall, so it answers with the switch's id and the wall it now has, which setLineAction takes.",
     params: [
       wall,
       optional(doorParam()),
@@ -1164,7 +1213,7 @@ export const agentActions: AgentAction[] = [
             : updateSwitch(added.map, added.id, {
                 texture: choice(args, "texture", switchTextures),
               }),
-        result: added.id,
+        result: placedSwitch(added.map, added.id),
       };
     },
   },
@@ -1426,11 +1475,16 @@ export function agentRisk(
       };
     }
     if (name === "replaceTexture") {
-      const { result } = runAgentAction(map, name, args);
       const from = text(args, "from");
+      const to = text(args, "to");
+      const worn = countTexture(
+        map,
+        from,
+        choice(args, "kind", ["wall", "flat"]),
+      );
       return {
-        title: `Replace ${from} with ${text(args, "to")}?`,
-        detail: `${typeof result === "number" ? `${count(result, "surface", "surfaces")} change.` : "Every surface that wears it changes."} Undo puts ${from} back.`,
+        title: `Replace ${from} with ${to}?`,
+        detail: `${count(worn, "surface", "surfaces")} change. Undo puts ${from} back.`,
         confirm: "Replace",
       };
     }
@@ -1702,7 +1756,9 @@ function roomDetail(map: GameMap, sector: Sector) {
   };
 }
 
-function catalog(of: string) {
+const namePageSize = 200;
+
+function catalog(of: string, args: Args, context: CheckContext) {
   if (of === "things") {
     return thingKinds.map((kind) => ({
       kind,
@@ -1710,16 +1766,23 @@ function catalog(of: string) {
       category: thingCatalog[kind].category,
     }));
   }
+  const names = context.names ?? freedoomNames;
+  const search =
+    args.search === undefined ? "" : text(args, "search").trim().toUpperCase();
+  const matching = (list: readonly string[]) =>
+    list.filter((name) => name.toUpperCase().includes(search));
+  const found = (list: readonly string[]) =>
+    page(matching(list), args, namePageSize, namePageLimit);
   if (of === "walls") {
+    const solid = new Set(names.walls);
     return {
-      walls: wallTextures,
+      ...found(names.walls),
+      seeThrough: matching(names.middles.filter((name) => !solid.has(name))),
       doors: doorTextures,
       switches: switchTextures,
     };
   }
-  if (of === "flats") {
-    return { floors: floorTextures, ceilings: ceilingTextures, sky: "F_SKY1" };
-  }
+  if (of === "flats") return { ...found(names.flats), sky: "F_SKY1" };
   if (of === "sector-effects") {
     return Object.entries(sectorEffects).map(([effect, { label }]) => ({
       effect,
@@ -1730,19 +1793,24 @@ function catalog(of: string) {
     kind,
     label: lineActions[kind].label,
     group: lineActions[kind].group,
-    triggers: Object.keys(lineActions[kind].triggers),
-    // Pressing a door's own face moves the door behind it. Any other
-    // trigger finds the room to move by its tag.
-    needsRoom: Object.keys(lineActions[kind].triggers).some((trigger) =>
-      lineUsesTag({
-        kind,
-        trigger: trigger as LineTrigger,
-        repeat: true,
-        tag: 0,
-      }),
-    ),
+    triggers: triggersOf(kind).map((trigger) => {
+      const keys = keysFor(kind, trigger);
+      return {
+        trigger,
+        needsRoom: takesRoom(kind, trigger),
+        ...(keys.length > 0 && { keys }),
+      };
+    }),
   }));
 }
+
+const triggersOf = (kind: LineActionKind) =>
+  Object.keys(lineActions[kind].triggers) as LineTrigger[];
+
+// Pressing a door's own face moves the door behind it. Any other trigger
+// finds the room to move by its tag.
+const takesRoom = (kind: LineActionKind, trigger: LineTrigger) =>
+  lineUsesTag({ kind, trigger, repeat: true, tag: 0 });
 
 function countBy(values: string[]) {
   const counts: Record<string, number> = {};
@@ -1800,6 +1868,11 @@ function findSwitch(map: GameMap, value: unknown) {
   const found = map.switches.find((item) => item.id === value);
   if (!found) throw new Error(`No switch "${label(value)}".`);
   return found.id;
+}
+
+function placedSwitch(map: GameMap, id: string) {
+  const placed = defined(map.switches.find((item) => item.id === id));
+  return { switch: id, wall: wallKey(placed.from, placed.to) };
 }
 
 // A wall named by its corners in either order.
@@ -1951,11 +2024,61 @@ function placed(map: GameMap, args: Args, point: Point) {
   };
 }
 
+const closestShown = 5;
+
+// A texture or flat the game has, matched whatever its case.
+function textureName(
+  args: Args,
+  name: string,
+  kind: "wall" | "flat",
+  context: CheckContext,
+) {
+  const value = text(args, name).trim();
+  const names = context.names ?? freedoomNames;
+  const known = kind === "flat" ? names.flats : names.textures;
+  const wanted = value.toUpperCase();
+  const match = known.find((item) => item.toUpperCase() === wanted);
+  if (match) return match;
+  const closest = known
+    .map((item) => ({ item, distance: editDistance(wanted, item) }))
+    .toSorted((a, b) => a.distance - b.distance)
+    .slice(0, closestShown)
+    .map(({ item }) => item);
+  throw new Error(
+    `No ${kind === "flat" ? "flat" : "wall texture"} "${value}" for ${name}. The closest are ${closest.join(", ")}. listCatalog of ${kind}s names them all.`,
+  );
+}
+
+function editDistance(a: string, b: string) {
+  let row = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= a.length; i += 1) {
+    const next = [i];
+    for (let j = 1; j <= b.length; j += 1) {
+      next[j] = Math.min(
+        row[j] + 1,
+        next[j - 1] + 1,
+        row[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+    }
+    row = next;
+  }
+  return row[b.length];
+}
+
 const lightLimit = 255;
 
-function looks(args: Args, sector?: Sector) {
+function looks(args: Args, context: CheckContext, sector?: Sector) {
   const texture = (name: string) =>
-    args[name] === undefined ? {} : { [name]: text(args, name) };
+    args[name] === undefined
+      ? {}
+      : {
+          [name]: textureName(
+            args,
+            name,
+            name === "wallTexture" ? "wall" : "flat",
+            context,
+          ),
+        };
   return {
     ...(args.name !== undefined && {
       name: text(args, "name").trim().slice(0, maxNameLength) || "Room",
@@ -2078,9 +2201,9 @@ function getIsRecord(value: unknown): value is Args {
 }
 
 // One page of a long list, so a big map's answers stay small.
-function page<T>(items: T[], args: Args, fallback: number) {
+function page<T>(items: T[], args: Args, fallback: number, most = pageLimit) {
   const offset = number(args, "offset", 0, Math.max(0, items.length), 0);
-  const limit = number(args, "limit", 1, pageLimit, fallback);
+  const limit = number(args, "limit", 1, most, fallback);
   const shown = items.slice(offset, offset + limit);
   return {
     total: items.length,
