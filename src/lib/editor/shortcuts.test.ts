@@ -39,6 +39,11 @@ describe("editor shortcuts", () => {
     }
   });
 
+  it("keeps a chosen key from a default that wants it too", () => {
+    const keys = resolveKeys({ preset: "wadsmith", keys: { snap: "-" } });
+    expect([keys.snap, keys.zoomOut, keys.zoomIn]).toEqual(["-", "", "="]);
+  });
+
   it("names only shortcuts the table has in a preset", () => {
     for (const { keys } of Object.values(keyPresets)) {
       for (const name of Object.keys(keys)) {

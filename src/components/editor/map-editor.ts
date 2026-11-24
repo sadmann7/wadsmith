@@ -40,7 +40,7 @@ import {
   targetForKeys,
   wallTarget,
 } from "@/lib/editor/map-target";
-import { createWheelZoom, steppedZoom } from "@/lib/editor/zoom";
+import { createWheelZoom, minZoom, steppedZoom } from "@/lib/editor/zoom";
 import { getIsPlayerStart } from "@/lib/map/catalog";
 import {
   addSwitch,
@@ -372,7 +372,7 @@ export const mapEditor = definePrimitive({
     const viewport = createViewport<MapEditorState>(context, {
       key: "viewport",
       surface: root,
-      minZoom: () => 0.1,
+      minZoom: () => minZoom,
       maxZoom: () => 4,
     });
 
@@ -1157,7 +1157,7 @@ export const mapEditor = definePrimitive({
         fitView(
           boundsOf(points),
           box,
-          { padding: 56, minZoom: 0.1, maxZoom },
+          { padding: 56, minZoom, maxZoom },
           overlays,
           parts.map(boundsOf),
         ),

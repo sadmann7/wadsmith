@@ -1,5 +1,7 @@
 const zoomFactor = 1.25;
 
+export const minZoom = zoomFactor ** -10;
+
 const gestureGap = 250;
 const notch = 120;
 const pixels = 0;
@@ -36,23 +38,28 @@ export function createWheelZoom() {
     pending +=
       mode === pixels
         ? (event.wheelDeltaY ?? 0) / notch
-        : -Math.sign(event.deltaY);
+        : lineSteps(event.deltaY);
     const steps = Math.trunc(pending) || 0;
     pending -= steps;
     return steps;
   };
 }
 
-// A mouse wheel turns in notches the browser reports as lines, or as 120 in
-// the legacy `wheelDeltaY`. A trackpad scrolls by pixels, often sideways too,
-// and Chrome and Safari report its `wheelDeltaY` as exactly -3 × `deltaY`.
+// A mouse wheel turns in whole notches, which Firefox reports as lines and
+// the legacy `wheelDeltaY` as multiples of 120. Chrome and Safari report a
+// trackpad's `wheelDeltaY` as about -3 × `deltaY`, which can also be 120.
 function getIsMouseWheel(event: WheelInput, mode: number) {
-  if (mode !== pixels) return true;
+  if (event.deltaX !== 0) return false;
+  if (mode !== pixels) return Number.isInteger(event.deltaY);
   const legacy = event.wheelDeltaY ?? 0;
   return (
-    event.deltaX === 0 &&
     legacy !== 0 &&
     legacy % notch === 0 &&
-    legacy !== -3 * event.deltaY
+    Math.abs(legacy + 3 * event.deltaY) >= 3
   );
+}
+
+function lineSteps(lines: number) {
+  if (!Number.isInteger(lines)) return -lines / 3;
+  return -Math.sign(lines) * Math.max(1, Math.round(Math.abs(lines) / 3));
 }

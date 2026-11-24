@@ -35,6 +35,14 @@ describe("wheel zoom", () => {
     const read = createWheelZoom();
     expect(read(wheel({ deltaMode: 1, deltaY: 3 }))).toBe(-1);
     expect(read(wheel({ deltaMode: 1, deltaY: -3, timeStamp: 40 }))).toBe(1);
+    expect(read(wheel({ deltaMode: 1, deltaY: 6, timeStamp: 80 }))).toBe(-2);
+    expect(read(wheel({ deltaMode: 1, deltaY: 1, timeStamp: 120 }))).toBe(-1);
+    expect(read(wheel({ deltaMode: 1, deltaY: 1.5, timeStamp: 160 }))).toBe(0);
+    expect(read(wheel({ deltaMode: 1, deltaY: 1.5, timeStamp: 200 }))).toBe(-1);
+  });
+
+  it("leaves a scroll by part of a line to pan", () => {
+    expect(createWheelZoom()(wheel({ deltaMode: 1, deltaY: 0.25 }))).toBe(null);
   });
 
   it("leaves a trackpad's scroll to pan", () => {
@@ -42,6 +50,9 @@ describe("wheel zoom", () => {
       null,
     );
     expect(createWheelZoom()(wheel({ deltaY: 40, wheelDeltaY: -120 }))).toBe(
+      null,
+    );
+    expect(createWheelZoom()(wheel({ deltaY: 40.3, wheelDeltaY: -120 }))).toBe(
       null,
     );
     expect(createWheelZoom()(wheel({ deltaY: 2.5, wheelDeltaY: -3 }))).toBe(

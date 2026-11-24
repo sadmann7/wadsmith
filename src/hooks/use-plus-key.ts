@@ -12,7 +12,8 @@ export function usePlusKey(enabled: boolean, onPress: () => boolean) {
         event.defaultPrevented ||
         event.ctrlKey ||
         event.metaKey ||
-        event.altKey
+        event.altKey ||
+        document.querySelector('[aria-modal="true"]')
       ) {
         return;
       }
