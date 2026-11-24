@@ -478,10 +478,16 @@ export const agentActions: AgentAction[] = [
     run: (map, args, context) => {
       const corners = points(args, "corners");
       if (corners.length < 3) throw new Error("A room needs three corners.");
+      const isFloorOnly =
+        args.floor !== undefined && args.ceiling === undefined;
       const added = drawRoom(
         map,
         corners,
-        looks(args, context, newRoomLooks(map, corners)),
+        looks(
+          args,
+          context,
+          isFloorOnly ? undefined : newRoomLooks(map, corners),
+        ),
         1,
       );
       return { map: added.map, result: added.id };

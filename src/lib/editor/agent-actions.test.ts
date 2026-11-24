@@ -221,6 +221,13 @@ describe("agent actions", () => {
       floor: -32,
       ceiling: 128,
     });
+    const stepped = runAgentAction(starterMap, "addRoom", [
+      { corners, floor: 112 },
+    ]);
+    expect(stepped.map.sectors.at(-1)).toMatchObject({
+      floor: 112,
+      ceiling: 240,
+    });
   });
 
   it("splits a ring round a room inside, or refuses and changes nothing", () => {
