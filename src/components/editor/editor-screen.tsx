@@ -1861,13 +1861,15 @@ export function EditorScreen({
       ? `${selectedThings.length} things`
       : thing
         ? thingLabel(thing, customThings)
-        : line
-          ? `Line ${line.wall}`
-          : surfaceInfo && !surfaceInfo.thing
-            ? surfaceInfo.label
-            : placingThings
-              ? "Things"
-              : (sector?.name ?? "Nothing selected");
+        : selectedWalls.length > 1
+          ? `${selectedWalls.length} lines`
+          : line
+            ? `Line ${line.wall}`
+            : surfaceInfo && !surfaceInfo.thing
+              ? surfaceInfo.label
+              : placingThings
+                ? "Things"
+                : (sector?.name ?? "Nothing selected");
   const selectionMeta = selectedSwitch
     ? selectedSwitch.door
       ? "Wired to a door"
@@ -1876,25 +1878,27 @@ export function EditorScreen({
       ? "Changes apply to every selected thing"
       : thing
         ? thingMeta
-        : placingThings
-          ? tool === "thing"
-            ? `Placing ${placingLabel}`
-            : "Pick a thing to place"
-          : line
-            ? `${
-                line.back === line.front
-                  ? "Inside a room"
-                  : line.back
-                    ? "Two-sided"
-                    : "One-sided"
-              } · ${line.length} long · ${
-                line.back && line.back !== line.front
-                  ? `${line.front.name} to ${line.back.name}`
-                  : line.front.name
-              }`
-            : sector
-              ? `${sector.door ? "Door" : "Sector"} · ${sectorLoops(sector).flatMap(loopEdges).length} walls`
-              : "Click a room, line or thing on the map";
+        : selectedWalls.length > 1
+          ? "Changes apply to every selected line"
+          : placingThings
+            ? tool === "thing"
+              ? `Placing ${placingLabel}`
+              : "Pick a thing to place"
+            : line
+              ? `${
+                  line.back === line.front
+                    ? "Inside a room"
+                    : line.back
+                      ? "Two-sided"
+                      : "One-sided"
+                } · ${line.length} long · ${
+                  line.back && line.back !== line.front
+                    ? `${line.front.name} to ${line.back.name}`
+                    : line.front.name
+                }`
+              : sector
+                ? `${sector.door ? "Door" : "Sector"} · ${sectorLoops(sector).flatMap(loopEdges).length} walls`
+                : "Click a room, line or thing on the map";
 
   const play = () => {
     if (canPlay && !buildProblem()) {
