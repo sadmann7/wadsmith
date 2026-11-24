@@ -21,6 +21,7 @@ import {
   loopPolygon,
   pointInPolygon,
   sectorAt,
+  sectorPolygon,
   wallKey,
   wallOwners,
 } from "./geometry";
@@ -651,7 +652,10 @@ describe("drawing over the starter maps", () => {
         return [Math.min(first, second), Math.max(first, second)];
       };
       const pillars = base.sectors.flatMap((sector) =>
-        (sector.holes ?? []).map((hole) => loopPolygon(base, hole)),
+        (sector.holes ?? []).map((hole) => ({
+          room: sectorPolygon(base, sector),
+          shape: loopPolygon(base, hole),
+        })),
       );
       const wallsOf = (sector: Sector) =>
         loopEdges(sector.vertices).map(({ from, to }) => [
@@ -693,13 +697,17 @@ describe("drawing over the starter maps", () => {
               )
             : box(x, y, right, bottom);
         const label = JSON.stringify(corners);
-        // Over a pillar, or touching a door or a switch's wall, a room is
-        // drawn as before, lying over the other and flagged by the checks.
+        // Over a pillar of a room it's not drawn round, or touching a door, a
+        // switch's wall or a room inside another, a room is drawn as before,
+        // lying over the other and flagged by the checks.
         const drawn = drawRoom(base, corners, {}, 1).map;
         const plain = addRoom(base, corners, {}, 1);
         const isHeld =
-          pillars.some((pillar) => getIsOverlapping(corners, pillar)) ||
-          heldWalls.some((wall) => getIsTouching(corners, wall));
+          pillars.some(
+            ({ room, shape }) =>
+              getIsOverlapping(corners, shape) &&
+              !room.every((point) => getIsCovered(point, corners)),
+          ) || heldWalls.some((wall) => getIsTouching(corners, wall));
         if (
           !isHeld ||
           JSON.stringify(drawn) !==
@@ -750,19 +758,22 @@ function getIsTouching(polygon: Point[], [from, to]: Point[]) {
   return Array.from({ length: steps + 1 }, (_, step) => ({
     x: from.x + ((to.x - from.x) * step) / steps,
     y: from.y + ((to.y - from.y) * step) / steps,
-  })).some(
-    (point) =>
-      pointInPolygon(point, polygon) ||
-      polygon.some((corner, index) => {
-        const next = polygon[(index + 1) % polygon.length];
-        return (
-          cross(corner, next, point) === 0 &&
-          point.x >= Math.min(corner.x, next.x) &&
-          point.x <= Math.max(corner.x, next.x) &&
-          point.y >= Math.min(corner.y, next.y) &&
-          point.y <= Math.max(corner.y, next.y)
-        );
-      }),
+  })).some((point) => getIsCovered(point, polygon));
+}
+
+function getIsCovered(point: Point, polygon: Point[]) {
+  return (
+    pointInPolygon(point, polygon) ||
+    polygon.some((corner, index) => {
+      const next = polygon[(index + 1) % polygon.length];
+      return (
+        cross(corner, next, point) === 0 &&
+        point.x >= Math.min(corner.x, next.x) &&
+        point.x <= Math.max(corner.x, next.x) &&
+        point.y >= Math.min(corner.y, next.y) &&
+        point.y <= Math.max(corner.y, next.y)
+      );
+    })
   );
 }
 
