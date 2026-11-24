@@ -72,9 +72,11 @@ import {
   keysFor,
   lineActionKinds,
   lineActions,
+  type LineSides,
   lineTriggers,
   lineUsesTag,
   newLineAction,
+  triggersFor,
 } from "@/lib/map/lines";
 import {
   drawLines,
@@ -870,10 +872,11 @@ export const agentActions: AgentAction[] = [
         ...(args.repeat !== undefined && { repeat: Boolean(args.repeat) }),
       };
       const action = fitLineAction(wanted, line);
-      if (args.trigger !== undefined && action.trigger !== args.trigger) {
-        throw new Error(
-          `${lineActions[kind].label} can't be set off by "${text(args, "trigger")}" on this wall. It takes: ${Object.keys(lineActions[kind].triggers).join(", ")}.`,
-        );
+      if (
+        args.trigger !== undefined &&
+        !triggersFor(kind, line).includes(wanted.trigger)
+      ) {
+        throw new Error(refusedTrigger(kind, wanted.trigger, line));
       }
       const acted = updateLine(map, key, { ...soleSpecial, action });
       const { label } = lineActions[kind];
@@ -1544,6 +1547,38 @@ export function agentStepSummary(
     };
   }
   return { label, at: null };
+}
+
+function refusedTrigger(
+  kind: LineActionKind,
+  trigger: LineTrigger,
+  sides: LineSides,
+) {
+  const { label, triggers } = lineActions[kind];
+  const allowed = triggersFor(kind, sides);
+  const refusal = triggers[trigger]
+    ? `${label} can't be set off by "${trigger}" on this wall: ${wallRefusal(trigger, sides)}.`
+    : `${label} never takes "${trigger}".`;
+  if (allowed.length > 0) return `${refusal} It takes: ${allowed.join(", ")}.`;
+  const others = lineTriggers.filter(
+    (each) => triggers[each] && each !== trigger,
+  );
+  if (others.length === 0) {
+    return `${refusal} It takes nothing else, so no trigger works on this wall.`;
+  }
+  const lead = triggers[trigger]
+    ? "Its other triggers don't fit either"
+    : `It takes only ${others.join(" or ")}`;
+  return `${refusal} ${lead}: ${others
+    .map((each) => wallRefusal(each, sides))
+    .join("; ")}.`;
+}
+
+function wallRefusal(trigger: LineTrigger, { twoSided }: LineSides) {
+  if (trigger === "walk") return "nothing can walk over a solid wall";
+  return twoSided
+    ? "pressing the wall only works when a door room is right behind it"
+    : "a press-to-open door needs a sector behind the line";
 }
 
 function humanize(name: string) {

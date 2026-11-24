@@ -11,6 +11,7 @@ import {
 } from "@/lib/engine/test-engine";
 import { checkMap } from "@/lib/map/checks";
 import { wallKey } from "@/lib/map/geometry";
+import { starterMap } from "@/lib/map/starter-map";
 import { testMap } from "@/lib/map/test-map";
 import { freedoomNames } from "@/lib/map/textures";
 import { compileMap } from "@/lib/wad/compile";
@@ -410,7 +411,48 @@ describe("agent actions", () => {
     // Nothing walks over a solid wall.
     expect(() =>
       runAgentAction(testMap, "setLineAction", ["v1|v6", "exit", "walk"]),
-    ).toThrow(/can't be set off by "walk"/);
+    ).toThrow(
+      'can\'t be set off by "walk" on this wall: nothing can walk over a solid wall. It takes: switch.',
+    );
+    expect(() =>
+      runAgentAction(testMap, "setLineAction", ["v1|v6", "door-raise", "door"]),
+    ).toThrow(
+      'can\'t be set off by "door" on this wall: a press-to-open door needs a sector behind the line. It takes: switch.',
+    );
+    expect(() =>
+      runAgentAction(starterMap, "setLineAction", {
+        wall: "v25|v26",
+        kind: "door-raise",
+        trigger: "door",
+      }),
+    ).toThrow(
+      'can\'t be set off by "door" on this wall: pressing the wall only works when a door room is right behind it. It takes: switch, walk.',
+    );
+    expect(() =>
+      runAgentAction(testMap, "setLineAction", [
+        "v1|v6",
+        "door-close-wait",
+        "walk",
+      ]),
+    ).toThrow(
+      'can\'t be set off by "walk" on this wall: nothing can walk over a solid wall. It takes nothing else, so no trigger works on this wall.',
+    );
+    expect(() =>
+      runAgentAction(starterMap, "setLineAction", {
+        wall: "v25|v26",
+        kind: "exit",
+        trigger: "door",
+      }),
+    ).toThrow('End the level never takes "door". It takes: switch, walk.');
+    expect(() =>
+      runAgentAction(testMap, "setLineAction", [
+        "v1|v6",
+        "door-close-wait",
+        "switch",
+      ]),
+    ).toThrow(
+      'Door: close, wait, open never takes "switch". It takes only walk: nothing can walk over a solid wall.',
+    );
   });
 
   it("locks a door behind a key and waits for the key to be placed", () => {
