@@ -7,7 +7,7 @@ import type { GameFiles, Skill } from "@/lib/engine/runtime";
 import type { GameMap } from "@/lib/map/types";
 
 import { SidebarDrawer, type SidebarProps } from "@/components/app-sidebar";
-import { wadFileName } from "@/components/editor/build-dialog";
+import { mapFileName, wadFileName } from "@/components/editor/build-dialog";
 import { EditorScreen } from "@/components/editor/editor-screen";
 import { GameView, type Level } from "@/components/play/play-panel";
 import { type HostedGame, PlayTogether } from "@/components/play/play-together";
@@ -1752,7 +1752,7 @@ export function EpisodeScreen() {
                   variant="primary"
                   onClick={() =>
                     download(
-                      "wadsmith-map.json",
+                      mapFileName(details.name),
                       serializeMap({
                         ...session.saver.map,
                         name: details.name,

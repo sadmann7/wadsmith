@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { GameMap, LineAction } from "@/lib/map/types";
 
-import { wadFileName } from "@/components/editor/build-dialog";
+import { mapFileName, wadFileName } from "@/components/editor/build-dialog";
 import { defined } from "@/lib/defined";
 import {
   getCanStand,
@@ -2370,6 +2370,14 @@ describe("map check", () => {
     expect(wadFileName("..")).toBe("wadsmith-map01.wad");
     expect(wadFileName("level.wad.")).toBe("level.wad");
     expect(wadFileName("x".repeat(300))).toHaveLength(68);
+  });
+
+  it("names a saved map file after the map", () => {
+    expect(mapFileName("Lantern Spire")).toBe("lantern-spire.json");
+    expect(mapFileName("  The Cinder Works!  ")).toBe("the-cinder-works.json");
+    expect(mapFileName("")).toBe("wadsmith-map.json");
+    expect(mapFileName("***")).toBe("wadsmith-map.json");
+    expect(mapFileName("x".repeat(300))).toHaveLength(69);
   });
 
   it("splits room errors into a title and place", () => {
