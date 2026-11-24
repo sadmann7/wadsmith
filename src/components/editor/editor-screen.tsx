@@ -213,7 +213,11 @@ import {
   swapWallSides,
 } from "@/lib/map/wall-tools";
 import { SceneCamera } from "@/lib/preview/scene-camera";
-import { createFlatAssets, readWadAssets } from "@/lib/wad/assets";
+import {
+  createFlatAssets,
+  readWadAssets,
+  textureHeightOf,
+} from "@/lib/wad/assets";
 import { compileMap } from "@/lib/wad/compile";
 import {
   customThingsOf,
@@ -1827,7 +1831,11 @@ export function EditorScreen({
     (playerStart ? sectorAt(map, playerStart) : undefined);
   const soundReached =
     sound && soundRoom
-      ? soundReach(map, soundRoom.id, { ...sound, custom: customThings })
+      ? soundReach(map, soundRoom.id, {
+          ...sound,
+          custom: customThings,
+          textureHeight: textureHeightOf(assets),
+        })
       : null;
 
   const thingRoom = thing ? sectorAt(map, thing) : null;

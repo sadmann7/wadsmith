@@ -34,6 +34,19 @@ export interface SceneAssets {
 
 export const shadeLevels = 32;
 
+const textureHeights = new WeakMap<SceneAssets, (name: string) => number>();
+
+// One function per set of assets, so the views that read texture heights
+// share what they work out from them.
+export function textureHeightOf(assets: SceneAssets) {
+  let height = textureHeights.get(assets);
+  if (!height) {
+    height = (name: string) => assets.texture(name).height;
+    textureHeights.set(assets, height);
+  }
+  return height;
+}
+
 // A sprite's name and frame, matched to its first lump facing front.
 const spriteFrames: Record<ThingKind, string | null> = {
   player: "PLAYA",
