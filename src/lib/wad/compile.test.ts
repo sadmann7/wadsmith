@@ -1563,6 +1563,24 @@ describe("line editing", () => {
     expect(lineIssues(openWall, { tag: 99 })).toContain(`line-tag:${openWall}`);
   });
 
+  it("words a lost tag for what the action does", () => {
+    const message = (patch: Partial<LineAction>) =>
+      validateMap(
+        updateLine(testMap, openWall, { action: lowerFloor(patch) }),
+      ).find((issue) => issue.id === `line-tag:${openWall}`);
+    expect(message({ tag: 99 })?.message).toContain(
+      "the sector this action moves no longer has its tag.",
+    );
+    const teleport = message({ kind: "teleport", tag: 99 });
+    expect(teleport?.message).toContain(
+      "no room is this teleporter's destination.",
+    );
+    expect(teleport?.target).toBe(openWall);
+    expect(message({ kind: "light-max", tag: 99 })?.message).toContain(
+      "the sector whose light it changes no longer has its tag.",
+    );
+  });
+
   it("warns about a floor raise that can't rise", () => {
     const raise = (map: GameMap, target = "sector-2") => {
       const raised = setLineTarget(
