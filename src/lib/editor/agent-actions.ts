@@ -398,7 +398,7 @@ export const agentActions: AgentAction[] = [
   {
     name: "checkMap",
     description:
-      "The map's errors and warnings, including where a Vanilla map would overflow the original game's limits, and how its health, ammo and keys balance against its monsters on a difficulty.",
+      "The map's errors and warnings, including where a Vanilla map would overflow the original game's limits, and how its health, ammo and keys balance against its monsters on a difficulty. keysNeeded counts the keys locked lines ask for, and keysMissing the ones no key on the map opens.",
     reads: true,
     params: [
       optional({
