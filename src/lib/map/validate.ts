@@ -4,7 +4,14 @@ import type { CustomThings } from "@/lib/wad/custom-things";
 import { defined } from "@/lib/defined";
 
 import type { TextureNames } from "./textures";
-import type { Complevel, GameMap, Point, Sector, ThingSkill } from "./types";
+import type {
+  Complevel,
+  GameMap,
+  LineActionKind,
+  Point,
+  Sector,
+  ThingSkill,
+} from "./types";
 
 import { appearsOn } from "./balance";
 import {
@@ -51,6 +58,7 @@ import {
 import {
   describeLine,
   getIsTeleport,
+  lineActions,
   lineName,
   lineUsesTag,
   movesSector,
@@ -891,14 +899,9 @@ function validateLines(
     }
     if (!lineUsesTag(action)) continue;
     if (!action.tag) {
-      add(
-        "line-target",
-        getIsTeleport(action.kind)
-          ? "choose where it teleports to."
-          : "choose the sector this action moves.",
-      );
+      add("line-target", missingTargetMessage(action.kind));
     } else if (!map.sectors.some((sector) => sector.tag === action.tag)) {
-      add("line-tag", "the sector this action moves no longer has its tag.");
+      add("line-tag", lostTagMessage(action.kind));
     } else if (action.kind === "floor-raise") {
       const stuck = map.sectors.flatMap((sector) =>
         sector.tag === action.tag ? stuckFloor(map, sector) : [],
@@ -922,6 +925,22 @@ function validateLines(
       );
     }
   }
+}
+
+function missingTargetMessage(kind: LineActionKind) {
+  if (getIsTeleport(kind)) return "choose where it teleports to.";
+  if (lineActions[kind].group === "Lights") {
+    return "choose the sector whose light it changes.";
+  }
+  return "choose the sector this action moves.";
+}
+
+function lostTagMessage(kind: LineActionKind) {
+  if (getIsTeleport(kind)) return "no room is this teleporter's destination.";
+  if (lineActions[kind].group === "Lights") {
+    return "the sector whose light it changes no longer has its tag.";
+  }
+  return "the sector this action moves no longer has its tag.";
 }
 
 // A floor raise goes to the lowest ceiling around the sector, or its own if
