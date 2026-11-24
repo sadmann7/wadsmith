@@ -689,7 +689,7 @@ function validateDoors(
     if (depth > deepDoor) {
       add(
         "door-deep",
-        `the door is ${Math.round(depth)} deep. A door is usually ${doorDepth.min} to ${doorDepth.max}, and no more than ${deepDoor}.`,
+        `the door is ${Math.ceil(depth)} deep. A door is usually ${doorDepth.min} to ${doorDepth.max}, and no more than ${deepDoor}.`,
         warnings,
       );
     }
@@ -760,9 +760,9 @@ function validateDoors(
   }
 }
 
-// For each pair of rooms beside a door, the furthest a corner on one side is
-// from the other side's walls, taken from the side that gives less. A door
-// beside only one room has no depth to measure.
+// For each pair of rooms on different faces of a door, the furthest a corner
+// on one side is from the other side's walls, taken from the side that gives
+// less. Walls on one face run the same way around the door's loop.
 function measureDoorDepth(
   map: GameMap,
   sector: Sector,
@@ -781,6 +781,7 @@ function measureDoorDepth(
   let depth = 0;
   for (let first = 0; first < rooms.length; first += 1) {
     for (let second = first + 1; second < rooms.length; second += 1) {
+      if (sameFace(rooms[first], rooms[second])) continue;
       const gap = Math.min(
         wallReach(rooms[first], rooms[second]),
         wallReach(rooms[second], rooms[first]),
@@ -789,6 +790,14 @@ function measureDoorDepth(
     }
   }
   return depth;
+}
+
+function sameFace(first: [Point, Point][], second: [Point, Point][]) {
+  return first.every(([a, b]) =>
+    second.every(
+      ([c, d]) => (b.x - a.x) * (d.x - c.x) + (b.y - a.y) * (d.y - c.y) > 0,
+    ),
+  );
 }
 
 function wallReach(from: [Point, Point][], to: [Point, Point][]) {

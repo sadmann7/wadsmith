@@ -86,7 +86,7 @@ import {
   triggerChoices,
   triggersFor,
 } from "@/lib/map/lines";
-import { starterMap } from "@/lib/map/starter-map";
+import { blankMap, starterMap } from "@/lib/map/starter-map";
 import { parseMapFile, serializeMap } from "@/lib/map/storage";
 import { describeSurface, paintSurface, surfaceKey } from "@/lib/map/surfaces";
 import { islandMap, testMap } from "@/lib/map/test-map";
@@ -1275,6 +1275,45 @@ describe("validateMap", () => {
         severity: "warning",
       }),
     );
+  });
+
+  it("measures a wide door's depth across it, not along a split face", () => {
+    const door = (split: { x: number; y: number }, slope: number): GameMap => ({
+      ...blankMap,
+      vertices: {
+        a: { x: 0, y: 0 },
+        b: split,
+        c: { x: 256, y: slope },
+        d: { x: 256, y: slope + 16 },
+        e: { x: 0, y: 16 },
+        f: { x: 0, y: -128 },
+        g: { x: split.x, y: -128 },
+        h: { x: 256, y: -128 },
+        i: { x: 256, y: 160 },
+        j: { x: 0, y: 160 },
+      },
+      sectors: [
+        { ...testMap.sectors[0], id: "west", vertices: ["f", "g", "b", "a"] },
+        { ...testMap.sectors[0], id: "east", vertices: ["g", "h", "c", "b"] },
+        { ...testMap.sectors[0], id: "south", vertices: ["e", "d", "i", "j"] },
+        {
+          ...testMap.sectors[3],
+          id: "door",
+          vertices: ["a", "b", "c", "d", "e"],
+          door: { opensBy: "use", closes: true, texture: "DOOR3" },
+        },
+      ],
+      things: [{ id: "player-1", kind: "player", x: 64, y: -64, angle: 0 }],
+      switches: [],
+    });
+    for (const map of [
+      door({ x: 128, y: 0 }, 0),
+      door({ x: 128, y: 33 }, 64),
+    ]) {
+      const { errors, warnings } = inspectMap(map);
+      expect(errors).toEqual([]);
+      expect(warnings.map((issue) => issue.id)).not.toContain("door-deep:door");
+    }
   });
 
   it("finds no deep doors in the starter and featured maps", () => {
