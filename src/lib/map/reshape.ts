@@ -518,7 +518,10 @@ function drawOver(
   if (
     crossed.some((sector) => sector.door) ||
     joined.sectors.some(
-      (sector) => sector !== drawn && getIsOverPillar(joined, drawn, sector),
+      (sector) =>
+        sector !== drawn &&
+        containerOf(joined, sector) !== drawn &&
+        getIsOverPillar(joined, drawn, sector),
     )
   ) {
     return overlapping;

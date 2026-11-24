@@ -402,6 +402,18 @@ describe("drawing a room against the wall of the room it's in, around obstacles"
     }
   });
 
+  it("still cuts round a room with a pillar that it's drawn round", () => {
+    for (const corners of [
+      box(-64, -64, 832, 576),
+      box(0, 0, 1024, 576),
+      box(0, 0, 832, 512),
+    ]) {
+      const drawn = drawRoom(pillarMap, corners, {}, 1);
+      expect(problems(drawn.map)).toEqual([]);
+      expect(() => compileMap(drawn.map)).not.toThrow();
+    }
+  });
+
   it("cuts the outer room round a bridge that only reaches a pillar", () => {
     const post = drawRoom(hall.map, box(200, 96, 232, 128), {}, 1);
     const pillared = defined(makePillar(post.map, post.id));
