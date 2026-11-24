@@ -179,8 +179,8 @@ function getIsWalkable(rooms: Sector[]) {
 
 const playerRadius = 16;
 const gridSteps = 32;
-// Finer than the narrowest strip a player fits in, measured along an axis.
 const maxGridStep = 16;
+const maxSpots = 16384;
 
 // Whether a player box fits somewhere inside the room, tried on a grid.
 function getHasRoom(map: GameMap, sector: Sector, walls: RoomWall[]) {
@@ -192,9 +192,12 @@ function getHasRoom(map: GameMap, sector: Sector, walls: RoomWall[]) {
   const top = Math.min(...ys) + playerRadius;
   const bottom = Math.max(...ys) - playerRadius;
   if (left > right || top > bottom) return false;
-  const step = Math.min(
-    maxGridStep,
-    Math.max(1, Math.max(right - left, bottom - top) / gridSteps),
+  // A tight fit can fall between spots, which only leaves the room unnamed.
+  const width = right - left;
+  const height = bottom - top;
+  const step = Math.max(
+    Math.min(maxGridStep, Math.max(1, Math.max(width, height) / gridSteps)),
+    Math.sqrt(((width + 1) * (height + 1)) / maxSpots),
   );
   for (let x = left; x <= right; x += step) {
     for (let y = top; y <= bottom; y += step) {
