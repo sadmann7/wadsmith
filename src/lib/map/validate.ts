@@ -1,7 +1,7 @@
 import type { GameInfo } from "@/lib/engine/game";
-import type { CustomThings } from "@/lib/wad/custom-things";
 
 import { defined } from "@/lib/defined";
+import { type CustomThings, thingLabel } from "@/lib/wad/custom-things";
 
 import type { TextureNames } from "./textures";
 import type {
@@ -201,7 +201,7 @@ export function inspectMap(map: GameMap, context: CheckContext = {}) {
       }
     }
     layers.things = issues.map((issue) => issue.id);
-    if (issues.length === 0) validateReach(map, warnings);
+    if (issues.length === 0) validateReach(map, warnings, context.custom);
   }
   return { errors: issues, warnings, layers };
 }
@@ -862,8 +862,12 @@ function lineOpensDoor(
   );
 }
 
-function validateReach(map: GameMap, warnings: MapIssue[]) {
-  const found = findUnreachable(map);
+function validateReach(
+  map: GameMap,
+  warnings: MapIssue[],
+  custom: CustomThings = new Map(),
+) {
+  const found = findUnreachable(map, custom);
   if (!found) return;
   for (const sector of found.rooms) {
     warnings.push({
@@ -875,7 +879,7 @@ function validateReach(map: GameMap, warnings: MapIssue[]) {
   for (const { thing, room } of found.things) {
     warnings.push({
       id: `unreachable-thing:${thing.id}`,
-      message: `${room.name}: the player can't reach the ${thingCatalog[thing.kind].label.toLowerCase()} here.`,
+      message: `${room.name}: the player can't reach the ${thingLabel(thing, custom).toLowerCase()} here.`,
       target: thing.id,
     });
   }

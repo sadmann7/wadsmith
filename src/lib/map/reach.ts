@@ -1,3 +1,5 @@
+import { type CustomThings, thingCategory } from "@/lib/wad/custom-things";
+
 import type {
   GameMap,
   LineActionKind,
@@ -7,7 +9,6 @@ import type {
   Thing,
 } from "./types";
 
-import { thingCatalog } from "./catalog";
 import { loopPolygon, sectorAt, wallOwners } from "./geometry";
 import {
   actionForSpecial,
@@ -29,7 +30,10 @@ interface RoomWall {
 // What the player can't get to from the player start: the items, keys and
 // walls that end the level, and the rooms holding them that it could stand in. Anything
 // an action could open counts as open, so only clear cases are found.
-export function findUnreachable(map: GameMap) {
+export function findUnreachable(
+  map: GameMap,
+  custom: CustomThings = new Map(),
+) {
   const start = map.things.find((thing) => thing.kind === "player");
   const first = start && sectorAt(map, start);
   if (!first) return null;
@@ -44,7 +48,7 @@ export function findUnreachable(map: GameMap) {
   };
   const reached = reachableRooms(map, first, walls, hasRoom);
   const things = map.things.flatMap((thing) => {
-    const { category } = thingCatalog[thing.kind];
+    const category = thingCategory(thing, custom);
     if (category !== "item" && category !== "key") return [];
     const room = sectorAt(map, thing);
     if (!room || room.door || reached.has(room)) return [];
