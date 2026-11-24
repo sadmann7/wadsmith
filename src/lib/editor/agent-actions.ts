@@ -90,6 +90,7 @@ import { countTexture, replaceTexture } from "@/lib/map/texture-tools";
 import { freedoomNames } from "@/lib/map/textures";
 import {
   type CheckContext,
+  doorKey,
   inspectMap,
   type MapIssue,
 } from "@/lib/map/validate";
@@ -151,7 +152,7 @@ const maxNoteLength = 200;
 // Problems an agent finishes with a later edit, like a door that waits for
 // its switch. They are reported back and never refuse the edit.
 const unfinished =
-  /^(empty|no-player|door-unwired|switch-unwired|line-key)(:|$)/;
+  /^(empty|no-player|door-unwired|switch-unwired|line-key|door-key)(:|$)/;
 
 const room = (description = "A room's id or name."): AgentParam => ({
   name: "room",
@@ -624,7 +625,7 @@ export const agentActions: AgentAction[] = [
   {
     name: "makeDoor",
     description:
-      "Turns a thin room between two rooms into a door. It opens when pressed, or from a switch added with addDoorSwitch.",
+      "Turns a thin room between two rooms into a door. It opens when pressed, locked behind a key if given one, or from a switch added with addDoorSwitch.",
     params: [
       room("The room to turn into a door."),
       optional({
@@ -649,17 +650,28 @@ export const agentActions: AgentAction[] = [
         description:
           "The texture on the door's face, like BIGDOOR2, or the wall's own to hide a secret door.",
       }),
+      optional({
+        name: "key",
+        type: "string",
+        description:
+          "The key a pressed door needs. Place that key too. None when left out.",
+        choices: keyColors,
+      }),
     ],
     run: (map, args, context) => {
       const door: DoorSettings = {
         ...defaultDoor,
         opensBy: choice(args, "opensBy", ["use", "switch"], "use"),
+        ...(args.key !== undefined && { key: choice(args, "key", keyColors) }),
         closes: flag(args, "closes") ?? true,
         ...(flag(args, "fast") && { fast: true }),
         ...(args.texture !== undefined && {
           texture: textureName(args, "texture", "wall", context),
         }),
       };
+      if (door.key && door.opensBy === "switch") {
+        throw new Error("A door opened by a switch can't need a key.");
+      }
       return { map: setRoomDoor(map, findRoom(map, args.room).id, door) };
     },
   },
@@ -840,7 +852,7 @@ export const agentActions: AgentAction[] = [
   {
     name: "setLineAction",
     description:
-      "Gives a wall an action, like a lift, a remote door, a teleporter or the level's exit. Actions that move a room need the room as their target. For a locked door, give the wall in front of a door the kind door-raise with the trigger door and a key.",
+      "Gives a wall an action, like a lift, a remote door, a teleporter or the level's exit. Actions that move a room need the room as their target. To lock a whole door, give makeDoor a key instead. To lock one side, give the wall in front of the door the kind door-raise with the trigger door and a key.",
     params: [
       wall,
       {
@@ -1763,7 +1775,7 @@ function roomSummary(map: GameMap, sector: Sector) {
     floor: sector.floor,
     ceiling: sector.ceiling,
     light: sector.light,
-    ...(sector.door && { door: sector.door.opensBy }),
+    ...(sector.door && { door: doorKey(sector) ?? sector.door.opensBy }),
     ...(sector.tag && { tag: sector.tag }),
     ...(sector.effect && { effect: sector.effect }),
     box,

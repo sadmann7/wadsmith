@@ -1,6 +1,7 @@
 import { defined } from "@/lib/defined";
 
 import type {
+  Complevel,
   DoorSettings,
   GameMap,
   KeyColor,
@@ -10,6 +11,8 @@ import type {
   Sector,
 } from "./types";
 
+import { lockedDoorSpecial } from "./boom";
+import { atLeast } from "./complevel";
 import { wallKey, wallOwners } from "./geometry";
 
 interface Specials {
@@ -555,20 +558,20 @@ export function fitLineAction(
   };
 }
 
-// The specials a door's own lines and its switch get, from how the door is set
-// to open.
-export function doorSpecial(door: DoorSettings) {
+// The special a door's own lines get, from how the door is set to open. Doom
+// has no fast locked door, so Boom's generalized one stands in where the map
+// allows it, and Vanilla opens it at normal speed.
+export function doorSpecial(door: DoorSettings, level: Complevel) {
+  const { key } = door;
+  if (key && door.fast && atLeast(level, "boom")) {
+    return lockedDoorSpecial(door, key);
+  }
   return defined(
     lineSpecial({
-      kind: door.fast
-        ? door.closes
-          ? "door-raise-fast"
-          : "door-open-fast"
-        : door.closes
-          ? "door-raise"
-          : "door-open",
+      kind: doorKind(key ? { ...door, fast: undefined } : door),
       trigger: "door",
       repeat: door.closes,
+      key,
       tag: 0,
     }),
   );
@@ -577,13 +580,7 @@ export function doorSpecial(door: DoorSettings) {
 export function switchDoorSpecial(door: DoorSettings) {
   return defined(
     lineSpecial({
-      kind: door.fast
-        ? door.closes
-          ? "door-raise-fast"
-          : "door-open-fast"
-        : door.closes
-          ? "door-raise"
-          : "door-open",
+      kind: doorKind(door),
       trigger: "switch",
       repeat: true,
       tag: 0,
@@ -649,4 +646,9 @@ function frontOwner(owners: Sector[], front?: string) {
     owners.find((sector) => !sector.door) ??
     owners[0]
   );
+}
+
+function doorKind({ fast, closes }: DoorSettings): LineActionKind {
+  if (fast) return closes ? "door-raise-fast" : "door-open-fast";
+  return closes ? "door-raise" : "door-open";
 }

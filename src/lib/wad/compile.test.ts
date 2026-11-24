@@ -16,6 +16,7 @@ import {
 import { games } from "@/lib/engine/game";
 import { mapBalance } from "@/lib/map/balance";
 import {
+  fieldValue,
   generalizedClass,
   generalizedFields,
   generalizedTrigger,
@@ -1459,6 +1460,126 @@ describe("doors and switches", () => {
     expect(special({ fast: true, opensBy: "use", closes: true })).toEqual([
       117, 117,
     ]);
+  });
+
+  describe("locked doors", () => {
+    const lockedMap = (settings: Partial<typeof door>) => ({
+      ...setRoomDoor(testMap, "sector-4", {
+        ...door,
+        opensBy: "use",
+        key: "blue",
+        ...settings,
+      }),
+      switches: [],
+    });
+    const specials = (map: GameMap) =>
+      linesOf(map)
+        .map((item) => item.special)
+        .filter(Boolean);
+
+    it("puts the keyed specials on every line into the door", () => {
+      expect(specials(lockedMap({ closes: true }))).toEqual([26, 26]);
+      expect(specials(lockedMap({ closes: true, key: "yellow" }))).toEqual([
+        27, 27,
+      ]);
+      expect(specials(lockedMap({ closes: true, key: "red" }))).toEqual([
+        28, 28,
+      ]);
+      expect(specials(lockedMap({ closes: false }))).toEqual([32, 32]);
+      expect(specials(lockedMap({ closes: false, key: "yellow" }))).toEqual([
+        34, 34,
+      ]);
+      expect(specials(lockedMap({ closes: false, key: "red" }))).toEqual([
+        33, 33,
+      ]);
+    });
+
+    it("leaves a line with its own action as it was", () => {
+      const map = lockedMap({ closes: true });
+      const [first] = linesOf(map).filter((item) => item.special);
+      const opened = updateLine(map, first.line.wall, {
+        action: { kind: "door-raise", trigger: "door", repeat: true, tag: 0 },
+      });
+      expect(specials(opened).toSorted((a, b) => a - b)).toEqual([1, 26]);
+    });
+
+    it("opens a fast locked door at normal speed in Vanilla", () => {
+      const map = lockedMap({ closes: true, fast: true });
+      expect(specials(map)).toEqual([26, 26]);
+      expect(checkMap(map).map((issue) => issue.id)).toContain(
+        "door-slow:sector-4",
+      );
+    });
+
+    it("uses a Boom locked door for a fast locked door in Boom", () => {
+      const map = {
+        ...lockedMap({ closes: false, fast: true }),
+        complevel: "boom" as const,
+      };
+      const [special] = specials(map);
+      expect(generalizedClass("locked")?.base).toBe(special & ~0x3ff);
+      expect(
+        Object.fromEntries(
+          generalizedFields(special).map((field) => [
+            field.id,
+            field.options[fieldValue(special, field)],
+          ]),
+        ),
+      ).toEqual({
+        trigger: "Use door once",
+        speed: "Fast",
+        kind: "Opens and stays",
+        key: "Blue keycard",
+        skulls: "Yes",
+      });
+      expect(generalizedTrigger(special)).toEqual({
+        trigger: "door",
+        repeat: false,
+      });
+      expect(checkMap(map).map((issue) => issue.id)).not.toContain(
+        "door-slow:sector-4",
+      );
+      expect(
+        checkMap(map).filter((issue) => issue.id.startsWith("line-level")),
+      ).toEqual([]);
+    });
+
+    it("asks for the door's key on every difficulty", () => {
+      const map = lockedMap({ closes: true });
+      const ids = (next: GameMap) => checkMap(next).map((issue) => issue.id);
+      expect(ids(map)).toContain("door-key:sector-4");
+      expect(
+        checkMap(map).find((issue) => issue.id === "door-key:sector-4")
+          ?.message,
+      ).toBe(
+        `${map.sectors.find((sector) => sector.id === "sector-4")?.name}: place the blue key on every difficulty.`,
+      );
+      const keyed = addThing(map, "blue-key", { x: 64, y: 64 });
+      expect(ids(keyed.map)).not.toContain("door-key:sector-4");
+      expect(ids(keyed.map)).not.toContain(`key-unused:${keyed.id}`);
+      expect(mapBalance(keyed.map, "medium")).toMatchObject({
+        keysNeeded: 1,
+        keysMissing: 0,
+      });
+      const hardOnly = updateThing(keyed.map, keyed.id, { skills: ["hard"] });
+      expect(ids(hardOnly)).toContain("door-key:sector-4");
+    });
+
+    it("forgets the key once the door opens from a switch", () => {
+      const map = lockedMap({ opensBy: "switch" });
+      expect(checkMap(map).map((issue) => issue.id)).not.toContain(
+        "door-key:sector-4",
+      );
+      expect(mapBalance(map, "medium").keysNeeded).toBe(0);
+    });
+
+    it("saves and loads the door's key", () => {
+      const map = lockedMap({ key: "yellow" });
+      expect(parseMapFile(serializeMap(map))).toEqual(map);
+      expect(() =>
+        parseMapFile(serializeMap(lockedMap({ key: "green" as never }))),
+      ).toThrow("not valid");
+    });
   });
 
   it("cuts a short section out of a long wall for a switch", () => {

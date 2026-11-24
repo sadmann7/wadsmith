@@ -279,12 +279,14 @@ function parseDoor(value: unknown, label: string): DoorSettings {
   }
   if (
     typeof door.closes !== "boolean" ||
-    (door.fast !== undefined && typeof door.fast !== "boolean")
+    (door.fast !== undefined && typeof door.fast !== "boolean") ||
+    (door.key !== undefined && !keyColors.includes(door.key as KeyColor))
   ) {
     fail(`${label} is not valid.`);
   }
   return {
     opensBy: door.opensBy,
+    ...(door.key === undefined ? {} : { key: door.key as KeyColor }),
     closes: door.closes,
     ...(door.fast ? { fast: true } : {}),
     texture: texture(door.texture, null, label),
