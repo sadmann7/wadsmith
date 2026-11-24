@@ -28,6 +28,7 @@ interface SectorIndex {
 const cellSize = 512;
 const cellOffset = 1024;
 const cellRow = 4096;
+const scanLines = 32;
 
 // Maps are replaced on every edit, never changed in place, so what's worked
 // out for one stays right for as long as it's in use.
@@ -194,6 +195,49 @@ export function interiorPoint(polygon: Point[]): Point {
   return { x: (corner.x + found.x) / 2, y: (corner.y + found.y) / 2 };
 }
 
+// The spot inside a room's outline and clear of its pillars that stands
+// furthest from any wall among those on a set of level lines across it. A
+// line between each pair of corner heights crosses every part of the room, so
+// even a thin walkway round a pillar is found.
+export function roomPoint(map: GameMap, sector: Sector): Point {
+  const outline = sectorPolygon(map, sector);
+  const loops = [outline, ...sectorHoles(map, sector)];
+  const walls = loops.flatMap((loop) =>
+    loop.map((point, index) => [point, loop[(index + 1) % loop.length]]),
+  );
+  const box = boxOf(outline);
+  const corners = new Set(loops.flat().map((point) => point.y));
+  const levels = [...corners].toSorted((a, b) => a - b);
+  const lines = [
+    ...levels.slice(1).map((y, index) => (levels[index] + y) / 2),
+    ...Array.from(
+      { length: scanLines },
+      (_, index) =>
+        box.top + ((index + 0.5) * (box.bottom - box.top)) / scanLines,
+    ),
+  ].filter((y) => !corners.has(y));
+  let best: Point | null = null;
+  let clearance = -1;
+  for (const y of lines) {
+    const crossings = walls
+      .filter(([a, b]) => a.y <= y !== b.y <= y)
+      .map(([a, b]) => a.x + ((y - a.y) * (b.x - a.x)) / (b.y - a.y))
+      .toSorted((a, b) => a - b);
+    for (let index = 0; index + 1 < crossings.length; index += 2) {
+      const point = { x: (crossings[index] + crossings[index + 1]) / 2, y };
+      if (!pointInSector(map, sector, point)) continue;
+      const reach = Math.min(
+        ...walls.map(([a, b]) => segmentDistance(a, b, point)),
+      );
+      if (reach > clearance) {
+        best = point;
+        clearance = reach;
+      }
+    }
+  }
+  return best ?? interiorPoint(outline);
+}
+
 export function pointInSector(map: GameMap, sector: Sector, point: Point) {
   return (
     pointInPolygon(point, sectorPolygon(map, sector)) &&
@@ -349,6 +393,20 @@ export function loopsPath(loops: Point[][]) {
       (loop) => `M${loop.map((point) => `${point.x} ${point.y}`).join("L")}Z`,
     )
     .join("");
+}
+
+function segmentDistance(a: Point, b: Point, point: Point) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const length = dx * dx + dy * dy;
+  const along =
+    length === 0
+      ? 0
+      : Math.max(
+          0,
+          Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / length),
+        );
+  return Math.hypot(a.x + along * dx - point.x, a.y + along * dy - point.y);
 }
 
 function inTriangle(a: Point, b: Point, c: Point, point: Point) {

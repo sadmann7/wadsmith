@@ -4,6 +4,8 @@ import type { GameMap, Point, Sector } from "./types";
 
 import {
   pointInPolygon,
+  pointInSector,
+  roomPoint,
   sectorAt,
   sectorPolygon,
   wallOwners,
@@ -136,3 +138,154 @@ describe("wallOwners", () => {
     ).toEqual(["sector-1", "sector-2"]);
   });
 });
+
+describe("roomPoint", () => {
+  it("stands in the middle of a plain room", () => {
+    const map = shape([
+      [0, 0],
+      [512, 0],
+      [512, 256],
+      [0, 256],
+    ]);
+    expect(roomPoint(map, map.sectors[0])).toEqual({ x: 256, y: 128 });
+  });
+
+  it.each([
+    [512, 64],
+    [2048, 48],
+    [256, 8],
+  ])(
+    "stands on the walkway round a pillar in a room %i wide, %i from its walls",
+    (size, gap) => {
+      const far = size - gap;
+      const map = shape(
+        [
+          [0, 0],
+          [size, 0],
+          [size, size],
+          [0, size],
+        ],
+        [
+          [
+            [gap, gap],
+            [far, gap],
+            [far, far],
+            [gap, far],
+          ],
+        ],
+      );
+      const point = roomPoint(map, map.sectors[0]);
+      expect(pointInSector(map, map.sectors[0], point)).toBe(true);
+      expect(clearance(map, point)).toBeCloseTo(gap / 2, 0);
+    },
+  );
+
+  it("keeps out of every pillar when there are several", () => {
+    const map = shape(
+      [
+        [0, 0],
+        [768, 0],
+        [768, 256],
+        [0, 256],
+      ],
+      [0, 256, 512].map((left) => [
+        [left + 32, 32],
+        [left + 224, 32],
+        [left + 224, 224],
+        [left + 32, 224],
+      ]),
+    );
+    const point = roomPoint(map, map.sectors[0]);
+    expect(pointInSector(map, map.sectors[0], point)).toBe(true);
+    expect(clearance(map, point)).toBeGreaterThanOrEqual(16);
+  });
+
+  it("finds the widest arm of an L-shaped room", () => {
+    const map = shape([
+      [0, 0],
+      [512, 0],
+      [512, 128],
+      [128, 128],
+      [128, 512],
+      [0, 512],
+    ]);
+    const point = roomPoint(map, map.sectors[0]);
+    expect(pointInSector(map, map.sectors[0], point)).toBe(true);
+    expect(clearance(map, point)).toBe(64);
+  });
+
+  it("stays inside a U-shaped room whose box middle is outside it", () => {
+    const map = shape([
+      [0, 0],
+      [384, 0],
+      [384, 384],
+      [256, 384],
+      [256, 128],
+      [128, 128],
+      [128, 384],
+      [0, 384],
+    ]);
+    const point = roomPoint(map, map.sectors[0]);
+    expect(pointInSector(map, map.sectors[0], { x: 192, y: 192 })).toBe(false);
+    expect(pointInSector(map, map.sectors[0], point)).toBe(true);
+    expect(clearance(map, point)).toBe(64);
+  });
+
+  it("stays inside a slanted room", () => {
+    const map = shape([
+      [0, 0],
+      [300, 40],
+      [260, 300],
+      [20, 200],
+    ]);
+    const point = roomPoint(map, map.sectors[0]);
+    expect(pointInSector(map, map.sectors[0], point)).toBe(true);
+    expect(clearance(map, point)).toBeGreaterThan(80);
+  });
+});
+
+function shape(outline: number[][], holes: number[][][] = []): GameMap {
+  const vertices: Record<string, Point> = {};
+  const loop = (points: number[][], prefix: string) =>
+    points.map(([x, y], index) => {
+      vertices[`${prefix}${index}`] = { x, y };
+      return `${prefix}${index}`;
+    });
+  return {
+    vertices,
+    sectors: [
+      {
+        ...room("room", loop(outline, "o")),
+        holes: holes.map((hole, index) => loop(hole, `h${index}-`)),
+      },
+    ],
+    things: [],
+    switches: [],
+  };
+}
+
+function clearance(map: GameMap, point: Point) {
+  const sector = map.sectors[0];
+  const loops = [sector.vertices, ...(sector.holes ?? [])];
+  return Math.min(
+    ...loops.flatMap((loop) =>
+      loop.map((id, index) => {
+        const a = map.vertices[id];
+        const b = map.vertices[loop[(index + 1) % loop.length]];
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const along = Math.max(
+          0,
+          Math.min(
+            1,
+            ((point.x - a.x) * dx + (point.y - a.y) * dy) / (dx * dx + dy * dy),
+          ),
+        );
+        return Math.hypot(
+          a.x + along * dx - point.x,
+          a.y + along * dy - point.y,
+        );
+      }),
+    ),
+  );
+}

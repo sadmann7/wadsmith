@@ -18,6 +18,7 @@ import {
   containerOf,
   loopEdges,
   pointInSector,
+  roomPoint,
   sectorAt,
   sectorEdges,
   sectorLoops,
@@ -1003,19 +1004,9 @@ function overlapLength(a: Point, b: Point, c: Point, d: Point) {
 }
 
 export function roomCenter(map: GameMap, sector: Sector): Point {
-  const polygon = sectorPolygon(map, sector);
-  const average = {
-    x: polygon.reduce((sum, point) => sum + point.x, 0) / polygon.length,
-    y: polygon.reduce((sum, point) => sum + point.y, 0) / polygon.length,
-  };
-  if (pointInSector(map, sector, average)) return snapPoint(average);
-  for (let index = 0; index < polygon.length; index += 1) {
-    const before = polygon[index];
-    const after = polygon[(index + 2) % polygon.length];
-    const middle = { x: (before.x + after.x) / 2, y: (before.y + after.y) / 2 };
-    if (pointInSector(map, sector, middle)) return snapPoint(middle);
-  }
-  return snapPoint(polygon[0]);
+  const point = roomPoint(map, sector);
+  const snapped = snapPoint(point);
+  return pointInSector(map, sector, snapped) ? snapped : point;
 }
 
 // A new corner on a wall splits it in every outline along it, and both halves
