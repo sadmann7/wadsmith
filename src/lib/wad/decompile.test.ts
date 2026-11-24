@@ -57,6 +57,34 @@ describe("decompileMap", () => {
     expect(parseMapFile(serializeMap(map))).toEqual(map);
   });
 
+  it("keeps a locked door's key on the door", () => {
+    const lines = Object.fromEntries(
+      Object.entries(starterMap.lines ?? {}).filter(
+        ([wall]) => wall !== wallKey("v17", "v18"),
+      ),
+    );
+    const locked: GameMap = {
+      ...starterMap,
+      lines,
+      sectors: starterMap.sectors.map((sector) =>
+        sector.door?.opensBy === "use"
+          ? { ...sector, door: { ...sector.door, key: "red" } }
+          : sector,
+      ),
+    };
+    const [doom] = readMaps([{ name: "map.wad", data: compileMap(locked) }]);
+    const { map } = decompileMap(doom);
+    const doors = map.sectors.filter(
+      (sector) => sector.door?.opensBy === "use",
+    );
+    expect(doors.length).toBeGreaterThan(0);
+    expect(doors.every((sector) => sector.door?.key === "red")).toBe(true);
+    expect(
+      Object.values(map.lines ?? {}).some((line) => line.action?.key),
+    ).toBe(false);
+    expect(parseMapFile(serializeMap(map))).toEqual(map);
+  });
+
   it("keeps a pillar as a hole in its room", () => {
     const build = doomMap();
     const room = build.sector();

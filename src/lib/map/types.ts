@@ -7,6 +7,7 @@ type Complevel = "vanilla" | "boom" | "mbf" | "mbf21";
 
 interface DoorSettings {
   opensBy: "use" | "switch";
+  key?: KeyColor;
   closes: boolean;
   fast?: boolean;
   texture: string;

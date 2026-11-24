@@ -104,6 +104,7 @@ import {
   describeLine,
   fitLineAction,
   getIsLineActionKind,
+  keyColors,
   keysFor,
   lineActionGroups,
   lineActionKinds,
@@ -141,6 +142,12 @@ const keyLabels: Record<KeyColor, string> = {
   yellow: "Yellow key",
   red: "Red key",
 };
+const doorOpeners = [
+  { value: "use", label: "Use" },
+  ...keyColors.map((key) => ({ value: key, label: keyLabels[key] })),
+  { value: "switch", label: "Switch" },
+];
+
 const partLabels: Record<WallPart, string> = {
   upper: "Upper",
   middle: "Wall",
@@ -380,6 +387,9 @@ export function RoomsInspector({
   // What every door agrees on, or null where they differ.
   const door = <K extends keyof DoorSettings>(key: K) =>
     agreed(rooms.map((room) => room.door?.[key]));
+  const opener = agreed(
+    rooms.map((room) => (room.door ? doorOpener(room.door) : null)),
+  );
   // The field lists Mixed as a value, which choosing again changes nothing.
   const paint =
     (patch: (name: string) => Partial<Sector>) => (name: string) => {
@@ -489,18 +499,13 @@ export function RoomsInspector({
           <>
             <ChoiceField
               label="Opens with"
-              value={door("opensBy") ?? mixed}
+              value={opener ?? mixed}
               items={[
-                ...(door("opensBy") === null
-                  ? [{ value: mixed, label: mixed }]
-                  : []),
-                { value: "use", label: "Use key" },
-                { value: "switch", label: "Switch" },
+                ...(opener === null ? [{ value: mixed, label: mixed }] : []),
+                ...doorOpeners,
               ]}
-              onChange={(opensBy) => {
-                if (opensBy !== mixed) {
-                  onDoor({ opensBy: opensBy as DoorSettings["opensBy"] });
-                }
+              onChange={(value) => {
+                if (value !== mixed) onDoor(openerPatch(value));
               }}
             />
             <ToggleField
@@ -1725,14 +1730,9 @@ function DoorFields({ door, assets, light, onChange }: DoorFieldsProps) {
     <>
       <ChoiceField
         label="Opens with"
-        value={door.opensBy}
-        items={[
-          { value: "use", label: "Use key" },
-          { value: "switch", label: "Switch" },
-        ]}
-        onChange={(opensBy) =>
-          onChange({ ...door, opensBy: opensBy as DoorSettings["opensBy"] })
-        }
+        value={doorOpener(door)}
+        items={doorOpeners}
+        onChange={(value) => onChange({ ...door, ...openerPatch(value) })}
       />
       <ToggleField
         label="Closes again"
@@ -2265,4 +2265,14 @@ function Meter({ label, value, fill, color }: MeterProps) {
       </div>
     </div>
   );
+}
+
+function doorOpener({ opensBy, key }: DoorSettings) {
+  return opensBy === "use" && key ? key : opensBy;
+}
+
+function openerPatch(value: string): Pick<DoorSettings, "opensBy" | "key"> {
+  return value === "use" || value === "switch"
+    ? { opensBy: value, key: undefined }
+    : { opensBy: "use", key: value as KeyColor };
 }

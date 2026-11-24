@@ -1,5 +1,13 @@
+import { defined } from "@/lib/defined";
+
 import type { LineSides } from "./lines";
-import type { LineTrigger, Sector, SectorEffect } from "./types";
+import type {
+  DoorSettings,
+  KeyColor,
+  LineTrigger,
+  Sector,
+  SectorEffect,
+} from "./types";
 
 import { sectorEffects } from "./catalog";
 
@@ -290,6 +298,27 @@ export function newGeneralized(
     !doorBehind
     ? withField(kind.start, trigger, 2 | (option & 1))
     : kind.start;
+}
+
+const lockedKeys: Record<KeyColor, number> = { red: 1, blue: 2, yellow: 3 };
+
+// Either the keycard or the skull key of the colour opens it, as in Doom.
+export function lockedDoorSpecial(
+  door: Pick<DoorSettings, "closes" | "fast">,
+  key: KeyColor,
+) {
+  const locked = defined(generalizedClass("locked"));
+  const values: Record<string, number> = {
+    trigger: door.closes ? 7 : 6,
+    speed: door.fast ? 2 : 1,
+    kind: door.closes ? 0 : 1,
+    key: lockedKeys[key],
+    skulls: 1,
+  };
+  return locked.fields.reduce(
+    (special, field) => withField(special, field, values[field.id]),
+    locked.base,
+  );
 }
 
 export function generalizedFields(special: number) {

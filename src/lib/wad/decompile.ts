@@ -3,6 +3,7 @@ import type {
   Complevel,
   DoorSettings,
   GameMap,
+  KeyColor,
   LineSettings,
   LineSide,
   MapSwitch,
@@ -282,6 +283,7 @@ export function decompileMap(
   const doorCandidates = new Map<number, DoorSettings["opensBy"] | null>();
   const doorCloses = new Map<number, boolean>();
   const doorFast = new Set<number>();
+  const doorKey = new Map<number, KeyColor>();
   const manualLines = new Map<number, number[]>();
   for (const line of lines) {
     if (manualDoors[line.special] !== undefined && line.backSector !== null) {
@@ -300,6 +302,8 @@ export function decompileMap(
     doorCandidates.set(index, "use");
     doorCloses.set(index, manualDoors[special]);
     if (fastManualDoors.has(special)) doorFast.add(index);
+    const key = actionForSpecial(special)?.key;
+    if (key) doorKey.set(index, key);
   }
   for (const line of [...lines, ...details]) {
     const action = actionForSpecial(line.special);
@@ -484,6 +488,7 @@ export function decompileMap(
       if (upper && texture !== upper) replaced.add(upper);
       door = {
         opensBy: defined(doorCandidates.get(index)),
+        ...(doorKey.has(index) && { key: doorKey.get(index) }),
         closes: doorCloses.get(index) ?? true,
         ...(doorFast.has(index) ? { fast: true } : {}),
         texture,
@@ -580,7 +585,7 @@ export function decompileMap(
       // it carries a tag to keep.
       const automatic =
         doorBehind !== undefined &&
-        line.special === doorSpecial(doorBehind) &&
+        line.special === doorSpecial(doorBehind, "vanilla") &&
         line.tag === 0;
       const trigger = action
         ? action.trigger

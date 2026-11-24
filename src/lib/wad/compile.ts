@@ -285,7 +285,7 @@ export function compileLumps(map: GameMap, slot = mapLumpName): Lump[] {
       const doorway = detail ? undefined : (door ?? frontSector.door);
       flags = lineTwoSided | (settings?.blocksAll ? lineBlocksPlayer : 0);
       if (door?.opensBy === "use" && !settings?.shut) {
-        special = doorSpecial(door);
+        special = doorSpecial(door, map.complevel ?? "vanilla");
       }
       // A door's face is the door's texture unless the side chose its own.
       const textures = (sector: Sector) =>
