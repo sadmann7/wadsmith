@@ -78,6 +78,7 @@ import {
   originOf,
 } from "@/lib/editor/clipboard";
 import { createEditHistory } from "@/lib/editor/edit-history";
+import { endsFieldEdit, notTyping } from "@/lib/editor/field-keys";
 import {
   parseLayout,
   type SavedLayout,
@@ -542,6 +543,7 @@ export function EditorScreen({
   const mapCheck = React.useRef<HTMLElement>(null);
   const splitSizes = React.useRef(initialLayout.sizes);
   const hoveredPane = React.useRef<SinglePane | null>(null);
+  const focusedPane = React.useRef<SinglePane>("map");
   const mapPointer = React.useRef<{ clientX: number; clientY: number } | null>(
     null,
   );
@@ -2397,6 +2399,9 @@ export function EditorScreen({
                   className="pane map-pane"
                   aria-label="Top-down map"
                   data-pane="map"
+                  onFocus={() => {
+                    focusedPane.current = "map";
+                  }}
                   onPointerEnter={() => {
                     hoveredPane.current = "map";
                   }}
@@ -2582,6 +2587,9 @@ export function EditorScreen({
                   data-agent-hidden
                   aria-label="3D view"
                   data-pane="scene"
+                  onFocus={() => {
+                    focusedPane.current = "scene";
+                  }}
                   onPointerEnter={() => {
                     hoveredPane.current = "scene";
                   }}
@@ -2612,7 +2620,19 @@ export function EditorScreen({
             </Resizable>
           </div>
 
-          <aside className="side" data-agent-hidden>
+          <aside
+            className="side"
+            data-agent-hidden
+            onKeyDownCapture={(event) => {
+              if (endsFieldEdit(event.nativeEvent, event.currentTarget)) {
+                focusPane(
+                  visibleLayout === "split"
+                    ? focusedPane.current
+                    : visibleLayout,
+                );
+              }
+            }}
+          >
             {checks.length === 0 ? null : (
               <section
                 ref={mapCheck}
@@ -3574,15 +3594,6 @@ function shortcut(name: EditorShortcut, when?: () => boolean) {
       (typingShortcuts.has(name) || notTyping()) &&
       (when?.() ?? true),
   };
-}
-
-function notTyping() {
-  const focused = document.activeElement;
-  return !(
-    focused instanceof HTMLElement &&
-    (focused.isContentEditable ||
-      /^(INPUT|TEXTAREA|SELECT)$/.test(focused.tagName))
-  );
 }
 
 // Edits from the 3D view that join one undo step while they keep coming, like
