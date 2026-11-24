@@ -34,6 +34,7 @@ const scanLines = 32;
 // out for one stays right for as long as it's in use.
 const containerCache = new WeakMap<GameMap, Map<string, Sector | null>>();
 const ownerCache = new WeakMap<GameMap, Map<string, Sector[]>>();
+const pointCache = new WeakMap<GameMap, Map<string, Point>>();
 
 export function loopEdges(loop: string[]): Edge[] {
   return loop.map((from, index) => ({
@@ -195,13 +196,18 @@ export function interiorPoint(polygon: Point[]): Point {
   return { x: (corner.x + found.x) / 2, y: (corner.y + found.y) / 2 };
 }
 
-// The spot inside a room's outline and clear of its pillars that stands
-// furthest from any wall among those on a set of level lines across it. A
-// line between each pair of corner heights crosses every part of the room, so
-// even a thin walkway round a pillar is found.
+// The spot inside a room, clear of its pillars and the rooms drawn inside it,
+// that stands furthest from any wall among those on a set of level lines. A
+// line between each pair of neighbouring corner y values crosses every part
+// of the room, so even a thin walkway round a pillar is found.
 export function roomPoint(map: GameMap, sector: Sector): Point {
+  const cached = pointCache.get(map)?.get(sector.id);
+  if (cached) return cached;
   const outline = sectorPolygon(map, sector);
-  const loops = [outline, ...sectorHoles(map, sector)];
+  const inner = map.sectors
+    .filter((other) => containerOf(map, other)?.id === sector.id)
+    .map((other) => sectorPolygon(map, other));
+  const loops = [outline, ...sectorHoles(map, sector), ...inner];
   const walls = loops.flatMap((loop) =>
     loop.map((point, index) => [point, loop[(index + 1) % loop.length]]),
   );
@@ -225,7 +231,7 @@ export function roomPoint(map: GameMap, sector: Sector): Point {
       .toSorted((a, b) => a - b);
     for (let index = 0; index + 1 < crossings.length; index += 2) {
       const point = { x: (crossings[index] + crossings[index + 1]) / 2, y };
-      if (!pointInSector(map, sector, point)) continue;
+      if (sectorAt(map, point)?.id !== sector.id) continue;
       const reach = Math.min(
         ...walls.map(([a, b]) => segmentDistance(a, b, point)),
       );
@@ -235,7 +241,11 @@ export function roomPoint(map: GameMap, sector: Sector): Point {
       }
     }
   }
-  return best ?? interiorPoint(outline);
+  const point = best ?? interiorPoint(outline);
+  const points = pointCache.get(map) ?? new Map<string, Point>();
+  points.set(sector.id, point);
+  pointCache.set(map, points);
+  return point;
 }
 
 export function pointInSector(map: GameMap, sector: Sector, point: Point) {

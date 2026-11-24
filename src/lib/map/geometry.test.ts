@@ -111,20 +111,6 @@ function everyRoomHolding(map: GameMap, point: Point) {
   );
 }
 
-function room(id: string, corners: string[]): Sector {
-  return {
-    id,
-    name: id,
-    vertices: corners,
-    floor: 0,
-    ceiling: 128,
-    light: 160,
-    floorTexture: "FLOOR4_8",
-    ceilingTexture: "CEIL3_5",
-    wallTexture: "STARTAN3",
-  };
-}
-
 describe("wallOwners", () => {
   it("keeps a map's owners and works a new map's out again", () => {
     expect(wallOwners(testMap)).toBe(wallOwners(testMap));
@@ -198,6 +184,30 @@ describe("roomPoint", () => {
     const point = roomPoint(map, map.sectors[0]);
     expect(pointInSector(map, map.sectors[0], point)).toBe(true);
     expect(clearance(map, point)).toBeGreaterThanOrEqual(16);
+  });
+
+  it("keeps out of a room drawn inside it", () => {
+    const map = shape([
+      [0, 0],
+      [512, 0],
+      [512, 512],
+      [0, 512],
+    ]);
+    const vertices = {
+      ...map.vertices,
+      i0: { x: 128, y: 128 },
+      i1: { x: 384, y: 128 },
+      i2: { x: 384, y: 384 },
+      i3: { x: 128, y: 384 },
+    };
+    const nested: GameMap = {
+      ...map,
+      vertices,
+      sectors: [...map.sectors, room("platform", ["i0", "i1", "i2", "i3"])],
+    };
+    const point = roomPoint(nested, nested.sectors[0]);
+    expect(sectorAt(nested, point)?.id).toBe("room");
+    expect(roomPoint(map, map.sectors[0])).toEqual({ x: 256, y: 256 });
   });
 
   it("finds the widest arm of an L-shaped room", () => {
@@ -288,4 +298,18 @@ function clearance(map: GameMap, point: Point) {
       }),
     ),
   );
+}
+
+function room(id: string, corners: string[]): Sector {
+  return {
+    id,
+    name: id,
+    vertices: corners,
+    floor: 0,
+    ceiling: 128,
+    light: 160,
+    floorTexture: "FLOOR4_8",
+    ceilingTexture: "CEIL3_5",
+    wallTexture: "STARTAN3",
+  };
 }

@@ -17,7 +17,6 @@ import { getIsPlayerStart } from "./catalog";
 import {
   containerOf,
   loopEdges,
-  pointInSector,
   roomPoint,
   sectorAt,
   sectorEdges,
@@ -1006,7 +1005,7 @@ function overlapLength(a: Point, b: Point, c: Point, d: Point) {
 export function roomCenter(map: GameMap, sector: Sector): Point {
   const point = roomPoint(map, sector);
   const snapped = snapPoint(point);
-  return pointInSector(map, sector, snapped) ? snapped : point;
+  return sectorAt(map, snapped)?.id === sector.id ? snapped : point;
 }
 
 // A new corner on a wall splits it in every outline along it, and both halves
