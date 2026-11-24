@@ -4,10 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GameMap } from "@/lib/map/types";
 
 import { defined } from "@/lib/defined";
-import { applyPositions } from "@/lib/map/edit";
+import { applyPositions, removeThing } from "@/lib/map/edit";
 import { pickedRooms } from "@/lib/map/fragment";
 import { roomPoint } from "@/lib/map/geometry";
-import { drawRoom } from "@/lib/map/reshape";
+import { drawRoom, removeCorner } from "@/lib/map/reshape";
 import { testMap } from "@/lib/map/test-map";
 import { SceneCamera } from "@/lib/preview/scene-camera";
 
@@ -609,6 +609,99 @@ describe("map editor parts", () => {
   });
 });
 
+describe("map editor drags during a co-op edit", () => {
+  it("end a drag cleanly when someone else deletes its only corner", () => {
+    const instance = mapEditor({ id, map: testMap });
+    const { store } = instance.part("handle", { value: "v1" });
+    store.set({ moving: { keys: ["v1"], dx: 16, dy: 0 } });
+    instance.setOptions({ id, map: defined(removeCorner(testMap, "v1")) });
+    expect(() =>
+      store.set({ moving: { keys: ["v1"], dx: 32, dy: 0 } }),
+    ).not.toThrow();
+    expect(store.get().moving).toBeNull();
+  });
+
+  it("carry on without a dragged corner someone else deletes", () => {
+    let result = null as GameMap | null;
+    let draft = null as GameMap | null;
+    const options = {
+      id,
+      onMapChange: (next: GameMap) => {
+        result = next;
+      },
+      onDraftMapChange: (next: GameMap | null) => {
+        draft = next;
+      },
+    };
+    const instance = mapEditor({
+      ...options,
+      map: testMap,
+      selection: ["v1", "v15"],
+    });
+    const surface = dragSurface();
+    instance.api.move.pointerdown(pointer(0, 0), "v15", surface.el);
+    surface.move(16, 0);
+    const edited = defined(removeCorner(testMap, "v1"));
+    instance.setOptions({ ...options, map: edited, selection: ["v15"] });
+    expect(
+      instance.part("handle", { value: "v15" }).store.get().moving?.keys,
+    ).toEqual(["v15"]);
+    expect(defined(draft).vertices.v1).toBeUndefined();
+    surface.move(32, 32);
+    surface.release(32, 32);
+    expect(defined(result).vertices.v1).toBeUndefined();
+    expect(defined(result).vertices.v15).toEqual({
+      x: edited.vertices.v15.x + 32,
+      y: edited.vertices.v15.y + 32,
+    });
+  });
+
+  it("end the drag of a thing someone else deletes", () => {
+    let changes = 0;
+    let draft = null as GameMap | null;
+    const options = {
+      id,
+      onMapChange: () => {
+        changes += 1;
+      },
+      onDraftMapChange: (next: GameMap | null) => {
+        draft = next;
+      },
+    };
+    const instance = mapEditor({ ...options, map: testMap });
+    const surface = dragSurface();
+    instance.api.move.pointerdown(pointer(0, 0), "thing:imp-1", surface.el);
+    surface.move(16, 0);
+    expect(draft).not.toBeNull();
+    instance.setOptions({ ...options, map: removeThing(testMap, "imp-1") });
+    expect(
+      instance.part("handle", { value: "v15" }).store.get().moving,
+    ).toBeNull();
+    expect(draft).toBeNull();
+    surface.move(64, 0);
+    surface.release(64, 0);
+    expect(changes).toBe(0);
+  });
+
+  it("show a co-op edit in the draft of a drag it leaves alone", () => {
+    let draft = null as GameMap | null;
+    const options = {
+      id,
+      onDraftMapChange: (next: GameMap | null) => {
+        draft = next;
+      },
+    };
+    const instance = mapEditor({ ...options, map: testMap });
+    const surface = dragSurface();
+    instance.api.move.pointerdown(pointer(0, 0), "v15", surface.el);
+    surface.move(16, 0);
+    instance.setOptions({ ...options, map: removeThing(testMap, "imp-1") });
+    expect(defined(draft).things.some((thing) => thing.id === "imp-1")).toBe(
+      false,
+    );
+  });
+});
+
 describe("map editor drawing", () => {
   beforeEach(() => {
     vi.stubGlobal("window", new EventTarget());
@@ -738,6 +831,40 @@ function listen(instance: Instance) {
   hear("port", { value: "door:sector-4" });
   hear("caption", { value: corridor.id, corners: corridor.vertices });
   return { heard: () => heard.splice(0).toSorted() };
+}
+
+// Pointer moves reach the drag through the element's document, and wait for
+// a frame that only a release flushes here.
+function dragSurface() {
+  const doc = Object.assign(new EventTarget(), {
+    defaultView: {
+      requestAnimationFrame: () => 1,
+      cancelAnimationFrame: () => {},
+      setTimeout: () => 0,
+    },
+    pointerLockElement: null,
+  });
+  const el = {
+    ownerDocument: doc,
+    setPointerCapture: () => {},
+    hasPointerCapture: () => false,
+    releasePointerCapture: () => {},
+  } as unknown as HTMLElement;
+  const send = (type: string, clientX: number, clientY: number) =>
+    doc.dispatchEvent(
+      Object.assign(new Event(type), {
+        clientX,
+        clientY,
+        pointerId: 1,
+        pointerType: "mouse",
+        buttons: type === "pointerup" ? 0 : 1,
+      }),
+    );
+  return {
+    el,
+    move: (x: number, y: number) => send("pointermove", x, y),
+    release: (x: number, y: number) => send("pointerup", x, y),
+  };
 }
 
 function release(
