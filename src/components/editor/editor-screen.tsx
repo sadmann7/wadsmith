@@ -825,16 +825,25 @@ export function EditorScreen({
 
   const transformSelection = (steps: Transform[], keys = transformKeys) => {
     if (keys.length === 0 || steps.length === 0) return;
-    let next = map;
-    for (const step of steps) {
-      const turned = transformParts(next, keys, step, grid);
-      if (!turned) {
-        setNotice(
-          "That would press two corners of a room together, or change nothing.",
-        );
-        return;
+    const run = (keepDoors: boolean) => {
+      let next: GameMap | null = map;
+      for (const step of steps) {
+        next = next && transformParts(next, keys, step, grid, keepDoors);
       }
-      next = turned;
+      return next;
+    };
+    // A door carried into another room's way is left behind instead, which
+    // only stretches it.
+    const carried = run(true);
+    const next =
+      carried && newProblems(map, carried).length === 0
+        ? carried
+        : (run(false) ?? carried);
+    if (!next) {
+      setNotice(
+        "That would press two corners of a room together, or change nothing.",
+      );
+      return;
     }
     const [problem] = newProblems(map, next);
     if (problem) {

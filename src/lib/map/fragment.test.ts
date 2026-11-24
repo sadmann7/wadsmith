@@ -624,6 +624,55 @@ describe("turning, flipping and resizing", () => {
     expect(named).not.toContain(broken.id);
   });
 
+  it("carries a resized room's doors and the walls they meet along", () => {
+    const arenaKeys = partKeys(
+      starterMap,
+      selectedParts(starterMap, [], "sector-3"),
+    );
+    const shrunk = defined(
+      transformParts(starterMap, arenaKeys, { kind: "scale", factor: 0.5 }, 32),
+    );
+    const at = (id: string) => shrunk.vertices[id];
+    for (const [near, far] of [
+      ["v7", "v13"],
+      ["v8", "v14"],
+      ["v17", "v19"],
+      ["v18", "v20"],
+    ]) {
+      expect(Math.abs(at(near).x - at(far).x)).toBe(16);
+      expect(at(far).y).toBe(at(near).y);
+    }
+    expect(at("v3")).toEqual(starterMap.vertices.v3);
+    expect(at("v21")).toEqual(starterMap.vertices.v21);
+    expect(newProblems(starterMap, shrunk)).toEqual([]);
+    const plain = defined(
+      transformParts(
+        starterMap,
+        arenaKeys,
+        { kind: "scale", factor: 0.5 },
+        32,
+        false,
+      ),
+    );
+    expect(plain.vertices.v13).toEqual(starterMap.vertices.v13);
+  });
+
+  it("leaves doors alone when a turn or flip moves a room", () => {
+    const arenaKeys = partKeys(
+      starterMap,
+      selectedParts(starterMap, [], "sector-3"),
+    );
+    const turned = defined(
+      transformParts(
+        starterMap,
+        arenaKeys,
+        { kind: "mirror", axis: "vertical" },
+        32,
+      ),
+    );
+    expect(turned.vertices.v13).toEqual(starterMap.vertices.v13);
+  });
+
   it("finds nothing new when a room joined to no other turns", () => {
     const turned = defined(
       transformParts(square, keys, { kind: "rotate", degrees: 90 }, 32),

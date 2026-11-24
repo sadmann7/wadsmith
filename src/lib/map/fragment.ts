@@ -367,12 +367,15 @@ export function pasteParts(
 // Turns, flips or resizes the corners and things behind the keys about their
 // middle. A flip and a quarter turn keep every point on the grid it was on,
 // and four quarter turns end where they began. Any other turn and every
-// resize lands on the grid.
+// resize lands on the grid. A resize carries the doors joined to what it
+// moves along with it, and the far wall each door meets, so they keep their
+// depth, unless `keepDoors` is false.
 export function transformParts(
   map: GameMap,
   keys: string[],
   transform: Transform,
   grid: number,
+  keepDoors = true,
 ): GameMap | null {
   const positions = positionsOf(map);
   const moved = keys.filter((key) => positions[key]);
@@ -420,12 +423,16 @@ export function transformParts(
     for (let turn = 0; turn < quarters; turn += 1) [dx, dy] = [-dy, dx];
     return { x: pivot.x + dx + 0, y: pivot.y + dy + 0 };
   };
-  const placed = applyPositions(map, {
-    ...positions,
-    ...Object.fromEntries(moved.map((key) => [key, place(positions[key])])),
-  });
+  const landed = Object.fromEntries(
+    moved.map((key) => [key, place(positions[key])]),
+  );
+  const carried =
+    transform.kind === "scale" && keepDoors ? carryDoors(map, landed) : {};
+  const placed = applyPositions(map, { ...positions, ...landed, ...carried });
   const turned = new Set(moved);
-  const corners = moved.filter((key) => map.vertices[key]);
+  const corners = [...moved, ...Object.keys(carried)].filter(
+    (key) => map.vertices[key],
+  );
   const next: GameMap = {
     ...placed,
     things: placed.things.map((thing) => {
@@ -458,7 +465,7 @@ export function transformParts(
       return `${point.x},${point.y}`;
     });
     return (
-      sectorVertices(sector).some((id) => turned.has(id)) &&
+      sectorVertices(sector).some((id) => turned.has(id) || id in carried) &&
       new Set(spots).size !== new Set(sectorVertices(sector)).size
     );
   });
@@ -472,6 +479,35 @@ export function transformParts(
         positions[key].x !== after[key].x || positions[key].y !== after[key].y,
     );
   return changed ? mergeCorners(next, corners) : null;
+}
+
+// A door's corner left behind goes the way its neighbour on the door's outline
+// went. A corner beside two moved ones, or pulled two ways by two doors, can't
+// tell which way to go, so none of the doors move.
+function carryDoors(map: GameMap, landed: Record<string, Point>) {
+  const carried: Record<string, Point> = {};
+  for (const sector of map.sectors) {
+    if (!sector.door) continue;
+    const outline = sector.vertices;
+    for (const [index, id] of outline.entries()) {
+      if (landed[id]) continue;
+      const near = [
+        outline[(index + outline.length - 1) % outline.length],
+        outline[(index + 1) % outline.length],
+      ].filter((other) => landed[other]);
+      if (near.length === 0) continue;
+      if (near.length > 1) return {};
+      const [from] = near;
+      const at = {
+        x: map.vertices[id].x + landed[from].x - map.vertices[from].x,
+        y: map.vertices[id].y + landed[from].y - map.vertices[from].y,
+      };
+      const held = carried[id];
+      if (held && (held.x !== at.x || held.y !== at.y)) return {};
+      carried[id] = at;
+    }
+  }
+  return carried;
 }
 
 // `origin` names the map a piece was copied from, so a paste can tell its own

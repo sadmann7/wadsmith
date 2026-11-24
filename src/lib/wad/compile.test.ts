@@ -1256,7 +1256,13 @@ describe("validateMap", () => {
       selectedParts(starterMap, [], "sector-3"),
     );
     const shrunk = defined(
-      transformParts(starterMap, keys, { kind: "scale", factor: 0.5 }, 32),
+      transformParts(
+        starterMap,
+        keys,
+        { kind: "scale", factor: 0.5 },
+        32,
+        false,
+      ),
     );
     const { errors, warnings } = inspectMap(shrunk);
     expect(errors).toEqual([]);
@@ -1276,6 +1282,22 @@ describe("validateMap", () => {
         severity: "warning",
       }),
     );
+  });
+
+  it("keeps a room's doors as deep as they were when it's halved", () => {
+    const keys = partKeys(
+      starterMap,
+      selectedParts(starterMap, [], "sector-3"),
+    );
+    const shrunk = defined(
+      transformParts(starterMap, keys, { kind: "scale", factor: 0.5 }, 32),
+    );
+    const { errors, warnings } = inspectMap(shrunk);
+    expect(errors).toEqual([]);
+    expect(
+      warnings.filter((issue) => issue.id.startsWith("door-deep")),
+    ).toEqual([]);
+    expect(() => compileMap(shrunk)).not.toThrow();
   });
 
   it("measures a wide door's depth across it, not along a split face", () => {
