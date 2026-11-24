@@ -10,6 +10,7 @@ import {
   activeLineActions,
   type CheckContext,
   inspectMap,
+  lockedKeys,
   type MapIssue,
 } from "./validate";
 
@@ -24,8 +25,7 @@ export function mapWarnings(
   custom: CustomThings = noCustomThings,
 ): CheckedIssue[] {
   const warnings: CheckedIssue[] = [];
-  const actions = activeLineActions(map);
-  const usedKeys = new Set(actions.map(({ action }) => action.key));
+  const usedKeys = lockedKeys(map);
   for (const thing of map.things) {
     const { category, label } = thingCatalog[thing.kind];
     if (

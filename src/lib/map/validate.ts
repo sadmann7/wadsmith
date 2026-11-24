@@ -7,6 +7,7 @@ import type { TextureNames } from "./textures";
 import type {
   Complevel,
   GameMap,
+  KeyColor,
   LineActionKind,
   Point,
   Sector,
@@ -102,6 +103,17 @@ export function activeLineActions(map: GameMap) {
 }
 
 type LineActions = ReturnType<typeof activeLineActions>;
+
+export function doorKey({ door }: Sector) {
+  return door?.opensBy === "use" ? door.key : undefined;
+}
+
+export function lockedKeys(map: GameMap) {
+  return new Set<KeyColor>([
+    ...activeLineActions(map).flatMap(({ action }) => action.key ?? []),
+    ...map.sectors.flatMap((sector) => doorKey(sector) ?? []),
+  ]);
+}
 
 // Warnings are legal in Doom but likely mistakes, so they don't block a build.
 export function inspectMap(map: GameMap, context: CheckContext = {}) {
@@ -745,6 +757,21 @@ function validateDoors(
     ) {
       add("door-shut", "no line opens it from any side.", warnings);
     }
+    const key = doorKey(sector);
+    if (key && !getHasKey(map, key)) {
+      add("door-key", `place the ${key} key on every difficulty.`);
+    }
+    if (
+      key &&
+      sector.door.fast &&
+      !atLeast(map.complevel ?? "vanilla", "boom")
+    ) {
+      add(
+        "door-slow",
+        "Vanilla has no fast locked door, so it opens at normal speed. Set the map to Boom for a fast one.",
+        warnings,
+      );
+    }
   }
 
   for (const item of map.switches) {
@@ -866,6 +893,14 @@ function validateReach(map: GameMap, warnings: MapIssue[]) {
 
 const skills: ThingSkill[] = ["easy", "medium", "hard"];
 
+function getHasKey(map: GameMap, color: KeyColor) {
+  const kinds = keyThings[color];
+  const keys = map.things.filter((thing) => kinds.includes(thing.kind));
+  return skills.every((skill) =>
+    keys.some((key) => appearsOn(key.skills, skill)),
+  );
+}
+
 function validateLines(
   map: GameMap,
   issues: MapIssue[],
@@ -886,16 +921,8 @@ function validateLines(
     } else if (action.trigger === "door" && !line.doorBehind) {
       add("line-doorless", doorlessMessage(line), warnings);
     }
-    if (action.key) {
-      const kinds = keyThings[action.key];
-      const keys = map.things.filter((thing) => kinds.includes(thing.kind));
-      if (
-        !skills.every((skill) =>
-          keys.some((key) => appearsOn(key.skills, skill)),
-        )
-      ) {
-        add("line-key", `place the ${action.key} key on every difficulty.`);
-      }
+    if (action.key && !getHasKey(map, action.key)) {
+      add("line-key", `place the ${action.key} key on every difficulty.`);
     }
     if (!lineUsesTag(action)) continue;
     if (!action.tag) {
