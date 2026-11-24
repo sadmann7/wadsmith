@@ -1121,18 +1121,16 @@ export const agentActions: AgentAction[] = [
       if (!info?.sector || !info.paints) {
         throw new Error(`${sector.name} has no such surface to paint.`);
       }
-      return {
-        map: paintSurface(
-          map,
-          key,
-          textureName(
-            args,
-            "texture",
-            kind === "wall" ? "wall" : "flat",
-            context,
-          ),
-        ),
-      };
+      const texture =
+        info.paints === "switch"
+          ? switchTexture({ texture: text(args, "texture") }, context)
+          : textureName(
+              args,
+              "texture",
+              kind === "wall" ? "wall" : "flat",
+              context,
+            );
+      return { map: paintSurface(map, key, texture) };
     },
   },
   {

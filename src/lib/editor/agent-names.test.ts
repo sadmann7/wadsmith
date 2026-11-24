@@ -123,7 +123,18 @@ const uses: Record<Kind, Use[]> = {
       (name, own) => ({ from: own.floorTexture, to: name, kind: "flat" }),
     ],
   ],
-  switch: [["addSwitch", (name) => ({ wall: "v1|v6", texture: name })]],
+  switch: [
+    ["addSwitch", (name) => ({ wall: "v1|v6", texture: name })],
+    [
+      "paintSurface",
+      (name) => ({
+        room: "Start room",
+        surface: "wall",
+        wall: "v15|v16",
+        texture: name,
+      }),
+    ],
+  ],
 };
 
 const kinds = ["wall", "flat", "switch"] as const;
