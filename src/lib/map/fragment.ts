@@ -501,10 +501,10 @@ export function transformParts(
   return changed ? mergeCorners(next, corners) : null;
 }
 
-// Runs the steps carrying doors as far as the map allows. Each door is
+// Runs the steps carrying doors as far as the map allows. Each door in turn is
 // carried with the far wall it meets kept straight, or bent, or left behind to
-// stretch, whichever adds the fewest new errors, then new warnings, named in
-// `stranded` when left. A door that can go takes the first of those that ties.
+// stretch, whichever adds the fewest new errors, then new warnings, in that
+// order on a tie. Doors left behind are named in `stranded`.
 export function transformKeepingDoors(
   map: GameMap,
   keys: string[],
@@ -526,13 +526,21 @@ export function transformKeepingDoors(
     const { errors, warnings } = newIssues(next);
     return { map: next, problems: errors, warnings };
   };
-  type Result = ReturnType<typeof run>;
-  const worse = (result: Result, than: Result) =>
-    !result ||
-    (!!than &&
-      (result.problems.length > than.problems.length ||
-        (result.problems.length === than.problems.length &&
-          result.warnings.length > than.warnings.length)));
+  const rank = (result: ReturnType<typeof run>) =>
+    result
+      ? [result.problems.length, result.warnings.length]
+      : [Infinity, Infinity];
+  const better = (
+    result: ReturnType<typeof run>,
+    than: ReturnType<typeof run>,
+  ) => {
+    const [errors, warnings] = rank(result);
+    const [fewestErrors, fewestWarnings] = rank(than);
+    return (
+      errors < fewestErrors ||
+      (errors === fewestErrors && warnings < fewestWarnings)
+    );
+  };
   const carried = run("walls");
   const moved = Object.fromEntries(keys.map((key) => [key, map.vertices[key]]));
   const doors = steps.some((step) => step.kind === "scale")
@@ -547,18 +555,19 @@ export function transformKeepingDoors(
   ) {
     return { ...(carried ?? empty), stranded: [] };
   }
-  const plan = new Map<string, DoorMove>();
-  let best = run(plan);
+  let plan = new Map<string, DoorMove>(doors.map((door) => [door, "straight"]));
+  let best = carried;
   for (const door of doors) {
-    for (const move of ["straight", "bent"] as const) {
-      const tried = run(new Map([...plan, [door, move]]));
-      if (worse(tried, best)) continue;
-      plan.set(door, move);
+    for (const move of ["bent", "stays"] as const) {
+      const next = new Map(plan);
+      if (move === "bent") next.set(door, move);
+      else next.delete(door);
+      const tried = run(next);
+      if (!better(tried, best)) continue;
+      plan = next;
       best = tried;
-      break;
     }
   }
-  if (worse(best, carried)) return { ...(carried ?? empty), stranded: [] };
   return {
     ...(best ?? empty),
     stranded: best ? doors.filter((door) => !plan.has(door)) : [],
