@@ -53,30 +53,10 @@ interface Plans {
   shown: Map<string, Shown>;
 }
 
-// How far a door stops short of the lowest ceiling beside it when open.
-const doorClearance = 4;
-
-// The floor vanilla's donut reads when the pool's first line has no back,
-// from the DOS memory Woof emulates.
-const donutOverrunFloor = 0x199257 / 0x10000;
-
-const vanillaSteps: Partial<Record<LineActionKind, number>> = {
-  stairs: 8,
-  "stairs-fast": 16,
-};
-const boomSteps = [4, 8, 16, 24];
-
-const moversCache = new WeakMap<GameMap, Movers>();
-const plansCache = new WeakMap<object, WeakMap<GameMap, Plans>>();
-const noTextures = {};
-
 // The map as the view draws it: every door shut, and the movers named in
-// `opened` as they stand once worked. An open door's ceiling stops just under
-// the lowest ceiling beside it, and floors and ceilings rest where Doom's
-// movers stop them. A room several actions start in takes the one that leaves
-// it the most room between floor and ceiling, the first line in wall order on
-// a tie, and a room two opened movers reach stays where the first in the
-// map's room order leaves it.
+// `opened` where Doom stops them. A room several actions start in takes the
+// one that leaves it the most open, the first wall on a tie, and a room two
+// opened movers reach stays where the first in room order leaves it.
 export function withMovers(
   map: GameMap,
   opened: readonly string[],
@@ -121,6 +101,9 @@ export function moverAt(
       : undefined;
   return (behind && of(behind.id)) || of(surface.sector);
 }
+
+// How far a door stops short of the lowest ceiling beside it when open.
+const doorClearance = 4;
 
 function shownWith(
   map: GameMap,
@@ -171,6 +154,10 @@ function getIsDoor(map: GameMap, id: string) {
   return Boolean(map.sectors.find((sector) => sector.id === id)?.door);
 }
 
+const plansCache = new WeakMap<object, WeakMap<GameMap, Plans>>();
+
+const noTextures = {};
+
 function plansOf(map: GameMap, textureHeight?: TextureHeight): Plans {
   const byTextures = textureHeight ?? noTextures;
   let byMap = plansCache.get(byTextures);
@@ -205,6 +192,8 @@ function plansOf(map: GameMap, textureHeight?: TextureHeight): Plans {
   byMap.set(map, result);
   return result;
 }
+
+const moversCache = new WeakMap<GameMap, Movers>();
 
 function moversOf(map: GameMap): Movers {
   const cached = moversCache.get(map);
@@ -297,19 +286,12 @@ function linesBySector(map: GameMap) {
   }
 }
 
-function floorTo(room: Sector, floor: number): Moves {
-  return new Map([[room.id, { floor: Math.min(room.ceiling, floor) }]]);
-}
-
-function lowerFloorTo(room: Sector, floor: number): Moves {
-  return new Map([[room.id, { floor }]]);
-}
-
-function ceilingTo(room: Sector, ceiling: number): Moves {
-  return new Map([[room.id, { ceiling: Math.max(room.floor, ceiling) }]]);
-}
-
 const still: Moves = new Map();
+
+const vanillaSteps: Partial<Record<LineActionKind, number>> = {
+  stairs: 8,
+  "stairs-fast": 16,
+};
 
 function vanillaWork(
   movers: Movers,
@@ -347,22 +329,28 @@ interface Nearby {
 function nearby(room: Sector, beside: Sector[]): Nearby {
   const floors = beside.map((item) => item.floor);
   const ceilings = beside.map((item) => item.ceiling);
-  const above = (values: number[], from: number) =>
-    Math.min(...values.filter((value) => value > from), Infinity);
-  const below = (values: number[], from: number) =>
-    Math.max(...values.filter((value) => value < from), -Infinity);
-  const or = (value: number, fallback: number) =>
-    Number.isFinite(value) ? value : fallback;
   return {
     lowestFloor: Math.min(room.floor, ...floors),
     highestFloor: Math.max(...floors),
     lowestCeiling: Math.min(...ceilings),
     highestCeiling: Math.max(...ceilings),
-    nextFloorUp: or(above(floors, room.floor), room.floor),
-    nextFloorDown: or(below(floors, room.floor), room.floor),
-    nextCeilingUp: or(above(ceilings, room.ceiling), room.ceiling),
-    nextCeilingDown: or(below(ceilings, room.ceiling), room.ceiling),
+    nextFloorUp: orElse(above(floors, room.floor), room.floor),
+    nextFloorDown: orElse(below(floors, room.floor), room.floor),
+    nextCeilingUp: orElse(above(ceilings, room.ceiling), room.ceiling),
+    nextCeilingDown: orElse(below(ceilings, room.ceiling), room.ceiling),
   };
+}
+
+function above(values: number[], from: number) {
+  return Math.min(...values.filter((value) => value > from), Infinity);
+}
+
+function below(values: number[], from: number) {
+  return Math.max(...values.filter((value) => value < from), -Infinity);
+}
+
+function orElse(value: number, fallback: number) {
+  return Number.isFinite(value) ? value : fallback;
 }
 
 type Worked = (
@@ -424,6 +412,8 @@ function vanillaHeights(kind: LineActionKind): Worked | null {
   }
 }
 
+const boomSteps = [4, 8, 16, 24];
+
 function boomWork(movers: Movers, special: number): Mover["work"] | null {
   const kind = generalizedKind(special);
   if (!kind) return null;
@@ -458,26 +448,21 @@ function boomWork(movers: Movers, special: number): Mover["work"] | null {
 
 // Boom stops a rising floor at its ceiling and a lowering ceiling at its
 // floor, and a mover sent the wrong way to its target jumps straight there.
-function boomHeights(
-  kind: string,
-  target: number,
-  up: boolean,
-): Worked | null {
+function boomHeights(kind: string, target: number, up: boolean): Worked | null {
   const sign = up ? 1 : -1;
   const floor = (room: Sector, height: number) =>
     up ? floorTo(room, height) : lowerFloorTo(room, height);
   const ceiling = (room: Sector, height: number) =>
-    up
-      ? new Map([[room.id, { ceiling: height }]])
-      : ceilingTo(room, height);
+    up ? new Map([[room.id, { ceiling: height }]]) : ceilingTo(room, height);
   if (kind === "floor") {
-    const by = (amount: number): Worked => (room) =>
-      floor(room, room.floor + sign * amount);
+    const by =
+      (amount: number): Worked =>
+      (room) =>
+        floor(room, room.floor + sign * amount);
     const targets: Worked[] = [
       (room, near) => floor(room, near.highestFloor),
       (room, near) => floor(room, near.lowestFloor),
-      (room, near) =>
-        floor(room, up ? near.nextFloorUp : near.nextFloorDown),
+      (room, near) => floor(room, up ? near.nextFloorUp : near.nextFloorDown),
       (room, near) => floor(room, near.lowestCeiling),
       (room) => floor(room, room.ceiling),
       (room, _near, shortest) => {
@@ -490,8 +475,10 @@ function boomHeights(
     return targets[target];
   }
   if (kind === "ceiling") {
-    const by = (amount: number): Worked => (room) =>
-      ceiling(room, room.ceiling + sign * amount);
+    const by =
+      (amount: number): Worked =>
+      (room) =>
+        ceiling(room, room.ceiling + sign * amount);
     const targets: Worked[] = [
       (room, near) => ceiling(room, near.highestCeiling),
       (room, near) => ceiling(room, near.lowestCeiling),
@@ -520,6 +507,18 @@ function boomHeights(
   }
   if (kind === "crusher") return (room) => ceilingTo(room, room.floor + 8);
   return null;
+}
+
+function floorTo(room: Sector, floor: number): Moves {
+  return new Map([[room.id, { floor: Math.min(room.ceiling, floor) }]]);
+}
+
+function lowerFloorTo(room: Sector, floor: number): Moves {
+  return new Map([[room.id, { floor }]]);
+}
+
+function ceilingTo(room: Sector, ceiling: number): Moves {
+  return new Map([[room.id, { ceiling: Math.max(room.floor, ceiling) }]]);
 }
 
 // A stair raises the room it starts in by a step, then the room behind each
@@ -559,6 +558,10 @@ function stairs(
     index = next;
   }
 }
+
+// The floor vanilla's donut reads when the pool's first line has no back,
+// from the DOS memory Woof emulates.
+const donutOverrunFloor = 0x199257 / 0x10000;
 
 // A donut lowers the room it starts in and raises the pool round it, both to
 // the floor of the room behind the pool's first line that doesn't face the

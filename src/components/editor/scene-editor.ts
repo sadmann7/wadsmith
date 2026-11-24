@@ -53,7 +53,6 @@ import {
   moverAt,
   withMovers,
 } from "@/lib/preview/movers";
-import { type SceneAssets, textureHeightOf } from "@/lib/wad/assets";
 import {
   cameraBasis,
   createRenderTarget,
@@ -63,6 +62,7 @@ import {
   type RenderTarget,
 } from "@/lib/preview/render";
 import { countNotches } from "@/lib/preview/wheel";
+import { type SceneAssets, textureHeightOf } from "@/lib/wad/assets";
 
 export type DraftSource = (
   listener: (map: GameMap | null) => void,
@@ -1440,11 +1440,9 @@ const sceneEditor = definePrimitive({
           (surface?.kind === "floor" || surface?.kind === "ceiling") &&
           !(
             state.map &&
-            movedRooms(
-              state.map,
-              state.opened,
-              heightsOf(state.assets),
-            ).has(surface.sector)
+            movedRooms(state.map, state.opened, heightsOf(state.assets)).has(
+              surface.sector,
+            )
           )
         ) {
           hover = "height";
