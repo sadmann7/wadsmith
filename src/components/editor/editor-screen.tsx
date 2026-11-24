@@ -1988,7 +1988,13 @@ export function EditorScreen({
     if (!request) return;
     const working = agentSession.getIsCalling();
     agentSession.stop();
-    const next = history.undoBatch(`agent-${request.id}`, mapRef.current);
+    const batch = `agent-${request.id}`;
+    if (!history.hasBatch(batch)) {
+      agentSession.dismiss();
+      setNotice("The agent's changes are too far back to undo any more.");
+      return;
+    }
+    const next = history.undoBatch(batch, mapRef.current);
     restore(next);
     // A request stopped mid-way stays, so the rest of its calls are refused.
     if (next && working) agentSession.clearTrail();

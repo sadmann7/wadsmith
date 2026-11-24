@@ -215,9 +215,34 @@ describe("an edit history", () => {
       history.record(map, next);
       map = next;
     }
+    expect(history.hasBatch("agent-1")).toBe(false);
     expect(history.undoBatch("agent-1", map)).toBeUndefined();
+  });
+
+  it("undoes only the newest step by hand once a batch passes the limit", () => {
+    const history = createEditHistory({ limit: 2, groupDelay: 60_000 });
+    const first = updateThing(testMap, "imp-1", { x: 800 });
+    history.record(testMap, first, { batch: "agent-1" });
+    const mine = updateThing(first, "imp-1", { x: 900 });
+    history.record(first, mine);
+    const second = updateSector(mine, "sector-3", { light: 90 });
+    history.record(mine, second, { batch: "agent-1" });
+    const back = defined(history.undo(second));
+    expect(imp(back)).toBe(900);
+    expect(back.sectors[2].light).toBe(testMap.sectors[2].light);
+    expect(imp(defined(history.undo(back)))).toBe(800);
+    expect(history.canUndo()).toBe(false);
+  });
+
+  it("forgets a batch with the rest of the history", () => {
+    const history = createEditHistory({ limit: 1, groupDelay: 60_000 });
+    const first = updateThing(testMap, "imp-1", { x: 800 });
+    history.record(testMap, first, { batch: "agent-1" });
+    const second = updateThing(first, "imp-1", { x: 900 });
+    history.record(first, second, { batch: "agent-1" });
     history.clear();
-    expect(history.undoBatch("agent-1", map)).toBeUndefined();
+    expect(history.hasBatch("agent-1")).toBe(false);
+    expect(history.undoBatch("agent-1", second)).toBeUndefined();
   });
 
   it("keeps the redo of a hand edit when undoing a batch", () => {
