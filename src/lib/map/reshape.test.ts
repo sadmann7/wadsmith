@@ -524,6 +524,23 @@ describe("cutting a room that touches a pillar or room inside it at a corner", (
     expect(sectorAt(defined(split).map, { x: 128, y: 128 })).toBeUndefined();
   });
 
+  it("keeps a pillar when a closed line runs along one of its walls", () => {
+    const line = [
+      { x: 160, y: 96 },
+      { x: 250, y: 128 },
+      { x: 160, y: 160 },
+    ];
+    for (const points of [line, line.toReversed()]) {
+      const split = defined(drawLines(pillared, points, 1));
+      expect(problems(split.map)).toEqual([]);
+      expect(split.map.sectors).toHaveLength(2);
+      expect(sectorAt(split.map, { x: 128, y: 128 })).toBeUndefined();
+      expect(sectorAt(split.map, { x: 200, y: 128 })?.id).not.toBe(room.id);
+      expect(sectorAt(split.map, { x: 300, y: 300 })?.id).toBe(room.id);
+      expect(() => compileMap(split.map)).not.toThrow();
+    }
+  });
+
   it("cuts round a room drawn against its wall when a pillar touches a room inside it", () => {
     const inner = drawRoom(pillared, box(160, 160, 224, 224), {}, 1);
     const drawn = drawRoom(inner.map, box(320, 0, 448, 64), {}, 1);
