@@ -14,6 +14,10 @@ import { runAgentAction } from "./agent-actions";
 
 type Kind = "wall" | "flat";
 
+type Args = Record<string, unknown>;
+
+type Use = [action: string, args: (name: string, own: Sector) => Args];
+
 interface Listed {
   walls: Set<string>;
   flats: Set<string>;
@@ -45,58 +49,6 @@ const games: [string, CheckContext][] = [
   ],
 ];
 
-function listAll(of: "walls" | "flats", context: CheckContext) {
-  const names: string[] = [];
-  let first: NamePage | undefined;
-  let offset: number | undefined = 0;
-  while (offset !== undefined) {
-    const page = runAgentAction(
-      testMap,
-      "listCatalog",
-      { of, offset, limit: 1000 },
-      context,
-    ).result as NamePage;
-    first ??= page;
-    names.push(...page.items);
-    offset = page.next;
-  }
-  const rest = first ?? { items: [] };
-  return [
-    ...names,
-    ...(rest.seeThrough ?? []),
-    ...(rest.doors ?? []),
-    ...(rest.switches ?? []),
-    ...(rest.sky === undefined ? [] : [rest.sky]),
-  ];
-}
-
-function listed(context: CheckContext): Listed {
-  return {
-    walls: new Set(listAll("walls", context)),
-    flats: new Set(listAll("flats", context)),
-  };
-}
-
-// The test map wearing names this game has, so a refusal can only come from
-// the name an action is given.
-function mapFor({ walls, flats }: Listed): GameMap {
-  const wall = [...walls][0];
-  const flat = [...flats][0];
-  return {
-    ...testMap,
-    sectors: testMap.sectors.map((sector) => ({
-      ...sector,
-      floorTexture: flat,
-      ceilingTexture: flat,
-      wallTexture: wall,
-      ...(sector.door && { door: { ...sector.door, texture: wall } }),
-    })),
-    switches: testMap.switches.map((item) => ({ ...item, texture: wall })),
-  };
-}
-
-type Args = Record<string, unknown>;
-
 const corners = [
   { x: 1200, y: 0 },
   { x: 1328, y: 0 },
@@ -104,9 +56,9 @@ const corners = [
   { x: 1200, y: 128 },
 ];
 
-// Each action that takes a name of that kind, given the name and the room
-// textures the game has for the parts it isn't testing.
-const uses: Record<Kind, [string, (name: string, own: Sector) => Args][]> = {
+// Each action that takes a name of that kind. The parts a use doesn't test
+// keep the room's own textures, which the game has.
+const uses: Record<Kind, Use[]> = {
   wall: [
     [
       "addRoom",
@@ -138,7 +90,10 @@ const uses: Record<Kind, [string, (name: string, own: Sector) => Args][]> = {
       }),
     ],
     ["makeDoor", (name) => ({ room: "Arena door", texture: name })],
-    ["replaceTexture", (name) => ({ from: "NOSUCH", to: name, kind: "wall" })],
+    [
+      "replaceTexture",
+      (name, own) => ({ from: own.wallTexture, to: name, kind: "wall" }),
+    ],
   ],
   flat: [
     [
@@ -150,15 +105,141 @@ const uses: Record<Kind, [string, (name: string, own: Sector) => Args][]> = {
         wallTexture: own.wallTexture,
       }),
     ],
-    ["updateRoom", (name) => ({ room: "Start room", floorTexture: name })],
-    ["updateRoom", (name) => ({ room: "Start room", ceilingTexture: name })],
+    [
+      "updateRoom",
+      (name) => ({
+        room: "Start room",
+        floorTexture: name,
+        ceilingTexture: name,
+      }),
+    ],
     [
       "paintSurface",
       (name) => ({ room: "Start room", surface: "ceiling", texture: name }),
     ],
-    ["replaceTexture", (name) => ({ from: "NOSUCH", to: name, kind: "flat" })],
+    [
+      "replaceTexture",
+      (name, own) => ({ from: own.floorTexture, to: name, kind: "flat" }),
+    ],
   ],
 };
+
+const kinds = ["wall", "flat"] as const;
+
+const timeout = 30_000;
+
+describe.each(games)("texture names with %s", (_, context) => {
+  const names = listed(context);
+  const map = mapFor(names);
+  const own = map.sectors[0];
+  const lists = { wall: names.walls, flat: names.flats };
+
+  describe.each(kinds)("%s names", (kind) => {
+    it.each(uses[kind])(
+      "%s takes every name listCatalog lists",
+      (action, args) => {
+        const refused = [...lists[kind]].flatMap((name) => {
+          const message = refusal(map, action, args(name, own), context);
+          return message === null ? [] : [`${name}: ${message}`];
+        });
+        expect(refused).toEqual([]);
+      },
+      timeout,
+    );
+
+    it.each(uses[kind])(
+      "%s takes no name listCatalog leaves out",
+      (action, args) => {
+        const known = context.names ?? freedoomNames;
+        const candidates = new Set([
+          ...known.walls,
+          ...known.middles,
+          ...known.textures,
+          ...known.flats,
+          ...known.custom,
+          ...doorTextures,
+          ...switchTextures,
+          "F_SKY1",
+        ]);
+        const unlisted = [...candidates].filter(
+          (name) =>
+            !lists[kind].has(name) &&
+            refusal(map, action, args(name, own), context) === null,
+        );
+        expect(unlisted).toEqual([]);
+      },
+      timeout,
+    );
+
+    it.each(uses[kind])(
+      "%s points a refused name to a list that holds its suggestions",
+      (action, args) => {
+        for (const wrong of ["NOSUCHTX", "MYBRIK", "F_SKY", "ZZ"]) {
+          const message = refusal(map, action, args(wrong, own), context);
+          const match =
+            /The closest are (.+)\. listCatalog of (\w+) names/.exec(
+              message ?? "",
+            );
+          expect(match, `${wrong}: ${message}`).not.toBeNull();
+          const [, closest, list] = match ?? [];
+          expect(list).toBe(`${kind}s`);
+          for (const name of closest.split(", ")) {
+            expect(lists[kind], `suggests ${name}`).toContain(name);
+          }
+        }
+      },
+    );
+  });
+});
+
+function listed(context: CheckContext): Listed {
+  return {
+    walls: new Set(listAll("walls", context)),
+    flats: new Set(listAll("flats", context)),
+  };
+}
+
+function listAll(of: "walls" | "flats", context: CheckContext) {
+  const names: string[] = [];
+  let first: NamePage | undefined;
+  let offset: number | undefined = 0;
+  while (offset !== undefined) {
+    const page = runAgentAction(
+      testMap,
+      "listCatalog",
+      { of, offset, limit: 1000 },
+      context,
+    ).result as NamePage;
+    first ??= page;
+    names.push(...page.items);
+    offset = page.next;
+  }
+  return [
+    ...names,
+    ...(first?.seeThrough ?? []),
+    ...(first?.doors ?? []),
+    ...(first?.switches ?? []),
+    ...(first?.sky === undefined ? [] : [first.sky]),
+  ];
+}
+
+// The test map wearing names the game has, so a refusal can only come from
+// the name an action is given.
+function mapFor({ walls, flats }: Listed): GameMap {
+  const wall = [...walls][0];
+  const flat = [...flats][0];
+  return {
+    ...testMap,
+    sectors: testMap.sectors.map((sector) => ({
+      ...sector,
+      floorTexture: flat,
+      ceilingTexture: flat,
+      wallTexture: wall,
+      ...(sector.door && { door: { ...sector.door, texture: wall } }),
+    })),
+    switches: testMap.switches.map((item) => ({ ...item, texture: wall })),
+  };
+}
 
 function refusal(
   map: GameMap,
@@ -173,71 +254,3 @@ function refusal(
     return error instanceof Error ? error.message : String(error);
   }
 }
-
-describe.each(games)("texture names with %s", (_, context) => {
-  const names = listed(context);
-  const map = mapFor(names);
-  const own = map.sectors[0];
-  const lists = { wall: names.walls, flat: names.flats };
-
-  it.each(["wall", "flat"] as const)(
-    "takes every %s name listCatalog lists",
-    (kind) => {
-      const refused = [...lists[kind]].flatMap((name) =>
-        uses[kind].flatMap(([action, args]) => {
-          const message = refusal(map, action, args(name, own), context);
-          return message === null ? [] : [`${action} ${name}: ${message}`];
-        }),
-      );
-      expect(refused).toEqual([]);
-    },
-  );
-
-  it.each(["wall", "flat"] as const)(
-    "lists every %s name the actions take",
-    (kind) => {
-      const known = context.names ?? freedoomNames;
-      const candidates = new Set([
-        ...known.walls,
-        ...known.middles,
-        ...known.textures,
-        ...known.flats,
-        ...known.custom,
-        ...doorTextures,
-        ...switchTextures,
-        "F_SKY1",
-      ]);
-      const unlisted = [...candidates].flatMap((name) =>
-        uses[kind].flatMap(([action, args]) =>
-          !lists[kind].has(name) &&
-          refusal(map, action, args(name, own), context) === null
-            ? [`${action} ${name}`]
-            : [],
-        ),
-      );
-      expect(unlisted).toEqual([]);
-    },
-  );
-
-  it.each(["wall", "flat"] as const)(
-    "points a refused %s name to a list that holds its suggestions",
-    (kind) => {
-      for (const [action, args] of uses[kind]) {
-        for (const wrong of ["NOSUCHTX", "MYBRIK", "F_SKY", "ZZ"]) {
-          const message = refusal(map, action, args(wrong, own), context);
-          expect(message, `${action} ${wrong}`).not.toBeNull();
-          const match =
-            /The closest are (.+)\. listCatalog of (\w+) names/.exec(
-              message ?? "",
-            );
-          expect(match, message ?? "").not.toBeNull();
-          const [, closest, list] = match ?? [];
-          expect(list).toBe(`${kind}s`);
-          for (const name of closest.split(", ")) {
-            expect(lists[kind], `${action} suggests ${name}`).toContain(name);
-          }
-        }
-      }
-    },
-  );
-});
