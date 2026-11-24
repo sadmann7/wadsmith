@@ -173,12 +173,14 @@ export function drawLines(
         ...sectorLoops(room).slice(1).flat(),
         ...inside.flatMap((sector) => sector.vertices),
       ]);
-      const spokes = (room.details ?? []).filter(
-        (chain) =>
-          ends.has(chain[0]) &&
-          ends.has(defined(chain.at(-1))) &&
-          (inner.has(chain[0]) || inner.has(defined(chain.at(-1)))),
-      );
+      const spokes = (room.details ?? []).filter((chain) => {
+        const [first, last] = [chain[0], defined(chain.at(-1))];
+        return (
+          ends.has(first) &&
+          ends.has(last) &&
+          inner.has(first) !== inner.has(last)
+        );
+      });
       const rebuilt =
         split(drawn) ||
         (spokes.length > 0 ? split([...drawn, ...spokes]) : null);
