@@ -25,13 +25,13 @@ import { type CustomThings, thingLabel } from "@/lib/wad/custom-things";
 
 import {
   MapCamera,
+  MapCaption,
   MapConnecting,
   MapDraft,
   MapEditor,
   MapFindCamera,
   MapFit,
   MapHandle,
-  MapLabel,
   MapLookHere,
   MapMarker,
   MapMarquee,
@@ -193,7 +193,7 @@ export function MapCanvas({
       .map((room) => (detailed ? room : { ...room, detail: undefined })),
     step,
   ).map(({ sector, detail, box }) => (
-    <MapLabel
+    <MapCaption
       key={sector.id}
       value={sector.id}
       corners={sector.vertices}
@@ -202,7 +202,7 @@ export function MapCanvas({
     >
       <strong>{sector.name}</strong>
       {detail ? <span>{detail}</span> : null}
-    </MapLabel>
+    </MapCaption>
   ));
 
   const handles = Object.entries(map.vertices)
