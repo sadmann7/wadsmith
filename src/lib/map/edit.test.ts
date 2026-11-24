@@ -122,6 +122,17 @@ describe("addRoom", () => {
     });
   });
 
+  it("keeps a door between sky rooms under a solid ceiling", () => {
+    const yard = { ceilingTexture: "F_SKY1", wallTexture: "ROCKRED1" };
+    const west = addRoom(blank, box(0, 0, 256, 256), yard);
+    const yards = addRoom(west.map, box(272, 0, 528, 256), yard).map;
+    const { map, id } = addRoom(yards, box(256, 96, 272, 160));
+    expect(map.sectors.find((sector) => sector.id === id)).toMatchObject({
+      wallTexture: "ROCKRED1",
+      ceilingTexture: "CEIL3_5",
+    });
+  });
+
   it("lets textures passed in win over the neighbour's", () => {
     const { map, id } = addRoom(rockRooms(), box(256, 96, 272, 160), {
       wallTexture: "METAL",

@@ -39,6 +39,8 @@ export const wallKeyPrefix = "wall:";
 export const roomKeyPrefix = "room:";
 const switchWidth = 64;
 
+const skyFlat = "F_SKY1";
+
 export const defaultDoor: DoorSettings = {
   opensBy: "use",
   closes: true,
@@ -720,12 +722,21 @@ export function roomDefaults(index: number) {
 }
 
 // A room takes its light and textures from the room it shares the most wall
-// with, and the starter ones when it touches none.
+// with, and the starter ones when it touches none. A sky ceiling stays
+// behind, since a door under one between two sky rooms shows sky, not its
+// face.
 export function newRoomLooks(map: GameMap, corners: Point[]) {
+  const starter = roomDefaults(map.sectors.length + 1);
   const neighbour = widestNeighbour(map, corners);
+  if (!neighbour) return starter;
+  const looks = looksOf(neighbour);
   return {
-    ...roomDefaults(map.sectors.length + 1),
-    ...(neighbour && looksOf(neighbour)),
+    ...starter,
+    ...looks,
+    ceilingTexture:
+      looks.ceilingTexture === skyFlat
+        ? starter.ceilingTexture
+        : looks.ceilingTexture,
   };
 }
 
