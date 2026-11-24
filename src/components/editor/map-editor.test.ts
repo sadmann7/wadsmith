@@ -1,3 +1,4 @@
+import { partAttrs } from "@ui-sdk/core/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { GameMap } from "@/lib/map/types";
@@ -6,6 +7,7 @@ import { defined } from "@/lib/defined";
 import { pickedRooms } from "@/lib/map/fragment";
 import { drawRoom } from "@/lib/map/reshape";
 import { testMap } from "@/lib/map/test-map";
+import { SceneCamera } from "@/lib/preview/scene-camera";
 
 import { mapEditor } from "./map-editor";
 
@@ -379,6 +381,29 @@ describe("map editor parts", () => {
     const placed = defined(result).things.at(-1);
     expect(placed?.kind).toBe("shotgun");
     expect(picked).toEqual([`thing:${placed?.id}`]);
+  });
+
+  it("put a thing under the camera above it wherever things take clicks", () => {
+    const onThing = (
+      editMode: "vertices" | "lines" | "sectors" | "things",
+      at = { x: 96, y: 160 },
+      zoom = 1,
+    ) => {
+      const camera = new SceneCamera(testMap);
+      camera.moveTo(testMap, at);
+      const instance = mapEditor({ id, map: testMap, camera, editMode });
+      instance.api.viewport.zoomTo(zoom);
+      return (
+        partAttrs(instance.part("camera", {}))["data-on-thing"] !== undefined
+      );
+    };
+    expect(onThing("things")).toBe(true);
+    expect(onThing("vertices")).toBe(true);
+    expect(onThing("lines")).toBe(false);
+    expect(onThing("sectors")).toBe(false);
+    expect(onThing("things", { x: 104, y: 160 })).toBe(true);
+    expect(onThing("things", { x: 104, y: 160 }, 4)).toBe(false);
+    expect(onThing("things", { x: 136, y: 160 })).toBe(false);
   });
 
   it("clear the selection with Escape", () => {
