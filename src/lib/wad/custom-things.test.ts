@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import type { GameMap } from "@/lib/map/types";
 
-import { runAgentAction } from "@/lib/editor/agent-actions";
+import {
+  agentRisk,
+  agentStepSummary,
+  runAgentAction,
+} from "@/lib/editor/agent-actions";
 import { mapBalance } from "@/lib/map/balance";
 import { checkMap } from "@/lib/map/checks";
 import { addThing, changeThings, duplicateThings } from "@/lib/map/edit";
@@ -289,6 +293,16 @@ describe("custom things by number", () => {
   it("selects only the custom things with the same number", () => {
     expect(similarThings(map, ids(20001).slice(0, 1))).toEqual(ids(20001));
     expect(similarThings(map, ids(20002))).toEqual(ids(20002));
+  });
+
+  it("names a custom thing in the agent's questions and steps", () => {
+    const [zombie] = ids(20001);
+    expect(agentRisk(map, "removeThing", [zombie], custom).title).toBe(
+      "Remove the plasma zombie?",
+    );
+    expect(
+      agentStepSummary(map, "updateThing", [zombie], null, custom).label,
+    ).toBe("Update thing · Plasma Zombie");
   });
 
   it("lets the agent list, place and check custom things by number", () => {

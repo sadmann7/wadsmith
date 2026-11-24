@@ -2042,6 +2042,7 @@ export function EditorScreen({
         agentState.question.action,
         agentState.question.args,
         null,
+        customThings,
       )
     : null;
   // Each of a browser agent's edits is its own undo step, and Undo all takes
@@ -2087,7 +2088,14 @@ export function EditorScreen({
     const traced = agentSession.record(
       action,
       report.todo,
-      (args) => agentStepSummary(mapRef.current, action, args, report.result),
+      (args) =>
+        agentStepSummary(
+          mapRef.current,
+          action,
+          args,
+          report.result,
+          customThings,
+        ),
       edit,
     );
     if (!traced) logBridgeAction(action, report);
@@ -2554,6 +2562,7 @@ export function EditorScreen({
                   <AgentCard
                     session={agentState}
                     map={map}
+                    customThings={customThings}
                     doneEdits={undoable.done}
                     onAnswer={(yes, always) =>
                       agentSession.answer(yes, { always })

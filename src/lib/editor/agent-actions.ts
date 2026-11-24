@@ -1461,6 +1461,7 @@ export function agentRisk(
   map: GameMap,
   name: string,
   input: unknown[] | Args = [],
+  custom: CustomThings = noCustomThings,
 ): AgentRisk {
   const fallback = {
     title: `Let the agent run ${humanize(name).toLowerCase()}?`,
@@ -1520,7 +1521,7 @@ export function agentRisk(
       const thing = findThing(map, args.thing);
       const room = sectorAt(map, thing);
       return {
-        title: `Remove the ${thingCatalog[thing.kind].label.toLowerCase()}?`,
+        title: `Remove the ${thingLabel(thing, custom).toLowerCase()}?`,
         detail: `${room ? `It stands in ${room.name}. ` : ""}Undo brings it back.`,
         confirm: "Remove thing",
       };
@@ -1589,6 +1590,7 @@ export function agentStepSummary(
   name: string,
   input: unknown[] | Args,
   result: unknown,
+  custom: CustomThings = noCustomThings,
 ): AgentStepSummary {
   const made = map.sectors.find((sector) => sector.id === result);
   const placed = map.things.find((thing) => thing.id === result);
@@ -1610,7 +1612,7 @@ export function agentStepSummary(
   }
   if (thing) {
     return {
-      label: `${label} · ${thingCatalog[thing.kind].label}`,
+      label: `${label} · ${thingLabel(thing, custom)}`,
       at: { x: thing.x, y: thing.y },
     };
   }

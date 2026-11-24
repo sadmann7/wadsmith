@@ -2,6 +2,7 @@ import { Bot, Check, LoaderCircle, X } from "lucide-react";
 import * as React from "react";
 
 import type { GameMap } from "@/lib/map/types";
+import type { CustomThings } from "@/lib/wad/custom-things";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -15,6 +16,7 @@ import {
 interface AgentCardProps {
   session: AgentSessionState;
   map: GameMap;
+  customThings: CustomThings;
   doneEdits: ReadonlySet<number>;
   onAnswer: (yes: boolean, always: boolean) => void;
   onStop: () => void;
@@ -25,6 +27,7 @@ interface AgentCardProps {
 export function AgentCard({
   session,
   map,
+  customThings,
   doneEdits,
   onAnswer,
   onStop,
@@ -38,6 +41,7 @@ export function AgentCard({
         key={question.id}
         question={question}
         map={map}
+        customThings={customThings}
         onAnswer={onAnswer}
       />
     );
@@ -122,12 +126,14 @@ export function AgentCard({
 interface AgentQuestionCardProps {
   question: NonNullable<AgentSessionState["question"]>;
   map: GameMap;
+  customThings: CustomThings;
   onAnswer: (yes: boolean, always: boolean) => void;
 }
 
 function AgentQuestionCard({
   question,
   map,
+  customThings,
   onAnswer,
 }: AgentQuestionCardProps) {
   const [always, setAlways] = React.useState(false);
@@ -136,7 +142,7 @@ function AgentQuestionCard({
   const [risk] = React.useState(() =>
     question.confirm
       ? { title: question.confirm, detail: "", confirm: "Allow" }
-      : agentRisk(map, question.action, question.args),
+      : agentRisk(map, question.action, question.args, customThings),
   );
   // Focus moves to the question unless the person is typing somewhere, and
   // goes back once it's answered.
