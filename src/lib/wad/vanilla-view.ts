@@ -1,12 +1,18 @@
-// A port of the parts of Doom 1.9's renderer (r_bsp.c, r_segs.c, r_plane.c)
-// that decide how many visplanes, drawsegs and solid segs a view fills. It
-// draws nothing, works in floats where Doom works in fixed point, and so can
-// be a step off near a limit.
+// A port of the parts of Doom 1.9's renderer (r_bsp.c, r_segs.c, r_plane.c,
+// r_things.c) that decide how many visplanes, drawsegs, solid segs, openings
+// and sprites a view fills, for a single-player game. It draws nothing.
+// Angles follow Doom's R_PointToAngle, but distances and scales are floats,
+// and a sprite is as wide as its thing, so a count can be a step off near a
+// limit.
+import { vanillaThings } from "@/lib/map/doom-info";
+
 import type { Lump } from "./compile";
 
 export const visplaneLimit = 128;
 export const drawsegLimit = 256;
 export const solidsegLimit = 32;
+export const openingLimit = 320 * 64;
+export const vispriteLimit = 128;
 
 const viewWidth = 320;
 const viewHeight = 168;
@@ -24,6 +30,15 @@ const subsectorFlag = 0x8000;
 const twoSided = 4;
 const skyFlat = "F_SKY1";
 const unset = 0xff;
+const slopeRange = 2048;
+const minZ = 4;
+const notSingle = 0x10;
+// Starts spawn no sprite of their own, and teleport destinations and the
+// boss brain's spots are kept out of their sector's thing list.
+const unseenThings = new Set([1, 2, 3, 4, 11, 14, 87, 89]);
+const thingRadius = new Map(
+  vanillaThings.map(([type, , radius]) => [type, radius]),
+);
 
 // The corners of a box that bound its view, by where the view stands.
 const checkCoord = [
@@ -40,12 +55,20 @@ const checkCoord = [
   [2, 1, 3, 0],
 ];
 
+interface LevelThing {
+  x: number;
+  y: number;
+  radius: number;
+  skills: number;
+}
+
 interface LevelSector {
   floor: number;
   ceiling: number;
   floorFlat: string;
   ceilingFlat: string;
   light: number;
+  things: LevelThing[];
 }
 
 interface LevelSeg {
@@ -81,6 +104,8 @@ export interface ViewCounts {
   visplanes: number;
   drawsegs: number;
   solidsegs: number;
+  openings: number;
+  vissprites: number;
 }
 
 interface Plane {
@@ -115,6 +140,7 @@ export function readLevel(lumps: Lump[]): Level {
     floorFlat: name(sectorData, i * 26 + 4),
     ceilingFlat: name(sectorData, i * 26 + 12),
     light: sectorData.getInt16(i * 26 + 20, true),
+    things: [] as LevelThing[],
   }));
   const sideData = data("SIDEDEFS");
   const sides = Array.from({ length: count(sideData, 30) }, (_, i) => ({
@@ -178,7 +204,22 @@ export function readLevel(lumps: Lump[]): Level {
       ] as [number, number],
     };
   });
-  return { sectors, segs, subsectors, nodes };
+  const level = { sectors, segs, subsectors, nodes };
+  const thingData = data("THINGS");
+  for (let i = 0; i < count(thingData, 10); i += 1) {
+    const type = thingData.getInt16(i * 10 + 6, true);
+    const flags = thingData.getInt16(i * 10 + 8, true);
+    if (unseenThings.has(type) || flags & notSingle || !(flags & 7)) continue;
+    const x = thingData.getInt16(i * 10, true);
+    const y = thingData.getInt16(i * 10 + 2, true);
+    sectorAtPoint(level, x, y)?.things.push({
+      x,
+      y,
+      radius: thingRadius.get(type) ?? 20,
+      skills: flags & 7,
+    });
+  }
+  return level;
 }
 
 // Counts what one view of the level fills. The angle is a Doom binary angle,
@@ -199,6 +240,11 @@ export function countView(
   const planes: Plane[] = [];
   let drawsegs = 0;
   let drawsegsWanted = 0;
+  let openings = 0;
+  const sectorsSeen = new Set<LevelSector>();
+  const spritesBySkill = [0, 0, 0];
+  const viewCos = Math.cos(bamToRadians(viewAngle));
+  const viewSin = Math.sin(bamToRadians(viewAngle));
   const floorClip = new Int16Array(viewWidth).fill(viewHeight);
   const ceilingClip = new Int16Array(viewWidth).fill(-1);
 
@@ -209,7 +255,28 @@ export function countView(
   let angleToSeg = 0;
 
   const pointToAngle = (x: number, y: number) =>
-    toBam(Math.atan2(y - viewY, x - viewX));
+    fixedPointToAngle(((x - viewX) * 0x10000) | 0, ((y - viewY) * 0x10000) | 0);
+
+  const addSprites = (sector: LevelSector) => {
+    if (sectorsSeen.has(sector)) return;
+    sectorsSeen.add(sector);
+    for (const thing of sector.things) {
+      const trX = thing.x - viewX;
+      const trY = thing.y - viewY;
+      const tz = trX * viewCos + trY * viewSin;
+      if (tz < minZ) continue;
+      const tx = trX * viewSin - trY * viewCos;
+      if (Math.abs(tx) > tz * 4) continue;
+      const xScale = projection / tz;
+      if (Math.floor(centerX + (tx - thing.radius) * xScale) > viewWidth) {
+        continue;
+      }
+      if (Math.floor(centerX + (tx + thing.radius) * xScale) - 1 < 0) continue;
+      for (let skill = 0; skill < 3; skill += 1) {
+        if (thing.skills & (1 << skill)) spritesBySkill[skill] += 1;
+      }
+    }
+  };
 
   const newPlane = (height: number, flat: string, light: number) => {
     const plane: Plane = {
@@ -260,6 +327,19 @@ export function countView(
     drawsegsWanted += 1;
     if (drawsegs === drawsegLimit) return;
     const back = seg.back;
+    if (back) {
+      const width = stop - start + 1;
+      const masked = seg.middle;
+      const bottomClipped = back.ceiling <= front.floor;
+      const topClipped = back.floor >= front.ceiling;
+      const bottom =
+        front.floor > back.floor || back.floor > viewZ || bottomClipped;
+      const top =
+        front.ceiling < back.ceiling || back.ceiling < viewZ || topClipped;
+      if (masked) openings += width;
+      if ((top || masked) && !topClipped) openings += width;
+      if ((bottom || masked) && !bottomClipped) openings += width;
+    }
     const normal = (seg.angle + ang90) >>> 0;
     let offset = Math.abs(toSigned((normal - angleToSeg) >>> 0));
     if (offset > ang90) offset = ang90;
@@ -514,6 +594,7 @@ export function countView(
     const firstSeg = level.segs[first];
     if (!firstSeg) return;
     front = firstSeg.front;
+    addSprites(front);
     floorPlane =
       front.floor < viewZ
         ? findPlane(front.floor, front.floorFlat, front.light)
@@ -542,6 +623,8 @@ export function countView(
     visplanes: planes.length,
     drawsegs: drawsegsWanted,
     solidsegs: solidPeak,
+    openings,
+    vissprites: Math.max(...spritesBySkill),
   };
 }
 
@@ -555,6 +638,18 @@ export function pointOnSide(x: number, y: number, node: LevelNode) {
   const left = node.dy * (x - node.x);
   const right = (y - node.y) * node.dx;
   return right < left ? 0 : 1;
+}
+
+function sectorAtPoint(level: Level, x: number, y: number) {
+  let index = level.nodes.length - 1;
+  if (index < 0) return level.segs[level.subsectors[0]?.first ?? 0]?.front;
+  while (!(index & subsectorFlag)) {
+    const node = level.nodes[index];
+    index = node.children[pointOnSide(x, y, node)];
+  }
+  const subsector =
+    level.subsectors[index === 0xffff ? 0 : index & ~subsectorFlag];
+  return subsector && level.segs[subsector.first]?.front;
 }
 
 function count(view: DataView, size: number) {
@@ -605,8 +700,42 @@ function viewTables() {
   return { viewAngleToX, xToViewAngle };
 }
 
-function toBam(radians: number) {
-  return Math.round((radians / (Math.PI * 2)) * 0x100000000) >>> 0;
+const tanToAngle = Float64Array.from({ length: slopeRange + 1 }, (_, i) =>
+  Math.floor((Math.atan(i / slopeRange) / (Math.PI * 2)) * 0x100000000),
+);
+
+function fixedPointToAngle(x: number, y: number) {
+  if (x === 0 && y === 0) return 0;
+  if (x >= 0) {
+    if (y >= 0) {
+      return x > y
+        ? tanToAngle[slopeDiv(y, x)]
+        : (ang90 - 1 - tanToAngle[slopeDiv(x, y)]) >>> 0;
+    }
+    const down = -y;
+    return x > down
+      ? -tanToAngle[slopeDiv(down, x)] >>> 0
+      : (ang90 * 3 + tanToAngle[slopeDiv(x, down)]) >>> 0;
+  }
+  const left = -x;
+  if (y >= 0) {
+    return left > y
+      ? (ang180 - 1 - tanToAngle[slopeDiv(y, left)]) >>> 0
+      : (ang90 + tanToAngle[slopeDiv(left, y)]) >>> 0;
+  }
+  const down = -y;
+  return left > down
+    ? (ang180 + tanToAngle[slopeDiv(down, left)]) >>> 0
+    : (ang90 * 3 - 1 - tanToAngle[slopeDiv(left, down)]) >>> 0;
+}
+
+function slopeDiv(num: number, den: number) {
+  const unsignedDen = den >>> 0;
+  if (unsignedDen < 512) return slopeRange;
+  const answer = Math.floor(
+    ((num * 8) % 0x100000000) / Math.floor(unsignedDen / 256),
+  );
+  return Math.min(answer, slopeRange);
 }
 
 function bamToRadians(angle: number) {
