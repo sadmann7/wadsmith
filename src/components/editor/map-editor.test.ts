@@ -27,7 +27,7 @@ describe("map editor parts", () => {
     const parts = listen(instance);
     instance.api.viewport.panBy(40, 0);
     instance.api.viewport.zoomTo(2);
-    expect(parts.heard()).toEqual(["label sector-2", "label sector-2"]);
+    expect(parts.heard()).toEqual(["caption sector-2", "caption sector-2"]);
   });
 
   it("wake only the parts of a moved corner", () => {
@@ -49,8 +49,8 @@ describe("map editor parts", () => {
     const { store } = instance.part("handle", { value: "v1" });
     const keys = ["v1"];
     const dragged = [
+      "caption sector-2",
       "handle v1",
-      "label sector-2",
       "port door:sector-4",
       "sector sector-1",
       "sector sector-3",
@@ -584,7 +584,7 @@ function listen(instance: Instance) {
   hear("handle", { value: "v10" });
   hear("handle", { value: "thing:imp-1" });
   hear("port", { value: "door:sector-4" });
-  hear("label", { value: corridor.id, corners: corridor.vertices });
+  hear("caption", { value: corridor.id, corners: corridor.vertices });
   return { heard: () => heard.splice(0).toSorted() };
 }
 
