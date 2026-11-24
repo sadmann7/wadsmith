@@ -381,6 +381,45 @@ describe("map editor parts", () => {
     expect(picked).toEqual([`thing:${placed?.id}`]);
   });
 
+  it("zoom a step at a time on each zoom request", () => {
+    const instance = mapEditor({ id, map: testMap });
+    instance.api.viewport.zoomTo(0.9);
+    const zoom = () => instance.api.viewport.get().zoom;
+    instance.setOptions({ id, map: testMap, zoomRequest: { id: 1, steps: 1 } });
+    expect(zoom()).toBeCloseTo(1);
+    instance.setOptions({ id, map: testMap, zoomRequest: { id: 2, steps: 1 } });
+    expect(zoom()).toBeCloseTo(1.25);
+    instance.setOptions({ id, map: testMap, zoomRequest: { id: 2, steps: 1 } });
+    expect(zoom()).toBeCloseTo(1.25);
+    instance.setOptions({
+      id,
+      map: testMap,
+      zoomRequest: { id: 3, steps: -2 },
+    });
+    expect(zoom()).toBeCloseTo(0.8);
+  });
+
+  it("zoom on a mouse wheel's notch, and not on a trackpad's scroll", () => {
+    const instance = mapEditor({ id, map: testMap });
+    const zoom = () => instance.api.viewport.get().zoom;
+    instance.api.wheel(scroll({ deltaY: 100, wheelDeltaY: -120 }));
+    expect(zoom()).toBeCloseTo(0.8);
+    instance.api.wheel(
+      scroll({ deltaY: 4, wheelDeltaY: -12, timeStamp: 1000 }),
+    );
+    expect(zoom()).toBeCloseTo(0.8);
+  });
+
+  it("leave - and = to the zoom shortcuts", () => {
+    const instance = mapEditor({ id, map: testMap });
+    instance.api.keydown(press("-"));
+    instance.api.keydown(press("="));
+    expect(instance.api.viewport.get().zoom).toBe(1);
+    instance.api.viewport.zoomTo(2);
+    instance.api.keydown(press("0"));
+    expect(instance.api.viewport.get().zoom).toBe(1);
+  });
+
   it("clear the selection with Escape", () => {
     let picked: string[] | null = null;
     const instance = mapEditor({
@@ -635,6 +674,22 @@ function box(left: number, top: number, right: number, bottom: number) {
     { x: right, y: bottom },
     { x: left, y: bottom },
   ];
+}
+
+function scroll(input: Partial<WheelEvent> & { wheelDeltaY?: number }) {
+  return {
+    deltaMode: 0,
+    deltaX: 0,
+    deltaY: 0,
+    clientX: 0,
+    clientY: 0,
+    shiftKey: false,
+    ctrlKey: false,
+    metaKey: false,
+    timeStamp: 0,
+    preventDefault: () => {},
+    ...input,
+  } as WheelEvent;
 }
 
 function press(key: string, keys: Partial<KeyboardEvent> = {}) {

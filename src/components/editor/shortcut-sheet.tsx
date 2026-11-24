@@ -319,7 +319,11 @@ function groups(keymap: Keymap): { title: string; items: Shortcut[] }[] {
         },
         {
           keys: [key("Space-drag"), key("Middle-drag")],
-          does: "Pan the map",
+          does: "Pan the map, as a trackpad's two-finger scroll does too",
+        },
+        {
+          keys: [key("Wheel")],
+          does: "Zoom at the pointer, as a trackpad pinch does too",
         },
         {
           keys: [key("Page Up"), key("Page Down")],
@@ -353,7 +357,6 @@ function groups(keymap: Keymap): { title: string; items: Shortcut[] }[] {
           does: "Select a saved group, with Shift to add it to the selection",
         },
         { keys: [chord("alt+1")], does: "Save the selection as group 1" },
-        { keys: [key("+"), key("−", "minus")], does: "Zoom in or out" },
         { keys: [key("0")], does: "Reset the zoom" },
         { keys: [key("C")], does: "Wire the focused switch to a door" },
         { keys: [chord("shift+F10")], does: "Open the menu for the selection" },

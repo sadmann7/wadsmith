@@ -40,6 +40,7 @@ import {
   targetForKeys,
   wallTarget,
 } from "@/lib/editor/map-target";
+import { createWheelZoom, steppedZoom } from "@/lib/editor/zoom";
 import { getIsPlayerStart } from "@/lib/map/catalog";
 import {
   addSwitch,
@@ -88,6 +89,12 @@ import { type DrawShape, gridCells, shapeCorners } from "@/lib/map/shapes";
 
 export type MapTool = "select" | "draw" | "line" | "thing" | "switch";
 export type EditMode = "vertices" | "lines" | "sectors" | "things";
+export interface ZoomRequest {
+  id: number;
+  steps: number;
+  at?: Point | null;
+}
+
 export interface MapViewStatus {
   pointer: Point | null;
   zoom: number;
@@ -137,6 +144,7 @@ interface MapEditorOptions {
   findCameraRequest?: number;
   fitRequest?: number;
   fitSelectionRequest?: number;
+  zoomRequest?: ZoomRequest | null;
   // A selector for what lies over the map, like a card, which a fit keeps the
   // map clear of.
   fitAround?: string;
@@ -289,6 +297,7 @@ export const mapEditor = definePrimitive({
     findCameraRequest: "number",
     fitRequest: "number",
     fitSelectionRequest: "number",
+    zoomRequest: "value",
     fitAround: "string",
     selectAllRequest: "number",
     drawRequest: "value",
@@ -502,6 +511,8 @@ export const mapEditor = definePrimitive({
     let lookRequest = context.options().lookAtRequest?.id ?? 0;
     let fitRequest = context.options().fitRequest ?? 0;
     let fitSelectionRequest = context.options().fitSelectionRequest ?? 0;
+    let zoomRequest = context.options().zoomRequest?.id ?? 0;
+    const readWheel = createWheelZoom();
     let fitAround = context.options().fitAround ?? "";
     let selectAllRequest = context.options().selectAllRequest ?? 0;
     let drawRequest = context.options().drawRequest?.id ?? 0;
@@ -551,6 +562,23 @@ export const mapEditor = definePrimitive({
       if (request === fitSelectionRequest) return;
       fitSelectionRequest = request;
       fitSelection();
+    });
+    const stepZoom = (
+      steps: number,
+      at?: Point,
+      details: { reason: "wheel" | "zoom-key"; event?: Event } = {
+        reason: "zoom-key",
+      },
+    ) => viewport.zoomTo(steppedZoom(viewport.get().zoom, steps), at, details);
+    // The zoom shortcuts step around the pointer, so the viewport keeps only
+    // its reset key.
+    const resetZoomKey = (event: KeyboardEvent) => {
+      if (event.key === "0") viewport.keydown(event);
+    };
+    context.onOptions(({ zoomRequest: request }) => {
+      if (!request || request.id === zoomRequest) return;
+      zoomRequest = request.id;
+      stepZoom(request.steps, request.at ?? undefined);
     });
     context.onOptions((options) => {
       const around = options.fitAround ?? "";
@@ -1652,7 +1680,7 @@ export const mapEditor = definePrimitive({
           } else if (event.key === "Backspace") {
             store.set({ drawing: drawing.slice(0, -1) });
           } else {
-            viewport.keydown(event);
+            resetZoomKey(event);
             return;
           }
           event.preventDefault();
@@ -1694,7 +1722,22 @@ export const mapEditor = definePrimitive({
           event.preventDefault();
           return;
         }
-        viewport.keydown(event);
+        resetZoomKey(event);
+      },
+      wheel(event: WheelEvent) {
+        const steps = readWheel(event);
+        if (steps === null) {
+          viewport.wheel(event);
+          return;
+        }
+        event.preventDefault();
+        if (steps !== 0) {
+          stepZoom(
+            steps,
+            { x: event.clientX, y: event.clientY },
+            { reason: "wheel", event },
+          );
+        }
       },
       keyup(event: KeyboardEvent) {
         if (event.key === " ") spaceHeld = false;
@@ -1756,7 +1799,7 @@ export const mapEditor = definePrimitive({
       }),
       bind: (el, { api }) => api.attach(el),
       on: {
-        wheel: (event, { api }) => api.viewport.wheel(event),
+        wheel: (event, { api }) => api.wheel(event),
         pointerdown: (event, { api }) => api.pointerdown(event),
         pointermove: (event, { api }) => api.pointermove(event),
         pointerleave: (_event, { api }) => api.pointerleave(),

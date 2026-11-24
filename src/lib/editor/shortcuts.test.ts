@@ -30,6 +30,15 @@ describe("editor shortcuts", () => {
     }
   });
 
+  it("zooms with = and - in every preset", () => {
+    for (const preset of Object.keys(
+      keyPresets,
+    ) as (keyof typeof keyPresets)[]) {
+      const keys = resolveKeys({ preset, keys: {} });
+      expect([keys.zoomIn, keys.zoomOut], preset).toEqual(["=", "-"]);
+    }
+  });
+
   it("names only shortcuts the table has in a preset", () => {
     for (const { keys } of Object.values(keyPresets)) {
       for (const name of Object.keys(keys)) {
