@@ -19,6 +19,8 @@ export function endsFieldEdit(event: KeyboardEvent, panel: Element) {
     !typedFields.has(field.type) ||
     !panel.contains(field) ||
     event.isComposing ||
+    // Safari ends a composition with an Enter that isn't marked as composing.
+    event.keyCode === 229 ||
     event.altKey ||
     event.ctrlKey ||
     event.metaKey ||

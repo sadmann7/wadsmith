@@ -70,6 +70,12 @@ it("keeps Escape for closing an open list", () => {
   Object.defineProperty(enter, "target", { value: input });
   expect(endsFieldEdit(enter, panel)).toBe(true);
   expect(endsFieldEdit(enter, document.createElement("aside"))).toBe(false);
+  const composing = new KeyboardEvent("keydown", {
+    key: "Enter",
+    keyCode: 229,
+  });
+  Object.defineProperty(composing, "target", { value: input });
+  expect(endsFieldEdit(composing, panel)).toBe(false);
 });
 
 function render() {
