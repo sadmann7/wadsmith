@@ -1596,15 +1596,15 @@ export const mapEditor = definePrimitive({
           change("tool", "select", { reason: "draw" });
         } else if (!key) {
           const { editMode } = store.get();
+          const at = viewport.toCanvas(event.clientX, event.clientY);
           const pressed =
             event.shiftKey &&
             (editMode === "vertices" || editMode === "sectors")
-              ? sectorAt(map, viewport.toCanvas(event.clientX, event.clientY))
+              ? sectorAt(map, at)
               : undefined;
           if (pressed) {
             toggleRoom(pressed);
           } else if (editMode === "lines") {
-            const at = viewport.toCanvas(event.clientX, event.clientY);
             const wall = wallNear(map, at, wallReach / view.zoom);
             if (!wall) {
               if (!event.shiftKey) select([]);
@@ -1628,7 +1628,7 @@ export const mapEditor = definePrimitive({
           } else {
             select(
               [],
-              editMode === "things" ? null : (sectorAt(map, point)?.id ?? null),
+              editMode === "things" ? null : (sectorAt(map, at)?.id ?? null),
             );
           }
         }
@@ -1991,9 +1991,11 @@ export const mapEditor = definePrimitive({
       attrs: (state) => ({
         type: "button",
         "data-map-key": "camera",
+        "data-on-thing": getIsCameraOnThing(state) ? "" : undefined,
         style: cameraStyle(state),
       }),
       live: live<MapEditorState, unknown, {}>((state) => ({
+        "data-on-thing": getIsCameraOnThing(state) ? "" : undefined,
         style: cameraStyle(state),
       })),
       on: {
@@ -2336,6 +2338,20 @@ function spansAt(points: Point[], y: number) {
     spans.push([crossings[index], crossings[index + 1]]);
   }
   return spans;
+}
+
+const cameraOverlap = 28;
+
+function getIsCameraOnThing(state: MapEditorState) {
+  const camera = state.cameraPosition;
+  if (!camera || state.editMode === "lines" || state.editMode === "sectors") {
+    return false;
+  }
+  const reach = cameraOverlap / state.viewport.zoom;
+  return state.map.things.some((thing) => {
+    const at = state.positions[`${thingKeyPrefix}${thing.id}`] ?? thing;
+    return Math.hypot(at.x - camera.x, at.y - camera.y) < reach;
+  });
 }
 
 function cameraStyle(state: MapEditorState) {

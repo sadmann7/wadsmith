@@ -218,13 +218,8 @@ export function roomPoint(map: GameMap, sector: Sector): Point {
   const cached = pointCache.get(map)?.get(sector.id);
   if (cached) return cached;
   const outline = sectorPolygon(map, sector);
-  const inner = map.sectors
-    .filter((other) => containerOf(map, other)?.id === sector.id)
-    .map((other) => sectorPolygon(map, other));
-  const loops = [outline, ...sectorHoles(map, sector), ...inner];
-  const walls = loops.flatMap((loop) =>
-    loop.map((point, index) => [point, loop[(index + 1) % loop.length]]),
-  );
+  const loops = roomLoops(map, sector);
+  const walls = loopWalls(loops);
   const box = boxOf(outline);
   const corners = new Set(loops.flat().map((point) => point.y));
   const levels = [...corners].toSorted((a, b) => a - b);
@@ -260,6 +255,26 @@ export function roomPoint(map: GameMap, sector: Sector): Point {
   points.set(sector.id, point);
   pointCache.set(map, points);
   return point;
+}
+
+// The facing, in degrees snapped to 45, with the furthest view from a spot
+// to the room's walls, its pillars and the rooms drawn inside it.
+export function clearView(map: GameMap, sector: Sector, at: Point) {
+  const walls = loopWalls(roomLoops(map, sector));
+  let best = 0;
+  let furthest = -1;
+  for (let angle = 0; angle < 360; angle += 45) {
+    const turn = (angle * Math.PI) / 180;
+    const way = { x: Math.cos(turn), y: -Math.sin(turn) };
+    const reach = Math.min(
+      ...walls.map(([a, b]) => rayDistance(at, way, a, b)),
+    );
+    if (reach > furthest + 1e-6) {
+      best = angle;
+      furthest = reach;
+    }
+  }
+  return best;
 }
 
 export function pointInSector(map: GameMap, sector: Sector, point: Point) {
@@ -516,4 +531,27 @@ function boxContains(outer: Box, inner: Box) {
     outer.top <= inner.top &&
     outer.bottom >= inner.bottom
   );
+}
+
+function roomLoops(map: GameMap, sector: Sector) {
+  const inner = map.sectors
+    .filter((other) => containerOf(map, other)?.id === sector.id)
+    .map((other) => sectorPolygon(map, other));
+  return [sectorPolygon(map, sector), ...sectorHoles(map, sector), ...inner];
+}
+
+function loopWalls(loops: Point[][]) {
+  return loops.flatMap((loop) =>
+    loop.map((point, index) => [point, loop[(index + 1) % loop.length]]),
+  );
+}
+
+function rayDistance(from: Point, way: Point, a: Point, b: Point) {
+  const side = { x: b.x - a.x, y: b.y - a.y };
+  const facing = way.x * side.y - way.y * side.x;
+  if (Math.abs(facing) < 1e-9) return Infinity;
+  const offset = { x: a.x - from.x, y: a.y - from.y };
+  const along = (offset.x * side.y - offset.y * side.x) / facing;
+  const across = (offset.x * way.y - offset.y * way.x) / facing;
+  return along > 0 && across >= 0 && across <= 1 ? along : Infinity;
 }
