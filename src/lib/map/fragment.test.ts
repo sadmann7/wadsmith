@@ -27,7 +27,7 @@ import {
 import { wallKey, wallOwners } from "./geometry";
 import { starterMap } from "./starter-map";
 import { islandMap, testMap } from "./test-map";
-import { newProblems, validateMap } from "./validate";
+import { issuesSince, newProblems, validateMap } from "./validate";
 
 const openWall = wallKey("v3", "v4");
 const lowerFloor: LineAction = {
@@ -631,13 +631,13 @@ describe("turning, flipping and resizing", () => {
       selectedParts(starterMap, [], "sector-3"),
     );
     const halve: Transform = { kind: "scale", factor: 0.5 };
-    const { map: shrunk, problems } = transformKeepingDoors(
-      starterMap,
-      arenaKeys,
-      [halve],
-      32,
-    );
+    const {
+      map: shrunk,
+      problems,
+      stranded,
+    } = transformKeepingDoors(starterMap, arenaKeys, [halve], 32);
     expect(problems).toEqual([]);
+    expect(stranded).toEqual([]);
     const at = (id: string) => defined(shrunk).vertices[id];
     for (const [near, far] of [
       ["v7", "v13"],
@@ -659,6 +659,35 @@ describe("turning, flipping and resizing", () => {
       transformParts(starterMap, arenaKeys, halve, 32, "none"),
     );
     expect(plain.vertices.v13).toEqual(starterMap.vertices.v13);
+  });
+
+  it("leaves the doors behind rather than carry one onto a monster", () => {
+    const map: GameMap = {
+      ...starterMap,
+      things: [
+        ...starterMap.things,
+        { id: "imp-near-door", kind: "imp", x: 490, y: 160, angle: 0 },
+      ],
+    };
+    const keys = partKeys(map, selectedParts(map, [], "sector-3"));
+    const grow: Transform = { kind: "scale", factor: 1.05 };
+    const carried = defined(transformParts(map, keys, grow, 8, "walls"));
+    expect(issuesSince(map)(carried)).toEqual({
+      errors: [],
+      warnings: [expect.objectContaining({ id: "in-door:imp-near-door" })],
+    });
+    const {
+      map: grown,
+      problems,
+      stranded,
+    } = transformKeepingDoors(map, keys, [grow], 8);
+    expect(problems).toEqual([]);
+    expect(stranded).toEqual(["sector-4", "sector-7"]);
+    expect(defined(grown).vertices.v13).toEqual(map.vertices.v13);
+    expect(issuesSince(map)(defined(grown))).toEqual({
+      errors: [],
+      warnings: [],
+    });
   });
 
   it("keeps the far room's wall straight around a door set into it", () => {

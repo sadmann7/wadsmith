@@ -524,6 +524,47 @@ describe("cutting a room that touches a pillar or room inside it at a corner", (
     expect(sectorAt(defined(split).map, { x: 128, y: 128 })).toBeUndefined();
   });
 
+  it("keeps a pillar when a closed line runs along one of its walls", () => {
+    const line = [
+      { x: 160, y: 96 },
+      { x: 250, y: 128 },
+      { x: 160, y: 160 },
+    ];
+    for (const points of [line, line.toReversed()]) {
+      const split = defined(drawLines(pillared, points, 1));
+      expect(problems(split.map)).toEqual([]);
+      expect(split.map.sectors).toHaveLength(2);
+      expect(sectorAt(split.map, { x: 128, y: 128 })).toBeUndefined();
+      expect(sectorAt(split.map, { x: 200, y: 128 })?.id).not.toBe(room.id);
+      expect(sectorAt(split.map, { x: 300, y: 300 })?.id).toBe(room.id);
+      expect(() => compileMap(split.map)).not.toThrow();
+    }
+  });
+
+  it("cuts along a pillar that touches the room's wall at a corner", () => {
+    const diamond = [
+      { x: 0, y: 128 },
+      { x: 64, y: 64 },
+      { x: 128, y: 128 },
+      { x: 64, y: 192 },
+    ];
+    const inner = drawRoom(room.map, diamond, {}, 1);
+    const touching = defined(makePillar(inner.map, inner.id));
+    const line = [
+      { x: 64, y: 64 },
+      { x: 200, y: 96 },
+      { x: 128, y: 128 },
+    ];
+    for (const points of [line, line.toReversed()]) {
+      const split = defined(drawLines(touching, points, 1));
+      expect(problems(split.map)).toEqual([]);
+      expect(split.map.sectors).toHaveLength(2);
+      expect(sectorAt(split.map, { x: 64, y: 128 })).toBeUndefined();
+      expect(sectorAt(split.map, { x: 120, y: 100 })?.id).not.toBe(room.id);
+      expect(() => compileMap(split.map)).not.toThrow();
+    }
+  });
+
   it("cuts round a room drawn against its wall when a pillar touches a room inside it", () => {
     const inner = drawRoom(pillared, box(160, 160, 224, 224), {}, 1);
     const drawn = drawRoom(inner.map, box(320, 0, 448, 64), {}, 1);
@@ -837,6 +878,11 @@ describe("drawing over the starter maps", () => {
         if (line) {
           fresh(`line ${label}`, line.map);
           keepsPillars(`line ${label}`, line.map);
+        }
+        const loop = drawLines(base, [...corners, corners[0]], 1);
+        if (loop) {
+          fresh(`loop ${label}`, loop.map);
+          keepsPillars(`loop ${label}`, loop.map);
         }
       }
       for (const first of base.sectors) {

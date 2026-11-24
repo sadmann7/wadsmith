@@ -10,9 +10,9 @@ import { readWadAssets } from "@/lib/wad/assets";
 import { buildTextureWad } from "@/lib/wad/resources";
 import { fakeIwad, solid } from "@/lib/wad/test-wad";
 
-import { runAgentAction } from "./agent-actions";
+import { agentActions, runAgentAction } from "./agent-actions";
 
-type Kind = "wall" | "flat";
+type Kind = "wall" | "flat" | "switch";
 
 type Args = Record<string, unknown>;
 
@@ -21,6 +21,7 @@ type Use = [action: string, args: (name: string, own: Sector) => Args];
 interface Listed {
   walls: Set<string>;
   flats: Set<string>;
+  switches: Set<string>;
 }
 
 interface NamePage {
@@ -122,9 +123,23 @@ const uses: Record<Kind, Use[]> = {
       (name, own) => ({ from: own.floorTexture, to: name, kind: "flat" }),
     ],
   ],
+  switch: [
+    ["addSwitch", (name) => ({ wall: "v1|v6", texture: name })],
+    [
+      "paintSurface",
+      (name) => ({
+        room: "Start room",
+        surface: "wall",
+        wall: "v15|v16",
+        texture: name,
+      }),
+    ],
+  ],
 };
 
-const kinds = ["wall", "flat"] as const;
+const kinds = ["wall", "flat", "switch"] as const;
+
+const listOf = { wall: "walls", flat: "flats", switch: "walls" } as const;
 
 const timeout = 30_000;
 
@@ -132,7 +147,11 @@ describe.each(games)("texture names with %s", (_, context) => {
   const names = listed(context);
   const map = mapFor(names);
   const own = map.sectors[0];
-  const lists = { wall: names.walls, flat: names.flats };
+  const lists = {
+    wall: names.walls,
+    flat: names.flats,
+    switch: names.switches,
+  };
 
   describe.each(kinds)("%s names", (kind) => {
     it.each(uses[kind])(
@@ -176,13 +195,17 @@ describe.each(games)("texture names with %s", (_, context) => {
       (action, args) => {
         for (const wrong of ["NOSUCHTX", "MYBRIK", "F_SKY", "ZZ"]) {
           const message = refusal(map, action, args(wrong, own), context);
+          if (lists[kind].size === 0) {
+            expect(message).toMatch(/has no switch textures/);
+            continue;
+          }
           const match =
             /The closest are (.+)\. listCatalog of (\w+) names/.exec(
               message ?? "",
             );
           expect(match, `${wrong}: ${message}`).not.toBeNull();
           const [, closest, list] = match ?? [];
-          expect(list).toBe(`${kind}s`);
+          expect(list).toBe(listOf[kind]);
           for (const name of closest.split(", ")) {
             expect(lists[kind], `suggests ${name}`).toContain(name);
           }
@@ -190,13 +213,96 @@ describe.each(games)("texture names with %s", (_, context) => {
       },
     );
   });
+
+  it("addRoom with no textures gives the room names listCatalog lists", () => {
+    const next = runAgentAction(map, "addRoom", { corners }, context).map;
+    const added = next.sectors.at(-1);
+    expect(names.flats).toContain(added?.floorTexture);
+    expect(names.flats).toContain(added?.ceilingTexture);
+    expect(names.walls).toContain(added?.wallTexture);
+  });
+
+  it("makeDoor with no texture uses a wall listCatalog lists", () => {
+    const next = runAgentAction(
+      map,
+      "makeDoor",
+      { room: "Arena door" },
+      context,
+    ).map;
+    const door = next.sectors.find((sector) => sector.name === "Arena door");
+    expect(names.walls).toContain(door?.door?.texture);
+  });
+
+  it.each([
+    ["addSwitch", { wall: "v1|v6" }],
+    ["addDoorSwitch", { room: "Start room", door: "Arena door" }],
+  ])("%s with no texture uses a switch listCatalog lists", (action, args) => {
+    if (names.switches.size === 0) {
+      expect(refusal(map, action, args, context)).toMatch(
+        /has no switch textures/,
+      );
+      return;
+    }
+    const next = runAgentAction(map, action, args, context).map;
+    expect(names.switches).toContain(next.switches.at(-1)?.texture);
+  });
+
+  it.each(["DOOR", "SW1", "BIG", "STAR", "Z"])(
+    "a search for %s narrows every list of walls",
+    (search) => {
+      const page = runAgentAction(
+        testMap,
+        "listCatalog",
+        { of: "walls", search, limit: 1000 },
+        context,
+      ).result as NamePage;
+      const shown = [
+        ...page.items,
+        ...(page.seeThrough ?? []),
+        ...(page.doors ?? []),
+        ...(page.switches ?? []),
+      ];
+      expect(shown.filter((name) => !name.includes(search))).toEqual([]);
+    },
+  );
+});
+
+it("no help text or choice names a texture a game may lack", () => {
+  const textures = new Set([
+    ...freedoomNames.textures,
+    ...freedoomNames.flats,
+    ...doorTextures,
+    ...switchTextures,
+    "F_SKY1",
+  ]);
+  const named = agentActions.flatMap(({ name, description, params }) =>
+    [
+      description,
+      ...params.flatMap((param) => [
+        param.description,
+        ...(param.choices ?? []),
+      ]),
+    ].flatMap((help) =>
+      [...help.matchAll(/[A-Z][A-Z0-9_]{2,7}/g)]
+        .map(([word]) => word)
+        .filter((word) => textures.has(word))
+        .map((word) => `${name}: ${word}`),
+    ),
+  );
+  expect(named).toEqual([]);
 });
 
 function listed(context: CheckContext): Listed {
   return {
     walls: new Set(listAll("walls", context)),
     flats: new Set(listAll("flats", context)),
+    switches: new Set(firstPage("walls", context).switches),
   };
+}
+
+function firstPage(of: "walls" | "flats", context: CheckContext) {
+  return runAgentAction(testMap, "listCatalog", { of }, context)
+    .result as NamePage;
 }
 
 function listAll(of: "walls" | "flats", context: CheckContext) {
