@@ -687,6 +687,22 @@ function box(left: number, top: number, right: number, bottom: number) {
   ];
 }
 
+function scroll(input: Partial<WheelEvent> & { wheelDeltaY?: number }) {
+  return {
+    deltaMode: 0,
+    deltaX: 0,
+    deltaY: 0,
+    clientX: 0,
+    clientY: 0,
+    shiftKey: false,
+    ctrlKey: false,
+    metaKey: false,
+    timeStamp: 0,
+    preventDefault: () => {},
+    ...input,
+  } as WheelEvent;
+}
+
 function pointer(clientX: number, clientY: number) {
   return {
     clientX,
@@ -703,22 +719,6 @@ function pointer(clientX: number, clientY: number) {
     target: { closest: () => null },
     preventDefault: () => {},
   } as unknown as PointerEvent;
-}
-
-function scroll(input: Partial<WheelEvent> & { wheelDeltaY?: number }) {
-  return {
-    deltaMode: 0,
-    deltaX: 0,
-    deltaY: 0,
-    clientX: 0,
-    clientY: 0,
-    shiftKey: false,
-    ctrlKey: false,
-    metaKey: false,
-    timeStamp: 0,
-    preventDefault: () => {},
-    ...input,
-  } as WheelEvent;
 }
 
 function press(key: string, keys: Partial<KeyboardEvent> = {}) {
