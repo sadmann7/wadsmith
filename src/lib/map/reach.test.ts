@@ -173,6 +173,41 @@ describe("reachable rooms", () => {
     expect(reachWarnings(map)).toEqual([]);
   });
 
+  it("doesn't run across a raised block", () => {
+    const map = buildMap({
+      name: "Block",
+      rooms: [
+        room("Hall", 0, 0, 256),
+        room("Block", 128, 96, 256),
+        room("Cage", 256, 0, 256),
+      ],
+      things: [
+        { kind: "player", at: [64, 64] },
+        { kind: "stimpack", at: [320, 64] },
+      ],
+    });
+    expect(reachWarnings(map)).toEqual([
+      "Cage: the player can't get here from the start.",
+      "Cage: the player can't reach the stimpack here.",
+    ]);
+  });
+
+  it("runs across a pit to a floor within a step", () => {
+    const map = buildMap({
+      name: "Pit",
+      rooms: [
+        room("Hall", 0, 0, 256),
+        room("Pit", 128, -256, 256),
+        room("Far room", 256, 24, 256),
+      ],
+      things: [
+        { kind: "player", at: [64, 64] },
+        { kind: "stimpack", at: [320, 64] },
+      ],
+    });
+    expect(reachWarnings(map)).toEqual([]);
+  });
+
   it("lets the player pick up an item at the edge of a ledge", () => {
     const map = buildMap({
       name: "Edge",

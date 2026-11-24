@@ -135,7 +135,8 @@ function reachableRooms(
         }
         const crosses = narrow
           ? getIsWalkable([from.other, middle, to.other])
-          : getIsWalkable([from.other, to.other]) &&
+          : middle.floor < from.other.floor &&
+            getIsWalkable([from.other, to.other]) &&
             middle.ceiling - Math.max(from.other.floor, to.other.floor) >=
               playerHeight &&
             segmentDistance(from.from, from.to, to.from, to.to) <= runGap;
@@ -178,6 +179,8 @@ function getIsWalkable(rooms: Sector[]) {
 
 const playerRadius = 16;
 const gridSteps = 32;
+// Finer than the narrowest strip a player fits in, measured along an axis.
+const maxGridStep = 16;
 
 // Whether a player box fits somewhere inside the room, tried on a grid.
 function getHasRoom(map: GameMap, sector: Sector, walls: RoomWall[]) {
@@ -189,7 +192,10 @@ function getHasRoom(map: GameMap, sector: Sector, walls: RoomWall[]) {
   const top = Math.min(...ys) + playerRadius;
   const bottom = Math.max(...ys) - playerRadius;
   if (left > right || top > bottom) return false;
-  const step = Math.max(1, Math.max(right - left, bottom - top) / gridSteps);
+  const step = Math.min(
+    maxGridStep,
+    Math.max(1, Math.max(right - left, bottom - top) / gridSteps),
+  );
   for (let x = left; x <= right; x += step) {
     for (let y = top; y <= bottom; y += step) {
       const spot = { x, y };
