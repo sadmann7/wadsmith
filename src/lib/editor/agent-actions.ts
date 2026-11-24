@@ -82,7 +82,7 @@ import {
   removeCorner,
 } from "@/lib/map/reshape";
 import { describeSurface, paintSurface } from "@/lib/map/surfaces";
-import { replaceTexture } from "@/lib/map/texture-tools";
+import { countTexture, replaceTexture } from "@/lib/map/texture-tools";
 import { freedoomNames } from "@/lib/map/textures";
 import {
   type CheckContext,
@@ -1477,15 +1477,14 @@ export function agentRisk(
     if (name === "replaceTexture") {
       const from = text(args, "from");
       const to = text(args, "to");
-      const swapped = replaceTexture(
+      const worn = countTexture(
         map,
         from,
-        to,
         choice(args, "kind", ["wall", "flat"]),
       );
       return {
         title: `Replace ${from} with ${to}?`,
-        detail: `${count(swapped.count, "surface", "surfaces")} change. Undo puts ${from} back.`,
+        detail: `${count(worn, "surface", "surfaces")} change. Undo puts ${from} back.`,
         confirm: "Replace",
       };
     }
