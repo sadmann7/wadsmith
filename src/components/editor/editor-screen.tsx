@@ -3295,6 +3295,7 @@ export function EditorScreen({
         thingKind={thingKind}
         thingType={placingType}
         thingLabel={placingLabel}
+        customThings={customThings}
         grid={grid}
         editMode={editMode}
         edit={{
@@ -3449,6 +3450,7 @@ export function EditorScreen({
       {finding ? (
         <FindDialog
           map={map}
+          custom={customThings}
           onSelect={selectFound}
           onClose={() => setFinding(false)}
         />

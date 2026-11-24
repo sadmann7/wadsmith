@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import type { GameMap } from "@/lib/map/types";
 
+import { runAgentAction } from "@/lib/editor/agent-actions";
 import { mapBalance } from "@/lib/map/balance";
 import { checkMap } from "@/lib/map/checks";
 import { addThing, changeThings, duplicateThings } from "@/lib/map/edit";
+import { findChoices, findKeys, similarThings } from "@/lib/map/similar";
 import { soundReach } from "@/lib/map/sound";
 import { parseMapFile, serializeMap } from "@/lib/map/storage";
 import { testMap } from "@/lib/map/test-map";
@@ -38,6 +40,14 @@ const mod = packWad([
   lump("BRICK1", 4),
 ]);
 const textures = packWad([lump("BRICK1", 4)]);
+const twoThings = packWad([
+  {
+    name: "DEHACKED",
+    data: encoder.encode(
+      "Thing 151 (Plasma Zombie)\nID # = 20001\nBits = COUNTKILL\n\nThing 152 (Toxic Barrel)\nID # = 20002\nBits = SOLID\nWidth = 1048576\n",
+    ),
+  },
+]);
 
 describe("custom things", () => {
   it("reads the things an added WAD's patch numbers", () => {
@@ -240,6 +250,120 @@ describe("custom things", () => {
       customThingWarnings({ ...twice, complevel: "mbf21" }, custom),
     ).toEqual([]);
     expect(customThingWarnings(twice, customThingsOf([mod]))).toEqual([]);
+  });
+});
+
+describe("custom things by number", () => {
+  const custom = customThingsOf([twoThings]);
+  const map = [
+    { type: 20001, x: 96 },
+    { type: 20002, x: 160 },
+    { type: 20001, x: 224 },
+  ].reduce(
+    (next, { type, x }) =>
+      addThing(next, "custom", { x, y: 128 }, 0, 1, type).map,
+    testMap,
+  );
+  const ids = (type: number) =>
+    map.things
+      .filter((thing) => thing.kind === "custom" && thing.type === type)
+      .map((thing) => thing.id);
+
+  it("finds each custom thing by its patch's name", () => {
+    const found = findChoices(map, "thing", custom).filter((choice) =>
+      choice.value.startsWith("custom:"),
+    );
+    expect(found).toEqual([
+      { value: "custom:20001", label: "Plasma Zombie", count: 2 },
+      { value: "custom:20002", label: "Toxic Barrel", count: 1 },
+    ]);
+    expect(findKeys(map, "thing", "custom:20001")).toEqual(
+      ids(20001).map((id) => `thing:${id}`),
+    );
+    expect(
+      findChoices(map, "thing").find((item) => item.value === "custom:20002")
+        ?.label,
+    ).toBe("Thing 20002");
+  });
+
+  it("selects only the custom things with the same number", () => {
+    expect(similarThings(map, ids(20001).slice(0, 1))).toEqual(ids(20001));
+    expect(similarThings(map, ids(20002))).toEqual(ids(20002));
+  });
+
+  it("lets the agent list, place and check custom things by number", () => {
+    const context = { custom };
+    const listed = runAgentAction(map, "listThings", { type: 20001 }, context)
+      .result as { items: { id: string; label: string }[] };
+    expect(listed.items.map((item) => item.id)).toEqual(ids(20001));
+    expect(listed.items[0].label).toBe("Plasma Zombie");
+    const every = runAgentAction(map, "listThings", { kind: "custom" }, context)
+      .result as { items: unknown[] };
+    expect(every.items).toHaveLength(3);
+    const catalog = runAgentAction(map, "listCatalog", ["things"], context)
+      .result as { kind: string; type?: number; label: string }[];
+    expect(catalog.filter((item) => item.kind === "custom")).toEqual([
+      {
+        kind: "custom",
+        type: 20001,
+        label: "Plasma Zombie",
+        category: "enemy",
+      },
+      { kind: "custom", type: 20002, label: "Toxic Barrel", category: "decor" },
+    ]);
+    const placed = runAgentAction(
+      map,
+      "placeThing",
+      { type: 20002, room: "Start room" },
+      context,
+    );
+    expect(placed.map.things.at(-1)).toMatchObject({
+      kind: "custom",
+      type: 20002,
+    });
+    const added = runAgentAction(
+      map,
+      "addThing",
+      { type: 20001, x: 64, y: 64 },
+      context,
+    );
+    expect(added.map.things.at(-1)).toMatchObject({
+      kind: "custom",
+      type: 20001,
+    });
+    expect(() =>
+      runAgentAction(map, "addThing", {
+        kind: "imp",
+        type: 20001,
+        x: 64,
+        y: 64,
+      }),
+    ).toThrow(/custom/);
+    const swapped = runAgentAction(
+      map,
+      "updateThing",
+      { thing: ids(20002)[0], kind: "imp" },
+      context,
+    );
+    expect(swapped.map.things.find((t) => t.id === ids(20002)[0])).toEqual(
+      expect.not.objectContaining({ type: expect.anything() }),
+    );
+    const described = runAgentAction(map, "describeMap", [], context)
+      .result as { things: Record<string, number> };
+    expect(described.things).toMatchObject({
+      "custom:20001": 2,
+      "custom:20002": 1,
+    });
+    const warnings = (given: typeof context) =>
+      (
+        runAgentAction(map, "checkMap", [], given).result as {
+          warnings: { id: string }[];
+        }
+      ).warnings.map((issue) => issue.id);
+    expect(warnings(context)).not.toContain("custom-unknown:20001");
+    expect(warnings({ custom: new Map() })).toEqual(
+      expect.arrayContaining(["custom-unknown:20001", "custom-unknown:20002"]),
+    );
   });
 });
 

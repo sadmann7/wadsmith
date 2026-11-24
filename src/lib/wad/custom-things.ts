@@ -90,6 +90,12 @@ export function thingLabel(
   return custom.get(type)?.name ?? `Thing ${type}`;
 }
 
+// Custom things are told apart by their editor number, and every other thing
+// by its kind.
+export function thingKindKey(thing: Pick<Thing, "kind" | "type">) {
+  return thing.kind === "custom" ? `custom:${thing.type ?? 0}` : thing.kind;
+}
+
 // A custom thing is what its patch makes it, and scenery when nothing added
 // numbers it.
 export function thingCategory(
