@@ -1060,7 +1060,8 @@
     cursor: grab;
   }
 
-  .map:not([data-mode="lines"], [data-mode="sectors"]) .map-thing {
+  .map:not([data-mode="lines"], [data-mode="sectors"]) .map-thing,
+  .map:not([data-mode="lines"], [data-mode="sectors"]) .map-port {
     z-index: 3;
   }
 

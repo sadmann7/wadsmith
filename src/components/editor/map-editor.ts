@@ -2340,7 +2340,7 @@ function spansAt(points: Point[], y: number) {
   return spans;
 }
 
-const cameraOverlap = 23;
+const cameraOverlap = 28;
 
 function getIsCameraOnThing(state: MapEditorState) {
   const camera = state.cameraPosition;
