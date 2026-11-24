@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { defined } from "@/lib/defined";
 import { compileMap } from "@/lib/wad/compile";
 
-import type { GameMap, Point } from "./types";
+import type { GameMap, Point, Sector } from "./types";
 
 import {
   addDetail,
@@ -14,7 +14,17 @@ import {
   updateLine,
   updateLineSide,
 } from "./edit";
-import { sectorAt, wallKey, wallOwners } from "./geometry";
+import {
+  containerOf,
+  cross,
+  loopEdges,
+  loopPolygon,
+  pointInPolygon,
+  sectorAt,
+  sectorPolygon,
+  wallKey,
+  wallOwners,
+} from "./geometry";
 import { joinWalls } from "./join";
 import {
   drawLines,
@@ -25,7 +35,7 @@ import {
 } from "./reshape";
 import { shapeCorners } from "./shapes";
 import { starterMap } from "./starter-map";
-import { testMap } from "./test-map";
+import { pillarMap, testMap } from "./test-map";
 import { validateMap } from "./validate";
 import { splitIntoSteps } from "./wall-tools";
 
@@ -380,6 +390,49 @@ describe("drawing a room against the wall of the room it's in, around obstacles"
     );
   });
 
+  it("cuts no room when it covers a pillar of the room it's in", () => {
+    for (const corners of [
+      box(176, 160, 528, 424),
+      box(160, 192, 640, 352),
+      box(160, 160, 640, 512),
+    ]) {
+      const drawn = drawRoom(pillarMap, corners, {}, 1);
+      const plain = addRoom(pillarMap, corners, {}, 1);
+      expect(drawn.map).toEqual(joinWalls(plain.map, [plain.id]));
+      expect(drawn.map.sectors).toHaveLength(pillarMap.sectors.length + 1);
+    }
+  });
+
+  it("still cuts round a room with a pillar that it's drawn round", () => {
+    const around = drawRoom(pillarMap, box(-200, -200, 1100, 700), {}, 1).map;
+    for (const [base, corners] of [
+      [pillarMap, box(-64, -64, 832, 576)],
+      [pillarMap, box(0, 0, 1024, 576)],
+      [pillarMap, box(0, 0, 832, 512)],
+      [around, box(-100, -100, 1500, 650)],
+    ] as const) {
+      const drawn = drawRoom(base, corners, {}, 1);
+      expect(problems(drawn.map)).toEqual([]);
+      expect(
+        drawn.map.sectors.find((room) => room.id === "hall")?.holes,
+      ).toHaveLength(1);
+      expect(() => compileMap(drawn.map)).not.toThrow();
+    }
+  });
+
+  it("cuts no room when it crosses a room with a pillar it covers", () => {
+    const corners = [
+      { x: -64, y: -64 },
+      { x: 832, y: -64 },
+      { x: 832, y: 400 },
+      { x: 640, y: 576 },
+      { x: -64, y: 576 },
+    ];
+    const drawn = drawRoom(pillarMap, corners, {}, 1);
+    const plain = addRoom(pillarMap, corners, {}, 1);
+    expect(drawn.map).toEqual(joinWalls(plain.map, [plain.id]));
+  });
+
   it("cuts the outer room round a bridge that only reaches a pillar", () => {
     const post = drawRoom(hall.map, box(200, 96, 232, 128), {}, 1);
     const pillared = defined(makePillar(post.map, post.id));
@@ -598,7 +651,7 @@ describe("drawing over the starter maps", () => {
     };
     const onGrid = (value: number) => Math.round(value / 8) * 8;
     const added: string[] = [];
-    for (const base of [testMap, starterMap]) {
+    for (const base of [testMap, starterMap, pillarMap]) {
       const before = new Set(problems(base));
       const fresh = (label: string, map: GameMap, allowed: string[] = []) => {
         const found = problems(map).filter(
@@ -607,11 +660,48 @@ describe("drawing over the starter maps", () => {
         if (found.length > 0) added.push(`${label}: ${found.join(", ")}`);
         else compileMap(map);
       };
-      for (let round = 0; round < 200; round += 1) {
-        const x = onGrid(random(1200) - 100);
-        const y = onGrid(random(700) - 150);
-        const right = onGrid(x + 16 + random(400));
-        const bottom = onGrid(y + 16 + random(300));
+      const points = Object.values(base.vertices);
+      // Every third room spans corners already on the map, so its sides meet
+      // walls, pillars and lines exactly.
+      const span = (values: number[]) => {
+        const first = values[random(values.length)];
+        const rest = values.filter((value) => value !== first);
+        const second = rest[random(rest.length)];
+        return [Math.min(first, second), Math.max(first, second)];
+      };
+      const pillars = base.sectors.flatMap((sector) =>
+        (sector.holes ?? []).map((hole) => ({
+          room: sectorPolygon(base, sector),
+          shape: loopPolygon(base, hole),
+        })),
+      );
+      const wallsOf = (sector: Sector) =>
+        loopEdges(sector.vertices).map(({ from, to }) => [
+          base.vertices[from],
+          base.vertices[to],
+        ]);
+      const heldWalls = [
+        ...base.switches.map((item) => [
+          base.vertices[item.from],
+          base.vertices[item.to],
+        ]),
+        ...base.sectors.filter((sector) => sector.door).flatMap(wallsOf),
+        // TODO: https://linear.app/gamepad/issue/BASE-378/cut-the-outer-room-round-a-room-drawn-against-its-wall-that-touches-a
+        ...base.sectors
+          .filter((sector) => containerOf(base, sector))
+          .flatMap(wallsOf),
+      ];
+      const xs = [...new Set(points.map((point) => point.x))];
+      const ys = [...new Set(points.map((point) => point.y))];
+      for (let round = 0; round < 300; round += 1) {
+        let x = onGrid(random(1200) - 100);
+        let y = onGrid(random(700) - 150);
+        let right = onGrid(x + 16 + random(400));
+        let bottom = onGrid(y + 16 + random(300));
+        if (round % 3 === 1) {
+          [x, right] = span(xs);
+          [y, bottom] = span(ys);
+        }
         const corners =
           round % 3 === 0
             ? defined(
@@ -625,13 +715,21 @@ describe("drawing over the starter maps", () => {
               )
             : box(x, y, right, bottom);
         const label = JSON.stringify(corners);
-        // Over a door or a switch's wall a room is drawn as before, lying
-        // over the other and flagged by the checks.
+        // Over a pillar of a room it's not drawn round, or touching a door, a
+        // switch's wall or a room inside another, a room is drawn as before,
+        // lying over the other and flagged by the checks.
         const drawn = drawRoom(base, corners, {}, 1).map;
         const plain = addRoom(base, corners, {}, 1);
+        const isHeld =
+          pillars.some(
+            ({ room, shape }) =>
+              getIsOverlapping(corners, shape) &&
+              !room.every((point) => getIsCovered(point, corners)),
+          ) || heldWalls.some((wall) => getIsTouching(corners, wall));
         if (
+          !isHeld ||
           JSON.stringify(drawn) !==
-          JSON.stringify(joinWalls(plain.map, [plain.id]))
+            JSON.stringify(joinWalls(plain.map, [plain.id]))
         ) {
           fresh(`room ${label}`, drawn);
         }
@@ -656,8 +754,46 @@ describe("drawing over the starter maps", () => {
       }
     }
     expect(added).toEqual([]);
-  });
+  }, 30_000);
 });
+
+function getIsOverlapping(first: Point[], second: Point[]) {
+  const xs = second.map((point) => point.x);
+  const ys = second.map((point) => point.y);
+  for (let x = Math.min(...xs) + 2; x < Math.max(...xs); x += 4) {
+    for (let y = Math.min(...ys) + 2; y < Math.max(...ys); y += 4) {
+      const point = { x, y };
+      if (pointInPolygon(point, first) && pointInPolygon(point, second)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function getIsTouching(polygon: Point[], [from, to]: Point[]) {
+  const steps = Math.ceil(Math.hypot(to.x - from.x, to.y - from.y));
+  return Array.from({ length: steps + 1 }, (_, step) => ({
+    x: from.x + ((to.x - from.x) * step) / steps,
+    y: from.y + ((to.y - from.y) * step) / steps,
+  })).some((point) => getIsCovered(point, polygon));
+}
+
+function getIsCovered(point: Point, polygon: Point[]) {
+  return (
+    pointInPolygon(point, polygon) ||
+    polygon.some((corner, index) => {
+      const next = polygon[(index + 1) % polygon.length];
+      return (
+        cross(corner, next, point) === 0 &&
+        point.x >= Math.min(corner.x, next.x) &&
+        point.x <= Math.max(corner.x, next.x) &&
+        point.y >= Math.min(corner.y, next.y) &&
+        point.y <= Math.max(corner.y, next.y)
+      );
+    })
+  );
+}
 
 function sharedWalls(map: GameMap) {
   return [...wallOwners(map)]

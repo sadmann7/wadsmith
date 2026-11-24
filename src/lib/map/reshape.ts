@@ -515,15 +515,24 @@ function drawOver(
   const crossed = joined.sectors.filter(
     (sector) => sector !== drawn && getIsCrossing(joined, drawn, sector),
   );
-  if (crossed.length === 0) return { ...overlapping, pieces: [added.id] };
+  const outline = sectorPolygon(joined, drawn);
+  const area = Math.abs(signedArea(outline));
+  // A smaller room it doesn't cross lies inside it, pillars and all.
+  const isInside = (sector: Sector) =>
+    !crossed.includes(sector) &&
+    Math.abs(signedArea(sectorPolygon(joined, sector))) < area;
   if (
-    crossed.some(
-      (sector) => sector.door || getIsOverPillar(joined, drawn, sector),
+    crossed.some((sector) => sector.door) ||
+    joined.sectors.some(
+      (sector) =>
+        sector !== drawn &&
+        !isInside(sector) &&
+        getIsOverPillar(joined, drawn, sector),
     )
   ) {
     return overlapping;
   }
-  const outline = sectorPolygon(joined, drawn);
+  if (crossed.length === 0) return { ...overlapping, pieces: [added.id] };
   const own = new Set(
     loopEdges(drawn.vertices).map(({ from, to }) => wallKey(from, to)),
   );
