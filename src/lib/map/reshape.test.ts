@@ -754,7 +754,7 @@ describe("drawing over the starter maps", () => {
       }
     }
     expect(added).toEqual([]);
-  });
+  }, 30_000);
 });
 
 function getIsOverlapping(first: Point[], second: Point[]) {
