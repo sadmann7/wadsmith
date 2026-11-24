@@ -476,11 +476,14 @@ export function decompileMap(
           ].upper,
       );
       const upper = mostCommon(uppers.filter((name) => name !== noTexture));
-      const texture = (doorTextures as readonly string[]).includes(upper ?? "")
-        ? upper
-        : upper?.startsWith("BIGDOOR")
-          ? "BIGDOOR2"
-          : "DOOR3";
+      const texture =
+        upper &&
+        ((doorTextures as readonly string[]).includes(upper) ||
+          walls.has(upper))
+          ? upper
+          : upper?.startsWith("BIGDOOR")
+            ? "BIGDOOR2"
+            : "DOOR3";
       if (upper && texture !== upper) replaced.add(upper);
       door = {
         opensBy: defined(doorCandidates.get(index)),

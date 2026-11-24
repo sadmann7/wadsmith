@@ -558,6 +558,62 @@ function box(
 }
 
 describe("doors line by line", () => {
+  it("keeps a secret door that wears the wall around it", () => {
+    const build = doomMap();
+    const rooms = [
+      build.sector(),
+      build.sector({ ceiling: 0 }),
+      build.sector(),
+    ];
+    const xs = [0, 256, 288, 544];
+    const top = xs.map((x) => build.vertex(x, 128));
+    const bottom = xs.map((x) => build.vertex(x, 0));
+    build.line(bottom[0], top[0], rooms[0]);
+    build.line(top[3], bottom[3], rooms[2]);
+    rooms.forEach((room, index) => {
+      build.line(top[index], top[index + 1], room);
+      build.line(bottom[index + 1], bottom[index], room);
+    });
+    const side = (sector: number, upper: string) =>
+      build.map.sides.push({
+        offsetX: 0,
+        offsetY: 0,
+        upper,
+        lower: "-",
+        middle: "-",
+        sector,
+      }) - 1;
+    build.map.lines.push(
+      {
+        start: top[1],
+        end: bottom[1],
+        flags: 4,
+        special: 31,
+        tag: 0,
+        front: side(rooms[0], "STARTAN3"),
+        back: side(rooms[1], "-"),
+      },
+      {
+        start: bottom[2],
+        end: top[2],
+        flags: 4,
+        special: 31,
+        tag: 0,
+        front: side(rooms[2], "STARTAN3"),
+        back: side(rooms[1], "-"),
+      },
+    );
+    build.map.things.push({ x: 64, y: 64, angle: 0, type: 1, flags: 7 });
+
+    const { map, report } = decompileMap(build.map);
+    const door = defined(map.sectors.find((sector) => sector.id === "s1"));
+    expect(door.door?.texture).toBe("STARTAN3");
+    expect(report.replacedTextures).not.toContain("STARTAN3");
+    expect(Object.values(map.lines ?? {}).some((line) => line.sides)).toBe(
+      false,
+    );
+  });
+
   it("keeps each line's own way of opening a door, its face and its pegging", () => {
     const build = doomMap();
     const rooms = [
