@@ -108,6 +108,7 @@ import {
   lineActionGroups,
   lineActionKinds,
   lineActions,
+  lineRooms,
   type LineSides,
   lineSpecial,
   lineUsesTag,
@@ -643,7 +644,7 @@ export function LineInspector({
                 ? {
                     kind: "wall",
                     use: wallUse(map),
-                    context: `Line ${line.number}, ${line.sector.name}`,
+                    context: lineRooms(line),
                   }
                 : undefined
             }

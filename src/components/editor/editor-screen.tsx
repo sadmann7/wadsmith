@@ -156,7 +156,7 @@ import {
   wallKey,
   wallOwners,
 } from "@/lib/map/geometry";
-import { describeLine, getIsTeleport } from "@/lib/map/lines";
+import { describeLine, getIsTeleport, lineRooms } from "@/lib/map/lines";
 import { lineLinks, type MapLink, sectorLinks } from "@/lib/map/links";
 import { gradient, gradientEnds, type SurfaceLook } from "@/lib/map/look";
 import {
@@ -1360,6 +1360,7 @@ export function EditorScreen({
     selectedWall && !selectedSwitch && !thing
       ? describeLine(map, selectedWall.wall, selectedWall.sector)
       : null;
+  const lineTitle = line ? lineRooms(line) : null;
   const freeWall = line ? freeWallAt(map, line.wall) : null;
   const alignedMap = line
     ? alignWalls(
@@ -1795,8 +1796,8 @@ export function EditorScreen({
       ? `${selectedThings.length} things`
       : thing
         ? thingLabel(thing, customThings)
-        : line
-          ? `Line ${line.number}`
+        : lineTitle
+          ? lineTitle
           : surfaceInfo && !surfaceInfo.thing
             ? surfaceInfo.label
             : placingThings

@@ -49,6 +49,7 @@ import {
 import {
   describeLine,
   getIsTeleport,
+  lineName,
   lineUsesTag,
   movesSector,
   opensDoor,
@@ -78,11 +79,10 @@ interface Wall {
 
 export function activeLineActions(map: GameMap) {
   const owners = wallOwners(map);
-  const entries = [...owners];
   return Object.entries(map.lines ?? {}).flatMap(([wall, { action }]) => {
     const owner = owners.get(wall)?.[0];
     if (!action || !owner) return [];
-    const line = describeLine(map, wall, owner.id, entries);
+    const line = describeLine(map, wall, owner.id);
     return line.wiredSwitch ? [] : [{ wall, action, line }];
   });
 }
@@ -771,7 +771,7 @@ function validateLines(
     const add = (kind: string, message: string, list = issues) =>
       list.push({
         id: `${kind}:${wall}`,
-        message: `Line ${line.number}: ${message}`,
+        message: `${lineName(line)}: ${message}`,
         target: wall,
       });
     if (!line.twoSided && action.trigger === "door") {
@@ -894,26 +894,20 @@ function validateLevels(
     });
   };
   const owners = whole ? wallOwners(map) : null;
-  const entries = owners ? [...owners] : [];
   for (const [wall, line] of Object.entries(map.lines ?? {})) {
     const special = line.raw?.special ?? 0;
     const flags = line.passUse ? linePassUse : 0;
     const owner = owners?.get(wall)?.[0];
-    const info = owner ? describeLine(map, wall, owner.id, entries) : null;
-    const number = info?.number ?? wall;
-    needs(
-      `line-level:${wall}`,
-      `Line ${number}`,
-      wall,
-      lineLevel(special, flags),
-    );
+    const info = owner ? describeLine(map, wall, owner.id) : null;
+    const name = info ? lineName(info) : `Line ${wall}`;
+    needs(`line-level:${wall}`, name, wall, lineLevel(special, flags));
     const kind = generalizedKind(special);
     if (!info || !kind) continue;
     const { trigger } = generalizedTrigger(special);
     if (!info.twoSided && (trigger === "door" || trigger === "walk")) {
       issues.push({
         id: `line-${trigger}:${wall}`,
-        message: `Line ${number}: ${
+        message: `${name}: ${
           trigger === "door"
             ? "a press-to-open door needs a sector behind the line."
             : "nothing can walk over a solid wall."
@@ -928,14 +922,14 @@ function validateLevels(
     ) {
       warnings.push({
         id: `line-doorless:${wall}`,
-        message: `Line ${number}: ${doorlessMessage(info)}`,
+        message: `${name}: ${doorlessMessage(info)}`,
         target: wall,
       });
     } else if (trigger !== "door" && !line.raw?.tag && !line.action) {
       // Boom works a switch, a walk-over or a shot only on tagged sectors.
       warnings.push({
         id: `line-target:${wall}`,
-        message: `Line ${number}: it does nothing until it has a sector to act on.`,
+        message: `${name}: it does nothing until it has a sector to act on.`,
         target: wall,
       });
     }

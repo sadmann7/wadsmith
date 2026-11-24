@@ -598,13 +598,8 @@ export function newLineAction(
   return fitLineAction({ kind, trigger: "door", repeat: true, tag: 0 }, sides);
 }
 
-export function describeLine(
-  map: GameMap,
-  wall: string,
-  sectorId: string,
-  entries = [...wallOwners(map)],
-) {
-  const owners = entries.find(([key]) => key === wall)?.[1] ?? [];
+export function describeLine(map: GameMap, wall: string, sectorId: string) {
+  const owners = wallOwners(map).get(wall) ?? [];
   const front = frontOwner(owners, map.lines?.[wall]?.front);
   const back =
     owners.find((sector) => sector !== front) ??
@@ -614,7 +609,6 @@ export function describeLine(
     map.switches.find((item) => wallKey(item.from, item.to) === wall) ?? null;
   return {
     wall,
-    number: entries.findIndex(([key]) => key === wall) + 1,
     length: Math.round(Math.hypot(to.x - from.x, to.y - from.y)),
     twoSided: back !== null,
     doorBehind: back !== null && back !== front && Boolean(back.door),
@@ -629,6 +623,18 @@ export function describeLine(
       map.sectors.find((sector) => sector.id === mapSwitch.door)?.door,
     ),
   };
+}
+
+type LineInfo = ReturnType<typeof describeLine>;
+
+export function lineRooms({ front, back }: Pick<LineInfo, "front" | "back">) {
+  if (!back) return `Wall of ${front.name}`;
+  if (back === front) return `Line in ${front.name}`;
+  return `Wall between ${front.name} and ${back.name}`;
+}
+
+export function lineName(line: Pick<LineInfo, "wall" | "front" | "back">) {
+  return `${lineRooms(line)} (${line.wall})`;
 }
 
 function specialsOf({ kind, trigger, key }: LineAction) {
