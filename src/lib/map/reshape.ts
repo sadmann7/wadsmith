@@ -757,6 +757,7 @@ function rebuildRooms(
   };
   const pieces: Piece[] = [];
   const points: Point[] = [];
+  const empties: (Cycle & { point: Point })[] = [];
   const pinched: { bound: Cycle; piece: Piece }[] = [];
   for (const whole of traced.faces) {
     const loops = splitPinched(map, whole);
@@ -768,7 +769,10 @@ function rebuildRooms(
     const point = insidePoint(face.polygon, 1);
     points.push(point);
     const source = sourceAt(point);
-    if (!source) continue;
+    if (!source) {
+      if (!sectorAt(map, point)) empties.push({ ...face, point });
+      continue;
+    }
     const piece = { ...face, source, point, holes: [] };
     pieces.push(piece);
     for (const bound of loops) {
@@ -776,17 +780,29 @@ function rebuildRooms(
     }
   }
   if (pieces.length === 0) return null;
-  // What a face touching itself runs round is a pillar when it is all empty,
-  // and other rooms when none of it is.
+  // Each empty face in a loop that also holds rooms is a pillar of the piece
+  // around it, unless a piece inside runs round it.
+  const emptiesIn = (around: Piece, polygon: Point[]) =>
+    empties
+      .filter(
+        (empty) =>
+          pointInPolygon(empty.point, polygon) &&
+          pieces
+            .filter((piece) => pointInPolygon(empty.point, piece.polygon))
+            .toSorted((a, b) => a.area - b.area)[0] === around,
+      )
+      .map((empty) => empty.loop);
+  // What a face touching itself runs round is a pillar when it is all empty.
   for (const { bound, piece } of pinched) {
     const within = points.filter((point) =>
       pointInPolygon(point, bound.polygon),
     );
-    const empty = within.filter((point) => !sectorAt(map, point)).length;
-    if (within.length === 0 || (empty > 0 && empty < within.length)) {
-      return null;
+    if (within.length === 0) return null;
+    if (within.every((point) => !sectorAt(map, point))) {
+      piece.holes.push(bound.loop.toReversed());
+    } else {
+      piece.holes.push(...emptiesIn(piece, bound.polygon));
     }
-    if (empty > 0) piece.holes.push(bound.loop.toReversed());
   }
 
   // A boundary that faces into a piece around it is a pillar of that piece,
@@ -803,8 +819,11 @@ function rebuildRooms(
     const filled =
       sectorAt(map, within) ||
       pieces.some((piece) => pointInPolygon(piece.point, bound.polygon));
-    if (filled) continue;
-    around.holes.push(bound.loop.toReversed());
+    around.holes.push(
+      ...(filled
+        ? emptiesIn(around, bound.polygon)
+        : [bound.loop.toReversed()]),
+    );
   }
 
   const used = map.sectors.map((sector) => sector.id);
