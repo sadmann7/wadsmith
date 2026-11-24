@@ -791,7 +791,9 @@ function rebuildRooms(
 
   // A boundary that faces into a piece around it is a pillar of that piece,
   // unless there is a room inside it.
-  for (const bound of traced.bounds) {
+  const parts = traced.bounds.flatMap((bound) => splitPinched(map, bound));
+  if (parts.some((part) => part.isFace || part.area === 0)) return null;
+  for (const bound of parts) {
     const outside = insidePoint(bound.polygon, 1);
     const around = pieces
       .filter((piece) => pointInPolygon(outside, piece.polygon))
@@ -802,7 +804,6 @@ function rebuildRooms(
       sectorAt(map, within) ||
       pieces.some((piece) => pointInPolygon(piece.point, bound.polygon));
     if (filled) continue;
-    if (new Set(bound.loop).size !== bound.loop.length) return null;
     around.holes.push(bound.loop.toReversed());
   }
 
@@ -897,14 +898,16 @@ function rebuildRooms(
         const middle = midpoint(map.vertices[from], map.vertices[to]);
         const piece = walls.has(key)
           ? undefined
-          : pieces.find(
-              (item) =>
-                item.source.id === effective(room.id) &&
-                pointInPolygon(middle, item.polygon) &&
-                !item.holes.some((hole) =>
-                  pointInPolygon(middle, loopPolygon(map, hole)),
-                ),
-            );
+          : pieces
+              .filter(
+                (item) =>
+                  item.source.id === effective(room.id) &&
+                  pointInPolygon(middle, item.polygon) &&
+                  !item.holes.some((hole) =>
+                    pointInPolygon(middle, loopPolygon(map, hole)),
+                  ),
+              )
+              .toSorted((a, b) => a.area - b.area)[0];
         const target = piece ? defined(built.get(piece)) : null;
         if (target !== holder || chain.at(-1) !== from) {
           close();
@@ -999,15 +1002,15 @@ function rebuildRooms(
   };
 }
 
-// A face that touches itself at a corner, running out round a room inside it
-// and back, splits there into its own outline and the outline of that room.
-function splitPinched(map: GameMap, face: Cycle) {
-  if (new Set(face.loop).size === face.loop.length) {
-    return [{ ...face, isFace: true }];
+// A loop that touches itself at a corner, running out round a room or pillar
+// and back, splits there into the loops on either side of that corner.
+function splitPinched(map: GameMap, cycle: Cycle) {
+  if (new Set(cycle.loop).size === cycle.loop.length) {
+    return [{ ...cycle, isFace: signedArea(cycle.polygon) > 0 }];
   }
   const loops: string[][] = [];
   const stack: string[] = [];
-  for (const id of [...face.loop, face.loop[0]]) {
+  for (const id of [...cycle.loop, cycle.loop[0]]) {
     const at = stack.indexOf(id);
     if (at >= 0) loops.push(stack.splice(at));
     stack.push(id);

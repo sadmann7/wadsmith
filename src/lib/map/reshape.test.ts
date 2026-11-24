@@ -476,6 +476,65 @@ describe("drawing a room against the wall of the room it's in, around obstacles"
   });
 });
 
+describe("cutting a room that touches a pillar or room inside it at a corner", () => {
+  const room = addRoom(empty, box(0, 0, 512, 512), {}, 1);
+  const post = drawRoom(room.map, box(96, 96, 160, 160), {}, 1);
+  const pillared = defined(makePillar(post.map, post.id));
+
+  it("moves a line into the room a closed line from the corner cuts off", () => {
+    const lined = defined(
+      addDetail(
+        room.map,
+        [
+          { x: 420, y: 40 },
+          { x: 440, y: 40 },
+        ],
+        1,
+      ),
+    ).map;
+    const loop = [
+      { x: 512, y: 0 },
+      { x: 400, y: 100 },
+      { x: 300, y: 50 },
+      { x: 512, y: 0 },
+    ];
+    for (const points of [loop, loop.toReversed()]) {
+      const split = defined(drawLines(lined, points, 1));
+      expect(problems(split.map)).toEqual([]);
+      expect(split.map.sectors).toHaveLength(2);
+      const cut = defined(sectorAt(split.map, { x: 430, y: 30 }));
+      expect(cut.id).not.toBe(room.id);
+      expect(cut.details).toHaveLength(1);
+    }
+  });
+
+  it("keeps a pillar when a closed line from its corner runs round it", () => {
+    const split = drawLines(
+      pillared,
+      [
+        { x: 160, y: 96 },
+        { x: 300, y: 50 },
+        { x: 300, y: 120 },
+        { x: 160, y: 96 },
+      ],
+      1,
+    );
+    expect(split?.map.sectors).toHaveLength(2);
+    expect(problems(defined(split).map)).toEqual([]);
+    expect(sectorAt(defined(split).map, { x: 128, y: 128 })).toBeUndefined();
+  });
+
+  it("cuts round a room drawn against its wall when a pillar touches a room inside it", () => {
+    const inner = drawRoom(pillared, box(160, 160, 224, 224), {}, 1);
+    const drawn = drawRoom(inner.map, box(320, 0, 448, 64), {}, 1);
+    expect(problems(drawn.map)).toEqual([]);
+    expect(sectorAt(drawn.map, { x: 128, y: 128 })).toBeUndefined();
+    expect(sectorAt(drawn.map, { x: 192, y: 192 })?.id).toBe(inner.id);
+    expect(sectorAt(drawn.map, { x: 384, y: 32 })?.id).toBe(drawn.id);
+    expect(() => compileMap(drawn.map)).not.toThrow();
+  });
+});
+
 describe("joining rooms", () => {
   it("makes one room of two that share a wall", () => {
     const next = addRoom(
