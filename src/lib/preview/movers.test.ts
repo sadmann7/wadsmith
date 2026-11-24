@@ -423,6 +423,19 @@ describe("vanilla's rarer mover quirks in the 3D view", () => {
     expect(heights(map, ["r1", "r2"])[2]).toEqual([16, 0]);
   });
 
+  it("stops a rising floor at a ceiling an earlier opened mover has moved", () => {
+    const map = row(
+      [{}, { tag: 2, ceiling: 8 }, { tag: 1 }],
+      {
+        [between(2)]: { front: "r2" },
+        [westWall]: boom("ceiling", { direction: 1, target: 0 }, 2)[westWall],
+        [wallKey("t3", "b3")]: acting("stairs")[westWall],
+      },
+      "boom",
+    );
+    expect(heights(map, ["r1", "r2"])[1]).toEqual([16, 128]);
+  });
+
   it("changes the floor texture where the action takes one", () => {
     const rooms = [
       { floor: -16, floorTexture: "NUKAGE1" },

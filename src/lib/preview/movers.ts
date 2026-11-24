@@ -13,10 +13,7 @@ import { actionForSpecial, lineUsesTag } from "@/lib/map/lines";
 import { parseSurface } from "@/lib/map/surfaces";
 import { buildLevel } from "@/lib/wad/compile";
 
-/**
- * The height of a wall texture by its name, or null when it has no picture.
- * "-" gives the height Doom reads for a side with no texture.
- */
+/** The height of a wall texture by its name, or of the texture Doom reads for "-", or null when it has no picture. */
 export type TextureHeight = (name: string) => number | null;
 
 interface Heights {
@@ -160,17 +157,13 @@ function shownWith(
       const earlier = moved.get(id) ?? {};
       const room = { ...defined(shut.get(id)), ...earlier };
       const later = { ...earlier };
-      // From Boom on, a plane stops at the other only when moving towards it.
-      if (earlier.floor === undefined && move.floor !== undefined) {
-        later.floor =
-          boom && move.rises ? Math.min(move.floor, room.ceiling) : move.floor;
+      const { floor, ceiling } = settle(room, move, boom);
+      if (earlier.floor === undefined && floor !== undefined) {
+        later.floor = floor;
         if (move.floorTexture) later.floorTexture = move.floorTexture;
       }
-      if (earlier.ceiling === undefined && move.ceiling !== undefined) {
-        later.ceiling =
-          boom && move.drops
-            ? Math.max(move.ceiling, room.floor)
-            : move.ceiling;
+      if (earlier.ceiling === undefined && ceiling !== undefined) {
+        later.ceiling = ceiling;
         if (move.ceilingTexture) later.ceilingTexture = move.ceilingTexture;
       }
       moved.set(id, later);
@@ -189,6 +182,21 @@ function shownWith(
   };
   shown.set(key, result);
   return result;
+}
+
+// From Boom on, a plane stops at the other only when moving towards it.
+function settle(room: Sector, move: Move, boom: boolean) {
+  const { floor, ceiling, rises, drops } = move;
+  return {
+    floor:
+      boom && rises && floor !== undefined
+        ? Math.min(floor, room.ceiling)
+        : floor,
+    ceiling:
+      boom && drops && ceiling !== undefined
+        ? Math.max(ceiling, room.floor)
+        : ceiling,
+  };
 }
 
 function getIsDoor(map: GameMap, id: string) {
@@ -217,13 +225,16 @@ function plansOf(map: GameMap, textureHeight?: TextureHeight): Plans {
 function planOf(map: GameMap, id: string, textureHeight?: TextureHeight) {
   const { plans } = plansOf(map, textureHeight);
   if (plans.has(id)) return plans.get(id) ?? null;
-  const { shut, candidates } = moversOf(map);
+  const { shut, candidates, boom } = moversOf(map);
   const room = shut.get(id);
   let best: { moves: Moves; gap: number } | null = null;
   for (const mover of room ? (candidates.get(id) ?? []) : []) {
     const start = defined(room);
     const moves = mover.work(start, textureHeight ?? null);
-    const { floor, ceiling } = { ...start, ...moves.get(id) };
+    const move = moves.get(id);
+    const settled: Heights = move ? settle(start, move, boom) : {};
+    const floor = settled.floor ?? start.floor;
+    const ceiling = settled.ceiling ?? start.ceiling;
     if (!best || ceiling - floor > best.gap) {
       best = { moves, gap: ceiling - floor };
     }
@@ -396,7 +407,7 @@ function vanillaWork(
     });
   }
   if (kind === "donut") return (room) => donut(movers, room);
-  const heights = vanillaHeights(kind, movers.boom);
+  const heights = vanillaHeights(kind);
   if (!heights) return null;
   return (room, textureHeight) => {
     const beside = movers.around.get(room.id) ?? [];
@@ -507,10 +518,7 @@ type Worked = (
   shortest: () => number | null,
 ) => Moves;
 
-// Doom stops a rising floor at its ceiling only from Boom on, apart from the
-// raise to the lowest ceiling nearby.
-function vanillaHeights(kind: LineActionKind, boom: boolean): Worked | null {
-  const rise = (room: Sector, floor: number) => raiseFloor(room, floor, boom);
+function vanillaHeights(kind: LineActionKind): Worked | null {
   switch (kind) {
     case "lift":
     case "lift-fast":
@@ -530,33 +538,33 @@ function vanillaHeights(kind: LineActionKind, boom: boolean): Worked | null {
         );
     case "floor-raise":
       return (room, near) =>
-        raiseFloor(room, Math.min(room.ceiling, near.lowestCeiling), true);
+        raiseFloor(room, Math.min(room.ceiling, near.lowestCeiling));
     case "floor-crush":
       return (room, near) =>
-        rise(room, Math.min(room.ceiling, near.lowestCeiling) - 8);
+        raiseFloor(room, Math.min(room.ceiling, near.lowestCeiling) - 8);
     case "floor-raise-next":
     case "floor-raise-next-fast":
     case "floor-raise-next-texture":
-      return (room, near) => rise(room, near.nextFloorUp);
+      return (room, near) => raiseFloor(room, near.nextFloorUp);
     case "floor-raise-24":
     case "floor-raise-24-texture":
-      return (room) => rise(room, room.floor + 24);
+      return (room) => raiseFloor(room, room.floor + 24);
     case "floor-raise-32-texture":
-      return (room) => rise(room, room.floor + 32);
+      return (room) => raiseFloor(room, room.floor + 32);
     case "floor-raise-512":
-      return (room) => rise(room, room.floor + 512);
+      return (room) => raiseFloor(room, room.floor + 512);
     case "floor-raise-texture":
       return (room, _near, shortest) => {
         const by = shortest();
-        return by === null ? still : rise(room, room.floor + by);
+        return by === null ? still : raiseFloor(room, room.floor + by);
       };
     case "ceiling-lower":
-      return (room) => lowerCeiling(room, room.floor, boom);
+      return (room) => lowerCeiling(room, room.floor);
     case "ceiling-lower-8":
     case "crusher":
     case "crusher-fast":
     case "crusher-silent":
-      return (room) => lowerCeiling(room, room.floor + 8, boom);
+      return (room) => lowerCeiling(room, room.floor + 8);
     case "ceiling-raise":
       return (room, near) => raiseCeiling(room, near.highestCeiling);
     default:
@@ -610,10 +618,9 @@ type Target = (
   shortest: () => number | null,
 ) => number | null;
 
-// Boom stops a rising floor at its ceiling and a lowering ceiling at its
-// floor, and a mover sent the wrong way to its target jumps straight there.
-// A texture change copies the room in front of the line, or the room across
-// the first line at the target height, measured on the plane the target is.
+// A mover sent the wrong way to its target jumps straight there. A texture
+// change copies the room in front of the line, or the room across the first
+// line at the target height, measured on the plane the target is.
 function boomHeights(
   movers: Movers,
   kind: string,
@@ -667,11 +674,11 @@ function boomHeights(
       const moves =
         plane === "floor"
           ? up
-            ? raiseFloor(room, height, true)
+            ? raiseFloor(room, height)
             : lowerFloor(room, height)
           : up
             ? raiseCeiling(room, height)
-            : lowerCeiling(room, height, true);
+            : lowerCeiling(room, height);
       if (value("change") === 0) return moves;
       const model =
         value("model") === 0
@@ -691,7 +698,7 @@ function boomHeights(
     return targets[target] ?? null;
   }
   if (kind === "crusher") {
-    return (room) => lowerCeiling(room, room.floor + 8, true);
+    return (room) => lowerCeiling(room, room.floor + 8);
   }
   return null;
 }
@@ -700,26 +707,16 @@ function lowerFloor(room: Sector, floor: number): Moves {
   return new Map([[room.id, { floor }]]);
 }
 
-function raiseFloor(room: Sector, floor: number, stops: boolean): Moves {
-  return new Map([
-    [
-      room.id,
-      { floor: stops ? Math.min(room.ceiling, floor) : floor, rises: true },
-    ],
-  ]);
+function raiseFloor(room: Sector, floor: number): Moves {
+  return new Map([[room.id, { floor, rises: true }]]);
 }
 
 function raiseCeiling(room: Sector, ceiling: number): Moves {
   return new Map([[room.id, { ceiling }]]);
 }
 
-function lowerCeiling(room: Sector, ceiling: number, stops: boolean): Moves {
-  return new Map([
-    [
-      room.id,
-      { ceiling: stops ? Math.max(room.floor, ceiling) : ceiling, drops: true },
-    ],
-  ]);
+function lowerCeiling(room: Sector, ceiling: number): Moves {
+  return new Map([[room.id, { ceiling, drops: true }]]);
 }
 
 interface StairOptions {
@@ -781,16 +778,12 @@ function stairs(
   { step, up, anyTexture, vanillaCount }: StairOptions,
   moving: Set<string>,
 ) {
-  const { map, shut, boom } = movers;
-  const stop = (room: Sector, floor: number) =>
-    up && boom ? Math.min(room.ceiling, floor) : floor;
+  const { map, shut } = movers;
   const bySector = movers.level()?.bySector;
   const sign = up ? 1 : -1;
   let height = start.floor + sign * step;
   let index = map.sectors.findIndex((sector) => sector.id === start.id);
-  const moves: Moves = new Map([
-    [start.id, { floor: stop(start, height), rises: up }],
-  ]);
+  const moves: Moves = new Map([[start.id, { floor: height, rises: up }]]);
   moving.add(start.id);
   if (!bySector) return { moves, last: index };
   for (;;) {
@@ -803,7 +796,7 @@ function stairs(
       if (moving.has(room.id)) continue;
       if (!vanillaCount) height += sign * step;
       next = line.back;
-      moves.set(room.id, { floor: stop(room, height), rises: up });
+      moves.set(room.id, { floor: height, rises: up });
       moving.add(room.id);
       break;
     }
@@ -834,12 +827,11 @@ function donut(movers: Movers, start: Sector): Moves {
     const model =
       line.back === null ? null : defined(shut.get(map.sectors[line.back].id));
     const floor = model?.floor ?? donutOverrunFloor;
-    const raised = boom ? Math.min(pool.ceiling, floor) : floor;
     return new Map([
       [
         pool.id,
         {
-          floor: raised,
+          floor,
           rises: true,
           ...(model && { floorTexture: model.floorTexture }),
         },
