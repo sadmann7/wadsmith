@@ -155,7 +155,7 @@ import {
   removeParts,
   selectedParts,
   type Transform,
-  transformParts,
+  transformKeepingDoors,
 } from "@/lib/map/fragment";
 import {
   loopEdges,
@@ -825,27 +825,19 @@ export function EditorScreen({
 
   const transformSelection = (steps: Transform[], keys = transformKeys) => {
     if (keys.length === 0 || steps.length === 0) return;
-    const run = (keepDoors: boolean) => {
-      let next: GameMap | null = map;
-      for (const step of steps) {
-        next = next && transformParts(next, keys, step, grid, keepDoors);
-      }
-      return next;
-    };
-    // A door carried into another room's way is left behind instead, which
-    // only stretches it.
-    const carried = run(true);
-    const next =
-      carried && newProblems(map, carried).length === 0
-        ? carried
-        : (run(false) ?? carried);
+    const { map: next, problems } = transformKeepingDoors(
+      map,
+      keys,
+      steps,
+      grid,
+    );
     if (!next) {
       setNotice(
         "That would press two corners of a room together, or change nothing.",
       );
       return;
     }
-    const [problem] = newProblems(map, next);
+    const [problem] = problems;
     if (problem) {
       setNotice(`That would give the map a new problem. ${problem.message}`);
       return;

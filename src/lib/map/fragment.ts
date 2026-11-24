@@ -15,14 +15,17 @@ import {
 } from "./edit";
 import {
   boxOf,
+  cross,
   sectorAt,
   sectorContainers,
   sectorEdges,
+  sectorLoops,
   sectorVertices,
   wallKey,
   wallOwners,
 } from "./geometry";
 import { MapFileError, maxFileBytes, parseMap } from "./storage";
+import { type MapIssue, newProblems } from "./validate";
 
 // What a selection stands for: whole rooms and things.
 export interface SelectedParts {
@@ -34,6 +37,10 @@ export type Transform =
   | { kind: "rotate"; degrees: number }
   | { kind: "mirror"; axis: "horizontal" | "vertical" }
   | { kind: "scale"; factor: number };
+
+// How far a resize carries joined doors: with the far wall each meets kept
+// straight, with only the doors named, alone, or not at all.
+export type DoorCarry = "walls" | ReadonlySet<string> | "doors" | "none";
 
 // A piece read back from text, and the map it says it was copied from.
 export interface CopiedPiece {
@@ -366,14 +373,13 @@ export function pasteParts(
 
 // Turns, flips or resizes the corners and things behind the keys about their
 // middle. A flip and a quarter turn keep every point on the grid, and other
-// turns and resizes land on it. A resize carries joined doors along, with the
-// far wall each meets, unless `keepDoors` is false.
+// turns and resizes land on it, and a resize carries joined doors along.
 export function transformParts(
   map: GameMap,
   keys: string[],
   transform: Transform,
   grid: number,
-  keepDoors = true,
+  carry: DoorCarry = "walls",
 ): GameMap | null {
   const positions = positionsOf(map);
   const moved = keys.filter((key) => positions[key]);
@@ -425,7 +431,14 @@ export function transformParts(
     moved.map((key) => [key, place(positions[key])]),
   );
   const carried =
-    transform.kind === "scale" && keepDoors ? carryDoors(map, landed) : {};
+    transform.kind === "scale" && carry !== "none"
+      ? carryDoors(
+          map,
+          landed,
+          (id) =>
+            carry === "walls" || (typeof carry !== "string" && carry.has(id)),
+        )
+      : {};
   const placed = applyPositions(map, { ...positions, ...landed, ...carried });
   const turned = new Set(moved);
   const corners = [...moved, ...Object.keys(carried)].filter(
@@ -479,6 +492,44 @@ export function transformParts(
   return changed ? mergeCorners(next, corners) : null;
 }
 
+// Runs the steps carrying doors as far as the map allows. A door whose far
+// wall can't stay straight bends it instead, and when that fails too the doors
+// stay behind and only stretch. Without a clean result it gives the last one.
+export function transformKeepingDoors(
+  map: GameMap,
+  keys: string[],
+  steps: Transform[],
+  grid: number,
+): { map: GameMap | null; problems: MapIssue[] } {
+  let last: { map: GameMap | null; problems: MapIssue[] } = {
+    map: null,
+    problems: [],
+  };
+  const attempt = (carry: DoorCarry) => {
+    let next: GameMap | null = map;
+    for (const step of steps) {
+      next = next && transformParts(next, keys, step, grid, carry);
+    }
+    if (!next) return false;
+    last = { map: next, problems: newProblems(map, next) };
+    return last.problems.length === 0;
+  };
+  if (attempt("walls")) return last;
+  const moved = new Set(keys);
+  const doors = map.sectors
+    .filter(
+      (sector) => sector.door && sector.vertices.some((id) => moved.has(id)),
+    )
+    .map((sector) => sector.id);
+  const straight = new Set(doors.filter((id) => attempt(new Set([id]))));
+  if (straight.size > 0 && straight.size < doors.length && attempt(straight)) {
+    return last;
+  }
+  if (attempt("doors")) return last;
+  attempt("none");
+  return last;
+}
+
 // `origin` names the map a piece was copied from, so a paste can tell its own
 // map from another.
 export function serializeFragment(fragment: GameMap, origin?: string) {
@@ -516,33 +567,104 @@ export function parseFragment(text: string): CopiedPiece | null {
   }
 }
 
-// A door's corner left behind goes the way its neighbour on the door's outline
-// went. A corner beside two moved ones, or pulled two ways by two doors, can't
-// tell which way to go, so none of the doors move.
-function carryDoors(map: GameMap, landed: Record<string, Point>) {
+// A door's far face keeps its offset from the corners the resize moved, so
+// the door keeps its depth. The far room's wall in line with that face moves
+// straight across with it and stays straight. Two doors pulling one corner two
+// ways leave every door where it was.
+function carryDoors(
+  map: GameMap,
+  landed: Record<string, Point>,
+  straight: (door: string) => boolean,
+) {
   const carried: Record<string, Point> = {};
-  for (const sector of map.sectors) {
-    if (!sector.door) continue;
-    const outline = sector.vertices;
-    for (const [index, id] of outline.entries()) {
-      if (landed[id]) continue;
-      const near = [
-        outline[(index + outline.length - 1) % outline.length],
-        outline[(index + 1) % outline.length],
-      ].filter((other) => landed[other]);
-      if (near.length === 0) continue;
-      if (near.length > 1) return {};
-      const [from] = near;
+  const put = (id: string, at: Point) => {
+    const held = carried[id];
+    if (held && (held.x !== at.x || held.y !== at.y)) return false;
+    carried[id] = at;
+    return true;
+  };
+  const corner = (id: string) => map.vertices[id];
+  for (const door of map.sectors) {
+    if (!door.door) continue;
+    const face = farFace(door.vertices, landed);
+    if (!face) continue;
+    const { chain, before, after } = face;
+    const a = corner(chain[0]);
+    const b = corner(chain[chain.length - 1]);
+    const span = far(a, b);
+    if (span === 0) continue;
+    const follow = (id: string, near: string) => ({
+      x: corner(id).x + landed[near].x - corner(near).x,
+      y: corner(id).y + landed[near].y - corner(near).y,
+    });
+    const newA = follow(chain[0], before);
+    const newB = follow(chain[chain.length - 1], after);
+    for (const id of chain) {
+      const point = corner(id);
+      const t =
+        ((point.x - a.x) * (b.x - a.x) + (point.y - a.y) * (b.y - a.y)) / span;
       const at = {
-        x: map.vertices[id].x + landed[from].x - map.vertices[from].x,
-        y: map.vertices[id].y + landed[from].y - map.vertices[from].y,
+        x: Math.round(newA.x + t * (newB.x - newA.x)),
+        y: Math.round(newA.y + t * (newB.y - newA.y)),
       };
-      const held = carried[id];
-      if (held && (held.x !== at.x || held.y !== at.y)) return {};
-      carried[id] = at;
+      if (!put(id, at)) return {};
+    }
+    const moveX = newA.x - a.x;
+    const moveY = newA.y - a.y;
+    const along = (moveX * (b.x - a.x) + moveY * (b.y - a.y)) / span;
+    const across = {
+      x: Math.round(moveX - along * (b.x - a.x)),
+      y: Math.round(moveY - along * (b.y - a.y)),
+    };
+    if (!straight(door.id)) continue;
+    const own = new Set(door.vertices);
+    for (const end of [chain[0], chain[chain.length - 1]]) {
+      for (const room of map.sectors) {
+        if (room.door) continue;
+        for (const loop of sectorLoops(room)) {
+          const index = loop.indexOf(end);
+          if (index < 0) continue;
+          for (const step of [1, loop.length - 1]) {
+            for (
+              let at = (index + step) % loop.length, left = loop.length;
+              left > 0 && !own.has(loop[at]) && !landed[loop[at]];
+              at = (at + step) % loop.length, left -= 1
+            ) {
+              const point = corner(loop[at]);
+              if (cross(a, b, point) !== 0) break;
+              const shifted = { x: point.x + across.x, y: point.y + across.y };
+              if (!put(loop[at], shifted)) return {};
+            }
+          }
+        }
+      }
     }
   }
   return carried;
+}
+
+// The door's corners the resize left behind, when they run in one unbroken
+// chain between two it moved.
+function farFace(outline: string[], landed: Record<string, Point>) {
+  const count = outline.length;
+  const starts = outline
+    .map((_, index) => index)
+    .filter(
+      (index) =>
+        !landed[outline[index]] && landed[outline[(index + count - 1) % count]],
+    );
+  if (starts.length !== 1) return null;
+  const [start] = starts;
+  const chain: string[] = [];
+  for (let at = start; !landed[outline[at % count]]; at += 1) {
+    chain.push(outline[at % count]);
+  }
+  if (chain.length < 2) return null;
+  return {
+    chain,
+    before: outline[(start + count - 1) % count],
+    after: outline[(start + chain.length) % count],
+  };
 }
 
 // A quarter turn about a point of the half grid whose two steps add up to a

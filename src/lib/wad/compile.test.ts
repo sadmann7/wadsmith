@@ -67,7 +67,12 @@ import {
   wallNear,
 } from "@/lib/map/edit";
 import { featuredMaps } from "@/lib/map/featured";
-import { partKeys, selectedParts, transformParts } from "@/lib/map/fragment";
+import {
+  partKeys,
+  selectedParts,
+  transformKeepingDoors,
+  transformParts,
+} from "@/lib/map/fragment";
 import { freedoomFlats, freedoomWalls } from "@/lib/map/freedoom-textures";
 import {
   containerOf,
@@ -1261,7 +1266,7 @@ describe("validateMap", () => {
         keys,
         { kind: "scale", factor: 0.5 },
         32,
-        false,
+        "none",
       ),
     );
     const { errors, warnings } = inspectMap(shrunk);
@@ -1290,7 +1295,12 @@ describe("validateMap", () => {
       selectedParts(starterMap, [], "sector-3"),
     );
     const shrunk = defined(
-      transformParts(starterMap, keys, { kind: "scale", factor: 0.5 }, 32),
+      transformKeepingDoors(
+        starterMap,
+        keys,
+        [{ kind: "scale", factor: 0.5 }],
+        32,
+      ).map,
     );
     const { errors, warnings } = inspectMap(shrunk);
     expect(errors).toEqual([]);
