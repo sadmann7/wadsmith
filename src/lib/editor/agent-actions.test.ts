@@ -10,7 +10,9 @@ import {
   waitForPlay,
 } from "@/lib/engine/test-engine";
 import { checkMap } from "@/lib/map/checks";
+import { wallKey } from "@/lib/map/geometry";
 import { testMap } from "@/lib/map/test-map";
+import { freedoomNames } from "@/lib/map/textures";
 import { compileMap } from "@/lib/wad/compile";
 
 import {
@@ -281,7 +283,11 @@ describe("agent actions", () => {
     ]);
     expect(wired.todo).toEqual([]);
     expect(wired.map.switches).toHaveLength(1);
-    expect(wired.result).toBe(wired.map.switches[0].id);
+    const placed = wired.map.switches[0];
+    expect(wired.result).toEqual({
+      switch: placed.id,
+      wall: wallKey(placed.from, placed.to),
+    });
   });
 
   it("names rooms, walls and choices it doesn't know", () => {
@@ -372,11 +378,41 @@ describe("agent actions", () => {
       tag: 0,
     });
     expect(locked.todo.join(" ")).toMatch(/place the blue key/);
+    expect(() =>
+      runAgentAction(testMap, "setLineAction", {
+        wall: "v13|v14",
+        kind: "door-raise",
+        trigger: "door",
+        key: "blue",
+        room: "Arena door",
+      }),
+    ).toThrow(/set off by door takes no target room.*Only switch or walk/);
     const keyed = runAgentAction(locked.map, "placeThing", [
       "blue-key",
       "Start room",
     ]);
     expect(keyed.todo.join(" ")).not.toMatch(/blue key/);
+  });
+
+  it("answers with the wall a switch splits off, which takes its action", () => {
+    const added = runAgentAction(testMap, "addSwitch", ["v1|v6"]);
+    const { switch: id, wall } = added.result as {
+      switch: string;
+      wall: string;
+    };
+    const placed = defined(added.map.switches.find((item) => item.id === id));
+    expect(wall).toBe(wallKey(placed.from, placed.to));
+    expect(wall).not.toBe("v1|v6");
+    const raised = runAgentAction(added.map, "setLineAction", [
+      wall,
+      "floor-raise-next",
+      "switch",
+      "Corridor",
+    ]);
+    expect(raised.map.lines?.[wall]?.action).toMatchObject({
+      kind: "floor-raise-next",
+      trigger: "switch",
+    });
   });
 
   it("sets flags, a front side and a raw special on a wall", () => {
@@ -523,14 +559,114 @@ describe("agent actions", () => {
         { room: "Start room", wallTexture: "NOPE" },
         context,
       ),
-    ).toThrow(/has no texture called NOPE/);
-    // Without the game's names, any name goes.
+    ).toThrow(/No wall texture "NOPE" for wallTexture\. The closest are/);
+    // Without the game's names, Freedoom's stand in.
+    expect(() =>
+      runAgentAction(testMap, "updateRoom", {
+        room: "Start room",
+        wallTexture: "STARTAN4",
+      }),
+    ).toThrow(/The closest are STARTAN1, STARTAN2, STARTAN3/);
     expect(
       runAgentAction(testMap, "updateRoom", {
         room: "Start room",
-        wallTexture: "NOPE",
+        wallTexture: "startan3",
       }).map.sectors[0].wallTexture,
-    ).toBe("NOPE");
+    ).toBe("STARTAN3");
+  });
+
+  it("refuses a texture or flat the game doesn't have, wherever it goes", () => {
+    const steps: [string, Record<string, unknown>, RegExp][] = [
+      [
+        "addRoom",
+        {
+          corners: [
+            { x: 512, y: 512 },
+            { x: 640, y: 512 },
+            { x: 640, y: 640 },
+          ],
+          floorTexture: "FLOOR4_9",
+        },
+        /No flat "FLOOR4_9" for floorTexture\. The closest are FLOOR4_1, FLOOR4_5, FLOOR4_6, FLOOR4_8/,
+      ],
+      [
+        "updateRoom",
+        { room: "Start room", ceilingTexture: "STARTAN3" },
+        /No flat "STARTAN3"/,
+      ],
+      [
+        "paintSurface",
+        { room: "Start room", surface: "floor", texture: "NUKAGE9" },
+        /No flat "NUKAGE9" for texture\. The closest are NUKAGE1/,
+      ],
+      [
+        "paintSurface",
+        {
+          room: "Start room",
+          surface: "wall",
+          wall: "v6|v1",
+          texture: "BRWN1",
+        },
+        /No wall texture "BRWN1" for texture\. The closest are BROWN1/,
+      ],
+      [
+        "setLineSide",
+        { wall: "v3|v4", room: "Corridor", middle: "MIDGRAT" },
+        /No wall texture "MIDGRAT" for middle\. The closest are MIDGRATE/,
+      ],
+      [
+        "replaceTexture",
+        { from: "STARTAN3", to: "STARTAN", kind: "wall" },
+        /No wall texture "STARTAN" for to\./,
+      ],
+    ];
+    for (const [name, args, message] of steps) {
+      expect(() => runAgentAction(testMap, name, args)).toThrow(message);
+    }
+    // "-" still takes a side's texture away.
+    const cleared = runAgentAction(testMap, "setLineSide", {
+      wall: "v3|v4",
+      room: "Corridor",
+      middle: "-",
+    });
+    expect(cleared.map).not.toBe(testMap);
+  });
+
+  it("lists every wall texture and flat the game has, a page at a time", () => {
+    const walls = runAgentAction(testMap, "listCatalog", ["walls"]).result as {
+      total: number;
+      items: string[];
+      next?: number;
+    };
+    expect(walls.total).toBe(freedoomNames.walls.length);
+    expect(walls.items).toHaveLength(200);
+    expect(walls.next).toBe(200);
+    const rest = runAgentAction(testMap, "listCatalog", {
+      of: "walls",
+      offset: 200,
+      limit: 1000,
+    }).result as { items: string[]; next?: number };
+    expect([...walls.items, ...rest.items]).toEqual(freedoomNames.walls);
+    expect(rest.next).toBeUndefined();
+    const nukage = runAgentAction(testMap, "listCatalog", {
+      of: "flats",
+      search: "nukage",
+    }).result;
+    expect(nukage).toEqual({
+      total: 3,
+      offset: 0,
+      items: ["NUKAGE1", "NUKAGE2", "NUKAGE3"],
+      sky: "F_SKY1",
+    });
+    const grates = runAgentAction(testMap, "listCatalog", {
+      of: "walls",
+      search: " midgrat ",
+    }).result;
+    expect(grates).toMatchObject({ total: 0, seeThrough: ["MIDGRATE"] });
+    const custom = runAgentAction(testMap, "listCatalog", ["flats"], {
+      names: { ...freedoomNames, flats: ["MYFLAT"] },
+    }).result;
+    expect(custom).toMatchObject({ total: 1, items: ["MYFLAT"] });
   });
 
   it("reads the map without changing it", () => {
@@ -560,9 +696,22 @@ describe("agent actions", () => {
       next: 2,
     });
     const catalog = runAgentAction(testMap, "listCatalog", ["line-actions"])
-      .result as { kind: string; needsRoom: boolean }[];
-    expect(catalog.find((item) => item.kind === "exit")?.needsRoom).toBe(false);
-    expect(catalog.find((item) => item.kind === "lift")?.needsRoom).toBe(true);
+      .result as {
+      kind: string;
+      triggers: { trigger: string; needsRoom: boolean; keys?: string[] }[];
+    }[];
+    const triggers = (kind: string) =>
+      catalog.find((item) => item.kind === kind)?.triggers;
+    expect(triggers("exit")).toEqual([
+      { trigger: "switch", needsRoom: false },
+      { trigger: "walk", needsRoom: false },
+    ]);
+    expect(triggers("lift")?.every((item) => item.needsRoom)).toBe(true);
+    expect(triggers("door-raise")).toEqual([
+      { trigger: "door", needsRoom: false, keys: ["blue", "yellow", "red"] },
+      { trigger: "switch", needsRoom: true },
+      { trigger: "walk", needsRoom: true },
+    ]);
     const help = runAgentAction(testMap, "help").result as { name: string }[];
     expect(help.map((item) => item.name)).toEqual(agentActionNames);
   });

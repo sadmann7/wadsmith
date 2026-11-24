@@ -285,6 +285,121 @@ describe("drawing a room over another", () => {
   });
 });
 
+describe("drawing a room against the wall of the room it's in", () => {
+  const lava = drawRoom(
+    empty,
+    [
+      { x: 216, y: 16 },
+      { x: 464, y: 16 },
+      { x: 624, y: 176 },
+      { x: 624, y: 416 },
+      { x: 464, y: 576 },
+      { x: 216, y: 576 },
+      { x: 56, y: 416 },
+      { x: 56, y: 176 },
+    ],
+    { name: "Lava Hall", floor: -16 },
+    1,
+  );
+  const island = drawRoom(lava.map, box(296, 248, 392, 344), { floor: 32 }, 1);
+
+  it("cuts the outer room round a bridge from its wall to an island", () => {
+    const bridge = drawRoom(island.map, box(56, 280, 296, 312), {}, 1);
+    expect(problems(bridge.map)).toEqual([]);
+    expect(sectorAt(bridge.map, { x: 160, y: 296 })?.id).toBe(bridge.id);
+    expect(sectorAt(bridge.map, { x: 344, y: 296 })?.id).toBe(island.id);
+    expect(sectorAt(bridge.map, { x: 160, y: 200 })?.id).toBe(lava.id);
+    expect(sectorAt(bridge.map, { x: 160, y: 400 })?.id).toBe(lava.id);
+    const owners = wallOwners(bridge.map);
+    const ends = (x: number) =>
+      defined(sectorWall(bridge.map, { x, y: 280 }, { x, y: 312 }));
+    expect(owners.get(ends(56))?.map((room) => room.id)).toEqual([bridge.id]);
+    expect(
+      owners
+        .get(ends(296))
+        ?.map((room) => room.id)
+        .toSorted(),
+    ).toEqual([bridge.id, island.id].toSorted());
+    expect(() => compileMap(bridge.map)).not.toThrow();
+  });
+
+  it("cuts it round a bridge that stops short of the island", () => {
+    const bridge = drawRoom(island.map, box(56, 280, 288, 312), {}, 1);
+    expect(problems(bridge.map)).toEqual([]);
+    expect(sectorAt(bridge.map, { x: 292, y: 296 })?.id).toBe(lava.id);
+    expect(sectorAt(bridge.map, { x: 344, y: 296 })?.id).toBe(island.id);
+  });
+
+  it("splits it in two with bridges from both walls", () => {
+    const west = drawRoom(island.map, box(56, 280, 296, 312), {}, 1);
+    const east = drawRoom(west.map, box(392, 280, 624, 312), {}, 1);
+    expect(problems(east.map)).toEqual([]);
+    const north = defined(sectorAt(east.map, { x: 340, y: 100 }));
+    const south = defined(sectorAt(east.map, { x: 340, y: 500 }));
+    expect(north.id).not.toBe(south.id);
+    expect([north.id, south.id]).toContain(lava.id);
+    expect(south.floor).toBe(-16);
+    expect(north.floor).toBe(-16);
+    expect(east.map.sectors).toHaveLength(5);
+    expect(() => compileMap(east.map)).not.toThrow();
+  });
+
+  it("splits it in two with one bridge from wall to wall over the island", () => {
+    const bridge = drawRoom(island.map, box(56, 280, 624, 312), {}, 1);
+    expect(problems(bridge.map)).toEqual([]);
+    expect(sectorAt(bridge.map, { x: 340, y: 100 })).not.toBe(
+      sectorAt(bridge.map, { x: 340, y: 500 }),
+    );
+    expect(sectorAt(bridge.map, { x: 344, y: 296 })?.floor).toBe(32);
+    expect(sectorAt(bridge.map, { x: 160, y: 296 })?.id).toBe(bridge.id);
+    expect(sectorAt(bridge.map, { x: 500, y: 296 })?.floor).toBe(0);
+    expect(() => compileMap(bridge.map)).not.toThrow();
+  });
+});
+
+describe("drawing a room against the wall of the room it's in, around obstacles", () => {
+  it("leaves a pillar it covers in place and the map flagged", () => {
+    const post = drawRoom(hall.map, box(200, 96, 232, 128), {}, 1);
+    const pillared = defined(makePillar(post.map, post.id));
+    const bridge = drawRoom(pillared, box(0, 80, 512, 144), {}, 1);
+    expect(
+      bridge.map.sectors.find((room) => room.id === hall.id)?.holes,
+    ).toHaveLength(1);
+    const sameSide = validateMap(bridge.map).find((issue) =>
+      issue.id.startsWith("same-side:"),
+    );
+    expect(sameSide?.target).toBe(bridge.id);
+    expect(sameSide?.message).toContain("without lying over its pillars");
+    expect(sameSide?.message).toContain(
+      `Move ${defined(bridge.map.sectors.find((room) => room.id === bridge.id)).name} off`,
+    );
+  });
+
+  it("cuts the outer room round a bridge that only reaches a pillar", () => {
+    const post = drawRoom(hall.map, box(200, 96, 232, 128), {}, 1);
+    const pillared = defined(makePillar(post.map, post.id));
+    for (const corners of [
+      box(0, 96, 200, 128),
+      box(232, 96, 512, 128),
+      box(200, 0, 232, 96),
+      box(200, 128, 232, 256),
+    ]) {
+      const bridge = drawRoom(pillared, corners, {}, 1);
+      expect(problems(bridge.map)).toEqual([]);
+      expect(() => compileMap(bridge.map)).not.toThrow();
+    }
+  });
+
+  it("cuts a room drawn round an earlier one against its wall", () => {
+    const inner = drawRoom(empty, box(0, 64, 128, 128), {}, 1);
+    const outer = drawRoom(inner.map, box(0, 0, 512, 256), { floor: 16 }, 1);
+    expect(problems(outer.map)).toEqual([]);
+    expect(sectorAt(outer.map, { x: 64, y: 96 })?.id).toBe(inner.id);
+    expect(sectorAt(outer.map, { x: 256, y: 128 })?.floor).toBe(16);
+    expect(() => compileMap(outer.map)).not.toThrow();
+  });
+});
+
 describe("joining rooms", () => {
   it("makes one room of two that share a wall", () => {
     const next = addRoom(
@@ -329,7 +444,7 @@ describe("joining rooms", () => {
   });
 
   it("refuses a room and a platform drawn inside it", () => {
-    const platform = drawRoom(hall.map, box(0, 0, 128, 128), {}, 1);
+    const platform = drawRoom(hall.map, box(64, 64, 128, 128), {}, 1);
     expect(joinRooms(platform.map, [hall.id, platform.id])).toBeNull();
   });
 
@@ -543,6 +658,15 @@ function sharedWalls(map: GameMap) {
   return [...wallOwners(map)]
     .filter(([, owners]) => owners.length === 2 && owners[0] !== owners[1])
     .map(([key]) => key);
+}
+
+function sectorWall(map: GameMap, a: Point, b: Point) {
+  const [from, to] = [a, b].map((point) =>
+    Object.keys(map.vertices).find(
+      (id) => map.vertices[id].x === point.x && map.vertices[id].y === point.y,
+    ),
+  );
+  return from && to ? wallKey(from, to) : undefined;
 }
 
 function box(left: number, top: number, right: number, bottom: number) {

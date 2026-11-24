@@ -35,6 +35,17 @@ describe("reviewing an agent's steps", () => {
     expect(risk.detail).toMatch(/^\d+ surfaces? change\./);
   });
 
+  it("counts a swap to a name only the loaded game has", () => {
+    const texture = testMap.sectors[0].floorTexture;
+    const risk = agentRisk(testMap, "replaceTexture", [
+      texture,
+      "MYFLAT",
+      "flat",
+    ]);
+    expect(risk.title).toBe(`Replace ${texture} with MYFLAT?`);
+    expect(risk.detail).toMatch(/^\d+ surfaces? change\./);
+  });
+
   it("still asks when the step names something missing", () => {
     expect(agentRisk(testMap, "removeRoom", ["Nowhere"]).title).toBe(
       "Let the agent run remove room?",

@@ -12,15 +12,10 @@ import type { LivePeer } from "@/lib/episodes/live";
 import type { MapLink } from "@/lib/map/links";
 import type { PlaytestRun, RunMark } from "@/lib/map/playtest";
 import type { SoundReach } from "@/lib/map/sound";
-import type {
-  GameMap,
-  LineSettings,
-  Point,
-  Sector,
-  ThingKind,
-} from "@/lib/map/types";
+import type { GameMap, LineSettings, Point, ThingKind } from "@/lib/map/types";
 
 import { buttonVariants } from "@/components/ui/button";
+import { clearLabels } from "@/lib/editor/map-labels";
 import { thingIcons } from "@/lib/editor/thing-icons";
 import { generalizedTrigger, getIsGeneralized } from "@/lib/map/boom";
 import { doorKeyPrefix, switchKeyPrefix, thingKeyPrefix } from "@/lib/map/edit";
@@ -171,26 +166,33 @@ export function MapCanvas({
     />
   ));
 
+  const detailed = props.editMode === "sectors";
   const rooms = map.sectors
     .filter((sector) => !sector.door)
-    .map((sector, index) => ({
-      sector,
-      number: String(index + 1).padStart(2, "0"),
-      box: boxOf(map, sector),
-    }));
+    .map((sector, index) => {
+      const number = String(index + 1).padStart(2, "0");
+      return {
+        sector,
+        name: sector.name,
+        detail: `S${number} ${sector.floor}/${sector.ceiling}`,
+        box: boxOf(map, sector),
+      };
+    });
 
-  const labels = clearOf(
-    rooms.filter(
-      ({ box }) =>
-        (box.right - box.left) * labelStep >= labelWidth &&
-        (!area ||
-          (box.right >= area.left &&
-            box.left <= area.right &&
-            box.bottom >= area.top &&
-            box.top <= area.bottom)),
-    ),
-    labelStep,
-  ).map(({ sector, number, box }) => (
+  const labels = clearLabels(
+    rooms
+      .filter(
+        ({ box }) =>
+          (box.right - box.left) * labelStep >= labelWidth &&
+          (!area ||
+            (box.right >= area.left &&
+              box.left <= area.right &&
+              box.bottom >= area.top &&
+              box.top <= area.bottom)),
+      )
+      .map((room) => (detailed ? room : { ...room, detail: undefined })),
+    step,
+  ).map(({ sector, detail, box }) => (
     <MapLabel
       key={sector.id}
       value={sector.id}
@@ -199,9 +201,7 @@ export function MapCanvas({
       style={{ "--room-width": box.right - box.left } as React.CSSProperties}
     >
       <strong>{sector.name}</strong>
-      <span>
-        S{number} {sector.floor}/{sector.ceiling}
-      </span>
+      {detail ? <span>{detail}</span> : null}
     </MapLabel>
   ));
 
@@ -495,51 +495,6 @@ function boxOf(map: GameMap, sector: GameMap["sectors"][number]): Area {
     right: Math.max(...xs),
     bottom: Math.max(...ys),
   };
-}
-
-// A crowded map keeps the bigger room's label where two would overlap. The
-// sizes are rough, from the name's length, and the zoom step can run up to a
-// fifth over the zoom, so they're scaled up to match.
-function clearOf<Room extends { sector: Sector; box: Area }>(
-  rooms: Room[],
-  zoom: number,
-) {
-  if (!Number.isFinite(zoom)) return rooms;
-  const scale = 1.2 / zoom;
-  const placed: Area[] = [];
-  const kept = new Set(
-    rooms
-      .toSorted(
-        (a, b) =>
-          (b.box.right - b.box.left) * (b.box.bottom - b.box.top) -
-          (a.box.right - a.box.left) * (a.box.bottom - a.box.top),
-      )
-      .filter(({ sector, box }) => {
-        const halfWidth = ((sector.name.length * 7.5 + 8) / 2) * scale;
-        const x = (box.left + box.right) / 2;
-        const y = box.top + 24 / zoom;
-        const label = {
-          left: x - halfWidth,
-          right: x + halfWidth,
-          top: y - 10 * scale,
-          bottom: y + 10 * scale,
-        };
-        if (
-          placed.some(
-            (other) =>
-              label.left < other.right &&
-              label.right > other.left &&
-              label.top < other.bottom &&
-              label.bottom > other.top,
-          )
-        ) {
-          return false;
-        }
-        placed.push(label);
-        return true;
-      }),
-  );
-  return rooms.filter((room) => kept.has(room));
 }
 
 function inArea(area: Area | null, { x, y }: { x: number; y: number }) {

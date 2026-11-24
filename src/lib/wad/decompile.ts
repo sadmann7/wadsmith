@@ -30,11 +30,6 @@ import {
   thingLevel,
 } from "@/lib/map/complevel";
 import {
-  freedoomFlats,
-  freedoomWalls,
-  middleTextures,
-} from "@/lib/map/freedoom-textures";
-import {
   pointInPolygon,
   sectorContainers,
   sectorVertices,
@@ -50,6 +45,7 @@ import {
   opensDoor,
   usedFromFront,
 } from "@/lib/map/lines";
+import { freedoomNames } from "@/lib/map/textures";
 
 import type { DoomMap } from "./read-map";
 
@@ -145,15 +141,6 @@ const effects = new Map(
 const thingKindOf = new Map<number, ThingKind>(
   thingKinds.map((kind) => [thingCatalog[kind].doomType, kind]),
 );
-// Without the game's own names, Freedoom's stand in.
-const freedoomNames: TextureNames = {
-  walls: freedoomWalls,
-  flats: freedoomFlats,
-  middles: middleTextures,
-  custom: [],
-  textures: [...middleTextures, ...doorTextures, ...switchTextures],
-};
-
 export function decompileMap(
   doom: DoomMap,
   names: TextureNames = freedoomNames,

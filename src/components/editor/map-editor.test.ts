@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { GameMap } from "@/lib/map/types";
 
@@ -457,6 +457,112 @@ describe("map editor parts", () => {
   });
 });
 
+describe("map editor drawing", () => {
+  beforeEach(() => {
+    vi.stubGlobal("window", new EventTarget());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("draw a room with one drag of the draw tool", () => {
+    let result = null as GameMap | null;
+    const instance = mapEditor({
+      id,
+      map: testMap,
+      tool: "draw",
+      drawShape: "rectangle",
+      onMapChange: (next) => {
+        result = next;
+      },
+    });
+    instance.api.pointerdown(pointer(2000, 2000));
+    instance.api.pointermove(pointer(2256, 2128));
+    release(2256, 2128);
+    expect(defined(result).sectors).toHaveLength(testMap.sectors.length + 1);
+  });
+
+  it("finish a drag of the draw tool released off the map", () => {
+    let result = null as GameMap | null;
+    const instance = mapEditor({
+      id,
+      map: testMap,
+      tool: "draw",
+      drawShape: "rectangle",
+      onMapChange: (next) => {
+        result = next;
+      },
+    });
+    instance.api.pointerdown(pointer(2000, 2000));
+    release(2256, 2128);
+    expect(defined(result).sectors).toHaveLength(testMap.sectors.length + 1);
+  });
+
+  it("leave a drag of the draw tool to its own pointer, and drop it when cancelled", () => {
+    let result = null as GameMap | null;
+    const instance = mapEditor({
+      id,
+      map: testMap,
+      tool: "draw",
+      drawShape: "rectangle",
+      onMapChange: (next) => {
+        result = next;
+      },
+    });
+    instance.api.pointerdown(pointer(2000, 2000));
+    release(2256, 2128, "pointerup", 2);
+    expect(result).toBeNull();
+    release(2256, 2128, "pointercancel");
+    release(2256, 2128);
+    expect(result).toBeNull();
+    const { store } = instance.part("handle", { value: "v1" });
+    expect(store.get().drawing).toEqual([]);
+  });
+
+  it("pan rather than draw with Space held in the draw tool", () => {
+    let result = null as GameMap | null;
+    const instance = mapEditor({
+      id,
+      map: testMap,
+      tool: "draw",
+      drawShape: "rectangle",
+      onMapChange: (next) => {
+        result = next;
+      },
+    });
+    instance.api.keydown(press(" ", { target: undefined }));
+    instance.api.pointerdown(pointer(2000, 2000));
+    release(2256, 2128);
+    instance.api.click(pointer(2256, 2128));
+    instance.api.pointerdown(pointer(2000, 2000));
+    instance.api.click(pointer(2000, 2000));
+    const { store } = instance.part("handle", { value: "v1" });
+    expect(result).toBeNull();
+    expect(store.get().drawing).toEqual([]);
+  });
+
+  it("start a room on a click of the draw tool and finish it on the next", () => {
+    let result = null as GameMap | null;
+    const instance = mapEditor({
+      id,
+      map: testMap,
+      tool: "draw",
+      drawShape: "rectangle",
+      onMapChange: (next) => {
+        result = next;
+      },
+    });
+    instance.api.pointerdown(pointer(2000, 2000));
+    release(2000, 2000);
+    instance.api.click(pointer(2000, 2000));
+    expect(result).toBeNull();
+    instance.api.pointerdown(pointer(2256, 2128));
+    instance.api.click(pointer(2256, 2128));
+    expect(defined(result).sectors).toHaveLength(testMap.sectors.length + 1);
+  });
+});
+
 // Wires parts the way a renderer does, so a change reaches a part only when
 // its slot's `selects` lets it through.
 function listen(instance: Instance) {
@@ -482,17 +588,36 @@ function listen(instance: Instance) {
   return { heard: () => heard.splice(0).toSorted() };
 }
 
-function press(key: string, keys: Partial<KeyboardEvent> = {}) {
+function release(
+  clientX: number,
+  clientY: number,
+  type = "pointerup",
+  pointerId = 1,
+) {
+  const event = Object.assign(new Event(type), {
+    clientX,
+    clientY,
+    pointerId,
+  });
+  window.dispatchEvent(event);
+}
+
+function pointer(clientX: number, clientY: number) {
   return {
-    key,
+    clientX,
+    clientY,
+    pointerId: 1,
+    button: 0,
+    buttons: 1,
+    isPrimary: true,
+    pointerType: "mouse",
     ctrlKey: false,
     metaKey: false,
     shiftKey: false,
     altKey: false,
-    defaultPrevented: false,
+    target: { closest: () => null },
     preventDefault: () => {},
-    ...keys,
-  } as KeyboardEvent;
+  } as unknown as PointerEvent;
 }
 
 function moved(map: GameMap, corner: string, dx: number): GameMap {
@@ -510,4 +635,17 @@ function box(left: number, top: number, right: number, bottom: number) {
     { x: right, y: bottom },
     { x: left, y: bottom },
   ];
+}
+
+function press(key: string, keys: Partial<KeyboardEvent> = {}) {
+  return {
+    key,
+    ctrlKey: false,
+    metaKey: false,
+    shiftKey: false,
+    altKey: false,
+    defaultPrevented: false,
+    preventDefault: () => {},
+    ...keys,
+  } as KeyboardEvent;
 }
