@@ -721,14 +721,19 @@ export function roomDefaults(index: number) {
   };
 }
 
-// A room takes its light and textures from the room it shares the most wall
-// with, and the starter ones when it touches none. A sky ceiling stays
-// behind, since a door under one between two sky rooms shows sky, not its
-// face.
+// A room takes its heights, light and textures from the room it shares the
+// most wall with. A room drawn inside another touching none of its walls
+// takes only that room's heights. A sky ceiling stays behind, since a door
+// under one between two sky rooms shows sky, not its face.
 export function newRoomLooks(map: GameMap, corners: Point[]) {
   const starter = roomDefaults(map.sectors.length + 1);
   const neighbour = widestNeighbour(map, corners);
-  if (!neighbour) return starter;
+  if (!neighbour) {
+    const around = roomAround(map, corners);
+    return around
+      ? { ...starter, floor: around.floor, ceiling: around.ceiling }
+      : starter;
+  }
   const looks = looksOf(neighbour);
   return {
     ...starter,
@@ -976,6 +981,11 @@ function widestNeighbour(map: GameMap, corners: Point[]) {
     if (length > (best?.length ?? 0)) best = { sector, length };
   }
   return best?.sector;
+}
+
+function roomAround(map: GameMap, corners: Point[]) {
+  const [first, ...rest] = corners.map((corner) => sectorAt(map, corner));
+  return first && rest.every((sector) => sector === first) ? first : undefined;
 }
 
 function overlapLength(a: Point, b: Point, c: Point, d: Point) {
@@ -1385,6 +1395,8 @@ export function nextId(prefix: string, used: Iterable<string>) {
 
 function looksOf(sector: Sector) {
   return {
+    floor: sector.floor,
+    ceiling: sector.ceiling,
     light: sector.light,
     floorTexture: sector.floorTexture,
     ceilingTexture: sector.ceilingTexture,

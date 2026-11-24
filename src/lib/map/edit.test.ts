@@ -157,7 +157,54 @@ describe("newRoomLooks", () => {
   });
 });
 
+describe("newRoomLooks heights", () => {
+  it("starts a room at the floor and ceiling of the room it's drawn against", () => {
+    const sunk = addRoom(blank, box(0, 0, 256, 256), {
+      floor: -32,
+      ceiling: 96,
+    }).map;
+    const { map, id } = addRoom(sunk, box(64, 256, 192, 384));
+    expect(map.sectors.find((sector) => sector.id === id)).toMatchObject({
+      floor: -32,
+      ceiling: 96,
+    });
+  });
+
+  it("gives a room drawn inside another that room's heights", () => {
+    const sunk = addRoom(blank, box(0, 0, 256, 256), {
+      floor: -32,
+      ceiling: 96,
+      wallTexture: "ROCKRED1",
+    }).map;
+    expect(newRoomLooks(sunk, box(64, 64, 128, 128))).toMatchObject({
+      floor: -32,
+      ceiling: 96,
+      wallTexture: "STARTAN3",
+    });
+  });
+
+  it("keeps the starter heights for a room drawn on its own", () => {
+    expect(newRoomLooks(blank, box(0, 0, 128, 128))).toMatchObject({
+      floor: 0,
+      ceiling: 128,
+    });
+  });
+});
+
 describe("addRoomOnSide", () => {
+  it("starts at the heights of the room it builds from", () => {
+    const rooms = addRoom(rockRooms(), box(528, -512, 640, 512), {
+      floor: 64,
+      ceiling: 256,
+    }).map;
+    const raised = updateSector(rooms, "sector-2", { floor: -32, ceiling: 96 });
+    const added = addRoomOnSide(raised, "sector-2", "south", 512);
+    expect(added?.map.sectors.at(-1)).toMatchObject({
+      floor: -32,
+      ceiling: 96,
+    });
+  });
+
   it("copies the room it builds from over a wider neighbour", () => {
     const rooms = addRoom(rockRooms(), box(528, -512, 640, 512), {
       wallTexture: "MARBLE1",

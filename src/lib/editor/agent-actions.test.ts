@@ -11,6 +11,7 @@ import {
 } from "@/lib/engine/test-engine";
 import { checkMap } from "@/lib/map/checks";
 import { wallKey } from "@/lib/map/geometry";
+import { starterMap } from "@/lib/map/starter-map";
 import { testMap } from "@/lib/map/test-map";
 import { freedoomNames } from "@/lib/map/textures";
 import { compileMap } from "@/lib/wad/compile";
@@ -197,6 +198,28 @@ describe("agent actions", () => {
     expect(map.sectors[2]).toMatchObject({
       ...rock,
       door: { texture: "BIGDOOR2" },
+    });
+  });
+
+  it("starts a room drawn against Exit at Exit's heights", () => {
+    const corners = [
+      [976, 256],
+      [1168, 256],
+      [1168, 384],
+      [976, 384],
+    ];
+    const drawn = runAgentAction(starterMap, "addRoom", [corners]);
+    expect(drawn.map.sectors.at(-1)).toMatchObject({
+      floor: -32,
+      ceiling: 96,
+      wallTexture: "TEKWALL4",
+    });
+    const raised = runAgentAction(starterMap, "addRoom", [
+      { corners, ceiling: 128 },
+    ]);
+    expect(raised.map.sectors.at(-1)).toMatchObject({
+      floor: -32,
+      ceiling: 128,
     });
   });
 

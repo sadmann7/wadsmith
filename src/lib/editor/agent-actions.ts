@@ -38,6 +38,7 @@ import {
   gridSize,
   makePillar,
   mergeCorners,
+  newRoomLooks,
   removeDetailLine,
   removeHole,
   removeNote,
@@ -477,7 +478,12 @@ export const agentActions: AgentAction[] = [
     run: (map, args, context) => {
       const corners = points(args, "corners");
       if (corners.length < 3) throw new Error("A room needs three corners.");
-      const added = drawRoom(map, corners, looks(args, context), 1);
+      const added = drawRoom(
+        map,
+        corners,
+        looks(args, context, newRoomLooks(map, corners)),
+        1,
+      );
       return { map: added.map, result: added.id };
     },
   },
@@ -2070,7 +2076,9 @@ function editDistance(a: string, b: string) {
 
 const lightLimit = 255;
 
-function looks(args: Args, context: CheckContext, sector?: Sector) {
+type RoomHeights = Pick<Sector, "floor" | "ceiling" | "door">;
+
+function looks(args: Args, context: CheckContext, sector?: RoomHeights) {
   const texture = (name: string) =>
     args[name] === undefined
       ? {}
@@ -2101,7 +2109,7 @@ function looks(args: Args, context: CheckContext, sector?: Sector) {
 const heightLimit = 2048;
 
 // A room's heights, with what isn't given taken from the room as it is.
-function heightsOf(args: Args, sector?: Sector) {
+function heightsOf(args: Args, sector?: RoomHeights) {
   const floor =
     args.floor === undefined
       ? (sector?.floor ?? 0)

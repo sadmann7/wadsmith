@@ -345,7 +345,12 @@ describe("drawing a room against the wall of the room it's in", () => {
   });
 
   it("splits it in two with one bridge from wall to wall over the island", () => {
-    const bridge = drawRoom(island.map, box(56, 280, 624, 312), {}, 1);
+    const bridge = drawRoom(
+      island.map,
+      box(56, 280, 624, 312),
+      { floor: 0 },
+      1,
+    );
     expect(problems(bridge.map)).toEqual([]);
     expect(sectorAt(bridge.map, { x: 340, y: 100 })).not.toBe(
       sectorAt(bridge.map, { x: 340, y: 500 }),
