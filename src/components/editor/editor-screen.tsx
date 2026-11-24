@@ -67,6 +67,7 @@ import {
 } from "@/components/ui/segmented-control";
 import { useEditorKeys } from "@/hooks/use-editor-keys";
 import { useIwad } from "@/hooks/use-iwad";
+import { usePlusKey } from "@/hooks/use-plus-key";
 import { useVanillaLimits } from "@/hooks/use-vanilla-limits";
 import { actForPerson, agentSession } from "@/lib/editor/agent";
 import { agentStepSummary } from "@/lib/editor/agent-actions";
@@ -225,6 +226,7 @@ import type {
   EditMode,
   MapTool,
   MapViewStatus,
+  ZoomRequest,
 } from "./map-editor";
 
 import { AgentCard } from "./agent-card";
@@ -512,6 +514,9 @@ export function EditorScreen({
   const [findCameraRequest, setFindCameraRequest] = React.useState(0);
   const [fitRequest, setFitRequest] = React.useState(0);
   const [fitSelectionRequest, setFitSelectionRequest] = React.useState(0);
+  const [zoomRequest, setZoomRequest] = React.useState<ZoomRequest | null>(
+    null,
+  );
   const [selectAllRequest, setSelectAllRequest] = React.useState(0);
   const [groups, setGroups] = React.useState<Record<string, SelectionGroup>>(
     {},
@@ -1243,6 +1248,29 @@ export function EditorScreen({
     () => setFitSelectionRequest((request) => request + 1),
     shortcut("fitSelection", () => modeKeys() && visibleLayout !== "scene"),
   );
+
+  const zoomMap = (steps: number) => {
+    const pointer = mapPointer.current;
+    setZoomRequest((request) => ({
+      id: (request?.id ?? 0) + 1,
+      steps,
+      at: pointer && { x: pointer.clientX, y: pointer.clientY },
+    }));
+  };
+  const zoomKeys = () => modeKeys() && visibleLayout !== "scene";
+  useShortcut(shortcutKeys.zoomIn, () => zoomMap(1), {
+    ...shortcut("zoomIn", zoomKeys),
+    repeat: true,
+  });
+  useShortcut(shortcutKeys.zoomOut, () => zoomMap(-1), {
+    ...shortcut("zoomOut", zoomKeys),
+    repeat: true,
+  });
+  usePlusKey(shortcutKeys.zoomIn === "=", () => {
+    if (!shortcut("zoomIn", zoomKeys).when()) return false;
+    zoomMap(1);
+    return true;
+  });
 
   const toggleDoors = () => {
     const making = selectedRooms.some((room) => !room.door);
@@ -2480,6 +2508,7 @@ export function EditorScreen({
                       findCameraRequest={findCameraRequest}
                       fitRequest={fitRequest}
                       fitSelectionRequest={fitSelectionRequest}
+                      zoomRequest={zoomRequest}
                       fitAround={[
                         showWelcome && "#welcome-card",
                         hasAgentCard && "[data-agent-card]",
