@@ -13,15 +13,22 @@ import { actionForSpecial, lineUsesTag } from "@/lib/map/lines";
 import { parseSurface } from "@/lib/map/surfaces";
 import { buildLevel } from "@/lib/wad/compile";
 
-/** The height of a wall texture by its name, or null when it has no picture. */
+/** The height of a wall texture by its name, or of the texture Doom reads for "-", or null when it has no picture. */
 export type TextureHeight = (name: string) => number | null;
 
 interface Heights {
   floor?: number;
   ceiling?: number;
+  floorTexture?: string;
+  ceilingTexture?: string;
 }
 
-type Moves = Map<string, Heights>;
+interface Move extends Heights {
+  rises?: boolean;
+  drops?: boolean;
+}
+
+type Moves = Map<string, Move>;
 
 interface Mover {
   work: (room: Sector, textureHeight: TextureHeight | null) => Moves;
@@ -31,6 +38,11 @@ interface LevelLine {
   front: number;
   back: number | null;
   wall: string;
+}
+
+interface Level {
+  bySector: LevelLine[][];
+  fronts: Map<string, number>;
 }
 
 interface Shown {
@@ -48,8 +60,9 @@ interface Movers extends Shut {
   map: GameMap;
   candidates: Map<string, Mover[]>;
   boom: boolean;
+  vanilla: boolean;
   vanillaStairs: boolean;
-  levelLines: () => LevelLine[][] | null;
+  level: () => Level | null;
 }
 
 interface Plans {
@@ -140,18 +153,20 @@ function shownWith(
       });
       continue;
     }
-    for (const [id, heights] of planOf(map, sector.id, textureHeight) ?? []) {
+    for (const [id, move] of planOf(map, sector.id, textureHeight) ?? []) {
       const earlier = moved.get(id) ?? {};
       const room = { ...defined(shut.get(id)), ...earlier };
-      const later = { ...heights };
-      // From Boom on, a floor or ceiling stops where the other one stands.
-      if (boom && later.floor !== undefined) {
-        later.floor = Math.min(later.floor, room.ceiling);
+      const later = { ...earlier };
+      const { floor, ceiling } = settle(room, move, boom);
+      if (earlier.floor === undefined && floor !== undefined) {
+        later.floor = floor;
+        if (move.floorTexture) later.floorTexture = move.floorTexture;
       }
-      if (boom && later.ceiling !== undefined) {
-        later.ceiling = Math.max(later.ceiling, room.floor);
+      if (earlier.ceiling === undefined && ceiling !== undefined) {
+        later.ceiling = ceiling;
+        if (move.ceilingTexture) later.ceilingTexture = move.ceilingTexture;
       }
-      moved.set(id, { ...later, ...earlier });
+      moved.set(id, later);
     }
   }
   const result = {
@@ -167,6 +182,21 @@ function shownWith(
   };
   shown.set(key, result);
   return result;
+}
+
+// From Boom on, a plane stops at the other only when moving towards it.
+function settle(room: Sector, move: Move, boom: boolean) {
+  const { floor, ceiling, rises, drops } = move;
+  return {
+    floor:
+      boom && rises && floor !== undefined
+        ? Math.min(floor, room.ceiling)
+        : floor,
+    ceiling:
+      boom && drops && ceiling !== undefined
+        ? Math.max(ceiling, room.floor)
+        : ceiling,
+  };
 }
 
 function getIsDoor(map: GameMap, id: string) {
@@ -195,13 +225,16 @@ function plansOf(map: GameMap, textureHeight?: TextureHeight): Plans {
 function planOf(map: GameMap, id: string, textureHeight?: TextureHeight) {
   const { plans } = plansOf(map, textureHeight);
   if (plans.has(id)) return plans.get(id) ?? null;
-  const { shut, candidates } = moversOf(map);
+  const { shut, candidates, boom } = moversOf(map);
   const room = shut.get(id);
   let best: { moves: Moves; gap: number } | null = null;
   for (const mover of room ? (candidates.get(id) ?? []) : []) {
     const start = defined(room);
     const moves = mover.work(start, textureHeight ?? null);
-    const { floor, ceiling } = { ...start, ...moves.get(id) };
+    const move = moves.get(id);
+    const settled: Heights = move ? settle(start, move, boom) : {};
+    const floor = settled.floor ?? start.floor;
+    const ceiling = settled.ceiling ?? start.ceiling;
     if (!best || ceiling - floor > best.gap) {
       best = { moves, gap: ceiling - floor };
     }
@@ -264,10 +297,10 @@ const moversCache = new WeakMap<GameMap, Movers>();
 function moversOf(map: GameMap): Movers {
   const cached = moversCache.get(map);
   if (cached) return cached;
-  let level: LevelLine[][] | null | undefined;
-  const levelLines = () => {
-    if (level === undefined) level = linesBySector(map);
-    return level;
+  let built: Level | null | undefined;
+  const level = () => {
+    if (built === undefined) built = levelOf(map);
+    return built;
   };
   const complevel = map.complevel ?? "vanilla";
   const movers: Movers = {
@@ -275,8 +308,9 @@ function moversOf(map: GameMap): Movers {
     map,
     candidates: new Map(),
     boom: atLeast(complevel, "boom"),
+    vanilla: complevel === "vanilla",
     vanillaStairs: complevel === "vanilla" || complevel === "mbf",
-    levelLines,
+    level,
   };
   const tagged = (tag: number) =>
     tag > 0
@@ -300,14 +334,16 @@ function moversOf(map: GameMap): Movers {
     let work: Mover["work"] | null = null;
     let starts: Sector[] = [];
     if (named) {
-      work = lineUsesTag(named) ? vanillaWork(movers, named.kind) : null;
       starts = tagged(named.tag);
+      work = lineUsesTag(named)
+        ? vanillaWork(movers, named.kind, wall, starts)
+        : null;
     } else if (movers.boom && raw?.special && generalizedKind(raw.special)) {
-      work = boomWork(movers, raw.special);
       starts =
         generalizedTrigger(raw.special).trigger === "door"
           ? behind(wall)
           : tagged(raw.tag);
+      work = boomWork(movers, raw.special, wall, starts);
     }
     if (!work) continue;
     for (const start of starts) {
@@ -319,20 +355,22 @@ function moversOf(map: GameMap): Movers {
   return movers;
 }
 
-// Each room's lines in linedef order, as the engine groups them, or null when
-// the map doesn't build.
-function linesBySector(map: GameMap) {
+// Each room's lines in linedef order, as the engine groups them, and the
+// room in front of each wall, or null when the map doesn't build.
+function levelOf(map: GameMap): Level | null {
   try {
     const { lines } = buildLevel(map);
     const bySector: LevelLine[][] = map.sectors.map(() => []);
+    const fronts = new Map<string, number>();
     for (const { frontSector, backSector, wall } of lines) {
       const line = { front: frontSector, back: backSector, wall };
+      fronts.set(wall, frontSector);
       bySector[frontSector].push(line);
       if (backSector !== null && backSector !== frontSector) {
         bySector[backSector].push(line);
       }
     }
-    return bySector;
+    return { bySector, fronts };
   } catch {
     return null;
   }
@@ -345,31 +383,95 @@ const vanillaSteps: Partial<Record<LineActionKind, number>> = {
   "stairs-fast": 16,
 };
 
+// The raises that take the floor texture of the room in front of their line.
+const takesFrontTexture = new Set<LineActionKind>([
+  "floor-raise-next-texture",
+  "floor-raise-24-texture",
+  "floor-raise-32-texture",
+]);
+
 function vanillaWork(
   movers: Movers,
   kind: LineActionKind,
+  wall: string,
+  starts: Sector[],
 ): Mover["work"] | null {
   const step = vanillaSteps[kind];
   if (step) {
-    return (room) =>
-      stairs(movers, room, {
-        step,
-        up: true,
-        anyTexture: false,
-        vanillaCount: movers.vanillaStairs,
-      });
+    return stairsWork(movers, starts, {
+      step,
+      up: true,
+      anyTexture: false,
+      vanillaCount: movers.vanillaStairs,
+      search: movers.vanilla,
+    });
   }
   if (kind === "donut") return (room) => donut(movers, room);
-  const heights = vanillaHeights(kind, movers.boom);
+  const heights = vanillaHeights(kind);
   if (!heights) return null;
   return (room, textureHeight) => {
     const beside = movers.around.get(room.id) ?? [];
-    return beside.length > 0
-      ? heights(room, nearby(room, beside), () =>
-          shortestTexture(movers.map, room, "lower", textureHeight),
-        )
-      : still;
+    if (beside.length === 0) return still;
+    const near = nearby(room, beside);
+    const moves = heights(room, near, () =>
+      shortestTexture(movers, room, "lower", textureHeight),
+    );
+    if (kind === "floor-lower-texture") {
+      const model = modelOf(movers, room, "floor", near.lowestFloor);
+      return withTexture(moves, room, "floor", model);
+    }
+    return takesFrontTexture.has(kind)
+      ? withTexture(moves, room, "floor", frontOf(movers, wall))
+      : moves;
   };
+}
+
+function frontOf(movers: Movers, wall: string) {
+  const index = movers.level()?.fronts.get(wall);
+  return index === undefined
+    ? null
+    : defined(movers.shut.get(movers.map.sectors[index].id));
+}
+
+// The room across the first two-sided line of a room whose floor or ceiling
+// stands at a height. Vanilla cuts the search short at the line count of the
+// last room it looked across, when that is fewer.
+function modelOf(
+  movers: Movers,
+  room: Sector,
+  plane: "floor" | "ceiling",
+  height: number,
+) {
+  const { map, shut } = movers;
+  const bySector = movers.level()?.bySector;
+  if (!bySector) return null;
+  const index = map.sectors.findIndex((sector) => sector.id === room.id);
+  const own = bySector[index];
+  let bound = own.length;
+  for (let at = 0; at < bound; at += 1) {
+    const { front, back } = own[at];
+    if (back === null) continue;
+    const across = front === index ? back : front;
+    const model = defined(shut.get(map.sectors[across].id));
+    if (model[plane] === height) return model;
+    if (movers.vanilla) bound = Math.min(own.length, bySector[across].length);
+  }
+  return null;
+}
+
+function withTexture(
+  moves: Moves,
+  room: Sector,
+  plane: "floor" | "ceiling",
+  model: Sector | null,
+): Moves {
+  const move = moves.get(room.id);
+  if (!model || !move) return moves;
+  const texture =
+    plane === "floor"
+      ? { floorTexture: model.floorTexture }
+      : { ceilingTexture: model.ceilingTexture };
+  return new Map([...moves, [room.id, { ...move, ...texture }]]);
 }
 
 interface Nearby {
@@ -416,23 +518,19 @@ type Worked = (
   shortest: () => number | null,
 ) => Moves;
 
-// Doom stops a rising floor at its ceiling only from Boom on, apart from the
-// raise to the lowest ceiling nearby.
-function vanillaHeights(kind: LineActionKind, boom: boolean): Worked | null {
-  const rise = (room: Sector, floor: number) =>
-    boom ? riseFloor(room, floor) : setFloor(room, floor);
+function vanillaHeights(kind: LineActionKind): Worked | null {
   switch (kind) {
     case "lift":
     case "lift-fast":
     case "platform":
     case "floor-lower":
     case "floor-lower-texture":
-      return (room, near) => setFloor(room, near.lowestFloor);
+      return (room, near) => lowerFloor(room, near.lowestFloor);
     case "floor-lower-highest":
-      return (room, near) => setFloor(room, near.highestFloor);
+      return (room, near) => lowerFloor(room, near.highestFloor);
     case "floor-lower-fast":
       return (room, near) =>
-        setFloor(
+        lowerFloor(
           room,
           near.highestFloor === room.floor
             ? near.highestFloor
@@ -440,35 +538,35 @@ function vanillaHeights(kind: LineActionKind, boom: boolean): Worked | null {
         );
     case "floor-raise":
       return (room, near) =>
-        setFloor(room, Math.min(room.ceiling, near.lowestCeiling));
+        raiseFloor(room, Math.min(room.ceiling, near.lowestCeiling));
     case "floor-crush":
       return (room, near) =>
-        setFloor(room, Math.min(room.ceiling, near.lowestCeiling) - 8);
+        raiseFloor(room, Math.min(room.ceiling, near.lowestCeiling) - 8);
     case "floor-raise-next":
     case "floor-raise-next-fast":
     case "floor-raise-next-texture":
-      return (room, near) => rise(room, near.nextFloorUp);
+      return (room, near) => raiseFloor(room, near.nextFloorUp);
     case "floor-raise-24":
     case "floor-raise-24-texture":
-      return (room) => rise(room, room.floor + 24);
+      return (room) => raiseFloor(room, room.floor + 24);
     case "floor-raise-32-texture":
-      return (room) => rise(room, room.floor + 32);
+      return (room) => raiseFloor(room, room.floor + 32);
     case "floor-raise-512":
-      return (room) => rise(room, room.floor + 512);
+      return (room) => raiseFloor(room, room.floor + 512);
     case "floor-raise-texture":
       return (room, _near, shortest) => {
         const by = shortest();
-        return by === null ? still : rise(room, room.floor + by);
+        return by === null ? still : raiseFloor(room, room.floor + by);
       };
     case "ceiling-lower":
-      return (room) => setCeiling(room, room.floor);
+      return (room) => lowerCeiling(room, room.floor);
     case "ceiling-lower-8":
     case "crusher":
     case "crusher-fast":
     case "crusher-silent":
-      return (room) => setCeiling(room, room.floor + 8);
+      return (room) => lowerCeiling(room, room.floor + 8);
     case "ceiling-raise":
-      return (room, near) => setCeiling(room, near.highestCeiling);
+      return (room, near) => raiseCeiling(room, near.highestCeiling);
     default:
       return null;
   }
@@ -476,7 +574,12 @@ function vanillaHeights(kind: LineActionKind, boom: boolean): Worked | null {
 
 const boomSteps = [4, 8, 16, 24];
 
-function boomWork(movers: Movers, special: number): Mover["work"] | null {
+function boomWork(
+  movers: Movers,
+  special: number,
+  wall: string,
+  starts: Sector[],
+): Mover["work"] | null {
   const kind = generalizedKind(special);
   if (!kind) return null;
   const fields = new Map(
@@ -488,141 +591,216 @@ function boomWork(movers: Movers, special: number): Mover["work"] | null {
   const value = (id: string) => fields.get(id) ?? 0;
   const up = value("direction") === 1;
   if (kind.class === "stairs") {
-    return (room) =>
-      stairs(movers, room, {
-        step: boomSteps[value("step")],
-        up,
-        anyTexture: value("ignore") === 1,
-        vanillaCount: false,
-      });
+    return stairsWork(movers, starts, {
+      step: boomSteps[value("step")],
+      up,
+      anyTexture: value("ignore") === 1,
+      vanillaCount: false,
+      search: false,
+    });
   }
-  const heights = boomHeights(kind.class, value("target"), up);
+  const heights = boomHeights(movers, kind.class, value, wall);
   if (!heights) return null;
   const part = kind.class === "ceiling" ? "upper" : "lower";
   return (room, textureHeight) => {
     const beside = movers.around.get(room.id) ?? [];
     return beside.length > 0
       ? heights(room, nearby(room, beside), () =>
-          shortestTexture(movers.map, room, part, textureHeight),
+          shortestTexture(movers, room, part, textureHeight),
         )
       : still;
   };
 }
 
-// Boom stops a rising floor at its ceiling and a lowering ceiling at its
-// floor, and a mover sent the wrong way to its target jumps straight there.
-function boomHeights(kind: string, target: number, up: boolean): Worked | null {
+type Target = (
+  room: Sector,
+  near: Nearby,
+  shortest: () => number | null,
+) => number | null;
+
+// A mover sent the wrong way to its target jumps straight there. A texture
+// change copies the room in front of the line, or the room across the first
+// line at the target height, measured on the plane the target is.
+function boomHeights(
+  movers: Movers,
+  kind: string,
+  value: (id: string) => number,
+  wall: string,
+): Worked | null {
+  const up = value("direction") === 1;
+  const target = value("target");
   const sign = up ? 1 : -1;
-  const floor = (room: Sector, height: number) =>
-    up ? riseFloor(room, height) : setFloor(room, height);
-  const ceiling = (room: Sector, height: number) =>
-    up ? new Map([[room.id, { ceiling: height }]]) : dropCeiling(room, height);
-  if (kind === "floor") {
+  if (kind === "floor" || kind === "ceiling") {
+    const plane = kind;
+    const other = plane === "floor" ? "ceiling" : "floor";
     const by =
-      (amount: number): Worked =>
+      (amount: number): Target =>
       (room) =>
-        floor(room, room.floor + sign * amount);
-    const targets: Worked[] = [
-      (room, near) => floor(room, near.highestFloor),
-      (room, near) => floor(room, near.lowestFloor),
-      (room, near) => floor(room, up ? near.nextFloorUp : near.nextFloorDown),
-      (room, near) => floor(room, near.lowestCeiling),
-      (room) => floor(room, room.ceiling),
-      (room, _near, shortest) => {
-        const amount = shortest();
-        return amount === null ? still : by(amount)(room, _near, shortest);
-      },
-      by(24),
-      by(32),
-    ];
-    return targets[target];
-  }
-  if (kind === "ceiling") {
-    const by =
-      (amount: number): Worked =>
-      (room) =>
-        ceiling(room, room.ceiling + sign * amount);
-    const targets: Worked[] = [
-      (room, near) => ceiling(room, near.highestCeiling),
-      (room, near) => ceiling(room, near.lowestCeiling),
-      (room, near) =>
-        ceiling(room, up ? near.nextCeilingUp : near.nextCeilingDown),
-      (room, near) => ceiling(room, near.highestFloor),
-      (room) => ceiling(room, room.floor),
-      (room, _near, shortest) => {
-        const amount = shortest();
-        return amount === null ? still : by(amount)(room, _near, shortest);
-      },
-      by(24),
-      by(32),
-    ];
-    return targets[target];
+        room[plane] + sign * amount;
+    const targets: Target[] =
+      plane === "floor"
+        ? [
+            (_room, near) => near.highestFloor,
+            (_room, near) => near.lowestFloor,
+            (_room, near) => (up ? near.nextFloorUp : near.nextFloorDown),
+            (_room, near) => near.lowestCeiling,
+            (room) => room.ceiling,
+            (room, _near, shortest) => {
+              const amount = shortest();
+              return amount === null ? null : room.floor + sign * amount;
+            },
+            by(24),
+            by(32),
+          ]
+        : [
+            (_room, near) => near.highestCeiling,
+            (_room, near) => near.lowestCeiling,
+            (_room, near) => (up ? near.nextCeilingUp : near.nextCeilingDown),
+            (_room, near) => near.highestFloor,
+            (room) => room.floor,
+            (room, _near, shortest) => {
+              const amount = shortest();
+              return amount === null ? null : room.ceiling + sign * amount;
+            },
+            by(24),
+            by(32),
+          ];
+    const to = targets[target];
+    if (!to) return null;
+    const measured = target === 3 || target === 4 ? other : plane;
+    return (room, near, shortest) => {
+      const height = to(room, near, shortest);
+      if (height === null) return still;
+      const moves =
+        plane === "floor"
+          ? up
+            ? raiseFloor(room, height)
+            : lowerFloor(room, height)
+          : up
+            ? raiseCeiling(room, height)
+            : lowerCeiling(room, height);
+      if (value("change") === 0) return moves;
+      const model =
+        value("model") === 0
+          ? frontOf(movers, wall)
+          : modelOf(movers, room, measured, height);
+      return withTexture(moves, room, plane, model);
+    };
   }
   if (kind === "lift") {
     const targets: Worked[] = [
-      (room, near) => setFloor(room, near.lowestFloor),
-      (room, near) => setFloor(room, near.nextFloorDown),
-      (room, near) => setFloor(room, Math.min(room.floor, near.lowestCeiling)),
-      (room, near) => setFloor(room, near.lowestFloor),
+      (room, near) => lowerFloor(room, near.lowestFloor),
+      (room, near) => lowerFloor(room, near.nextFloorDown),
+      (room, near) =>
+        lowerFloor(room, Math.min(room.floor, near.lowestCeiling)),
+      (room, near) => lowerFloor(room, near.lowestFloor),
     ];
-    return targets[target];
+    return targets[target] ?? null;
   }
-  if (kind === "crusher") return (room) => dropCeiling(room, room.floor + 8);
+  if (kind === "crusher") {
+    return (room) => lowerCeiling(room, room.floor + 8);
+  }
   return null;
 }
 
-function setCeiling(room: Sector, ceiling: number): Moves {
-  return new Map([[room.id, { ceiling }]]);
-}
-
-function riseFloor(room: Sector, floor: number): Moves {
-  return new Map([[room.id, { floor: Math.min(room.ceiling, floor) }]]);
-}
-
-function setFloor(room: Sector, floor: number): Moves {
+function lowerFloor(room: Sector, floor: number): Moves {
   return new Map([[room.id, { floor }]]);
 }
 
-function dropCeiling(room: Sector, ceiling: number): Moves {
-  return new Map([[room.id, { ceiling: Math.max(room.floor, ceiling) }]]);
+function raiseFloor(room: Sector, floor: number): Moves {
+  return new Map([[room.id, { floor, rises: true }]]);
+}
+
+function raiseCeiling(room: Sector, ceiling: number): Moves {
+  return new Map([[room.id, { ceiling }]]);
+}
+
+function lowerCeiling(room: Sector, ceiling: number): Moves {
+  return new Map([[room.id, { ceiling, drops: true }]]);
+}
+
+interface StairOptions {
+  step: number;
+  up: boolean;
+  anyTexture: boolean;
+  vanillaCount: boolean;
+  search: boolean;
+}
+
+// A line builds a stair from each room it tags, lowest first, skipping one a
+// stair already moves. Vanilla searches the tag again after each stair for
+// the first room past the stair's last step.
+function stairsWork(
+  movers: Movers,
+  starts: Sector[],
+  options: StairOptions,
+): Mover["work"] {
+  let built: Map<string, Moves> | null = null;
+  return (room) => {
+    built ??= lineStairs(movers, starts, options);
+    return built.get(room.id) ?? still;
+  };
+}
+
+function lineStairs(movers: Movers, starts: Sector[], options: StairOptions) {
+  const { map, shut } = movers;
+  const indices = starts
+    .map((start) => map.sectors.findIndex((sector) => sector.id === start.id))
+    .toSorted((a, b) => a - b);
+  const moving = new Set<string>();
+  const built = new Map<string, Moves>();
+  let at = -1;
+  let after = -1;
+  for (;;) {
+    do {
+      const from = at;
+      at = indices.find((index) => index > from) ?? -1;
+    } while (at >= 0 && at <= after);
+    if (at < 0) return built;
+    const start = defined(shut.get(map.sectors[at].id));
+    if (moving.has(start.id)) continue;
+    const { moves, last } = stairs(movers, start, options, moving);
+    built.set(start.id, moves);
+    if (options.search) {
+      at = -1;
+      after = last;
+    }
+  }
 }
 
 // A stair raises the room it starts in by a step, then the room behind each
-// next line the last step is in front of, while the floor texture matches.
-// Vanilla counts a step for a matching room already in the stair too.
+// next line the last step is in front of, while the floor texture matches
+// and the room isn't moving yet. Vanilla counts a step for a matching room
+// that is moving too.
 function stairs(
   movers: Movers,
   start: Sector,
-  {
-    step,
-    up,
-    anyTexture,
-    vanillaCount,
-  }: { step: number; up: boolean; anyTexture: boolean; vanillaCount: boolean },
-): Moves {
-  const { map, shut, boom } = movers;
-  const stop = (room: Sector, floor: number) =>
-    up && boom ? Math.min(room.ceiling, floor) : floor;
-  const lines = movers.levelLines();
+  { step, up, anyTexture, vanillaCount }: StairOptions,
+  moving: Set<string>,
+) {
+  const { map, shut } = movers;
+  const bySector = movers.level()?.bySector;
   const sign = up ? 1 : -1;
   let height = start.floor + sign * step;
-  const moves: Moves = new Map([[start.id, { floor: stop(start, height) }]]);
-  if (!lines) return moves;
   let index = map.sectors.findIndex((sector) => sector.id === start.id);
+  const moves: Moves = new Map([[start.id, { floor: height, rises: up }]]);
+  moving.add(start.id);
+  if (!bySector) return { moves, last: index };
   for (;;) {
     let next = -1;
-    for (const line of lines[index]) {
+    for (const line of bySector[index]) {
       if (line.back === null || line.front !== index) continue;
       const room = defined(shut.get(map.sectors[line.back].id));
       if (!anyTexture && room.floorTexture !== start.floorTexture) continue;
       if (vanillaCount) height += sign * step;
-      if (moves.has(room.id)) continue;
+      if (moving.has(room.id)) continue;
       if (!vanillaCount) height += sign * step;
       next = line.back;
-      moves.set(room.id, { floor: stop(room, height) });
+      moves.set(room.id, { floor: height, rises: up });
+      moving.add(room.id);
       break;
     }
-    if (next < 0) return moves;
+    if (next < 0) return { moves, last: index };
     index = next;
   }
 }
@@ -633,48 +811,63 @@ const donutOverrunFloor = 0x199257 / 0x10000;
 
 // A donut lowers the room it starts in and raises the pool round it, both to
 // the floor of the room behind the pool's first line that doesn't face the
-// start. Vanilla doesn't skip a one-sided line there.
+// start, and the pool takes that room's floor texture. Vanilla doesn't skip a
+// one-sided line there.
 function donut(movers: Movers, start: Sector): Moves {
   const { map, shut, boom } = movers;
-  const lines = movers.levelLines();
+  const bySector = movers.level()?.bySector;
   const index = map.sectors.findIndex((sector) => sector.id === start.id);
-  const first = lines?.[index][0];
-  if (!lines || !first || first.back === null) return still;
+  const first = bySector?.[index][0];
+  if (!bySector || !first || first.back === null) return still;
   if (boom && first.front === first.back) return still;
   const poolIndex = first.front === index ? first.back : first.front;
   const pool = defined(shut.get(map.sectors[poolIndex].id));
-  for (const line of lines[poolIndex]) {
+  for (const line of bySector[poolIndex]) {
     if (line.back === index || (boom && line.back === null)) continue;
-    const floor =
-      line.back === null
-        ? donutOverrunFloor
-        : defined(shut.get(map.sectors[line.back].id)).floor;
+    const model =
+      line.back === null ? null : defined(shut.get(map.sectors[line.back].id));
+    const floor = model?.floor ?? donutOverrunFloor;
     return new Map([
-      [pool.id, { floor: boom ? Math.min(pool.ceiling, floor) : floor }],
+      [
+        pool.id,
+        {
+          floor,
+          rises: true,
+          ...(model && { floorTexture: model.floorTexture }),
+        },
+      ],
       [start.id, { floor }],
     ]);
   }
   return still;
 }
 
+// A line drawn inside a room has no lower or upper texture, which vanilla
+// reads as the first texture and Boom skips.
 function shortestTexture(
-  map: GameMap,
+  movers: Movers,
   room: Sector,
   part: "upper" | "lower",
   textureHeight: TextureHeight | null,
 ) {
   if (!textureHeight) return null;
+  const { map, vanilla } = movers;
+  const heightOf = (name: string) =>
+    name === "-" && !vanilla ? Infinity : (textureHeight(name) ?? Infinity);
   let least = Infinity;
   for (const [wall, [one, other]] of wallOwners(map)) {
-    if (!other || one === other || (one.id !== room.id && other.id !== room.id))
+    if (!other || (one.id !== room.id && other.id !== room.id)) continue;
+    if (one === other) {
+      least = Math.min(least, heightOf("-"));
       continue;
+    }
     const door = one.door ?? other.door;
     for (const side of [one, other]) {
       const name =
         part === "upper" && door
           ? (map.lines?.[wall]?.sides?.[side.id]?.upper ?? door.texture)
           : wallPartTexture(map, side, wall, part);
-      least = Math.min(least, textureHeight(name) ?? Infinity);
+      least = Math.min(least, heightOf(name));
     }
   }
   return Number.isFinite(least) ? least : null;

@@ -26,6 +26,8 @@ export interface SceneAssets {
   shades: Uint32Array;
   names: TextureNames;
   texture: (name: string) => Picture;
+  // The height of the game's first texture, which Doom reads for "-".
+  blankHeight: number | null;
   flat: (name: string) => Picture;
   sprite: (kind: ThingKind) => Picture | null;
   // A sprite by its name and frame, like "TROOA", facing front.
@@ -46,6 +48,7 @@ export function textureHeightOf(assets: SceneAssets) {
   let height = textureHeights.get(assets);
   if (!height) {
     height = (name: string) => {
+      if (name === "-") return assets.blankHeight;
       const picture = assets.texture(name);
       return picture.height > 1 ? picture.height : null;
     };
@@ -278,6 +281,9 @@ export function readWadAssets(
       textureCache.set(name, picture);
       return picture;
     },
+    blankHeight: catalog.placeholder
+      ? (definitions.get(catalog.placeholder)?.height ?? null)
+      : null,
     flat(name) {
       const cached = flatCache.get(name);
       if (cached) return cached;
@@ -418,6 +424,7 @@ export function createFlatAssets(): SceneAssets {
     shades,
     names: freedoomNames,
     texture: tile,
+    blankHeight: null,
     flat: tile,
     sprite(kind) {
       const monster =
