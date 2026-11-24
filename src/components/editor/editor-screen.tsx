@@ -1861,15 +1861,15 @@ export function EditorScreen({
       ? `${selectedThings.length} things`
       : thing
         ? thingLabel(thing, customThings)
-        : line
-          ? selectedWalls.length > 1
-            ? `${selectedWalls.length} lines`
-            : `Line ${line.wall}`
-          : surfaceInfo && !surfaceInfo.thing
-            ? surfaceInfo.label
-            : placingThings
-              ? "Things"
-              : (sector?.name ?? "Nothing selected");
+        : selectedWalls.length > 1
+          ? `${selectedWalls.length} lines`
+          : line
+            ? `Line ${line.wall}`
+            : surfaceInfo && !surfaceInfo.thing
+              ? surfaceInfo.label
+              : placingThings
+                ? "Things"
+                : (sector?.name ?? "Nothing selected");
   const selectionMeta = selectedSwitch
     ? selectedSwitch.door
       ? "Wired to a door"
@@ -1878,12 +1878,12 @@ export function EditorScreen({
       ? "Changes apply to every selected thing"
       : thing
         ? thingMeta
-        : placingThings
-          ? tool === "thing"
-            ? `Placing ${placingLabel}`
-            : "Pick a thing to place"
-          : line && selectedWalls.length > 1
-            ? "Changes apply to every selected line"
+        : selectedWalls.length > 1
+          ? "Changes apply to every selected line"
+          : placingThings
+            ? tool === "thing"
+              ? `Placing ${placingLabel}`
+              : "Pick a thing to place"
             : line
               ? `${
                   line.back === line.front
