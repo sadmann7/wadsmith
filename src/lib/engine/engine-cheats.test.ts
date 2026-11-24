@@ -34,6 +34,18 @@ describe.skipIf(!ready)("playtest cheats in the engine", () => {
     expect(game.status().health).toBeLessThan(100);
   }, 30_000);
 
+  it("still ends the level on a damage-exit floor in god mode", async () => {
+    const exitFloor = updateSector(openMap, "sector-1", {
+      effect: "damage-20-exit",
+    });
+    const game = await launch(exitFloor);
+    await waitForPlay(game);
+    game.setCheats({ ...noCheats, god: true });
+    expect(game.cheats().god).toBe(true);
+    await play(game, 15_000, () => !game.status().inLevel);
+    expect(game.status().inLevel).toBe(false);
+  }, 30_000);
+
   it("walks through a wall with no clipping", async () => {
     const distance = async (noclip: boolean) => {
       const game = await launch(playerAt(openMap, 300, 280, 0));

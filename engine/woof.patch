@@ -559,10 +559,10 @@ index a16ecd1..e79fe25 100644
  
 diff --git a/src/wadsmith.c b/src/wadsmith.c
 new file mode 100644
-index 0000000..8cf2cb0
+index 0000000..abfd7fc
 --- /dev/null
 +++ b/src/wadsmith.c
-@@ -0,0 +1,435 @@
+@@ -0,0 +1,440 @@
 +// The interface between Woof and Wadsmith's game worker.
 +
 +#include <emscripten.h>
@@ -751,29 +751,34 @@ index 0000000..8cf2cb0
 +
 +// Held here and set again each frame, so they last through deaths and
 +// restarts. A network game never gets them.
++static boolean CanCheat(void)
++{
++    return !netgame && gamestate == GS_LEVEL && Player()->mo;
++}
++
 +static void ApplyCheats(void)
 +{
-+    player_t *player = Player();
-+
-+    if (netgame || gamestate != GS_LEVEL || !player->mo)
++    if (CanCheat())
 +    {
-+        return;
++        Player()->cheats = (Player()->cheats & ~(CF_GODMODE | CF_NOCLIP))
++                           | wanted_cheats;
 +    }
++}
 +
-+    const int wanted = wanted_cheats & (CF_GODMODE | CF_NOCLIP);
++// Only turning god mode on heals, as IDDQD does. A damage-exit floor clears
++// god mode each tic and has to be able to wear the player down to the exit.
++EXPORT void wadsmith_set_cheats(int cheats)
++{
++    player_t *player = Player();
++    const int added = cheats & ~wanted_cheats;
 +
-+    if ((wanted & CF_GODMODE) && !(player->cheats & CF_GODMODE)
-+        && player->health > 0)
++    wanted_cheats = cheats & (CF_GODMODE | CF_NOCLIP);
++
++    if ((added & CF_GODMODE) && CanCheat() && player->health > 0)
 +    {
 +        player->health = player->mo->health = deh_god_mode_health;
 +    }
 +
-+    player->cheats = (player->cheats & ~(CF_GODMODE | CF_NOCLIP)) | wanted;
-+}
-+
-+EXPORT void wadsmith_set_cheats(int cheats)
-+{
-+    wanted_cheats = cheats;
 +    ApplyCheats();
 +}
 +
