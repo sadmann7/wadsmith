@@ -78,17 +78,6 @@ interface Spot {
   count: number;
 }
 
-// After the angles halfway between the eight directions, each step turns the
-// view or moves the spot from the best view found so far, and keeps whichever
-// neighbour fills more.
-const steps = [
-  { turn: 0, move: 1 / 2 },
-  { turn: ang45 / 4, move: 0 },
-  { turn: 0, move: 1 / 4 },
-  { turn: ang45 / 8, move: 0 },
-  { turn: ang45 / 16, move: 0 },
-];
-
 // Looks from a grid of spots a player could stand on, in eight directions,
 // then turns and steps around the views closest to each of the renderer's
 // fixed limits, and reports the rooms with the worst views past them.
@@ -180,6 +169,17 @@ function keep(spots: Map<string, Spot> | undefined, spot: Spot, past: number) {
     spots?.set(spot.sector, spot);
   }
 }
+
+// After the angles halfway between the eight directions, each step turns the
+// view or moves the spot from the best view found so far, and keeps whichever
+// neighbour fills more.
+const steps = [
+  { turn: 0, move: 1 / 2 },
+  { turn: ang45 / 4, move: 0 },
+  { turn: 0, move: 1 / 4 },
+  { turn: ang45 / 8, move: 0 },
+  { turn: ang45 / 16, move: 0 },
+];
 
 function refine(
   start: Spot,

@@ -118,9 +118,6 @@ interface Plane {
 }
 
 const { viewAngleToX, xToViewAngle } = viewTables();
-const tanToAngle = Float64Array.from({ length: slopeRange + 1 }, (_, i) =>
-  Math.floor((Math.atan(i / slopeRange) / (Math.PI * 2)) * 0x100000000),
-);
 
 export function readLevel(lumps: Lump[]): Level {
   const data = (name: string) => {
@@ -222,18 +219,6 @@ export function readLevel(lumps: Lump[]): Level {
     });
   }
   return level;
-}
-
-function sectorAtPoint(level: Level, x: number, y: number) {
-  let index = level.nodes.length - 1;
-  if (index < 0) return level.segs[level.subsectors[0]?.first ?? 0]?.front;
-  while (!(index & subsectorFlag)) {
-    const node = level.nodes[index];
-    index = node.children[pointOnSide(x, y, node)];
-  }
-  const subsector =
-    level.subsectors[index === 0xffff ? 0 : index & ~subsectorFlag];
-  return subsector && level.segs[subsector.first]?.front;
 }
 
 // Counts what one view of the level fills. The angle is a Doom binary angle,
@@ -654,6 +639,18 @@ export function pointOnSide(x: number, y: number, node: LevelNode) {
   return right < left ? 0 : 1;
 }
 
+function sectorAtPoint(level: Level, x: number, y: number) {
+  let index = level.nodes.length - 1;
+  if (index < 0) return level.segs[level.subsectors[0]?.first ?? 0]?.front;
+  while (!(index & subsectorFlag)) {
+    const node = level.nodes[index];
+    index = node.children[pointOnSide(x, y, node)];
+  }
+  const subsector =
+    level.subsectors[index === 0xffff ? 0 : index & ~subsectorFlag];
+  return subsector && level.segs[subsector.first]?.front;
+}
+
 function count(view: DataView, size: number) {
   return Math.floor(view.byteLength / size);
 }
@@ -701,6 +698,10 @@ function viewTables() {
   }
   return { viewAngleToX, xToViewAngle };
 }
+
+const tanToAngle = Float64Array.from({ length: slopeRange + 1 }, (_, i) =>
+  Math.floor((Math.atan(i / slopeRange) / (Math.PI * 2)) * 0x100000000),
+);
 
 function fixedPointToAngle(x: number, y: number) {
   if (x === 0 && y === 0) return 0;

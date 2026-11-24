@@ -93,19 +93,8 @@ function bonus(id: string, x: number, y: number): Thing {
   return { id, kind: "health-bonus", x, y, angle: 0 };
 }
 
-function room(id: string, vertices: string[], ceiling: number): Sector {
-  return {
-    ...testMap.sectors[0],
-    id,
-    name: id[0].toUpperCase() + id.slice(1),
-    vertices,
-    floor: 0,
-    ceiling,
-  };
-}
-
 // One wide hall crossed by rows of grates, seen end on.
-export function grates(rows: number): GameMap {
+function grates(rows: number): GameMap {
   const vertices: GameMap["vertices"] = {
     a: { x: 0, y: 0 },
     b: { x: 4096, y: 0 },
@@ -134,7 +123,7 @@ export function grates(rows: number): GameMap {
 
 // A one-spot alcove open to a low hall, with two piles of things in the hall
 // 80 degrees apart as the alcove sees them.
-export function crowd(each: number): GameMap {
+function crowd(each: number): GameMap {
   const pile = (name: string, degrees: number) => {
     const radians = (degrees * Math.PI) / 180;
     const x = Math.round(16 + 800 * Math.cos(radians));
@@ -192,4 +181,15 @@ function grid(
     }
   }
   return { vertices, sectors, things: [], switches: [] };
+}
+
+function room(id: string, vertices: string[], ceiling: number): Sector {
+  return {
+    ...testMap.sectors[0],
+    id,
+    name: id[0].toUpperCase() + id.slice(1),
+    vertices,
+    floor: 0,
+    ceiling,
+  };
 }
