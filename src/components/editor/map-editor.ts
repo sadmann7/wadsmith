@@ -508,7 +508,8 @@ export const mapEditor = definePrimitive({
     let focusRequest = context.options().focusRequest?.id ?? 0;
     let touchPress: { event: PointerEvent; held: boolean } | null = null;
     let ignoreClick = false;
-    let pressedDraw = false;
+    let drawPointer: number | null = null;
+    let stopDrawRelease: (() => void) | undefined;
 
     const findCamera = () => {
       if (!fitted) {
@@ -612,11 +613,42 @@ export const mapEditor = definePrimitive({
     };
 
     const pressedPoint = (event: MouseEvent) => {
-      const key = (event.target as Element).closest<HTMLElement>(
-        "[data-map-key]",
-      )?.dataset.mapKey;
+      const target = event.target as Partial<Element> | null;
+      const key =
+        target?.closest?.<HTMLElement>("[data-map-key]")?.dataset.mapKey;
       return (key && store.get().positions[key]) || pointFromEvent(event);
     };
+
+    const releaseDraw = (event: PointerEvent) => {
+      if (event.pointerId !== drawPointer) return;
+      stopDrawRelease?.();
+      drawPointer = null;
+      ignoreClick = Boolean(root()?.contains(event.target as Node));
+      if (event.type === "pointercancel") {
+        store.set({ drawing: [], cursor: null });
+        return;
+      }
+      const moved =
+        press &&
+        Math.abs(event.clientX - press.x) + Math.abs(event.clientY - press.y) >
+          clickSlop;
+      const { tool, drawing } = store.get();
+      if (!moved || drawing.length !== 1) return;
+      const point = pressedPoint(event);
+      if (tool === "draw") clickDraw(point);
+      else if (tool === "line") clickLine(point);
+    };
+    const watchDrawRelease = () => {
+      stopDrawRelease?.();
+      window.addEventListener("pointerup", releaseDraw, true);
+      window.addEventListener("pointercancel", releaseDraw, true);
+      stopDrawRelease = () => {
+        window.removeEventListener("pointerup", releaseDraw, true);
+        window.removeEventListener("pointercancel", releaseDraw, true);
+        stopDrawRelease = undefined;
+      };
+    };
+    context.onDestroy(() => stopDrawRelease?.());
 
     const addDrawnRoom = (corners: Point[]) => {
       const room = drawRoom(store.get().map, corners, {}, 1);
@@ -1401,7 +1433,7 @@ export const mapEditor = definePrimitive({
         root()?.focus({ preventScroll: true });
         touchPress = null;
         ignoreClick = false;
-        pressedDraw = false;
+        if (event.isPrimary) drawPointer = null;
         if (event.pointerType === "touch") {
           touchPress = { event, held: true };
           context.options().onContextTarget?.(targetAt(event));
@@ -1410,20 +1442,24 @@ export const mapEditor = definePrimitive({
         const target = event.target as Element;
         if (target.closest("[data-map-control]")) return;
         const { tool, editMode, map, viewport: view } = store.get();
-        // A finger pans and pinches the map, so it still draws with taps.
-        if (
-          (tool === "draw" || tool === "line") &&
-          event.isPrimary &&
-          event.button === 0 &&
-          event.pointerType !== "touch" &&
-          !spaceHeld &&
-          store.get().drawing.length === 0
-        ) {
-          const point = pressedPoint(event);
-          store.set({ drawing: [point], cursor: point });
-          pressedDraw = true;
-          event.preventDefault();
-          return;
+        if (tool === "draw" || tool === "line") {
+          if (event.button !== 0 || spaceHeld) {
+            ignoreClick = true;
+            viewport.pointerdown(event);
+            return;
+          }
+          if (
+            event.isPrimary &&
+            event.pointerType !== "touch" &&
+            store.get().drawing.length === 0
+          ) {
+            const point = pressedPoint(event);
+            store.set({ drawing: [point], cursor: point });
+            drawPointer = event.pointerId;
+            watchDrawRelease();
+            event.preventDefault();
+            return;
+          }
         }
         if (target.closest("[data-map-key]")) return;
         if (tool !== "select") return;
@@ -1534,13 +1570,6 @@ export const mapEditor = definePrimitive({
         const key =
           target.closest<HTMLElement>("[data-map-key]")?.dataset.mapKey;
         const point = pressedPoint(event);
-        if (pressedDraw) {
-          pressedDraw = false;
-          if (!moved || store.get().drawing.length !== 1) return;
-          if (tool === "draw") clickDraw(point);
-          else if (tool === "line") clickLine(point);
-          return;
-        }
         if (moved) return;
         if (tool === "draw") {
           clickDraw(point);
@@ -1606,6 +1635,13 @@ export const mapEditor = definePrimitive({
       },
       keydown(event: KeyboardEvent) {
         if (event.defaultPrevented || openMenuFromKey(event)) return;
+        // Space held over the map pans with the pointer, though a focused
+        // button inside it still presses.
+        if (event.key === " " && event.target === root()) {
+          spaceHeld = true;
+          event.preventDefault();
+          return;
+        }
         const { tool, drawing } = store.get();
         if (tool === "draw" || tool === "line") {
           if (event.key === "Enter") {
@@ -1624,13 +1660,6 @@ export const mapEditor = definePrimitive({
         }
         if ((tool === "thing" || tool === "switch") && event.key === "Escape") {
           change("tool", "select", { reason: "draw" });
-          event.preventDefault();
-          return;
-        }
-        // Space held over the map pans with the pointer, though a focused
-        // button inside it still presses.
-        if (event.key === " " && event.target === root()) {
-          spaceHeld = true;
           event.preventDefault();
           return;
         }
