@@ -28,6 +28,15 @@ import {
   vertexFloats,
 } from "./scene-mesh";
 
+const texelAssets: SceneAssets = {
+  shades: Uint32Array.from({ length: 32 * 256 }, (_, index) => index & 255),
+  names: freedoomNames,
+  texture: () => texelPicture(64, 128),
+  flat: () => texelPicture(64, 64),
+  sprite: () => null,
+  frame: () => null,
+};
+
 // Each texel's palette index is its column and row, four bits each, and the
 // shades leave indexes as they are, so a drawn color names the texel drawn.
 function texelPicture(width: number, height: number): Picture {
@@ -45,87 +54,6 @@ function texelPicture(width: number, height: number): Picture {
     pixels,
     opaque: new Uint8Array(width * height).fill(1),
   };
-}
-
-const texelAssets: SceneAssets = {
-  shades: Uint32Array.from({ length: 32 * 256 }, (_, index) => index & 255),
-  names: freedoomNames,
-  texture: () => texelPicture(64, 128),
-  flat: () => texelPicture(64, 64),
-  sprite: () => null,
-  frame: () => null,
-};
-
-function wrap(value: number, size: number) {
-  return ((Math.floor(value) % size) + size) % size;
-}
-
-// Draws the map with the column renderer and, for every wall pixel, checks
-// the texel against the one the mesh's corners give at that spot.
-function compareWalls(map: GameMap, camera: Camera) {
-  const target = createRenderTarget(320, 200);
-  renderScene(target, map, camera, {
-    assets: texelAssets,
-    fullbright: true,
-    things: false,
-  });
-  const mesh = buildSceneMesh(withMovers(map, []), { assets: texelAssets });
-  const { forward, right } = cameraBasis(camera);
-  const eye = eyeOf(map, camera);
-  const { vertices } = mesh;
-  let checked = 0;
-  let matched = 0;
-  for (let y = 0; y < target.height; y += 1) {
-    for (let x = 0; x < target.width; x += 1) {
-      const index = y * target.width + x;
-      const key = target.surfaces[target.pick[index]];
-      if (!key?.startsWith("wall:")) continue;
-      const id = mesh.ids.get(key);
-      expect(id, key).toBeDefined();
-      const distance = target.depth[index];
-      const spread =
-        ((2 * (x + 0.5)) / target.width - 1) * (160 / target.focal);
-      const point = {
-        x: camera.x + (forward.x + right.x * spread) * distance,
-        y: camera.y + (forward.y + right.y * spread) * distance,
-        z: eye + ((target.height / 2 - y - 0.5) * distance) / target.focal,
-      };
-      let best: { u: number; v: number; gap: number } | null = null;
-      for (let at = 0; at < vertices.length; at += vertexFloats * 6) {
-        if (vertices[at + 6] !== id) continue;
-        const a = { x: vertices[at], y: vertices[at + 1] };
-        const b = {
-          x: vertices[at + vertexFloats],
-          y: vertices[at + vertexFloats + 1],
-        };
-        const length = Math.hypot(b.x - a.x, b.y - a.y);
-        const share =
-          ((point.x - a.x) * (b.x - a.x) + (point.y - a.y) * (b.y - a.y)) /
-          (length * length);
-        const gap = Math.abs(
-          ((point.x - a.x) * (b.y - a.y) - (point.y - a.y) * (b.x - a.x)) /
-            length,
-        );
-        if (share < -0.01 || share > 1.01 || (best && gap >= best.gap)) {
-          continue;
-        }
-        const uA = vertices[at + 3];
-        const uB = vertices[at + vertexFloats + 3];
-        const rowTop = vertices[at + 4] + vertices[at + 2];
-        best = { u: uA + (uB - uA) * share, v: rowTop - point.z, gap };
-      }
-      if (!best) continue;
-      checked += 1;
-      const color = target.colors[index] & 255;
-      if (
-        color >> 4 === wrap(best.u, 64) % 16 &&
-        (color & 15) === wrap(best.v, 128) % 16
-      ) {
-        matched += 1;
-      }
-    }
-  }
-  return { checked, matched };
 }
 
 describe("buildSceneMesh", () => {
@@ -198,6 +126,78 @@ describe("buildSceneMesh", () => {
     expect(tallest).toBeLessThanOrEqual(128);
   });
 });
+
+// Draws the map with the column renderer and, for every wall pixel, checks
+// the texel against the one the mesh's corners give at that spot.
+function compareWalls(map: GameMap, camera: Camera) {
+  const target = createRenderTarget(320, 200);
+  renderScene(target, map, camera, {
+    assets: texelAssets,
+    fullbright: true,
+    things: false,
+  });
+  const mesh = buildSceneMesh(withMovers(map, []), { assets: texelAssets });
+  const { forward, right } = cameraBasis(camera);
+  const eye = eyeOf(map, camera);
+  const { vertices } = mesh;
+  let checked = 0;
+  let matched = 0;
+  for (let y = 0; y < target.height; y += 1) {
+    for (let x = 0; x < target.width; x += 1) {
+      const index = y * target.width + x;
+      const key = target.surfaces[target.pick[index]];
+      if (!key?.startsWith("wall:")) continue;
+      const id = mesh.ids.get(key);
+      expect(id, key).toBeDefined();
+      const distance = target.depth[index];
+      const spread =
+        ((2 * (x + 0.5)) / target.width - 1) * (160 / target.focal);
+      const point = {
+        x: camera.x + (forward.x + right.x * spread) * distance,
+        y: camera.y + (forward.y + right.y * spread) * distance,
+        z: eye + ((target.height / 2 - y - 0.5) * distance) / target.focal,
+      };
+      let best: { u: number; v: number; gap: number } | null = null;
+      for (let at = 0; at < vertices.length; at += vertexFloats * 6) {
+        if (vertices[at + 6] !== id) continue;
+        const a = { x: vertices[at], y: vertices[at + 1] };
+        const b = {
+          x: vertices[at + vertexFloats],
+          y: vertices[at + vertexFloats + 1],
+        };
+        const length = Math.hypot(b.x - a.x, b.y - a.y);
+        const share =
+          ((point.x - a.x) * (b.x - a.x) + (point.y - a.y) * (b.y - a.y)) /
+          (length * length);
+        const gap = Math.abs(
+          ((point.x - a.x) * (b.y - a.y) - (point.y - a.y) * (b.x - a.x)) /
+            length,
+        );
+        if (share < -0.01 || share > 1.01 || (best && gap >= best.gap)) {
+          continue;
+        }
+        const uA = vertices[at + 3];
+        const uB = vertices[at + vertexFloats + 3];
+        const rowTop = vertices[at + 4] + vertices[at + 2];
+        best = { u: uA + (uB - uA) * share, v: rowTop - point.z, gap };
+      }
+      if (!best) continue;
+      checked += 1;
+      const color = target.colors[index] & 255;
+      if (
+        color >> 4 === wrap(best.u, 64) % 16 &&
+        (color & 15) === wrap(best.v, 128) % 16
+      ) {
+        matched += 1;
+      }
+    }
+  }
+  return { checked, matched };
+}
+
+function wrap(value: number, size: number) {
+  return ((Math.floor(value) % size) + size) % size;
+}
 
 describe("flatPieces", () => {
   it.each([
