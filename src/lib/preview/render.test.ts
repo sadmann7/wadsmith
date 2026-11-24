@@ -8,7 +8,7 @@ import { defined } from "@/lib/defined";
 import { thingKinds } from "@/lib/map/catalog";
 import { updateLine, updateLineSide, updateSector } from "@/lib/map/edit";
 import { addDetail, makePillar } from "@/lib/map/edit";
-import { wallKey } from "@/lib/map/geometry";
+import { sectorAt, wallKey } from "@/lib/map/geometry";
 import { parseMapFile, serializeMap } from "@/lib/map/storage";
 import {
   describeSurface,
@@ -73,6 +73,33 @@ describe("startCamera", () => {
       switches: [],
     };
     expect(startCamera(map)).toEqual({ x: 256, y: 128, angle: 90 });
+  });
+
+  it("stands clear of a pillar that fills the room's middle", () => {
+    const map: GameMap = {
+      ...testMap,
+      vertices: {
+        a: { x: 0, y: 0 },
+        b: { x: 512, y: 0 },
+        c: { x: 512, y: 512 },
+        d: { x: 0, y: 512 },
+        e: { x: 64, y: 64 },
+        f: { x: 448, y: 64 },
+        g: { x: 448, y: 448 },
+        h: { x: 64, y: 448 },
+      },
+      sectors: [
+        {
+          ...testMap.sectors[0],
+          vertices: ["a", "b", "c", "d"],
+          holes: [["e", "f", "g", "h"]],
+        },
+      ],
+      things: [],
+      lines: {},
+      switches: [],
+    };
+    expect(sectorAt(map, startCamera(map))?.id).toBe("sector-1");
   });
 });
 

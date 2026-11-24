@@ -1,3 +1,4 @@
+import type { Box } from "@/lib/map/geometry";
 import type { WallPart } from "@/lib/map/surfaces";
 import type {
   GameMap,
@@ -664,18 +665,15 @@ export function renderScene(
 export function startCamera(map: GameMap): Camera {
   const player = map.things.find((thing) => thing.kind === "player");
   if (player) return { x: player.x, y: player.y, angle: player.angle };
-  const room = map.sectors.find((sector) => !sector.door);
+  const room = map.sectors.find(
+    (sector) => !sector.door && sector.vertices.length >= 3,
+  );
   if (!room) {
     const first = Object.values(map.vertices)[0] ?? { x: 0, y: 0 };
     return { ...first, angle: 0 };
   }
-  const polygon = sectorPolygon(map, room);
-  const box = boxOf(polygon);
-  const middle = {
-    x: (box.left + box.right) / 2,
-    y: (box.top + box.bottom) / 2,
-  };
-  const at = pointInSector(map, room, middle) ? middle : interiorPoint(polygon);
+  const box = boxOf(sectorPolygon(map, room));
+  const at = spotInside(map, room, box);
   const [from, to] = loopEdges(room.vertices)
     .map(({ from, to }) => [map.vertices[from], map.vertices[to]])
     .toSorted(
@@ -687,6 +685,30 @@ export function startCamera(map: GameMap): Camera {
     ...at,
     angle: (Math.atan2(at.y - side.y, side.x - at.x) * 180) / Math.PI,
   };
+}
+
+const spotSteps = 16;
+
+function spotInside(map: GameMap, room: Sector, box: Box): Point {
+  const middle = {
+    x: (box.left + box.right) / 2,
+    y: (box.top + box.bottom) / 2,
+  };
+  if (pointInSector(map, room, middle)) return middle;
+  const width = (box.right - box.left) / spotSteps;
+  const height = (box.bottom - box.top) / spotSteps;
+  const spots = Array.from({ length: spotSteps ** 2 }, (_, index) => ({
+    x: box.left + ((index % spotSteps) + 0.5) * width,
+    y: box.top + (Math.floor(index / spotSteps) + 0.5) * height,
+  })).toSorted(
+    (a, b) =>
+      Math.hypot(a.x - middle.x, a.y - middle.y) -
+      Math.hypot(b.x - middle.x, b.y - middle.y),
+  );
+  return (
+    spots.find((spot) => pointInSector(map, room, spot)) ??
+    interiorPoint(sectorPolygon(map, room))
+  );
 }
 
 const eyeHeight = 41;
