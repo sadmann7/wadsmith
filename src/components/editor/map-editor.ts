@@ -1991,9 +1991,11 @@ export const mapEditor = definePrimitive({
       attrs: (state) => ({
         type: "button",
         "data-map-key": "camera",
+        "data-on-thing": getIsCameraOnThing(state) ? "" : undefined,
         style: cameraStyle(state),
       }),
       live: live<MapEditorState, unknown, {}>((state) => ({
+        "data-on-thing": getIsCameraOnThing(state) ? "" : undefined,
         style: cameraStyle(state),
       })),
       on: {
@@ -2336,6 +2338,20 @@ function spansAt(points: Point[], y: number) {
     spans.push([crossings[index], crossings[index + 1]]);
   }
   return spans;
+}
+
+const cameraOverlap = 28;
+
+function getIsCameraOnThing(state: MapEditorState) {
+  const camera = state.cameraPosition;
+  if (!camera || state.editMode === "lines" || state.editMode === "sectors") {
+    return false;
+  }
+  const reach = cameraOverlap / state.viewport.zoom;
+  return state.map.things.some((thing) => {
+    const at = state.positions[`${thingKeyPrefix}${thing.id}`] ?? thing;
+    return Math.hypot(at.x - camera.x, at.y - camera.y) < reach;
+  });
 }
 
 function cameraStyle(state: MapEditorState) {
