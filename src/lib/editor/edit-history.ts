@@ -11,6 +11,7 @@ import type { GameMap } from "@/lib/map/types";
 
 import { sectorVertices } from "@/lib/map/geometry";
 interface Step {
+  id: number;
   undo: MapPatch;
   redo: MapPatch;
   group?: string;
@@ -37,13 +38,15 @@ export function createEditHistory({ limit, groupDelay }: EditHistoryOptions) {
   // Steps of a batch past the limit, which only undoing the whole batch
   // takes back, as long as some of its steps are still in the history.
   let evicted: Step[] = [];
+  let nextId = 1;
   const getHasBatch = (batch: string) =>
     done.some((step) => step.batch === batch) ||
     undone.some((step) => step.batch === batch);
   return {
     // Edits of one group close together join one step, like a drag's moves.
     // Edits of one batch stay separate steps that can still be undone
-    // together.
+    // together. Returns the id of the step the edit went into, if it changed
+    // anything.
     record(
       before: GameMap,
       after: GameMap,
@@ -65,9 +68,11 @@ export function createEditHistory({ limit, groupDelay }: EditHistoryOptions) {
         last.redo = combinePatches(last.redo, redo);
         last.undo = combinePatches(undo, last.undo);
         last.at = now;
-        return;
+        return last.id;
       }
-      done.push({ undo, redo, group, batch, at: now });
+      const id = nextId;
+      nextId += 1;
+      done.push({ id, undo, redo, group, batch, at: now });
       const oldest = done.length > limit ? done.shift() : undefined;
       // A batch's last step out takes its evicted steps with it.
       if (oldest?.batch) {
@@ -75,6 +80,7 @@ export function createEditHistory({ limit, groupDelay }: EditHistoryOptions) {
         if (getHasBatch(batch)) evicted.push(oldest);
         else evicted = evicted.filter((step) => step.batch !== batch);
       }
+      return id;
     },
     undo(current: GameMap) {
       const step = done.pop();
@@ -119,6 +125,9 @@ export function createEditHistory({ limit, groupDelay }: EditHistoryOptions) {
     },
     // Whether any step of one batch is still in the history.
     hasBatch: getHasBatch,
+    // The ids of the steps on the map now, leaving out what a redo would
+    // bring back.
+    getDoneIds: () => new Set([...evicted, ...done].map((step) => step.id)),
     canUndo: () => done.length > 0,
     canRedo: () => undone.length > 0,
     // Forgets every step, as when the whole map was swapped for another.

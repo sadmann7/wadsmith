@@ -256,6 +256,28 @@ describe("an edit history", () => {
     expect(imp(undone)).toBe(imp(testMap));
     expect(player(defined(history.redo(undone)))).toBe(120);
   });
+
+  it("names the steps still on the map", () => {
+    const history = createEditHistory({ limit: 2, groupDelay: 60_000 });
+    const first = updateThing(testMap, "imp-1", { x: 800 });
+    const a = history.record(testMap, first, { batch: "agent-1" });
+    expect(history.record(first, first)).toBeUndefined();
+    const second = updateThing(first, "imp-1", { x: 810 });
+    const b = history.record(first, second, { group: "nudge" });
+    const third = updateThing(second, "imp-1", { x: 820 });
+    expect(history.record(second, third, { group: "nudge" })).toBe(b);
+    const fourth = updateSector(third, "sector-3", { light: 90 });
+    const c = history.record(third, fourth, { batch: "agent-1" });
+    expect(history.getDoneIds()).toEqual(new Set([a, b, c]));
+
+    const back = defined(history.undo(fourth));
+    expect(history.getDoneIds()).toEqual(new Set([a, b]));
+    expect(history.redo(back)).toEqual(fourth);
+    expect(history.getDoneIds()).toEqual(new Set([a, b, c]));
+
+    defined(history.undoBatch("agent-1", fourth));
+    expect(history.getDoneIds()).toEqual(new Set([b]));
+  });
 });
 
 function imp(map: GameMap) {
