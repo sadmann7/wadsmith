@@ -408,6 +408,123 @@ describe("several movers on one room", () => {
   });
 });
 
+describe("vanilla's rarer mover quirks in the 3D view", () => {
+  it("stops a second opened mover at the other plane only when it moves towards it", () => {
+    const map = row(
+      [{}, { tag: 1 }, { tag: 2 }],
+      {
+        ...acting("stairs"),
+        [wallKey("t2", "t3")]: boom("ceiling", { direction: 1, target: 4 }, 2)[
+          westWall
+        ],
+      },
+      "boom",
+    );
+    expect(heights(map, ["r1", "r2"])[2]).toEqual([16, 0]);
+  });
+
+  it("changes the floor texture where the action takes one", () => {
+    const rooms = [
+      { floor: -16, floorTexture: "NUKAGE1" },
+      { tag: 1 },
+      { floor: 24, floorTexture: "FLAT5_4" },
+    ];
+    const floorTexture = (
+      lines: Record<string, LineSettings>,
+      complevel: GameMap["complevel"] = "vanilla",
+    ) =>
+      withMovers(row(rooms, lines, complevel), ["r1"]).sectors[1].floorTexture;
+    expect(floorTexture({})).toBe("FLOOR4_8");
+    expect(floorTexture(acting("floor-raise-24-texture"))).toBe("NUKAGE1");
+    expect(floorTexture(acting("floor-raise-next-texture"))).toBe("NUKAGE1");
+    expect(floorTexture(acting("floor-lower-texture"))).toBe("NUKAGE1");
+    expect(floorTexture(acting("floor-raise-24"))).toBe("FLOOR4_8");
+    const changed = (values: Record<string, number>) =>
+      floorTexture(boom("floor", { change: 2, ...values }), "boom");
+    expect(changed({ direction: 1, target: 0, model: 0 })).toBe("NUKAGE1");
+    expect(changed({ direction: 1, target: 0, model: 1 })).toBe("FLAT5_4");
+    expect(changed({ direction: 1, target: 6, model: 1 })).toBe("FLAT5_4");
+    expect(changed({ direction: 1, target: 7, model: 1 })).toBe("FLOOR4_8");
+    expect(changed({ direction: 1, target: 0, change: 0 })).toBe("FLOOR4_8");
+    const ceiling = withMovers(
+      row(
+        [{ ceilingTexture: "F_SKY1" }, { tag: 1 }, {}],
+        boom("ceiling", { direction: 0, target: 4, change: 2 }),
+        "boom",
+      ),
+      ["r1"],
+    ).sectors[1];
+    expect(ceiling.ceilingTexture).toBe("F_SKY1");
+    const donut = row(
+      [
+        { floor: 16, floorTexture: "NUKAGE1" },
+        { floor: -32 },
+        { floor: 64, tag: 1 },
+      ],
+      { ...acting("donut"), [between(1)]: { front: "r1" } },
+    );
+    expect(
+      withMovers(donut, ["r2"]).sectors.map((sector) => sector.floorTexture),
+    ).toEqual(["NUKAGE1", "NUKAGE1", "FLOOR4_8"]);
+  });
+
+  it("counts a line drawn inside a room as the first texture for the shortest lower wall on vanilla", () => {
+    const map = (complevel: GameMap["complevel"]) => {
+      const rooms = row(
+        [{}, { tag: 1 }, {}],
+        acting("floor-raise-texture"),
+        complevel,
+      );
+      return {
+        ...rooms,
+        vertices: {
+          ...rooms.vertices,
+          d0: { x: 80, y: 64 },
+          d1: { x: 112, y: 64 },
+        },
+        sectors: rooms.sectors.map((sector) =>
+          sector.id === "r1" ? { ...sector, details: [["d0", "d1"]] } : sector,
+        ),
+      };
+    };
+    const textureHeight = (name: string) => (name === "-" ? 16 : 128);
+    expect(heights(map("vanilla"), ["r1"], textureHeight)[1]).toEqual([
+      16, 128,
+    ]);
+    expect(heights(map("boom"), ["r1"], textureHeight)[1]).toEqual([128, 128]);
+  });
+
+  it("skips a tagged room before a vanilla stair's last step", () => {
+    const map = (complevel: GameMap["complevel"]) => {
+      const rooms = row(
+        [
+          { tag: 1 },
+          {},
+          {},
+          { floorTexture: "FLAT5_4" },
+          { tag: 1, floorTexture: "FLAT5_4" },
+        ],
+        acting("stairs"),
+        complevel,
+      );
+      const [first, second, third, fourth, fifth] = rooms.sectors;
+      return { ...rooms, sectors: [first, fifth, second, third, fourth] };
+    };
+    const floors = (complevel: GameMap["complevel"]) =>
+      withMovers(map(complevel), ["r0", "r4"]).sectors.map(
+        (sector) => `${sector.id} ${sector.floor}`,
+      );
+    expect(floors("vanilla")).toEqual([
+      "r0 8",
+      "r4 0",
+      "r1 16",
+      "r2 24",
+      "r3 0",
+    ]);
+    expect(floors("boom")).toEqual(["r0 8", "r4 8", "r1 16", "r2 24", "r3 16"]);
+  });
+});
+
 // Rooms side by side from west to east, each 64 wide, so each room is in
 // front of the line to the next.
 function row(
