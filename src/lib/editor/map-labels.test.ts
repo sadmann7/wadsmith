@@ -27,10 +27,18 @@ describe("labelPoint", () => {
     expect(labelPoint([hall, pillar], 1, 40)).toEqual({ x: 250, y: 24 });
   });
 
-  it("keeps the band clear of a pillar zoomed out, using the walkway", () => {
+  it("uses a walkway beside a pillar when the name fits there", () => {
     const pillar = box(64, 64, 448, 448);
-    const at = labelPoint([hall, pillar], 0.25, 40);
-    expect(at).toEqual({ x: 32, y: 96 });
+    expect(labelPoint([hall, pillar], 0.25, 12)).toEqual({ x: 32, y: 96 });
+  });
+
+  it("gives up when the name is wider than the walkways beside a pillar", () => {
+    const pillar = box(64, 64, 448, 448);
+    expect(labelPoint([hall, pillar], 0.25, 40)).toBeNull();
+  });
+
+  it("stays in the middle of a room too narrow for its name", () => {
+    expect(labelPoint([box(0, 0, 32, 256)], 1, 40)).toEqual({ x: 16, y: 24 });
   });
 
   it("gives up when a pillar covers the whole band", () => {

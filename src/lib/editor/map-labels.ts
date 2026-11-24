@@ -18,7 +18,7 @@ export function estimateLabelWidth(name: string, detail = "") {
 
 // A label sits near the top of its room, on a part of that band the room
 // covers and its pillars don't, so an L-shaped room doesn't label the room
-// tucked into its corner. Null when no part of the band is clear.
+// tucked into its corner. Null when the band has no clear room for it.
 export function labelPoint(
   loops: Point[][],
   zoom: number,
@@ -47,9 +47,9 @@ export function labelPoint(
     };
   }
   const widest = spans.toSorted((a, b) => b[1] - b[0] - (a[1] - a[0]))[0];
-  return home && !fits(widest)
-    ? { x: center.x, y }
-    : { x: (widest[0] + widest[1]) / 2, y };
+  if (fits(widest)) return { x: (widest[0] + widest[1]) / 2, y };
+  if (loops.length > 1 || !home) return null;
+  return { x: center.x, y };
 }
 
 // Keeps the bigger room's label where two would overlap. The sizes are rough,
