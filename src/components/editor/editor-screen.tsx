@@ -123,6 +123,7 @@ import {
   roomKeyPrefix,
   type RoomSide,
   setDoorTexture,
+  setLinesTarget,
   setLineTarget,
   setRoomDoor,
   setRoomWalls,
@@ -2769,6 +2770,12 @@ export function EditorScreen({
                     setWallsTag(map, selectedWalls, tag),
                     `lines:${selectedWalls.join()}`,
                   )
+                }
+                onTargetChange={(target) =>
+                  commit(setLinesTarget(map, selectedWalls, target))
+                }
+                onFrontChange={(front) =>
+                  commit(updateWalls(map, selectedWalls, { front }))
                 }
               />
             ) : line && selectedWall ? (

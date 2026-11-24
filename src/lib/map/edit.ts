@@ -28,7 +28,7 @@ import {
   wallOwners,
   wallStart,
 } from "./geometry";
-import { getIsTeleport } from "./lines";
+import { getIsTeleport, lineUsesTag } from "./lines";
 
 export const gridSize = 8;
 export const gridSizes = [1, 2, 4, 8, 16, 32, 64] as const;
@@ -232,17 +232,34 @@ export function setLineTarget(
   wall: string,
   sectorId: string | null,
 ): GameMap {
-  const { action, raw } = map.lines?.[wall] ?? {};
-  if (!action && !raw) return map;
+  return setLinesTarget(map, [wall], sectorId);
+}
+
+// Every wall gets the same tag, so aiming several lines at a room tags it once.
+export function setLinesTarget(
+  map: GameMap,
+  walls: string[],
+  sectorId: string | null,
+): GameMap {
+  const aiming = walls.filter((wall) => {
+    const { action, raw } = map.lines?.[wall] ?? {};
+    return action ? lineUsesTag(action) : Boolean(raw);
+  });
+  if (aiming.length === 0) return map;
   const sector = map.sectors.find((item) => item.id === sectorId);
   const tag = sector ? sector.tag || freeTag(map) : 0;
   const tagged = sector ? updateSector(map, sector.id, { tag }) : map;
-  const aimed = updateLine(
-    tagged,
-    wall,
-    action ? { action: { ...action, tag } } : { raw: { ...defined(raw), tag } },
-  );
-  return landTeleport(aimed, wall);
+  return aiming.reduce((next, wall) => {
+    const { action, raw } = next.lines?.[wall] ?? {};
+    const aimed = updateLine(
+      next,
+      wall,
+      action
+        ? { action: { ...action, tag } }
+        : { raw: { ...defined(raw), tag } },
+    );
+    return landTeleport(aimed, wall);
+  }, tagged);
 }
 
 // A teleporter lands on a destination thing in its room, so aiming one places
