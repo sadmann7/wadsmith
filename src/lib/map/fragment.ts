@@ -568,6 +568,14 @@ export function transformKeepingDoors(
       best = tried;
     }
   }
+  for (const fallback of [
+    new Map(doors.map((door) => [door, "bent" as const])),
+    new Map<string, DoorMove>(),
+  ]) {
+    if (best) break;
+    best = run(fallback);
+    plan = fallback;
+  }
   return {
     ...(best ?? empty),
     stranded: best ? doors.filter((door) => !plan.has(door)) : [],
