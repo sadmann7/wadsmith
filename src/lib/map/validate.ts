@@ -54,6 +54,7 @@ import {
   movesSector,
   opensDoor,
 } from "./lines";
+import { findUnreachable } from "./reach";
 
 // What the browser plays on, which a map can outgrow after it was saved.
 export interface CheckContext {
@@ -175,6 +176,7 @@ export function inspectMap(map: GameMap, context: CheckContext = {}) {
       }
     }
     layers.things = issues.map((issue) => issue.id);
+    if (issues.length === 0) validateReach(map, warnings);
   }
   return { errors: issues, warnings, layers };
 }
@@ -647,8 +649,8 @@ function meets(a: Box, b: Box) {
   );
 }
 
-const doorClearance = 4;
 const playerHeight = 56;
+const doorClearance = 4;
 
 function validateDoors(
   map: GameMap,
@@ -757,6 +759,35 @@ function lineOpensDoor(
     line.front.id !== door.id &&
     !(action.trigger === "walk" && (behind || line.settings.blocksAll))
   );
+}
+
+function validateReach(map: GameMap, warnings: MapIssue[]) {
+  const found = findUnreachable(map);
+  if (!found) return;
+  for (const sector of found.rooms) {
+    warnings.push({
+      id: `unreachable:${sector.id}`,
+      message: `${sector.name}: the player can't get here from the start.`,
+      target: sector.id,
+    });
+  }
+  for (const { thing, room } of found.things) {
+    warnings.push({
+      id: `unreachable-thing:${thing.id}`,
+      message: `${room.name}: the player can't reach the ${thingCatalog[thing.kind].label.toLowerCase()} here.`,
+      target: thing.id,
+    });
+  }
+  const owners = wallOwners(map);
+  for (const { wall } of found.exits) {
+    const owner = owners.get(wall)?.[0];
+    if (!owner) continue;
+    warnings.push({
+      id: `unreachable-exit:${wall}`,
+      message: `${lineName(describeLine(map, wall, owner.id))}: the player can't reach this exit.`,
+      target: wall,
+    });
+  }
 }
 
 const skills: ThingSkill[] = ["easy", "medium", "hard"];

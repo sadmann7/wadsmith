@@ -171,6 +171,12 @@ const buildGroups: {
     ids: /^(no-player|many-players|outside|in-door|coop-starts|deathmatch-starts)(:|$)/,
     needsValidRooms: true,
   },
+  {
+    name: "Reachable",
+    passed: "The player can get everywhere",
+    ids: /^unreachable(-[a-z]+)?(:|$)/,
+    needsValidRooms: true,
+  },
   { name: "Exit", passed: "The level can end", ids: /^no-exit(:|$)/ },
   {
     name: "Item balance",
