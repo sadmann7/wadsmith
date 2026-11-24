@@ -703,6 +703,72 @@ describe("turning, flipping and resizing", () => {
     expect(defined(shrunk).vertices.v7.x - face[0].x).toBe(16);
   });
 
+  it("carries two doors set into one far wall", () => {
+    const box = (id: string, vertices: string[], door = false) => ({
+      ...defined(starterMap.sectors.find((sector) => sector.id === "sector-2")),
+      id,
+      name: id,
+      vertices,
+      floor: 0,
+      ceiling: 128,
+      effect: undefined,
+      ...(door
+        ? {
+            door: {
+              opensBy: "use" as const,
+              closes: true,
+              texture: "BIGDOOR2",
+            },
+          }
+        : {}),
+    });
+    const map: GameMap = {
+      vertices: {
+        f1: { x: 256, y: 0 },
+        f2: { x: 496, y: 0 },
+        f3: { x: 496, y: 512 },
+        f4: { x: 256, y: 512 },
+        a1: { x: 512, y: 0 },
+        a2: { x: 960, y: 0 },
+        a3: { x: 960, y: 512 },
+        a4: { x: 512, y: 512 },
+        d1: { x: 496, y: 64 },
+        d2: { x: 496, y: 128 },
+        n1: { x: 512, y: 64 },
+        n2: { x: 512, y: 128 },
+        d3: { x: 496, y: 320 },
+        d4: { x: 496, y: 384 },
+        n3: { x: 512, y: 320 },
+        n4: { x: 512, y: 384 },
+      },
+      sectors: [
+        box("far", ["f1", "f2", "d1", "d2", "d3", "d4", "f3", "f4"]),
+        box("arena", ["a1", "a2", "a3", "a4", "n4", "n3", "n2", "n1"]),
+        box("door1", ["d1", "n1", "n2", "d2"], true),
+        box("door2", ["d3", "n3", "n4", "d4"], true),
+      ],
+      things: [{ id: "player-1", kind: "player", x: 384, y: 256, angle: 0 }],
+      switches: [],
+    };
+    expect(validateMap(map)).toEqual([]);
+    const { map: shrunk, problems } = transformKeepingDoors(
+      map,
+      partKeys(map, selectedParts(map, [], "arena")),
+      [{ kind: "scale", factor: 0.5 }],
+      32,
+    );
+    expect(problems).toEqual([]);
+    const at = (id: string) => defined(shrunk).vertices[id];
+    for (const [near, far] of [
+      ["n1", "d1"],
+      ["n4", "d4"],
+    ]) {
+      expect(at(near).x - at(far).x).toBe(16);
+    }
+    expect(at("f2").x).toBe(at("d1").x);
+    expect(at("f3").x).toBe(at("d4").x);
+  });
+
   it("leaves doors alone when a turn or flip moves a room", () => {
     const arenaKeys = partKeys(
       starterMap,

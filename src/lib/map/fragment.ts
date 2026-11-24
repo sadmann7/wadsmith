@@ -373,7 +373,8 @@ export function pasteParts(
 
 // Turns, flips or resizes the corners and things behind the keys about their
 // middle. A flip and a quarter turn keep every point on the grid, and other
-// turns and resizes land on it, and a resize carries joined doors along.
+// turns and resizes land on it. A resize carries joined doors along as `carry`
+// says, and gives nothing when they can't all go.
 export function transformParts(
   map: GameMap,
   keys: string[],
@@ -439,6 +440,7 @@ export function transformParts(
             carry === "walls" || (typeof carry !== "string" && carry.has(id)),
         )
       : {};
+  if (!carried) return null;
   const placed = applyPositions(map, { ...positions, ...landed, ...carried });
   const turned = new Set(moved);
   const corners = [...moved, ...Object.keys(carried)].filter(
@@ -515,11 +517,10 @@ export function transformKeepingDoors(
     return last.problems.length === 0;
   };
   if (attempt("walls")) return last;
-  const moved = new Set(keys);
+  if (!steps.some((step) => step.kind === "scale")) return last;
+  const moved = Object.fromEntries(keys.map((key) => [key, map.vertices[key]]));
   const doors = map.sectors
-    .filter(
-      (sector) => sector.door && sector.vertices.some((id) => moved.has(id)),
-    )
+    .filter((sector) => sector.door && farFace(sector.vertices, moved))
     .map((sector) => sector.id);
   const straight = new Set(doors.filter((id) => attempt(new Set([id]))));
   if (straight.size > 0 && straight.size < doors.length && attempt(straight)) {
@@ -569,14 +570,17 @@ export function parseFragment(text: string): CopiedPiece | null {
 
 // A door's far face keeps its offset from the corners the resize moved, so
 // the door keeps its depth. The far room's wall in line with that face moves
-// straight across with it and stays straight. Two doors pulling one corner two
-// ways leave every door where it was.
+// straight across with it and stays straight. A corner pulled two ways gives
+// no result.
 function carryDoors(
   map: GameMap,
   landed: Record<string, Point>,
   straight: (door: string) => boolean,
-) {
+): Record<string, Point> | null {
   const carried: Record<string, Point> = {};
+  const doorCorners = new Set(
+    map.sectors.flatMap((sector) => (sector.door ? sector.vertices : [])),
+  );
   const put = (id: string, at: Point) => {
     const held = carried[id];
     if (held && (held.x !== at.x || held.y !== at.y)) return false;
@@ -607,7 +611,7 @@ function carryDoors(
         x: Math.round(newA.x + t * (newB.x - newA.x)),
         y: Math.round(newA.y + t * (newB.y - newA.y)),
       };
-      if (!put(id, at)) return {};
+      if (!put(id, at)) return null;
     }
     const moveX = newA.x - a.x;
     const moveY = newA.y - a.y;
@@ -617,7 +621,6 @@ function carryDoors(
       y: Math.round(moveY - along * (b.y - a.y)),
     };
     if (!straight(door.id)) continue;
-    const own = new Set(door.vertices);
     for (const end of [chain[0], chain[chain.length - 1]]) {
       for (const room of map.sectors) {
         if (room.door) continue;
@@ -627,13 +630,13 @@ function carryDoors(
           for (const step of [1, loop.length - 1]) {
             for (
               let at = (index + step) % loop.length, left = loop.length;
-              left > 0 && !own.has(loop[at]) && !landed[loop[at]];
+              left > 0 && !doorCorners.has(loop[at]) && !landed[loop[at]];
               at = (at + step) % loop.length, left -= 1
             ) {
               const point = corner(loop[at]);
               if (cross(a, b, point) !== 0) break;
               const shifted = { x: point.x + across.x, y: point.y + across.y };
-              if (!put(loop[at], shifted)) return {};
+              if (!put(loop[at], shifted)) return null;
             }
           }
         }
