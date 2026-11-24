@@ -59,6 +59,7 @@ import {
 import {
   boxOf,
   sectorAt,
+  sectorDetails,
   sectorLoops,
   sectorPolygon,
   wallKey,
@@ -332,7 +333,8 @@ export const agentActions: AgentAction[] = [
   },
   {
     name: "describeRoom",
-    description: "One room in full, with every wall's textures and action.",
+    description:
+      "One room in full, with every wall's textures and action, and the lines drawn inside it.",
     reads: true,
     params: [room()],
     run: (map, args) => ({
@@ -690,7 +692,7 @@ export const agentActions: AgentAction[] = [
   {
     name: "splitRoom",
     description:
-      "Draws a line across rooms. Each stretch that runs from one wall of a room to another splits that room in two, and both halves keep its heights and looks.",
+      "Draws a line across rooms. Each stretch that runs from one wall of a room to another splits that room in two, and both halves keep its heights and looks. A stretch that would leave a room whole is refused. To cut a ring round a room inside it, go from the outer wall to the inner room, along its wall and back out, in one line.",
     params: [
       {
         name: "points",
@@ -699,9 +701,15 @@ export const agentActions: AgentAction[] = [
       },
     ],
     run: (map, args) => {
-      const drawn = drawLines(map, points(args, "points"), 1);
-      if (!drawn) throw new Error("No part of that line lies in a room.");
-      return { map: drawn.map, result: drawn.rooms };
+      const corners = points(args, "points");
+      const drawn = drawLines(map, corners, 1, "split");
+      if (drawn) return { map: drawn.map, result: drawn.rooms };
+      if (drawLines(map, corners, 1)) {
+        throw new Error(
+          "That line leaves a room whole, so nothing changed. Every stretch has to run from one wall of a room to another and cut it in two. A single line from an outer wall to a room inside it doesn't, so go back out along a second one in the same line. For a line that stays in one piece of a room, use addDetailLine.",
+        );
+      }
+      throw new Error("No part of that line lies in a room.");
     },
   },
   {
@@ -1750,6 +1758,7 @@ function roomDetail(map: GameMap, sector: Sector) {
     corners: outline.map(corner),
     pillars: holes.map((loop) => loop.map(corner)),
     walls,
+    lines: sectorDetails(sector).map(({ from, to }) => wallKey(from, to)),
     things: map.things
       .filter((thing) => sectorAt(map, thing) === sector)
       .map((thing) => thing.id),

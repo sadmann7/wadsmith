@@ -64,14 +64,15 @@ interface RebuildOptions {
   weak?: string;
 }
 
-// Draws a line over the map the way a desktop editor does. A stretch that
-// runs from one wall of a room across it to another splits the room in two;
-// a stretch that stays inside one room becomes a line in that room. Null
-// when no part of the line lands in a room, or it meets a switch's wall.
+// Draws a line over the map the way a desktop editor does. A stretch from
+// one wall of a room to another splits it; one that doesn't becomes a line
+// in the room, or in split mode makes the whole draw null. Null too when no
+// part of the line lands in a room, or it meets a switch's wall.
 export function drawLines(
   map: GameMap,
   points: Point[],
   grid = gridSize,
+  mode: "draw" | "split" = "draw",
 ): { map: GameMap; rooms: string[] } | null {
   const snapped = points
     .map((point) => snapPoint(point, grid))
@@ -156,19 +157,41 @@ export function drawLines(
     );
     let lines = list;
     if (cuts.length > 0) {
-      const rebuilt = rebuildRooms(next, [room.id], {
-        add: cuts.flatMap(({ corners }) =>
-          corners.slice(1).map((to, index) => ({ from: corners[index], to })),
-        ),
-        keep: inside.map((sector) => sector.id),
+      const split = (chains: string[][]) => {
+        const rebuilt = rebuildRooms(next, [room.id], {
+          add: chains.flatMap((chain) =>
+            chain.slice(1).map((to, index) => ({ from: chain[index], to })),
+          ),
+          keep: inside.map((sector) => sector.id),
+        });
+        return rebuilt && rebuilt.rooms.length > 1 ? rebuilt : null;
+      };
+      const drawn = cuts.map(({ corners }) => corners);
+      // A stroke that can't cut a ring round a room inside on its own may
+      // close a piece off with an earlier line from the ring's outer wall.
+      const inner = new Set([
+        ...sectorLoops(room).slice(1).flat(),
+        ...inside.flatMap((sector) => sector.vertices),
+      ]);
+      const spokes = (room.details ?? []).filter((chain) => {
+        const [first, last] = [chain[0], defined(chain.at(-1))];
+        return (
+          ends.has(first) &&
+          ends.has(last) &&
+          inner.has(first) !== inner.has(last)
+        );
       });
-      if (rebuilt && rebuilt.rooms.length > 1) {
+      const rebuilt =
+        split(drawn) ||
+        (spokes.length > 0 ? split([...drawn, ...spokes]) : null);
+      if (rebuilt) {
         next = rebuilt.map;
         touched.push(...rebuilt.rooms.map((item) => item.id));
         changed = true;
         lines = list.filter((run) => !cuts.includes(run));
       }
     }
+    if (mode === "split" && lines.length > 0) return null;
     for (const { corners } of lines) {
       const holder = sectorAt(
         next,

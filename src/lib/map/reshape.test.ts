@@ -6,6 +6,7 @@ import { compileMap } from "@/lib/wad/compile";
 import type { GameMap, Point } from "./types";
 
 import {
+  addDetail,
   addRoom,
   addSwitch,
   makePillar,
@@ -26,6 +27,7 @@ import { shapeCorners } from "./shapes";
 import { starterMap } from "./starter-map";
 import { testMap } from "./test-map";
 import { validateMap } from "./validate";
+import { splitIntoSteps } from "./wall-tools";
 
 const empty: GameMap = { vertices: {}, sectors: [], things: [], switches: [] };
 
@@ -155,6 +157,86 @@ describe("drawing a line across a room", () => {
     );
     expect(split.map.sectors).toHaveLength(4);
     expect(problems(split.map)).toEqual([]);
+  });
+
+  it("refuses in split mode a line that leaves the room whole", () => {
+    const island = drawRoom(hall.map, box(192, 64, 320, 192), {}, 1);
+    const spoke = [
+      { x: 0, y: 128 },
+      { x: 192, y: 128 },
+    ];
+    expect(drawLines(island.map, spoke, 1, "split")).toBeNull();
+    const drawn = defined(drawLines(island.map, spoke, 1));
+    expect(drawn.map.sectors[0].details).toHaveLength(1);
+    expect(
+      drawLines(
+        hall.map,
+        [
+          { x: 64, y: 64 },
+          { x: 128, y: 64 },
+        ],
+        1,
+        "split",
+      ),
+    ).toBeNull();
+  });
+
+  it("closes a piece off with a line drawn earlier from wall to wall", () => {
+    const island = drawRoom(hall.map, box(192, 64, 320, 192), {}, 1);
+    const first = defined(
+      drawLines(
+        island.map,
+        [
+          { x: 0, y: 112 },
+          { x: 192, y: 112 },
+        ],
+        1,
+      ),
+    );
+    const spoke = [
+      { x: 0, y: 144 },
+      { x: 192, y: 144 },
+    ];
+    for (const mode of ["draw", "split"] as const) {
+      const second = defined(drawLines(first.map, spoke, 1, mode));
+      expect(second.map.sectors).toHaveLength(3);
+      expect(second.map.sectors.every((sector) => !sector.details)).toBe(true);
+      const strip = defined(sectorAt(second.map, { x: 96, y: 128 }));
+      expect(strip).not.toBe(sectorAt(second.map, { x: 96, y: 32 }));
+      expect(problems(second.map)).toEqual([]);
+    }
+  });
+
+  it("keeps a line from wall to wall when another line splits the room", () => {
+    const corridor = addRoom(empty, box(0, 0, 256, 512), {}, 1);
+    let map = corridor.map;
+    for (const [from, to, x] of [
+      ["v2", "v3", 256],
+      ["v4", "v1", 0],
+    ] as const) {
+      map = defined(splitWall(map, wallKey(from, to), { x, y: 128 }, 1)).map;
+    }
+    const trigger = defined(
+      addDetail(
+        map,
+        [
+          { x: 0, y: 128 },
+          { x: 256, y: 128 },
+        ],
+        1,
+      ),
+    ).map;
+    const split = defined(
+      drawLines(trigger, [
+        { x: 0, y: 384 },
+        { x: 256, y: 384 },
+      ]),
+    );
+    expect(split.map.sectors).toHaveLength(2);
+    expect(split.map.sectors.flatMap((sector) => sector.details ?? [])).toEqual(
+      [expect.any(Array)],
+    );
+    expect(splitIntoSteps(trigger, corridor.id, 2, 8, false)).not.toBeNull();
   });
 
   it("splits a room around a pillar, which goes to the half it's in", () => {
