@@ -27,7 +27,7 @@ import {
 import { wallKey, wallOwners } from "./geometry";
 import { starterMap } from "./starter-map";
 import { islandMap, testMap } from "./test-map";
-import { newIssues, newProblems, validateMap } from "./validate";
+import { issuesSince, newProblems, validateMap } from "./validate";
 
 const openWall = wallKey("v3", "v4");
 const lowerFloor: LineAction = {
@@ -672,7 +672,7 @@ describe("turning, flipping and resizing", () => {
     const keys = partKeys(map, selectedParts(map, [], "sector-3"));
     const grow: Transform = { kind: "scale", factor: 1.05 };
     const carried = defined(transformParts(map, keys, grow, 8, "walls"));
-    expect(newIssues(map, carried)).toEqual({
+    expect(issuesSince(map)(carried)).toEqual({
       errors: [],
       warnings: [expect.objectContaining({ id: "in-door:imp-near-door" })],
     });
@@ -684,7 +684,7 @@ describe("turning, flipping and resizing", () => {
     expect(problems).toEqual([]);
     expect(stranded).toEqual(["sector-4", "sector-7"]);
     expect(defined(grown).vertices.v13).toEqual(map.vertices.v13);
-    expect(newIssues(map, defined(grown))).toEqual({
+    expect(issuesSince(map)(defined(grown))).toEqual({
       errors: [],
       warnings: [],
     });

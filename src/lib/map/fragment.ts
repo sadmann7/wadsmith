@@ -25,7 +25,7 @@ import {
   wallOwners,
 } from "./geometry";
 import { MapFileError, maxFileBytes, parseMap } from "./storage";
-import { type MapIssue, newIssues } from "./validate";
+import { issuesSince, type MapIssue } from "./validate";
 
 // What a selection stands for: whole rooms and things.
 export interface SelectedParts {
@@ -514,13 +514,14 @@ export function transformKeepingDoors(
     !best.map ||
     errors < best.problems.length ||
     (errors === best.problems.length && warnings < best.warnings.length);
+  const newIssues = issuesSince(map);
   const attempt = (carry: DoorCarry) => {
     let next: GameMap | null = map;
     for (const step of steps) {
       next = next && transformParts(next, keys, step, grid, carry);
     }
     if (!next) return false;
-    const { errors, warnings } = newIssues(map, next);
+    const { errors, warnings } = newIssues(next);
     if (better(errors.length, warnings.length)) {
       best = { map: next, problems: errors, warnings, carry };
     }

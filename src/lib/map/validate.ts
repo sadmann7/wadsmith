@@ -216,12 +216,14 @@ export function newProblems(before: GameMap, after: GameMap): MapIssue[] {
   return freshIssues(validateMap(before), validateMap(after));
 }
 
-export function newIssues(before: GameMap, after: GameMap) {
+export function issuesSince(before: GameMap) {
   const old = inspectMap(before);
-  const found = inspectMap(after);
-  return {
-    errors: freshIssues(old.errors, found.errors),
-    warnings: freshIssues(old.warnings, found.warnings),
+  return (after: GameMap) => {
+    const found = inspectMap(after);
+    return {
+      errors: freshIssues(old.errors, found.errors),
+      warnings: freshIssues(old.warnings, found.warnings),
+    };
   };
 }
 
