@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import type { LineActionKind } from "@/lib/map/types";
+
 import { defined } from "@/lib/defined";
 import { setLineTarget, updateLine, updateSector } from "@/lib/map/edit";
 import { wallKey } from "@/lib/map/geometry";
@@ -70,5 +72,56 @@ describe("doors and lifts in the 3D view", () => {
     expect(moverAt(testMap, "floor:sector-4")).toBe("sector-4");
     expect(moverAt(testMap, "thing:imp-1")).toBeNull();
     expect(moverAt(testMap, null)).toBeNull();
+  });
+
+  it("moves a floor or ceiling where its action leaves it", () => {
+    // The corridor runs from -16 to 96, between floors at 0 and -16 and
+    // ceilings at 128 and 96, with its door made a plain room.
+    const doorless = updateSector(testMap, "sector-4", { door: undefined });
+    const worked = (kind: LineActionKind) =>
+      defined(
+        withMovers(
+          setLineTarget(
+            updateLine(doorless, openWall, {
+              action: { kind, trigger: "switch", repeat: true, tag: 0 },
+            }),
+            openWall,
+            "sector-2",
+          ),
+          ["sector-2"],
+        ).sectors.find((sector) => sector.id === "sector-2"),
+      );
+    expect(worked("floor-raise").floor).toBe(96);
+    expect(worked("floor-crush").floor).toBe(88);
+    expect(worked("floor-raise-next").floor).toBe(0);
+    expect(worked("floor-raise-512").floor).toBe(96);
+    expect(worked("floor-lower-highest").floor).toBe(0);
+    expect(worked("floor-lower-fast").floor).toBe(8);
+    expect(worked("ceiling-lower").ceiling).toBe(-16);
+    expect(worked("ceiling-lower-8").ceiling).toBe(-8);
+    expect(worked("ceiling-raise").ceiling).toBe(128);
+    expect(worked("light-max").floor).toBe(-16);
+  });
+
+  it("reads the ceiling of a door beside a mover as shut", () => {
+    const wired = setLineTarget(
+      updateLine(testMap, openWall, {
+        action: {
+          kind: "floor-raise",
+          trigger: "switch",
+          repeat: true,
+          tag: 0,
+        },
+      }),
+      openWall,
+      "sector-3",
+    );
+    const arena = defined(
+      withMovers(wired, ["sector-3"]).sectors.find(
+        (sector) => sector.id === "sector-3",
+      ),
+    );
+    // The arena's only way out is the door, shut at -16.
+    expect(arena.floor).toBe(-16);
   });
 });

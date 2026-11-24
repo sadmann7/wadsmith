@@ -1865,6 +1865,7 @@ function roomDetail(map: GameMap, sector: Sector) {
 }
 
 const namePageSize = 200;
+const skyFlat = "F_SKY1";
 
 function catalog(of: string, args: Args, context: CheckContext) {
   if (of === "things") {
@@ -1894,14 +1895,24 @@ function catalog(of: string, args: Args, context: CheckContext) {
     page(matching(list), args, namePageSize, namePageLimit);
   if (of === "walls") {
     const solid = new Set(names.walls);
+    const textures = new Set(names.textures);
+    const had = (list: readonly string[]) =>
+      list.filter((name) => textures.has(name));
     return {
       ...found(names.walls),
-      seeThrough: matching(names.middles.filter((name) => !solid.has(name))),
-      doors: doorTextures,
-      switches: switchTextures,
+      seeThrough: matching(
+        had(names.middles.filter((name) => !solid.has(name))),
+      ),
+      doors: had(doorTextures),
+      switches: had(switchTextures),
     };
   }
-  if (of === "flats") return { ...found(names.flats), sky: "F_SKY1" };
+  if (of === "flats") {
+    return {
+      ...found(names.flats),
+      ...(names.flats.includes(skyFlat) && { sky: skyFlat }),
+    };
+  }
   if (of === "sector-effects") {
     return Object.entries(sectorEffects).map(([effect, { label }]) => ({
       effect,

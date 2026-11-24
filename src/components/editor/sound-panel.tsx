@@ -9,7 +9,9 @@ interface SoundPanelProps {
   reach: SoundReach;
   source: string;
   doorsOpen: boolean;
+  floorsMoved: boolean;
   onDoorsOpenChange: (open: boolean) => void;
+  onFloorsMovedChange: (moved: boolean) => void;
   onClose: () => void;
 }
 
@@ -17,7 +19,9 @@ export function SoundPanel({
   reach,
   source,
   doorsOpen,
+  floorsMoved,
   onDoorsOpenChange,
+  onFloorsMovedChange,
   onClose,
 }: SoundPanelProps) {
   const hearing = [...reach.rooms.values()];
@@ -63,6 +67,10 @@ export function SoundPanel({
       <label className="flex items-center justify-between gap-3">
         <span>Doors open</span>
         <Switch checked={doorsOpen} onCheckedChange={onDoorsOpenChange} />
+      </label>
+      <label className="flex items-center justify-between gap-3">
+        <span>Lifts and floors moved</span>
+        <Switch checked={floorsMoved} onCheckedChange={onFloorsMovedChange} />
       </label>
       <p className="text-xs text-muted-foreground">
         Select a room to hear a shot from there instead.

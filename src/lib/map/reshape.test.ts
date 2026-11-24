@@ -15,7 +15,6 @@ import {
   updateLineSide,
 } from "./edit";
 import {
-  containerOf,
   cross,
   loopEdges,
   loopPolygon,
@@ -448,6 +447,25 @@ describe("drawing a room against the wall of the room it's in, around obstacles"
     }
   });
 
+  it("cuts the outer room round a room that touches a room or pillar inside it", () => {
+    for (const corners of [
+      box(160, 0, 448, 160),
+      box(224, 0, 448, 192),
+      box(0, 352, 448, 512),
+      box(640, 0, 960, 160),
+    ]) {
+      const drawn = drawRoom(pillarMap, corners, {}, 1);
+      const [{ x, y }, , { x: right, y: bottom }] = corners;
+      const middle = { x: (x + right) / 2, y: (y + bottom) / 2 };
+      expect(problems(drawn.map)).toEqual([]);
+      expect(sectorAt(drawn.map, middle)?.id).toBe(drawn.id);
+      expect(sectorAt(drawn.map, { x: 544, y: 256 })?.id).toBe("stage");
+      expect(sectorAt(drawn.map, { x: 192, y: 240 })).toBeUndefined();
+      expect(sectorAt(drawn.map, { x: 96, y: 100 })?.id).toBe("hall");
+      expect(() => compileMap(drawn.map)).not.toThrow();
+    }
+  });
+
   it("cuts a room drawn round an earlier one against its wall", () => {
     const inner = drawRoom(empty, box(0, 64, 128, 128), {}, 1);
     const outer = drawRoom(inner.map, box(0, 0, 512, 256), { floor: 16 }, 1);
@@ -455,6 +473,65 @@ describe("drawing a room against the wall of the room it's in, around obstacles"
     expect(sectorAt(outer.map, { x: 64, y: 96 })?.id).toBe(inner.id);
     expect(sectorAt(outer.map, { x: 256, y: 128 })?.floor).toBe(16);
     expect(() => compileMap(outer.map)).not.toThrow();
+  });
+});
+
+describe("cutting a room that touches a pillar or room inside it at a corner", () => {
+  const room = addRoom(empty, box(0, 0, 512, 512), {}, 1);
+  const post = drawRoom(room.map, box(96, 96, 160, 160), {}, 1);
+  const pillared = defined(makePillar(post.map, post.id));
+
+  it("moves a line into the room a closed line from the corner cuts off", () => {
+    const lined = defined(
+      addDetail(
+        room.map,
+        [
+          { x: 420, y: 40 },
+          { x: 440, y: 40 },
+        ],
+        1,
+      ),
+    ).map;
+    const loop = [
+      { x: 512, y: 0 },
+      { x: 400, y: 100 },
+      { x: 300, y: 50 },
+      { x: 512, y: 0 },
+    ];
+    for (const points of [loop, loop.toReversed()]) {
+      const split = defined(drawLines(lined, points, 1));
+      expect(problems(split.map)).toEqual([]);
+      expect(split.map.sectors).toHaveLength(2);
+      const cut = defined(sectorAt(split.map, { x: 430, y: 30 }));
+      expect(cut.id).not.toBe(room.id);
+      expect(cut.details).toHaveLength(1);
+    }
+  });
+
+  it("keeps a pillar when a closed line from its corner runs round it", () => {
+    const split = drawLines(
+      pillared,
+      [
+        { x: 160, y: 96 },
+        { x: 300, y: 50 },
+        { x: 300, y: 120 },
+        { x: 160, y: 96 },
+      ],
+      1,
+    );
+    expect(split?.map.sectors).toHaveLength(2);
+    expect(problems(defined(split).map)).toEqual([]);
+    expect(sectorAt(defined(split).map, { x: 128, y: 128 })).toBeUndefined();
+  });
+
+  it("cuts round a room drawn against its wall when a pillar touches a room inside it", () => {
+    const inner = drawRoom(pillared, box(160, 160, 224, 224), {}, 1);
+    const drawn = drawRoom(inner.map, box(320, 0, 448, 64), {}, 1);
+    expect(problems(drawn.map)).toEqual([]);
+    expect(sectorAt(drawn.map, { x: 128, y: 128 })).toBeUndefined();
+    expect(sectorAt(drawn.map, { x: 192, y: 192 })?.id).toBe(inner.id);
+    expect(sectorAt(drawn.map, { x: 384, y: 32 })?.id).toBe(drawn.id);
+    expect(() => compileMap(drawn.map)).not.toThrow();
   });
 });
 
@@ -671,10 +748,32 @@ describe("drawing over the starter maps", () => {
       };
       const pillars = base.sectors.flatMap((sector) =>
         (sector.holes ?? []).map((hole) => ({
+          hole,
           room: sectorPolygon(base, sector),
           shape: loopPolygon(base, hole),
         })),
       );
+      // A pillar turning into floor breaks no check, so each edit must leave
+      // empty every part of a pillar it doesn't cover.
+      const keepsPillars = (
+        label: string,
+        map: GameMap,
+        covered: Point[] = [],
+        moved = "",
+      ) => {
+        const filled = pillars.filter(
+          ({ hole, shape }) =>
+            !hole.includes(moved) &&
+            insidePoints(shape).some(
+              (point) => !getIsCovered(point, covered) && sectorAt(map, point),
+            ),
+        );
+        if (filled.length > 0) {
+          added.push(
+            `${label}: pillar ${filled.map(({ hole }) => hole.join(" ")).join(", ")} filled`,
+          );
+        }
+      };
       const wallsOf = (sector: Sector) =>
         loopEdges(sector.vertices).map(({ from, to }) => [
           base.vertices[from],
@@ -686,10 +785,6 @@ describe("drawing over the starter maps", () => {
           base.vertices[item.to],
         ]),
         ...base.sectors.filter((sector) => sector.door).flatMap(wallsOf),
-        // TODO: https://linear.app/gamepad/issue/BASE-378/cut-the-outer-room-round-a-room-drawn-against-its-wall-that-touches-a
-        ...base.sectors
-          .filter((sector) => containerOf(base, sector))
-          .flatMap(wallsOf),
       ];
       const xs = [...new Set(points.map((point) => point.x))];
       const ys = [...new Set(points.map((point) => point.y))];
@@ -715,10 +810,11 @@ describe("drawing over the starter maps", () => {
               )
             : box(x, y, right, bottom);
         const label = JSON.stringify(corners);
-        // Over a pillar of a room it's not drawn round, or touching a door, a
-        // switch's wall or a room inside another, a room is drawn as before,
-        // lying over the other and flagged by the checks.
+        // Over a pillar of a room it's not drawn round, or touching a door or
+        // a switch's wall, a room is drawn as before, lying over the other and
+        // flagged by the checks.
         const drawn = drawRoom(base, corners, {}, 1).map;
+        keepsPillars(`room ${label}`, drawn, corners);
         const plain = addRoom(base, corners, {}, 1);
         const isHeld =
           pillars.some(
@@ -738,24 +834,45 @@ describe("drawing over the starter maps", () => {
           round % 2 ? [corners[0], corners[2]] : corners.slice(0, 3),
           1,
         );
-        if (line) fresh(`line ${label}`, line.map);
+        if (line) {
+          fresh(`line ${label}`, line.map);
+          keepsPillars(`line ${label}`, line.map);
+        }
       }
       for (const first of base.sectors) {
         for (const second of base.sectors) {
           const joined =
             first !== second && joinRooms(base, [first.id, second.id]);
-          if (joined) fresh(`join ${first.id} ${second.id}`, joined.map);
+          if (joined) {
+            fresh(`join ${first.id} ${second.id}`, joined.map);
+            keepsPillars(`join ${first.id} ${second.id}`, joined.map);
+          }
         }
       }
       for (const id of Object.keys(base.vertices)) {
         const removed = removeCorner(base, id);
         // A thing can end up outside the room once a corner goes.
-        if (removed) fresh(`corner ${id}`, removed, ["outside"]);
+        if (removed) {
+          fresh(`corner ${id}`, removed, ["outside"]);
+          keepsPillars(`corner ${id}`, removed, [], id);
+        }
       }
     }
     expect(added).toEqual([]);
   }, 30_000);
 });
+
+function insidePoints(polygon: Point[]) {
+  const xs = polygon.map((point) => point.x);
+  const ys = polygon.map((point) => point.y);
+  const points: Point[] = [];
+  for (let x = Math.min(...xs) + 2; x < Math.max(...xs); x += 4) {
+    for (let y = Math.min(...ys) + 2; y < Math.max(...ys); y += 4) {
+      if (pointInPolygon({ x, y }, polygon)) points.push({ x, y });
+    }
+  }
+  return points;
+}
 
 function getIsOverlapping(first: Point[], second: Point[]) {
   const xs = second.map((point) => point.x);
