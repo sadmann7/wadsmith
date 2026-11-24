@@ -671,10 +671,32 @@ describe("drawing over the starter maps", () => {
       };
       const pillars = base.sectors.flatMap((sector) =>
         (sector.holes ?? []).map((hole) => ({
+          hole,
           room: sectorPolygon(base, sector),
           shape: loopPolygon(base, hole),
         })),
       );
+      // A pillar turning into floor breaks no check, so each edit must leave
+      // empty every part of a pillar it doesn't cover.
+      const keepsPillars = (
+        label: string,
+        map: GameMap,
+        covered: Point[] = [],
+        moved = "",
+      ) => {
+        const filled = pillars.filter(
+          ({ hole, shape }) =>
+            !hole.includes(moved) &&
+            insidePoints(shape).some(
+              (point) => !getIsCovered(point, covered) && sectorAt(map, point),
+            ),
+        );
+        if (filled.length > 0) {
+          added.push(
+            `${label}: pillar ${filled.map(({ hole }) => hole.join(" ")).join(", ")} filled`,
+          );
+        }
+      };
       const wallsOf = (sector: Sector) =>
         loopEdges(sector.vertices).map(({ from, to }) => [
           base.vertices[from],
@@ -719,6 +741,7 @@ describe("drawing over the starter maps", () => {
         // switch's wall or a room inside another, a room is drawn as before,
         // lying over the other and flagged by the checks.
         const drawn = drawRoom(base, corners, {}, 1).map;
+        keepsPillars(`room ${label}`, drawn, corners);
         const plain = addRoom(base, corners, {}, 1);
         const isHeld =
           pillars.some(
@@ -738,24 +761,45 @@ describe("drawing over the starter maps", () => {
           round % 2 ? [corners[0], corners[2]] : corners.slice(0, 3),
           1,
         );
-        if (line) fresh(`line ${label}`, line.map);
+        if (line) {
+          fresh(`line ${label}`, line.map);
+          keepsPillars(`line ${label}`, line.map);
+        }
       }
       for (const first of base.sectors) {
         for (const second of base.sectors) {
           const joined =
             first !== second && joinRooms(base, [first.id, second.id]);
-          if (joined) fresh(`join ${first.id} ${second.id}`, joined.map);
+          if (joined) {
+            fresh(`join ${first.id} ${second.id}`, joined.map);
+            keepsPillars(`join ${first.id} ${second.id}`, joined.map);
+          }
         }
       }
       for (const id of Object.keys(base.vertices)) {
         const removed = removeCorner(base, id);
         // A thing can end up outside the room once a corner goes.
-        if (removed) fresh(`corner ${id}`, removed, ["outside"]);
+        if (removed) {
+          fresh(`corner ${id}`, removed, ["outside"]);
+          keepsPillars(`corner ${id}`, removed, [], id);
+        }
       }
     }
     expect(added).toEqual([]);
   }, 30_000);
 });
+
+function insidePoints(polygon: Point[]) {
+  const xs = polygon.map((point) => point.x);
+  const ys = polygon.map((point) => point.y);
+  const points: Point[] = [];
+  for (let x = Math.min(...xs) + 2; x < Math.max(...xs); x += 4) {
+    for (let y = Math.min(...ys) + 2; y < Math.max(...ys); y += 4) {
+      if (pointInPolygon({ x, y }, polygon)) points.push({ x, y });
+    }
+  }
+  return points;
+}
 
 function getIsOverlapping(first: Point[], second: Point[]) {
   const xs = second.map((point) => point.x);
