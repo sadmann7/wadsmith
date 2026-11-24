@@ -741,6 +741,7 @@ export function addRoom(
     map.sectors.map((sector) => sector.id),
   );
   const index = map.sectors.length + 1;
+  const neighbour = widestNeighbour({ ...map, vertices }, loop);
   return {
     id,
     map: {
@@ -748,7 +749,13 @@ export function addRoom(
       vertices,
       sectors: [
         ...map.sectors,
-        { id, vertices: loop, ...roomDefaults(index), ...patch },
+        {
+          id,
+          vertices: loop,
+          ...roomDefaults(index),
+          ...(neighbour && looksOf(neighbour)),
+          ...patch,
+        },
       ],
     },
   };
@@ -923,8 +930,44 @@ export function addRoomOnSide(
       { x: b.x + offset.x, y: b.y + offset.y },
       b,
     ],
-    patch,
+    { ...looksOf(sector), ...patch },
   );
+}
+
+// The room sharing the most wall length with the outline, the earlier room
+// on a tie. Walls count where they run along each other, whether or not
+// they share corners yet.
+function widestNeighbour(map: GameMap, loop: string[]) {
+  let best: { sector: Sector; length: number } | null = null;
+  for (const sector of map.sectors) {
+    let length = 0;
+    for (const edge of loopEdges(loop)) {
+      for (const other of sectorLoops(sector).flatMap(loopEdges)) {
+        length += overlapLength(
+          map.vertices[edge.from],
+          map.vertices[edge.to],
+          map.vertices[other.from],
+          map.vertices[other.to],
+        );
+      }
+    }
+    if (length > (best?.length ?? 0)) best = { sector, length };
+  }
+  return best?.sector;
+}
+
+function overlapLength(a: Point, b: Point, c: Point, d: Point) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const length = Math.hypot(dx, dy);
+  if (length === 0) return 0;
+  const offset = (point: Point) =>
+    Math.abs(dx * (point.y - a.y) - dy * (point.x - a.x)) / length;
+  if (offset(c) > 0.5 || offset(d) > 0.5) return 0;
+  const along = (point: Point) =>
+    (dx * (point.x - a.x) + dy * (point.y - a.y)) / length;
+  const [start, end] = [along(c), along(d)].toSorted((p, q) => p - q);
+  return Math.max(0, Math.min(length, end) - Math.max(0, start));
 }
 
 export function roomCenter(map: GameMap, sector: Sector): Point {
@@ -1316,6 +1359,15 @@ export function nextId(prefix: string, used: Iterable<string>) {
     }
   }
   return `${prefix}${highest + 1}`;
+}
+
+function looksOf(sector: Sector) {
+  return {
+    light: sector.light,
+    floorTexture: sector.floorTexture,
+    ceilingTexture: sector.ceilingTexture,
+    wallTexture: sector.wallTexture,
+  };
 }
 
 function withoutUnset<T extends object>(value: T) {

@@ -509,13 +509,7 @@ export const agentActions: AgentAction[] = [
         args.floor === undefined && args.ceiling === undefined
           ? { floor: source.floor, ceiling: source.ceiling }
           : heightsOf(args, source);
-      const added = addRoomOnSide(map, source.id, side, depth, {
-        ...heights,
-        light: source.light,
-        floorTexture: source.floorTexture,
-        ceilingTexture: source.ceilingTexture,
-        wallTexture: source.wallTexture,
-      });
+      const added = addRoomOnSide(map, source.id, side, depth, heights);
       if (!added) {
         throw new Error(`${source.name} has no free wall facing ${side}.`);
       }

@@ -149,6 +149,57 @@ describe("agent actions", () => {
     );
   });
 
+  it("gives a door drawn between two rooms their looks", () => {
+    const rock = {
+      wallTexture: "ROCKRED1",
+      floorTexture: "RROCK19",
+      ceilingTexture: "FLAT5_7",
+      light: 192,
+    };
+    const { map } = build(blank, [
+      [
+        "addRoom",
+        {
+          corners: [
+            [0, 0],
+            [256, 0],
+            [256, 256],
+            [0, 256],
+          ],
+          ...rock,
+        },
+      ],
+      [
+        "addRoom",
+        {
+          corners: [
+            [272, 0],
+            [528, 0],
+            [528, 256],
+            [272, 256],
+          ],
+          ...rock,
+        },
+      ],
+      [
+        "addRoom",
+        [
+          [
+            [256, 96],
+            [272, 96],
+            [272, 160],
+            [256, 160],
+          ],
+        ],
+      ],
+      ["makeDoor", ["sector-3"]],
+    ]);
+    expect(map.sectors[2]).toMatchObject({
+      ...rock,
+      door: { texture: "BIGDOOR2" },
+    });
+  });
+
   it("splits a ring round a room inside, or refuses and changes nothing", () => {
     const { map } = build(blank, [
       [
