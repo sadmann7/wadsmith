@@ -72,9 +72,11 @@ import {
   keysFor,
   lineActionKinds,
   lineActions,
+  type LineSides,
   lineTriggers,
   lineUsesTag,
   newLineAction,
+  triggersFor,
 } from "@/lib/map/lines";
 import {
   drawLines,
@@ -870,10 +872,11 @@ export const agentActions: AgentAction[] = [
         ...(args.repeat !== undefined && { repeat: Boolean(args.repeat) }),
       };
       const action = fitLineAction(wanted, line);
-      if (args.trigger !== undefined && action.trigger !== args.trigger) {
-        throw new Error(
-          `${lineActions[kind].label} can't be set off by "${text(args, "trigger")}" on this wall. It takes: ${Object.keys(lineActions[kind].triggers).join(", ")}.`,
-        );
+      if (
+        args.trigger !== undefined &&
+        !triggersFor(kind, line).includes(wanted.trigger)
+      ) {
+        throw new Error(refusedTrigger(kind, wanted.trigger, line));
       }
       const acted = updateLine(map, key, { ...soleSpecial, action });
       const { label } = lineActions[kind];
@@ -1544,6 +1547,27 @@ export function agentStepSummary(
     };
   }
   return { label, at: null };
+}
+
+function refusedTrigger(
+  kind: LineActionKind,
+  trigger: LineTrigger,
+  sides: LineSides,
+) {
+  const { label, triggers } = lineActions[kind];
+  const reason = !triggers[trigger]
+    ? ""
+    : trigger === "walk"
+      ? ": nothing can walk over a solid wall"
+      : sides.twoSided
+        ? ": a press-to-open door needs a door room right behind the line"
+        : ": a press-to-open door needs a sector behind the line";
+  const allowed = triggersFor(kind, sides);
+  return `${label} can't be set off by "${trigger}" on this wall${reason}. ${
+    allowed.length > 0
+      ? `It takes: ${allowed.join(", ")}.`
+      : "Nothing sets it off on this wall."
+  }`;
 }
 
 function humanize(name: string) {
