@@ -1451,7 +1451,14 @@ function TextureCombobox({
             spellCheck={false}
             className="font-mono uppercase"
             onFocus={(event) => event.currentTarget.select()}
-            onBlur={() => setQuery(value)}
+            onBlur={(event) => {
+              const next = event.relatedTarget;
+              if (
+                !(next instanceof Element && next.closest('[role="listbox"]'))
+              ) {
+                setQuery(value);
+              }
+            }}
             onKeyDown={(event) => {
               if (event.key === "Enter" && shown.length === 0) setQuery(value);
             }}
