@@ -1588,9 +1588,8 @@ export function EditorScreen({
   };
 
   const revealScene = () => {
-    if (narrow) {
-      if (visibleLayout !== "scene") changeLayout("scene");
-    } else if (visibleLayout === "map") {
+    if (narrow) changeLayout("scene");
+    else if (visibleLayout === "map") {
       if (!showDock) changeLayout("split");
       else if (isDockCollapsed) collapseDock(false);
     }
