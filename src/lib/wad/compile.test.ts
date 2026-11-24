@@ -1581,6 +1581,20 @@ describe("line editing", () => {
     );
   });
 
+  it("words a missing target for what the action does", () => {
+    const message = (patch: Partial<LineAction>) =>
+      validateMap(
+        updateLine(testMap, openWall, { action: lowerFloor(patch) }),
+      ).find((issue) => issue.id === `line-target:${openWall}`)?.message;
+    expect(message({})).toContain("choose the sector this action moves.");
+    expect(message({ kind: "teleport" })).toContain(
+      "choose where it teleports to.",
+    );
+    expect(message({ kind: "light-max" })).toContain(
+      "choose the sector whose light it changes.",
+    );
+  });
+
   it("warns about a floor raise that can't rise", () => {
     const raise = (map: GameMap, target = "sector-2") => {
       const raised = setLineTarget(
