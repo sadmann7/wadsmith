@@ -34,7 +34,7 @@ const { parseMapFile } = await import("@/lib/map/storage");
 const { readWadAssets } = await import("@/lib/wad/assets");
 const { defaultGame } = await import("@/lib/engine/game");
 const { packWad } = await import("@/lib/wad/pack");
-const { getIsWad } = await import("@/lib/wad/inspect");
+const { readLumps } = await import("@/lib/wad/inspect");
 
 const flag = process.argv.indexOf("--map");
 const autosave = flag > 0 ? process.argv[flag + 1] : undefined;
@@ -64,7 +64,11 @@ const mods = modPaths.map((path) => {
   if (/\.(deh|bex)$/i.test(path)) {
     return packWad([{ name: "DEHACKED", data }]);
   }
-  if (!getIsWad(data)) fail(`--mod: ${path} isn't a WAD or DEHACKED patch.`);
+  try {
+    readLumps({ name: path, data });
+  } catch (error) {
+    fail(`--mod: ${error.message}`);
+  }
   return data;
 });
 const context = iwad
