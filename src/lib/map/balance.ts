@@ -1,9 +1,9 @@
 import type { CustomThings } from "@/lib/wad/custom-things";
 
-import type { GameMap, KeyColor, ThingKind, ThingSkill } from "./types";
+import type { GameMap, ThingKind, ThingSkill } from "./types";
 
 import { keyThings, thingCatalog } from "./catalog";
-import { activeLineActions } from "./validate";
+import { lockedKeys } from "./validate";
 
 const startingHealth = 60;
 const startingDamage = 500;
@@ -83,11 +83,7 @@ export function mapBalance(
   const health = kinds.filter((kind) => healing[kind]);
   const ammo = kinds.filter((kind) => ammoDamage[kind]);
   const keys = kinds.filter((kind) => thingCatalog[kind].category === "key");
-  const needed = new Set<KeyColor>(
-    activeLineActions(map).flatMap(({ action }) =>
-      action.key ? [action.key] : [],
-    ),
-  );
+  const needed = lockedKeys(map);
   const healthGap =
     sumOf(enemies.map((enemy) => enemy.threat)) -
     startingHealth -

@@ -371,6 +371,25 @@ describe("agent actions", () => {
     });
   });
 
+  it("locks a door room behind a key", () => {
+    const { map } = build(testMap, [["removeSwitch", ["switch-1"]]]);
+    const locked = runAgentAction(map, "makeDoor", {
+      room: "Arena door",
+      key: "blue",
+    });
+    expect(
+      locked.map.sectors.find((sector) => sector.name === "Arena door")?.door,
+    ).toMatchObject({ opensBy: "use", key: "blue" });
+    expect(locked.todo.join(" ")).toMatch(/place the blue key/);
+    expect(() =>
+      runAgentAction(map, "makeDoor", {
+        room: "Arena door",
+        opensBy: "switch",
+        key: "blue",
+      }),
+    ).toThrow("can't need a key");
+  });
+
   it("names rooms, walls and choices it doesn't know", () => {
     expect(() => runAgentAction(testMap, "describeRoom", ["Vault"])).toThrow(
       /No room "Vault"\. Rooms: sector-1 \(Start room\)/,

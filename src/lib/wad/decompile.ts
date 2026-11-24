@@ -3,6 +3,7 @@ import type {
   Complevel,
   DoorSettings,
   GameMap,
+  KeyColor,
   LineSettings,
   LineSide,
   MapSwitch,
@@ -15,7 +16,11 @@ import type {
 } from "@/lib/map/types";
 
 import { defined } from "@/lib/defined";
-import { generalizedTrigger, getIsGeneralized } from "@/lib/map/boom";
+import {
+  generalizedTrigger,
+  getIsGeneralized,
+  lockedDoorSpecial,
+} from "@/lib/map/boom";
 import {
   doorTextures,
   sectorEffects,
@@ -41,6 +46,7 @@ import {
   closesDoor,
   doorSpecial,
   getIsFast,
+  keyColors,
   movesSector,
   opensDoor,
   usedFromFront,
@@ -113,22 +119,6 @@ const fallbackWall = "STARTAN3";
 const fallbackFloor = "FLOOR4_8";
 const fallbackCeiling = "CEIL3_5";
 const noTexture = "-";
-
-// The engine raises these doors from the sector behind the line that's used.
-const manualDoors: Record<number, boolean> = {
-  1: true,
-  26: true,
-  27: true,
-  28: true,
-  117: true,
-  31: false,
-  32: false,
-  33: false,
-  34: false,
-  118: false,
-};
-const keyedManualDoors = new Set([26, 27, 28, 32, 33, 34]);
-const fastManualDoors = new Set([117, 118]);
 
 const specialScrollLeft = 48;
 
@@ -282,9 +272,10 @@ export function decompileMap(
   const doorCandidates = new Map<number, DoorSettings["opensBy"] | null>();
   const doorCloses = new Map<number, boolean>();
   const doorFast = new Set<number>();
+  const doorKey = new Map<number, KeyColor>();
   const manualLines = new Map<number, number[]>();
   for (const line of lines) {
-    if (manualDoors[line.special] !== undefined && line.backSector !== null) {
+    if (manualDoor(line.special) && line.backSector !== null) {
       manualLines.set(line.backSector, [
         ...(manualLines.get(line.backSector) ?? []),
         line.special,
@@ -293,13 +284,16 @@ export function decompileMap(
   }
   // A door opens the way most of its lines do, and the rest keep their own.
   for (const [index, specials] of manualLines) {
-    const plain = specials.filter((special) => !keyedManualDoors.has(special));
-    const special = Number(
-      mostCommon((plain.length > 0 ? plain : specials).map(String)),
+    const plain = specials.filter((special) => !manualDoor(special)?.key);
+    const door = defined(
+      manualDoor(
+        Number(mostCommon((plain.length > 0 ? plain : specials).map(String))),
+      ),
     );
     doorCandidates.set(index, "use");
-    doorCloses.set(index, manualDoors[special]);
-    if (fastManualDoors.has(special)) doorFast.add(index);
+    doorCloses.set(index, door.closes);
+    if (door.fast) doorFast.add(index);
+    if (door.key) doorKey.set(index, door.key);
   }
   for (const line of [...lines, ...details]) {
     const action = actionForSpecial(line.special);
@@ -484,6 +478,7 @@ export function decompileMap(
       if (upper && texture !== upper) replaced.add(upper);
       door = {
         opensBy: defined(doorCandidates.get(index)),
+        ...(doorKey.has(index) && { key: doorKey.get(index) }),
         closes: doorCloses.get(index) ?? true,
         ...(doorFast.has(index) ? { fast: true } : {}),
         texture,
@@ -529,7 +524,7 @@ export function decompileMap(
   // never open, so its lines open it instead of staying shut.
   const openedPieces = new Set<string>();
   for (const line of lines) {
-    if (line.backSector === null || manualDoors[line.special] === undefined) {
+    if (line.backSector === null || !manualDoor(line.special)) {
       continue;
     }
     if (!doors.has(line.backSector)) continue;
@@ -580,7 +575,8 @@ export function decompileMap(
       // it carries a tag to keep.
       const automatic =
         doorBehind !== undefined &&
-        line.special === doorSpecial(doorBehind) &&
+        (line.special === doorSpecial(doorBehind, "vanilla") ||
+          line.special === doorSpecial(doorBehind, "boom")) &&
         line.tag === 0;
       const trigger = action
         ? action.trigger
@@ -832,6 +828,45 @@ export function decompileMap(
       ...(Object.keys(settings).length > 0 ? { lines: settings } : {}),
     },
     report,
+  };
+}
+
+// The engine raises these doors from the sector behind the line that's used.
+const manualDoors: Record<number, boolean> = {
+  1: true,
+  26: true,
+  27: true,
+  28: true,
+  117: true,
+  31: false,
+  32: false,
+  33: false,
+  34: false,
+  118: false,
+};
+const fastManualDoors = new Set([117, 118]);
+// Wadsmith writes a fast locked door as Boom's generalized locked door.
+const fastLockedDoors = new Map(
+  keyColors.flatMap((key) =>
+    [true, false].map(
+      (closes) =>
+        [
+          lockedDoorSpecial({ closes, fast: true }, key),
+          { closes, key },
+        ] as const,
+    ),
+  ),
+);
+
+function manualDoor(special: number) {
+  const locked = fastLockedDoors.get(special);
+  if (locked) return { ...locked, fast: true };
+  const closes = manualDoors[special];
+  if (closes === undefined) return undefined;
+  return {
+    closes,
+    fast: fastManualDoors.has(special),
+    key: actionForSpecial(special)?.key,
   };
 }
 
