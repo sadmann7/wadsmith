@@ -17,6 +17,12 @@ export function steppedZoom(zoom: number, steps: number) {
   return zoomFactor ** (from + steps);
 }
 
+// Zoom in quarter octaves, rounded up, so the canvas renders again only when
+// the zoom crosses a step.
+export function zoomStep(zoom: number) {
+  return 2 ** (Math.ceil(Math.log2(zoom) * 4) / 4);
+}
+
 // Each scroll keeps the kind its first event had, so a trackpad's stray
 // event never zooms it and a fast mouse wheel never pans.
 export function createWheelZoom() {
