@@ -2001,6 +2001,7 @@ export function EditorScreen({
     setActiveSector(null);
     setSurface(null);
     setFileError(null);
+    setNotice("");
     setDraftCorners([]);
     camera.reset(next);
     setMapVersion((version) => version + 1);
