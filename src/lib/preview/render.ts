@@ -36,7 +36,8 @@ import {
 import { withMovers } from "./movers";
 
 // Pitch tilts the view up by that share of its height, the way the engine
-// looks up and down, and lift raises the eye above standing height.
+// looks up and down, or by pitch / focalShare radians in a view that tilts
+// with true perspective. Lift raises the eye above standing height.
 export type Camera = Point & {
   angle: number;
   eye?: number;
@@ -44,9 +45,16 @@ export type Camera = Point & {
   lift?: number;
 };
 
-export interface RenderTarget {
+// The size and lens of a picture of the scene. A view that tilts turns the
+// camera to look up and down instead of sliding the horizon.
+export interface Viewport {
   width: number;
   height: number;
+  focal: number;
+  tilts?: boolean;
+}
+
+export interface RenderTarget extends Viewport {
   pixels: Uint8ClampedArray<ArrayBuffer>;
   colors: Uint32Array;
   depth: Float32Array;
@@ -57,10 +65,9 @@ export interface RenderTarget {
   extent: Uint16Array;
   reach: Float32Array;
   surfaces: string[];
-  focal: number;
 }
 
-interface SceneOptions {
+export interface SceneOptions {
   assets: SceneAssets;
   hovered?: string | null;
   selected?: string | null;
@@ -92,7 +99,7 @@ interface MaskedColumn {
   id: number;
 }
 
-interface Wall {
+export interface Wall {
   a: Point;
   b: Point;
   key: string;
@@ -103,16 +110,18 @@ interface Wall {
 }
 
 const fieldOfView = Math.PI / 2;
-const focalShare = 0.8;
+export const focalShare = 0.8;
 const maxPortals = 32;
 const skyColor = 0xff000000;
-const skyFlat = "F_SKY1";
+export const skyFlat = "F_SKY1";
 // The engine wraps the sky four times round the player, puts its row 100 on
 // the horizon and draws it as if the view were 320 wide at a 90° view.
-const skyTurn = 1024;
-const skyHorizon = 100;
-const skyView = 320;
+export const skyTurn = 1024;
+export const skyHorizon = 100;
+export const skyView = 320;
 const maxFloorDistance = 4096;
+// The most a sheared view looks up or down, as a share of its height.
+export const shearLimit = 0.5;
 const selectedOutline = 0xff2b6aff;
 const noMovers: readonly string[] = [];
 const hoveredOutline = 0xffffffff;
@@ -133,10 +142,18 @@ export function createRenderTarget(
     extent: new Uint16Array(width * height),
     reach: new Float32Array(width * height),
     surfaces: [""],
-    // The focal length follows the height, so a wider view sees more to the
-    // sides rather than zooming in.
-    focal: (height * focalShare) / Math.tan(fieldOfView / 2),
+    focal: focalOf(height),
   };
+}
+
+// The focal length follows the height, so a wider view sees more to the
+// sides rather than zooming in.
+export function focalOf(height: number) {
+  return (height * focalShare) / Math.tan(fieldOfView / 2);
+}
+
+export function tiltOf(camera: Camera) {
+  return (camera.pitch ?? 0) / focalShare;
 }
 
 export function cameraBasis(camera: Camera) {
@@ -146,7 +163,7 @@ export function cameraBasis(camera: Camera) {
 }
 
 export function projectPoint(
-  target: RenderTarget,
+  target: Viewport,
   map: GameMap,
   camera: Camera,
   point: Point,
@@ -155,33 +172,55 @@ export function projectPoint(
   const { forward, right } = cameraBasis(camera);
   const dx = point.x - camera.x;
   const dy = point.y - camera.y;
-  const distance = dx * forward.x + dy * forward.y;
-  if (distance <= 1) return null;
-  const scale = target.focal / distance;
+  const ahead = dx * forward.x + dy * forward.y;
+  const side = dx * right.x + dy * right.y;
+  const rise = plane - eyeOf(map, camera);
+  if (target.tilts) {
+    const tilt = tiltOf(camera);
+    const distance = ahead * Math.cos(tilt) + rise * Math.sin(tilt);
+    if (distance <= 1) return null;
+    const up = rise * Math.cos(tilt) - ahead * Math.sin(tilt);
+    const scale = target.focal / distance;
+    return {
+      x: target.width / 2 + side * scale,
+      y: target.height / 2 - up * scale,
+    };
+  }
+  if (ahead <= 1) return null;
+  const scale = target.focal / ahead;
   return {
-    x: target.width / 2 + (dx * right.x + dy * right.y) * scale,
-    y: horizonOf(target, camera) - (plane - eyeOf(map, camera)) * scale,
+    x: target.width / 2 + side * scale,
+    y: horizonOf(target, camera) - rise * scale,
   };
 }
 
 export function pointOnPlane(
-  target: RenderTarget,
+  target: Viewport,
   map: GameMap,
   camera: Camera,
   x: number,
   y: number,
   plane: number,
 ): Point | null {
-  const rows = y - horizonOf(target, camera);
-  const height = eyeOf(map, camera) - plane;
-  if (rows === 0 || height / rows <= 0) return null;
-  const distance = (height * target.focal) / rows;
-  if (distance > maxFloorDistance) return null;
   const { forward, right } = cameraBasis(camera);
   const spread = (x - target.width / 2) / target.focal;
+  const height = eyeOf(map, camera) - plane;
+  let ahead = 1;
+  let drop: number;
+  if (target.tilts) {
+    const tilt = tiltOf(camera);
+    const lift = (target.height / 2 - y) / target.focal;
+    ahead = Math.cos(tilt) - lift * Math.sin(tilt);
+    drop = -(Math.sin(tilt) + lift * Math.cos(tilt));
+  } else {
+    drop = (y - horizonOf(target, camera)) / target.focal;
+  }
+  if (drop === 0 || height / drop <= 0) return null;
+  const reach = height / drop;
+  if (reach * ahead > maxFloorDistance) return null;
   return {
-    x: camera.x + (forward.x + right.x * spread) * distance,
-    y: camera.y + (forward.y + right.y * spread) * distance,
+    x: camera.x + (forward.x * ahead + right.x * spread) * reach,
+    y: camera.y + (forward.y * ahead + right.y * spread) * reach,
   };
 }
 
@@ -675,20 +714,21 @@ export function startCamera(map: GameMap): Camera {
 
 const eyeHeight = 41;
 
-function eyeOf(map: GameMap, camera: Camera) {
+export function eyeOf(map: GameMap, camera: Camera) {
   return (
     camera.eye ??
     (sectorAt(map, camera)?.floor ?? 0) + eyeHeight + (camera.lift ?? 0)
   );
 }
 
-function horizonOf(target: RenderTarget, camera: Camera) {
-  return target.height / 2 + (camera.pitch ?? 0) * target.height;
+function horizonOf(target: Viewport, camera: Camera) {
+  const pitch = Math.max(-shearLimit, Math.min(shearLimit, camera.pitch ?? 0));
+  return target.height / 2 + pitch * target.height;
 }
 
 const sectorWalls = new WeakMap<GameMap, Map<string, Wall[]>>();
 
-function wallsBySector(map: GameMap) {
+export function wallsBySector(map: GameMap) {
   const cached = sectorWalls.get(map);
   if (cached) return cached;
   const owners = wallOwners(map);
@@ -768,7 +808,7 @@ function wrap(value: number, size: number) {
 
 const thingOwners = new WeakMap<GameMap, Map<Thing, Sector | undefined>>();
 
-function thingOwner(map: GameMap, thing: Thing) {
+export function thingOwner(map: GameMap, thing: Thing) {
   let owners = thingOwners.get(map);
   if (!owners) {
     owners = new Map();

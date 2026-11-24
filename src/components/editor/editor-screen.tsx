@@ -38,6 +38,7 @@ import type {
   ThingCategory,
   ThingKind,
 } from "@/lib/map/types";
+import type { SceneRendererKind } from "@/lib/preview/scene-renderer";
 
 import { GameView, type PlayerSpot } from "@/components/play/play-panel";
 import { type HostedGame, PlayTogether } from "@/components/play/play-together";
@@ -346,6 +347,7 @@ interface GridSetting {
 }
 
 const savedGrid = createLocalStorage("wadsmith:grid");
+const savedRenderer = createLocalStorage("wadsmith:scene-renderer");
 
 interface AppProps {
   initialMap: GameMap;
@@ -506,6 +508,12 @@ export function EditorScreen({
   const [pieceNewer, setPieceNewer] = React.useState(false);
   const [scenePicked, setScenePicked] = React.useState<string[]>([]);
   const [sceneView, setSceneView] = React.useState<SceneView>(startView);
+  const [sceneRenderer, setSceneRenderer] =
+    React.useState<SceneRendererKind>(loadRenderer);
+  const changeRenderer = (next: SceneRendererKind) => {
+    setSceneRenderer(next);
+    savedRenderer.set(next);
+  };
   const [drawShape, setDrawShape] = React.useState<DrawShape>("outline");
   const [drawSides, setDrawSides] = React.useState(8);
   const [prefabsAt, setPrefabsAt] = React.useState<{
@@ -1644,6 +1652,10 @@ export function EditorScreen({
       onContextMenuCapture={normalizeControlClick}
     >
       <SceneCanvas
+        // A canvas keeps the kind of drawing it started with, so another
+        // renderer needs a new one.
+        key={sceneRenderer}
+        renderer={sceneRenderer}
         aria-label={sceneLabel(shortcutKeys)}
         className="screen scene"
         map={map}
@@ -2263,6 +2275,19 @@ export function EditorScreen({
                 <MenuItem value="sound">
                   {sound ? "Hide sound" : "Show sound"}
                 </MenuItem>
+                <MenuCheckboxItem
+                  value="perspective"
+                  checked={sceneRenderer === "webgl"}
+                  onCheckedChange={(checked) =>
+                    changeRenderer(checked ? "webgl" : "columns")
+                  }
+                  closeOnSelect
+                >
+                  True perspective in 3D (WebGL)
+                  <MenuItemIndicator className="ml-auto text-primary">
+                    <Check size={14} />
+                  </MenuItemIndicator>
+                </MenuCheckboxItem>
                 <MenuSeparator />
                 <MenuItem value="shortcuts" shortcut={shortcutKeys.help}>
                   Keyboard shortcuts
@@ -3579,6 +3604,10 @@ function loadGrid(): GridSetting {
   } catch {
     return { size: gridSize, snap: true, merge: true };
   }
+}
+
+function loadRenderer(): SceneRendererKind {
+  return savedRenderer.get() === "webgl" ? "webgl" : "columns";
 }
 
 // Without storage the card would come back on every visit.
