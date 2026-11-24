@@ -1037,6 +1037,8 @@ interface LinesInspectorProps {
   onFlag: (flag: LineFlag, on: boolean) => void;
   onAction: (kind: LineActionKind | null) => void;
   onTag: (tag: number) => void;
+  onTargetChange: (sector: string | null) => void;
+  onFrontChange: (sector: string) => void;
 }
 
 export function LinesInspector({
@@ -1048,8 +1050,14 @@ export function LinesInspector({
   onFlag,
   onAction,
   onTag,
+  onTargetChange,
+  onFrontChange,
 }: LinesInspectorProps) {
   const look = describeWalls(map, walls);
+  const kind = getIsLineActionKind(look.action) ? look.action : null;
+  const target = look.tag
+    ? map.sectors.find((item) => item.tag === look.tag)
+    : undefined;
   const context = `${walls.length} lines`;
   return (
     <>
@@ -1110,6 +1118,39 @@ export function LinesInspector({
             onAction(getIsLineActionKind(kind) ? kind : null);
           }}
         />
+        {kind && look.tagged ? (
+          <ChoiceField
+            label={lineActions[kind].target ?? "Moves sector"}
+            value={look.tag === null ? mixed : (target?.id ?? "none")}
+            items={[
+              ...(look.tag === null ? [{ value: mixed, label: mixed }] : []),
+              { value: "none", label: "Choose a sector" },
+              ...map.sectors.map((item) => ({
+                value: item.id,
+                label: item.name,
+              })),
+            ]}
+            onChange={(next) => {
+              if (next !== mixed) onTargetChange(next === "none" ? null : next);
+            }}
+          />
+        ) : null}
+        {look.sides ? (
+          <ChoiceField
+            label="Works from"
+            value={look.front ?? mixed}
+            items={[
+              ...(look.front === null ? [{ value: mixed, label: mixed }] : []),
+              ...look.sides.map((item) => ({
+                value: item.id,
+                label: item.name,
+              })),
+            ]}
+            onChange={(next) => {
+              if (next !== mixed) onFrontChange(next);
+            }}
+          />
+        ) : null}
         {look.tagged ? (
           <TagSetting value={look.tag} free={freeTag(map)} onChange={onTag} />
         ) : null}
