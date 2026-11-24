@@ -6,6 +6,7 @@ import { compileMap } from "@/lib/wad/compile";
 import type { GameMap, Point } from "./types";
 
 import {
+  addDetail,
   addRoom,
   addSwitch,
   makePillar,
@@ -26,6 +27,7 @@ import { shapeCorners } from "./shapes";
 import { starterMap } from "./starter-map";
 import { testMap } from "./test-map";
 import { validateMap } from "./validate";
+import { splitIntoSteps } from "./wall-tools";
 
 const empty: GameMap = { vertices: {}, sectors: [], things: [], switches: [] };
 
@@ -203,6 +205,38 @@ describe("drawing a line across a room", () => {
       expect(strip).not.toBe(sectorAt(second.map, { x: 96, y: 32 }));
       expect(problems(second.map)).toEqual([]);
     }
+  });
+
+  it("keeps a line from wall to wall when another line splits the room", () => {
+    const corridor = addRoom(empty, box(0, 0, 256, 512), {}, 1);
+    let map = corridor.map;
+    for (const [from, to, x] of [
+      ["v2", "v3", 256],
+      ["v4", "v1", 0],
+    ] as const) {
+      map = defined(splitWall(map, wallKey(from, to), { x, y: 128 }, 1)).map;
+    }
+    const trigger = defined(
+      addDetail(
+        map,
+        [
+          { x: 0, y: 128 },
+          { x: 256, y: 128 },
+        ],
+        1,
+      ),
+    ).map;
+    const split = defined(
+      drawLines(trigger, [
+        { x: 0, y: 384 },
+        { x: 256, y: 384 },
+      ]),
+    );
+    expect(split.map.sectors).toHaveLength(2);
+    expect(split.map.sectors.flatMap((sector) => sector.details ?? [])).toEqual(
+      [expect.any(Array)],
+    );
+    expect(splitIntoSteps(trigger, corridor.id, 2, 8, false)).not.toBeNull();
   });
 
   it("splits a room around a pillar, which goes to the half it's in", () => {
