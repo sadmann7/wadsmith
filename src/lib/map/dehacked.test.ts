@@ -79,6 +79,7 @@ describe("parseDehacked", () => {
     const health = (text: string) => parseDehacked(text)[0]?.health;
     expect(health("Thing 12 (Imp)\nID # = 30000\nHit points = 90\n")).toBe(90);
     expect(health("Thing 22 (Cyberdemon)\nID # = 30000\n")).toBe(4000);
+    expect(health("Thing 140 (Dog)\nID # = 30000\n")).toBe(500);
     expect(health("Thing 151 (New)\nID # = 30000\n")).toBe(0);
   });
 
