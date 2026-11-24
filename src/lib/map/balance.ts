@@ -92,7 +92,8 @@ export function mapBalance(map: GameMap, skill: ThingSkill) {
     health: health.length,
     ammo: ammo.length,
     keys: keys.length,
-    keysNeeded: [...needed].filter(
+    keysNeeded: needed.size,
+    keysMissing: [...needed].filter(
       (key) => !keyThings[key].some((kind) => keys.includes(kind)),
     ).length,
     healthShort: Math.max(0, Math.ceil(healthGap / healthPerPickup)),

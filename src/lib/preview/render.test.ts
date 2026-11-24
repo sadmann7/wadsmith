@@ -8,7 +8,7 @@ import { defined } from "@/lib/defined";
 import { thingKinds } from "@/lib/map/catalog";
 import { updateLine, updateLineSide, updateSector } from "@/lib/map/edit";
 import { addDetail, makePillar } from "@/lib/map/edit";
-import { wallKey } from "@/lib/map/geometry";
+import { sectorAt, wallKey } from "@/lib/map/geometry";
 import { parseMapFile, serializeMap } from "@/lib/map/storage";
 import {
   describeSurface,
@@ -47,6 +47,68 @@ const stripes = {
   pixels: Uint8Array.from({ length: 64 * 64 }, (_, index) => index >> 6),
   opaque: new Uint8Array(64 * 64).fill(1),
 };
+
+describe("startCamera", () => {
+  it("stands on the player start", () => {
+    const player = defined(testMap.things.find((t) => t.kind === "player"));
+    expect(startCamera(testMap)).toEqual({
+      x: player.x,
+      y: player.y,
+      angle: player.angle,
+    });
+  });
+
+  it("stands in the middle of the first room facing its longest wall", () => {
+    const map: GameMap = {
+      ...testMap,
+      vertices: {
+        a: { x: 0, y: 0 },
+        b: { x: 512, y: 0 },
+        c: { x: 512, y: 256 },
+        d: { x: 0, y: 256 },
+      },
+      sectors: [{ ...testMap.sectors[0], vertices: ["a", "b", "c", "d"] }],
+      things: [],
+      lines: {},
+      switches: [],
+    };
+    expect(startCamera(map)).toEqual({ x: 256, y: 128, angle: 90 });
+  });
+
+  it.each([
+    [512, 64],
+    [2048, 48],
+  ])(
+    "stands clear of a pillar in a room %i wide, %i from its walls",
+    (size, gap) => {
+      const far = size - gap;
+      const map: GameMap = {
+        ...testMap,
+        vertices: {
+          a: { x: 0, y: 0 },
+          b: { x: size, y: 0 },
+          c: { x: size, y: size },
+          d: { x: 0, y: size },
+          e: { x: gap, y: gap },
+          f: { x: far, y: gap },
+          g: { x: far, y: far },
+          h: { x: gap, y: far },
+        },
+        sectors: [
+          {
+            ...testMap.sectors[0],
+            vertices: ["a", "b", "c", "d"],
+            holes: [["e", "f", "g", "h"]],
+          },
+        ],
+        things: [],
+        lines: {},
+        switches: [],
+      };
+      expect(sectorAt(map, startCamera(map))?.id).toBe("sector-1");
+    },
+  );
+});
 
 describe("renderScene", () => {
   it("runs wall textures from the viewer's left in either winding", () => {
