@@ -831,6 +831,7 @@ export function EditorScreen({
     const {
       map: next,
       problems,
+      warnings,
       stranded,
     } = transformKeepingDoors(map, keys, steps, grid);
     if (!next) {
@@ -848,9 +849,16 @@ export function EditorScreen({
       .filter((sector) => stranded.includes(sector.id))
       .map((sector) => sector.name);
     setNotice(
-      doors.length === 0
-        ? ""
-        : `${new Intl.ListFormat("en").format(doors)} couldn't move with the room, so ${doors.length === 1 ? "its depth" : "their depths"} changed.`,
+      [
+        doors.length === 0
+          ? ""
+          : `${new Intl.ListFormat("en").format(doors)} couldn't move with the room, so ${doors.length === 1 ? "its depth" : "their depths"} changed.`,
+        warnings[0]
+          ? `That gave the map a new warning. ${warnings[0].message}`
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" "),
     );
     commit(next);
     // Corners that met others on the way are gone, and so are the walls and
