@@ -15,11 +15,20 @@ import type { SoundReach } from "@/lib/map/sound";
 import type { GameMap, LineSettings, Point, ThingKind } from "@/lib/map/types";
 
 import { buttonVariants } from "@/components/ui/button";
-import { clearLabels } from "@/lib/editor/map-labels";
+import {
+  clearLabels,
+  estimateLabelWidth,
+  labelPoint,
+} from "@/lib/editor/map-labels";
 import { thingIcons } from "@/lib/editor/thing-icons";
 import { generalizedTrigger, getIsGeneralized } from "@/lib/map/boom";
 import { doorKeyPrefix, switchKeyPrefix, thingKeyPrefix } from "@/lib/map/edit";
-import { paintOrder, wallOwners } from "@/lib/map/geometry";
+import {
+  loopPolygon,
+  paintOrder,
+  roomPoint,
+  wallOwners,
+} from "@/lib/map/geometry";
 import { actionForSpecial } from "@/lib/map/lines";
 import { type CustomThings, thingLabel } from "@/lib/wad/custom-things";
 
@@ -176,6 +185,14 @@ export function MapCanvas({
         name: sector.name,
         detail: `S${number} ${sector.floor}/${sector.ceiling}`,
         box: boxOf(map, sector),
+        at:
+          labelPoint(
+            [sector.vertices, ...(sector.holes ?? [])].map((loop) =>
+              loopPolygon(map, loop),
+            ),
+            step,
+            estimateLabelWidth(sector.name),
+          ) ?? roomPoint(map, sector),
       };
     });
 
@@ -197,6 +214,7 @@ export function MapCanvas({
       key={sector.id}
       value={sector.id}
       corners={sector.vertices}
+      holes={sector.holes}
       className="map-label"
       style={{ "--room-width": box.right - box.left } as React.CSSProperties}
     >
