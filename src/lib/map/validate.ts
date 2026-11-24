@@ -492,10 +492,14 @@ function validateNeighbors(map: GameMap, issues: MapIssue[]) {
     const covered = (room: typeof a, pillar: typeof a) =>
       pillar.pillar && containerOf(map, room.sector) === pillar.sector;
     if (covered(a, b) || covered(b, a)) continue;
+    const [inner, outer] =
+      containerOf(map, b.sector) === a.sector
+        ? [b.sector, a.sector]
+        : [a.sector, b.sector];
     issues.push({
       id: `same-side:${key}`,
-      message: `${a.sector.name} and ${b.sector.name} are on the same side of one wall.`,
-      target: b.sector.id,
+      message: `${inner.name} and ${outer.name} are on the same side of one wall. Move ${inner.name} off that wall, or remove it and draw it again so it cuts ${outer.name}${outer.holes?.length ? " without lying over its pillars" : ""}.`,
+      target: inner.id,
     });
   }
 
