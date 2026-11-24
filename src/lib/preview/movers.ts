@@ -650,7 +650,7 @@ function donut(movers: Movers, start: Sector): Moves {
         ? donutOverrunFloor
         : defined(shut.get(map.sectors[line.back].id)).floor;
     return new Map([
-      [pool.id, { floor }],
+      [pool.id, { floor: boom ? Math.min(pool.ceiling, floor) : floor }],
       [start.id, { floor }],
     ]);
   }
