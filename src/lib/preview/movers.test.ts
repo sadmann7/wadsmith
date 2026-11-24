@@ -386,6 +386,26 @@ describe("several movers on one room", () => {
     expect(heights(map, ["r1", "r2"])[2]).toEqual([16, 128]);
     expect(heights(map, ["r2"])[2]).toEqual([0, 128]);
   });
+
+  it("moves a floor and a ceiling from two opened movers, never past each other on Boom", () => {
+    const map = (complevel: GameMap["complevel"]) =>
+      row(
+        [
+          {},
+          { tag: 1, floorTexture: "STEP1" },
+          { tag: 2, floorTexture: "STEP1" },
+        ],
+        {
+          ...acting("stairs"),
+          [wallKey("t2", "t3")]: {
+            action: { kind: "crusher", trigger: "walk", repeat: true, tag: 2 },
+          },
+        },
+        complevel,
+      );
+    expect(heights(map("boom"), ["r1", "r2"])[2]).toEqual([16, 16]);
+    expect(heights(map("vanilla"), ["r1", "r2"])[2]).toEqual([16, 8]);
+  });
 });
 
 // Rooms side by side from west to east, each 64 wide, so each room is in

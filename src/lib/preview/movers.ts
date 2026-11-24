@@ -115,7 +115,7 @@ function shownWith(
   textureHeight: TextureHeight | undefined,
 ): Shown {
   if (opened.length === 0) return shutOf(map).shown;
-  const { shut, around, candidates } = moversOf(map);
+  const { shut, around, candidates, boom } = moversOf(map);
   const { shown } = plansOf(map, textureHeight);
   const wanted = new Set(opened);
   const open = map.sectors.filter(
@@ -141,7 +141,17 @@ function shownWith(
       continue;
     }
     for (const [id, heights] of planOf(map, sector.id, textureHeight) ?? []) {
-      moved.set(id, { ...heights, ...moved.get(id) });
+      const earlier = moved.get(id) ?? {};
+      const room = { ...defined(shut.get(id)), ...earlier };
+      const later = { ...heights };
+      // From Boom on, a floor or ceiling stops where the other one stands.
+      if (boom && later.floor !== undefined) {
+        later.floor = Math.min(later.floor, room.ceiling);
+      }
+      if (boom && later.ceiling !== undefined) {
+        later.ceiling = Math.max(later.ceiling, room.floor);
+      }
+      moved.set(id, { ...later, ...earlier });
     }
   }
   const result = {
