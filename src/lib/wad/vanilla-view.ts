@@ -1,7 +1,8 @@
 // A port of the parts of Doom 1.9's renderer (r_bsp.c, r_segs.c, r_plane.c,
 // r_things.c) that decide how many visplanes, drawsegs, solid segs, openings
-// and sprites a view fills. It draws nothing. Angles follow Doom's tables,
-// but distances and scales are floats, so a count can be a step off near a
+// and sprites a view fills, for a single-player game. It draws nothing.
+// Angles follow Doom's R_PointToAngle, but distances and scales are floats,
+// and a sprite is as wide as its thing, so a count can be a step off near a
 // limit.
 import { vanillaThings } from "@/lib/map/doom-info";
 
