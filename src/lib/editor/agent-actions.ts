@@ -1475,11 +1475,17 @@ export function agentRisk(
       };
     }
     if (name === "replaceTexture") {
-      const { result } = runAgentAction(map, name, args);
       const from = text(args, "from");
+      const to = text(args, "to");
+      const swapped = replaceTexture(
+        map,
+        from,
+        to,
+        choice(args, "kind", ["wall", "flat"]),
+      );
       return {
-        title: `Replace ${from} with ${text(args, "to")}?`,
-        detail: `${typeof result === "number" ? `${count(result, "surface", "surfaces")} change.` : "Every surface that wears it changes."} Undo puts ${from} back.`,
+        title: `Replace ${from} with ${to}?`,
+        detail: `${count(swapped.count, "surface", "surfaces")} change. Undo puts ${from} back.`,
         confirm: "Replace",
       };
     }
