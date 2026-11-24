@@ -55,6 +55,7 @@ export function createEditHistory({ limit, groupDelay }: EditHistoryOptions) {
       const now = Date.now();
       const last = done.at(-1);
       undone.length = 0;
+      evicted = evicted.filter((step) => step.batch && getHasBatch(step.batch));
       if (
         group &&
         last?.group === group &&
@@ -68,8 +69,12 @@ export function createEditHistory({ limit, groupDelay }: EditHistoryOptions) {
       }
       done.push({ undo, redo, group, batch, at: now });
       const oldest = done.length > limit ? done.shift() : undefined;
-      if (oldest?.batch) evicted.push(oldest);
-      evicted = evicted.filter((step) => step.batch && getHasBatch(step.batch));
+      // A batch's last step out takes its evicted steps with it.
+      if (oldest?.batch) {
+        const { batch } = oldest;
+        if (getHasBatch(batch)) evicted.push(oldest);
+        else evicted = evicted.filter((step) => step.batch !== batch);
+      }
     },
     undo(current: GameMap) {
       const step = done.pop();

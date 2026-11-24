@@ -1990,7 +1990,8 @@ export function EditorScreen({
     agentSession.stop();
     const batch = `agent-${request.id}`;
     if (!history.hasBatch(batch)) {
-      agentSession.dismiss();
+      if (working) agentSession.clearTrail();
+      else agentSession.dismiss();
       setNotice("The agent's changes are too far back to undo any more.");
       return;
     }
