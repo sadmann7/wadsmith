@@ -559,10 +559,10 @@ index a16ecd1..e79fe25 100644
  
 diff --git a/src/wadsmith.c b/src/wadsmith.c
 new file mode 100644
-index 0000000..9f7cc96
+index 0000000..abfd7fc
 --- /dev/null
 +++ b/src/wadsmith.c
-@@ -0,0 +1,399 @@
+@@ -0,0 +1,440 @@
 +// The interface between Woof and Wadsmith's game worker.
 +
 +#include <emscripten.h>
@@ -572,6 +572,7 @@ index 0000000..9f7cc96
 +#include "d_items.h"
 +#include "d_main.h"
 +#include "d_player.h"
++#include "deh_misc.h"
 +#include "doomstat.h"
 +#include "g_game.h"
 +#include "i_video.h"
@@ -592,6 +593,7 @@ index 0000000..9f7cc96
 +static int rgba_size;
 +static int frames;
 +static float mouse_turn;
++static int wanted_cheats;
 +
 +void WADSMITH_Exit(int code)
 +{
@@ -747,8 +749,47 @@ index 0000000..9f7cc96
 +    return count;
 +}
 +
++// Held here and set again each frame, so they last through deaths and
++// restarts. A network game never gets them.
++static boolean CanCheat(void)
++{
++    return !netgame && gamestate == GS_LEVEL && Player()->mo;
++}
++
++static void ApplyCheats(void)
++{
++    if (CanCheat())
++    {
++        Player()->cheats = (Player()->cheats & ~(CF_GODMODE | CF_NOCLIP))
++                           | wanted_cheats;
++    }
++}
++
++// Only turning god mode on heals, as IDDQD does. A damage-exit floor clears
++// god mode each tic and has to be able to wear the player down to the exit.
++EXPORT void wadsmith_set_cheats(int cheats)
++{
++    player_t *player = Player();
++    const int added = cheats & ~wanted_cheats;
++
++    wanted_cheats = cheats & (CF_GODMODE | CF_NOCLIP);
++
++    if ((added & CF_GODMODE) && CanCheat() && player->health > 0)
++    {
++        player->health = player->mo->health = deh_god_mode_health;
++    }
++
++    ApplyCheats();
++}
++
++EXPORT int wadsmith_cheats(void)
++{
++    return Player()->cheats & (CF_GODMODE | CF_NOCLIP);
++}
++
 +EXPORT void wadsmith_run_frame(void)
 +{
++    ApplyCheats();
 +    D_RunFrame();
 +}
 +

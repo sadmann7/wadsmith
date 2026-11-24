@@ -5,6 +5,7 @@ import type {
   SoundLevel,
 } from "./doom-worker";
 import type {
+  Cheats,
   EngineIwad,
   GameFiles,
   GameStatus,
@@ -236,6 +237,7 @@ export function startGameClient(options: GameClientOptions) {
       sound = next;
       send({ type: "sound", sound: next });
     },
+    setCheats: (cheats: Cheats) => send({ type: "cheats", cheats }),
     setHeld: (next: boolean) => {
       held = next;
       sendPause();

@@ -41,6 +41,8 @@ export interface PlaytestRun {
   marks: RunMark[];
   // Null when nobody reached the exit.
   result: RunResult | null;
+  // God mode or no clipping was on at some point.
+  cheated: boolean;
 }
 
 // The last run of a map, and the fastest any run of it reached the exit, in
@@ -112,15 +114,16 @@ export function killersOf(run: PlaytestRun) {
 }
 
 // A new run takes the last one's place, and the fastest exit is kept. A run
-// that didn't start at the player start is no time to beat.
+// that didn't start at the player start, or used cheats, is no time to beat.
 export function keepRun(
   saved: SavedPlaytest | null,
   run: PlaytestRun,
   timed = true,
 ): SavedPlaytest {
-  const times = [saved?.best, timed ? run.result?.tics : null].filter(
-    (tics) => tics !== null && tics !== undefined,
-  );
+  const times = [
+    saved?.best,
+    timed && !run.cheated ? run.result?.tics : null,
+  ].filter((tics) => tics !== null && tics !== undefined);
   return { run, best: times.length > 0 ? Math.min(...times) : null };
 }
 
@@ -134,7 +137,7 @@ export function parsePlaytest(value: unknown): SavedPlaytest | null {
 // A run read back from storage, or null when it isn't one.
 export function parseRun(value: unknown): PlaytestRun | null {
   if (!getIsRecord(value)) return null;
-  const { id, at, players, paths, marks, result } = value;
+  const { id, at, players, paths, marks, result, cheated } = value;
   if (typeof id !== "string" || !getIsCount(at)) return null;
   if (!Array.isArray(players) || !players.every(getIsCount)) return null;
   if (!Array.isArray(paths) || !Array.isArray(marks)) return null;
@@ -150,6 +153,7 @@ export function parseRun(value: unknown): PlaytestRun | null {
     paths: readPaths.filter((path) => path !== null),
     marks: readMarks.filter((mark) => mark !== null),
     result: readResult,
+    cheated: cheated === true,
   };
 }
 

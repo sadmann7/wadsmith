@@ -48,6 +48,7 @@ export class RunRecorder {
   private left = false;
   private totals = { kills: 0, secrets: 0, items: 0 };
   private result: RunResult | null = null;
+  private cheated = false;
 
   add(events: Int32Array) {
     for (let at = 0; at + trailFields <= events.length; at += trailFields) {
@@ -77,6 +78,10 @@ export class RunRecorder {
     }
   }
 
+  markCheated() {
+    this.cheated = true;
+  }
+
   // The run so far, or null when nobody has moved yet.
   run(): PlaytestRun | null {
     const paths = this.paths.filter((path) => path.points.length > 2);
@@ -88,6 +93,7 @@ export class RunRecorder {
       paths: paths.map((path) => ({ ...path, points: [...path.points] })),
       marks: this.marks.map((mark) => ({ ...mark })),
       result: this.result,
+      cheated: this.cheated,
     };
   }
 

@@ -2,11 +2,13 @@ import {
   ArrowLeft,
   ArrowRight,
   Crosshair,
+  Ghost,
   KeyRound,
   Loader,
   Maximize,
   Minimize,
   RotateCcw,
+  ShieldCheck,
   Skull,
   Volume2,
   VolumeX,
@@ -23,6 +25,7 @@ import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import { skillNames } from "@/lib/engine/coop";
 import {
+  type Cheats,
   fragLimit,
   type GameStatus,
   maxVolume,
@@ -97,8 +100,10 @@ interface GameTopBarProps {
   episode: boolean;
   exit: { to: string | null };
   screen: Screen;
+  cheats: Cheats | null;
   onSoundChange: (sound: SoundSettings) => void;
   onScreenChange: (screen: Screen) => void;
+  onCheatsChange: (cheats: Cheats) => void;
   onRestart: () => void;
   onToggleFullscreen: () => void;
   onExit: () => void;
@@ -118,8 +123,10 @@ export function GameTopBar({
   episode,
   exit,
   screen,
+  cheats,
   onSoundChange,
   onScreenChange,
+  onCheatsChange,
   onRestart,
   onToggleFullscreen,
   onExit,
@@ -204,6 +211,38 @@ export function GameTopBar({
           }
           onPointerUp={onControlUsed}
         />
+        {cheats ? (
+          <>
+            <span aria-hidden="true" className="separator max-[640px]:hidden" />
+            <button
+              type="button"
+              className={`${iconButtonClass} aria-pressed:text-primary`}
+              aria-label="God mode"
+              aria-pressed={cheats.god}
+              title={cheats.god ? "God mode on" : "God mode"}
+              onClick={(event) => {
+                onCheatsChange({ ...cheats, god: !cheats.god });
+                if (event.detail > 0) onControlUsed();
+              }}
+            >
+              <ShieldCheck size={15} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className={`${iconButtonClass} aria-pressed:text-primary`}
+              aria-label="No clipping"
+              aria-pressed={cheats.noclip}
+              title={cheats.noclip ? "No clipping on" : "No clipping"}
+              onClick={(event) => {
+                onCheatsChange({ ...cheats, noclip: !cheats.noclip });
+                if (event.detail > 0) onControlUsed();
+              }}
+            >
+              <Ghost size={15} aria-hidden="true" />
+            </button>
+            <span aria-hidden="true" className="separator max-[640px]:hidden" />
+          </>
+        ) : null}
         {coop ? null : (
           <>
             <button
@@ -275,6 +314,7 @@ interface GameHudProps {
   between: { tally: GameStatus; next: NextLevel; onNext: () => void } | null;
   exit: { label: string; hint: string };
   canEdit: boolean;
+  cheats: Cheats | null;
   noteOpen: boolean;
   mouseMode: MouseMode;
   noteSaved: boolean;
@@ -304,6 +344,7 @@ export function GameHud({
   between,
   exit,
   canEdit,
+  cheats,
   noteOpen,
   mouseMode,
   noteSaved,
@@ -358,6 +399,14 @@ export function GameHud({
             </>
           )}
         </dl>
+        {cheats && (cheats.god || cheats.noclip) ? (
+          <p role="status" className="px-3 pb-2 text-sm text-primary">
+            Cheats on:{" "}
+            {[cheats.god && "god mode", cheats.noclip && "no clipping"]
+              .filter(Boolean)
+              .join(", ")}
+          </p>
+        ) : null}
         {audioUnavailable ? (
           <p className="px-3 pb-2 text-sm text-muted-foreground">
             Sound needs HTTPS or localhost.
