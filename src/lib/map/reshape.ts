@@ -756,13 +756,38 @@ function rebuildRooms(
     )[0];
   };
   const pieces: Piece[] = [];
-  for (const face of traced.faces) {
-    if (new Set(face.loop).size !== face.loop.length) return null;
+  const points: Point[] = [];
+  const pinched: { bound: Cycle; piece: Piece }[] = [];
+  for (const whole of traced.faces) {
+    const loops = splitPinched(map, whole);
+    const faces = loops.filter((loop) => loop.isFace);
+    if (faces.length !== 1 || loops.some((loop) => loop.area === 0)) {
+      return null;
+    }
+    const [face] = faces;
     const point = insidePoint(face.polygon, 1);
+    points.push(point);
     const source = sourceAt(point);
-    if (source) pieces.push({ ...face, source, point, holes: [] });
+    if (!source) continue;
+    const piece = { ...face, source, point, holes: [] };
+    pieces.push(piece);
+    for (const bound of loops) {
+      if (!bound.isFace) pinched.push({ bound, piece });
+    }
   }
   if (pieces.length === 0) return null;
+  // What a face touching itself runs round is a pillar when it is all empty,
+  // and other rooms when none of it is.
+  for (const { bound, piece } of pinched) {
+    const within = points.filter((point) =>
+      pointInPolygon(point, bound.polygon),
+    );
+    const empty = within.filter((point) => !sectorAt(map, point)).length;
+    if (within.length === 0 || (empty > 0 && empty < within.length)) {
+      return null;
+    }
+    if (empty > 0) piece.holes.push(bound.loop.toReversed());
+  }
 
   // A boundary that faces into a piece around it is a pillar of that piece,
   // unless there is a room inside it.
@@ -972,6 +997,26 @@ function rebuildRooms(
       area: piece.area,
     })),
   };
+}
+
+// A face that touches itself at a corner, running out round a room inside it
+// and back, splits there into its own outline and the outline of that room.
+function splitPinched(map: GameMap, face: Cycle) {
+  if (new Set(face.loop).size === face.loop.length) {
+    return [{ ...face, isFace: true }];
+  }
+  const loops: string[][] = [];
+  const stack: string[] = [];
+  for (const id of [...face.loop, face.loop[0]]) {
+    const at = stack.indexOf(id);
+    if (at >= 0) loops.push(stack.splice(at));
+    stack.push(id);
+  }
+  return loops.map((loop) => {
+    const polygon = loopPolygon(map, loop);
+    const area = signedArea(polygon);
+    return { loop, polygon, area: Math.abs(area), isFace: area > 0 };
+  });
 }
 
 // Whether two of the walls cross or touch anywhere but a corner they share,
