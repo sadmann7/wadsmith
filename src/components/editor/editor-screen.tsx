@@ -1806,7 +1806,7 @@ export function EditorScreen({
       : thing
         ? thingLabel(thing, customThings)
         : line
-          ? `Line ${line.number}`
+          ? `Line ${line.wall}`
           : surfaceInfo && !surfaceInfo.thing
             ? surfaceInfo.label
             : placingThings
@@ -2619,7 +2619,7 @@ export function EditorScreen({
                         <div className="min-w-0">
                           <div>{title}</div>
                           {detail ? (
-                            <div className="truncate font-mono text-xs text-muted-foreground">
+                            <div className="font-mono text-xs wrap-break-word text-muted-foreground">
                               {detail}
                             </div>
                           ) : null}

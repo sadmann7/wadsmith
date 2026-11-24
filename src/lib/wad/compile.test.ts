@@ -845,8 +845,8 @@ describe("compatibility and raw specials", () => {
     expect(
       validateMap({ ...map, complevel: "boom" }).map((issue) => issue.id),
     ).toEqual(["thing-level:imp-1"]);
-    expect(validateMap({ ...map, complevel: undefined })[0].message).toMatch(
-      /^Line \d+: needs Boom/,
+    expect(validateMap({ ...map, complevel: undefined })[0].message).toBe(
+      "Wall between Stage and Yard (e|f): needs Boom compatibility, but the map is set to Vanilla.",
     );
     const copies = duplicateThings(map, ["imp-1"]);
     expect(copies.map.things.at(-1)).toMatchObject({
@@ -1493,16 +1493,16 @@ describe("line editing", () => {
       );
     };
     expect(raise(testMap)?.message).toBe(
-      "Line 5: the floor of Corridor can't rise: it stops at the lowest ceiling next to it, Arena door, closed at -16.",
+      "Wall between Start room and Corridor (v3|v4): the floor of Corridor can't rise: it stops at the lowest ceiling next to it, Arena door, closed at -16.",
     );
     expect(raise(setRoomDoor(testMap, "sector-4", undefined))).toBeUndefined();
     expect(
       raise(updateSector(testMap, "sector-2", { floor: 0 }))?.message,
     ).toBe(
-      "Line 5: the floor of Corridor drops instead of rising: it goes to the lowest ceiling next to it, Arena door, closed at -16.",
+      "Wall between Start room and Corridor (v3|v4): the floor of Corridor drops instead of rising: it goes to the lowest ceiling next to it, Arena door, closed at -16.",
     );
     expect(raise(testMap, "sector-4")?.message).toBe(
-      "Line 5: the floor of Arena door can't rise: it stops at its own ceiling, closed at -16.",
+      "Wall between Start room and Corridor (v3|v4): the floor of Arena door can't rise: it stops at its own ceiling, closed at -16.",
     );
   });
 
@@ -1989,6 +1989,29 @@ describe("thing settings", () => {
     expect(validateMap(hardOnly).map((issue) => issue.id)).toContain(
       `line-key:${wallKey("v3", "v4")}`,
     );
+  });
+
+  it("names a line by its wall, so its message stays the same after an earlier wall is split", () => {
+    const locked = updateLine(testMap, wallKey("v3", "v4"), {
+      action: {
+        kind: "door-raise",
+        trigger: "door",
+        repeat: true,
+        key: "blue",
+        tag: 0,
+      },
+    });
+    const message = (map: GameMap) =>
+      validateMap(map).find(
+        (issue) => issue.id === `line-key:${wallKey("v3", "v4")}`,
+      )?.message;
+    expect(message(locked)).toBe(
+      "Wall between Start room and Corridor (v3|v4): place the blue key on every difficulty.",
+    );
+    const at = { x: 80, y: 0 };
+    const added = addSwitch(locked, defined(freeWallNear(locked, at, 32)), at);
+    expect(added.map.switches).toHaveLength(testMap.switches.length + 1);
+    expect(message(added.map)).toBe(message(locked));
   });
 
   it("changes each selected thing from its own values", () => {
