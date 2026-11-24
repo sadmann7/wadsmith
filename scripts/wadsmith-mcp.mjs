@@ -34,39 +34,44 @@ const { parseMapFile } = await import("@/lib/map/storage");
 const { readWadAssets } = await import("@/lib/wad/assets");
 const { defaultGame } = await import("@/lib/engine/game");
 const { packWad } = await import("@/lib/wad/pack");
-
-// Freedoom's textures, once pnpm setup:engine has fetched it, so the map
-// uses only names the game has.
-const iwad = resolve(root, "public/engine/freedoom2.wad");
-const context = existsSync(iwad)
-  ? { game: defaultGame, names: readWadAssets(readFileSync(iwad)).names }
-  : {};
+const { getIsWad } = await import("@/lib/wad/inspect");
 
 const flag = process.argv.indexOf("--map");
 const autosave = flag > 0 ? process.argv[flag + 1] : undefined;
+
+const fail = (message) => {
+  process.stderr.write(`${message}\n`);
+  process.exit(1);
+};
+
+// Freedoom's textures, once pnpm setup:engine has fetched it, so the map
+// uses only names the game has.
+const iwadPath = resolve(root, "public/engine/freedoom2.wad");
+const iwad = existsSync(iwadPath)
+  ? new Uint8Array(readFileSync(iwadPath))
+  : undefined;
 
 const modPaths = process.argv.flatMap((arg, index) =>
   arg === "--mod" ? [process.argv[index + 1]] : [],
 );
 // A mod's textures replace the game's own list, so a build needs the IWAD.
-if (modPaths.length > 0 && !existsSync(iwad)) {
-  process.stderr.write("--mod needs Freedoom. Run pnpm setup:engine first.\n");
-  process.exit(1);
+if (modPaths.length > 0 && !iwad) {
+  fail("--mod needs Freedoom. Run pnpm setup:engine first.");
 }
 const mods = modPaths.map((path) => {
-  if (!path || !existsSync(resolve(path))) {
-    process.stderr.write(`--mod: no file ${path ?? ""}\n`);
-    process.exit(1);
-  }
+  if (!path || !existsSync(resolve(path))) fail(`--mod: no file ${path ?? ""}`);
   const data = new Uint8Array(readFileSync(resolve(path)));
-  return /\.(deh|bex)$/i.test(path)
-    ? packWad([{ name: "DEHACKED", data }])
-    : data;
+  if (/\.(deh|bex)$/i.test(path)) {
+    return packWad([{ name: "DEHACKED", data }]);
+  }
+  if (!getIsWad(data)) fail(`--mod: ${path} isn't a WAD or DEHACKED patch.`);
+  return data;
 });
+const context = iwad
+  ? { game: defaultGame, names: readWadAssets(iwad, mods).names }
+  : {};
 const textures =
-  mods.length > 0
-    ? { iwad: new Uint8Array(readFileSync(iwad)), resources: mods }
-    : undefined;
+  iwad && mods.length > 0 ? { iwad, resources: mods } : undefined;
 const files = {
   read: (path) => readFileSync(resolve(path), "utf8"),
   write: (path, data) => {
