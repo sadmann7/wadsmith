@@ -13,7 +13,6 @@ import type { EditorShortcut } from "@/lib/editor/shortcuts";
 import type { GameMap, Point, ThingKind } from "@/lib/map/types";
 import type { Camera } from "@/lib/preview/render";
 import type { SceneCamera } from "@/lib/preview/scene-camera";
-import type { SceneAssets } from "@/lib/wad/assets";
 
 import { currentKeys } from "@/lib/editor/keymap";
 import {
@@ -48,7 +47,12 @@ import {
   parseSurface,
 } from "@/lib/map/surfaces";
 import { alignWalls } from "@/lib/map/texture-tools";
-import { getIsMover, moverAt, withMovers } from "@/lib/preview/movers";
+import {
+  getIsMover,
+  movedRooms,
+  moverAt,
+  withMovers,
+} from "@/lib/preview/movers";
 import {
   cameraBasis,
   createRenderTarget,
@@ -58,6 +62,7 @@ import {
   type RenderTarget,
 } from "@/lib/preview/render";
 import { countNotches } from "@/lib/preview/wheel";
+import { type SceneAssets, textureHeightOf } from "@/lib/wad/assets";
 
 export type DraftSource = (
   listener: (map: GameMap | null) => void,
@@ -289,7 +294,8 @@ const sceneEditor = definePrimitive({
     // the map itself.
     const viewMap = () => {
       const map = shownMap();
-      return map ? withMovers(map, store.get().opened) : null;
+      const { assets, opened } = store.get();
+      return map ? withMovers(map, opened, heightsOf(assets)) : null;
     };
 
     // A door or lift that is gone, or no longer one, stops being shown open.
@@ -868,11 +874,15 @@ const sceneEditor = definePrimitive({
     // A door or lift shown open isn't at the height the map holds for it, so
     // its height waits until it is shut again.
     const getCanMoveHeight = (key: string | null) => {
-      const { map, opened } = store.get();
+      const { map, opened, assets } = store.get();
       const info = map ? describeSurface(map, key) : null;
       return (
         info?.height != null &&
-        !(info.sector && opened.includes(info.sector.id))
+        !(
+          map &&
+          info.sector &&
+          movedRooms(map, opened, heightsOf(assets)).has(info.sector.id)
+        )
       );
     };
 
@@ -1414,8 +1424,10 @@ const sceneEditor = definePrimitive({
         } else if (pressed("sceneOpen") && map && !event.repeat) {
           // The door or lift under the pointer, or else the selected one,
           // stands open until the key is pressed on it again.
-          const { hovered, selected, opened } = store.get();
-          const mover = moverAt(map, hovered) ?? moverAt(map, selected);
+          const { hovered, selected, opened, assets } = store.get();
+          const heights = heightsOf(assets);
+          const mover =
+            moverAt(map, hovered, heights) ?? moverAt(map, selected, heights);
           if (!mover) return;
           event.preventDefault();
           store.set({
@@ -1459,7 +1471,12 @@ const sceneEditor = definePrimitive({
         else if (state.placing) hover = undefined;
         else if (
           (surface?.kind === "floor" || surface?.kind === "ceiling") &&
-          !state.opened.includes(surface.sector)
+          !(
+            state.map &&
+            movedRooms(state.map, state.opened, heightsOf(state.assets)).has(
+              surface.sector,
+            )
+          )
         ) {
           hover = "height";
         } else if (surface) hover = "surface";
@@ -1561,6 +1578,10 @@ function drawCrosshair(
   output.fillStyle = color;
   output.fillRect(x - 6, y, 13, 1);
   output.fillRect(x, y - 6, 1, 13);
+}
+
+function heightsOf(assets: SceneAssets | null) {
+  return assets ? textureHeightOf(assets) : undefined;
 }
 
 function standable(map: GameMap, point: Point) {
