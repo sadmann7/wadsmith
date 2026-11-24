@@ -419,6 +419,7 @@ export function EditorScreen({
   // The map as last shown, which a remote edit lands on before the next
   // render.
   const mapRef = React.useRef(initialMap);
+  const agentEdit = React.useRef<number | undefined>(undefined);
   const [tool, setTool] = React.useState<MapTool>("select");
   const [gridSetting, setGridSetting] = React.useState(loadGrid);
   // Snapping off still lands on whole units, which is all the engine stores.
@@ -547,9 +548,18 @@ export function EditorScreen({
   const [history] = React.useState(() =>
     createEditHistory({ limit: 200, groupDelay: 500 }),
   );
-  const [undoable, setUndoable] = React.useState({ undo: false, redo: false });
+  const [undoable, setUndoable] = React.useState(() => ({
+    undo: false,
+    redo: false,
+    done: history.getDoneIds(),
+  }));
   const syncUndoable = React.useCallback(
-    () => setUndoable({ undo: history.canUndo(), redo: history.canRedo() }),
+    () =>
+      setUndoable({
+        undo: history.canUndo(),
+        redo: history.canRedo(),
+        done: history.getDoneIds(),
+      }),
     [history],
   );
 
@@ -1964,7 +1974,7 @@ export function EditorScreen({
     agentSession.getSnapshot,
     () => idleAgentSession,
   );
-  const hasAgentCard = getHasAgentCard(agentState);
+  const hasAgentCard = getHasAgentCard(agentState, undoable.done);
   const showWelcome = !welcomed && !hasAgentCard;
   const showMapDock = visibleLayout === "map" && showDock && !narrow;
   const agentAsk = agentState.question
@@ -1980,7 +1990,9 @@ export function EditorScreen({
   const commitAgentEdit = (next: GameMap) => {
     const request = agentSession.currentRequest();
     if (request === null) return commit(next);
-    history.record(mapRef.current, next, { batch: `agent-${request}` });
+    agentEdit.current = history.record(mapRef.current, next, {
+      batch: `agent-${request}`,
+    });
     showMap(next);
   };
   const undoAgentRequest = () => {
@@ -2011,8 +2023,13 @@ export function EditorScreen({
   // The visible trail of what an agent did, whoever the agent is. A browser
   // agent's edits go to its card instead.
   const logAgentAction = (action: string, report: AgentReport) => {
-    const traced = agentSession.record(action, report.todo, (args) =>
-      agentStepSummary(mapRef.current, action, args, report.result),
+    const edit = agentEdit.current;
+    agentEdit.current = undefined;
+    const traced = agentSession.record(
+      action,
+      report.todo,
+      (args) => agentStepSummary(mapRef.current, action, args, report.result),
+      edit,
     );
     if (!traced) logBridgeAction(action, report);
   };
@@ -2469,6 +2486,7 @@ export function EditorScreen({
                   <AgentCard
                     session={agentState}
                     map={map}
+                    doneEdits={undoable.done}
                     onAnswer={(yes, always) =>
                       agentSession.answer(yes, { always })
                     }

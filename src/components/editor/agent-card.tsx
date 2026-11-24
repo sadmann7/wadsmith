@@ -8,12 +8,14 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { agentRisk } from "@/lib/editor/agent-actions";
 import {
   type AgentSessionState,
+  getAgentStepsOnMap,
   getHasAgentCard,
 } from "@/lib/editor/agent-session";
 
 interface AgentCardProps {
   session: AgentSessionState;
   map: GameMap;
+  doneEdits: ReadonlySet<number>;
   onAnswer: (yes: boolean, always: boolean) => void;
   onStop: () => void;
   onUndoAll: () => void;
@@ -23,6 +25,7 @@ interface AgentCardProps {
 export function AgentCard({
   session,
   map,
+  doneEdits,
   onAnswer,
   onStop,
   onUndoAll,
@@ -39,9 +42,10 @@ export function AgentCard({
       />
     );
   }
-  if (!request || !getHasAgentCard(session)) return null;
+  if (!request || !getHasAgentCard(session, doneEdits)) return null;
   const working = status === "working";
-  const changes = request.steps.length;
+  const steps = getAgentStepsOnMap(request.steps, doneEdits);
+  const changes = steps.length;
   return (
     <section
       data-agent-card
@@ -76,8 +80,8 @@ export function AgentCard({
           }}
           className="grid max-h-40 gap-2.5 overflow-y-auto p-3 text-sm"
         >
-          {request.steps.map((step, index) => (
-            <li key={index} className="flex items-center gap-2.5">
+          {steps.map((step) => (
+            <li key={step.undoStep} className="flex items-center gap-2.5">
               <Check
                 size={14}
                 className="shrink-0 text-success"

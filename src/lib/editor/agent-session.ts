@@ -7,6 +7,7 @@ import { getIsAgentAskFirst, getIsAgentRead } from "./agent-actions";
 export interface AgentTrailStep {
   action: string;
   label: string;
+  undoStep?: number;
 }
 
 export interface AgentRequest {
@@ -44,11 +45,27 @@ interface Pending {
   at: number;
 }
 
-// Whether the card has something to show: a question, a step to undo, or a
-// stopped request to close.
-export function getHasAgentCard({ question, request }: AgentSessionState) {
+// Whether the card has something to show: a question, a step still on the
+// map, or a stopped request to close.
+export function getHasAgentCard(
+  { question, request }: AgentSessionState,
+  done: ReadonlySet<number>,
+) {
   return Boolean(
-    question || (request && (request.steps.length > 0 || request.stopped)),
+    question ||
+    (request &&
+      (getAgentStepsOnMap(request.steps, done).length > 0 || request.stopped)),
+  );
+}
+
+// The steps whose edits are still on the map, so an undone one drops off
+// until a redo brings it back.
+export function getAgentStepsOnMap(
+  steps: AgentTrailStep[],
+  done: ReadonlySet<number>,
+) {
+  return steps.filter(
+    (step) => step.undoStep !== undefined && done.has(step.undoStep),
   );
 }
 
@@ -190,6 +207,7 @@ export function createAgentSession({
       action: string,
       todo: string[],
       summarize: (args: unknown[]) => { label: string; at: Point | null },
+      undoStep?: number,
     ) {
       if (!getHasPending() || pending?.action !== action || !state.request) {
         return false;
@@ -198,7 +216,7 @@ export function createAgentSession({
       pending = null;
       lastAt = now();
       setRequest({
-        steps: [...state.request.steps, { action, label }],
+        steps: [...state.request.steps, { action, label, undoStep }],
         todo,
         at: at ?? state.request.at,
       });

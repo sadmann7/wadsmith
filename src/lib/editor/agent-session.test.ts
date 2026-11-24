@@ -2,7 +2,16 @@ import type { AgentAction } from "@ui-sdk/react/agent";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createAgentSession } from "./agent-session";
+import { defined } from "@/lib/defined";
+import { updateThing } from "@/lib/map/edit";
+import { testMap } from "@/lib/map/test-map";
+
+import {
+  createAgentSession,
+  getAgentStepsOnMap,
+  getHasAgentCard,
+} from "./agent-session";
+import { createEditHistory } from "./edit-history";
 
 const step = (action: string, args: unknown[] = []): AgentAction => ({
   ref: "c1",
@@ -133,5 +142,69 @@ describe("an agent session", () => {
     vi.advanceTimersByTime(2500);
     session.dismiss();
     expect(session.getSnapshot().request).toBeNull();
+  });
+
+  it("lists only the edits still on the map after undo, redo and a new edit", () => {
+    const session = createAgentSession({ busyMs: 2000, requestGapMs: 10_000 });
+    const history = createEditHistory({ limit: 10, groupDelay: 500 });
+    let map = testMap;
+    const edit = (x: number) => {
+      void session.allow(step("updateThing", [x]));
+      const next = updateThing(map, "imp-1", { x });
+      const id = history.record(map, next, { batch: "agent-1" });
+      session.record("updateThing", [], summary, id);
+      map = next;
+    };
+    const labels = () =>
+      getAgentStepsOnMap(
+        defined(session.getSnapshot().request).steps,
+        history.getDoneIds(),
+      ).map((item) => item.label);
+
+    edit(10);
+    edit(20);
+    edit(30);
+    map = defined(history.undo(map));
+    map = defined(history.undo(map));
+    expect(labels()).toEqual(["Step 10"]);
+    map = defined(history.redo(map));
+    expect(labels()).toEqual(["Step 10", "Step 20"]);
+    edit(40);
+    expect(labels()).toEqual(["Step 10", "Step 20", "Step 40"]);
+    map = defined(history.undo(map));
+    edit(50);
+    expect(labels()).toEqual(["Step 10", "Step 20", "Step 50"]);
+
+    map = defined(history.undoBatch("agent-1", map));
+    expect(map).toEqual(testMap);
+    expect(labels()).toEqual([]);
+  });
+
+  it("hides the card once every edit is undone, until a redo", () => {
+    const session = createAgentSession();
+    const history = createEditHistory({ limit: 10, groupDelay: 500 });
+    void session.allow(step("updateThing", [1]));
+    const moved = updateThing(testMap, "imp-1", { x: 1 });
+    const id = history.record(testMap, moved, { batch: "agent-1" });
+    session.record("updateThing", [], summary, id);
+    const hasCard = () =>
+      getHasAgentCard(session.getSnapshot(), history.getDoneIds());
+    expect(hasCard()).toBe(true);
+    const back = defined(history.undo(moved));
+    expect(hasCard()).toBe(false);
+    history.redo(back);
+    expect(hasCard()).toBe(true);
+    history.clear();
+    expect(hasCard()).toBe(false);
+    session.stop();
+    expect(hasCard()).toBe(true);
+  });
+
+  it("leaves a step whose edit changed nothing off the list", () => {
+    const session = createAgentSession();
+    void session.allow(step("updateThing", [1]));
+    session.record("updateThing", [], summary);
+    const { steps } = defined(session.getSnapshot().request);
+    expect(getAgentStepsOnMap(steps, new Set([1]))).toEqual([]);
   });
 });
