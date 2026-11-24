@@ -7,6 +7,7 @@ import {
   addRoomOnSide,
   applyPositions,
   defaultDoor,
+  newRoomLooks,
   positionsOf,
   setRoomDoor,
   updateSector,
@@ -129,6 +130,19 @@ describe("addRoom", () => {
       wallTexture: "METAL",
       floorTexture: "RROCK19",
     });
+  });
+});
+
+describe("newRoomLooks", () => {
+  it("previews a room's looks from the corners placed so far", () => {
+    const map = rockRooms();
+    expect(newRoomLooks(map, [])).toMatchObject({ wallTexture: "STARTAN3" });
+    expect(
+      newRoomLooks(map, [
+        { x: 256, y: 96 },
+        { x: 256, y: 160 },
+      ]),
+    ).toMatchObject({ wallTexture: "ROCKRED1", light: 192 });
   });
 });
 

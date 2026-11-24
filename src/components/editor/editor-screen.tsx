@@ -523,7 +523,7 @@ export function EditorScreen({
   const [contextMenuOpen, setContextMenuOpen] = React.useState(false);
   const [building, setBuilding] = React.useState(false);
   const [showShortcuts, setShowShortcuts] = React.useState(false);
-  const [draftCorners, setDraftCorners] = React.useState(0);
+  const [draftCorners, setDraftCorners] = React.useState<Point[]>([]);
   const [showDock, setShowDock] = React.useState(initialLayout.dock);
   const [editMode, setEditMode] = React.useState<EditMode>("vertices");
   const pointerStatus = React.useRef<HTMLSpanElement>(null);
@@ -1912,7 +1912,7 @@ export function EditorScreen({
     setActiveSector(null);
     setSurface(null);
     setFileError(null);
-    setDraftCorners(0);
+    setDraftCorners([]);
     camera.reset(next);
     setMapVersion((version) => version + 1);
   };

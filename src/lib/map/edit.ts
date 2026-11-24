@@ -719,6 +719,16 @@ export function roomDefaults(index: number) {
   };
 }
 
+// A room takes its light and textures from the room it shares the most wall
+// with, and the starter ones when it touches none.
+export function newRoomLooks(map: GameMap, corners: Point[]) {
+  const neighbour = widestNeighbour(map, corners);
+  return {
+    ...roomDefaults(map.sectors.length + 1),
+    ...(neighbour && looksOf(neighbour)),
+  };
+}
+
 // A wall drawn along an existing one must use that wall's corners, or the two
 // rooms overlap without being connected, so new rooms reuse matching corners.
 export function addRoom(
@@ -740,8 +750,6 @@ export function addRoom(
     "sector-",
     map.sectors.map((sector) => sector.id),
   );
-  const index = map.sectors.length + 1;
-  const neighbour = widestNeighbour({ ...map, vertices }, loop);
   return {
     id,
     map: {
@@ -752,8 +760,10 @@ export function addRoom(
         {
           id,
           vertices: loop,
-          ...roomDefaults(index),
-          ...(neighbour && looksOf(neighbour)),
+          ...newRoomLooks(
+            map,
+            loop.map((vertex) => vertices[vertex]),
+          ),
           ...patch,
         },
       ],
@@ -937,15 +947,16 @@ export function addRoomOnSide(
 // The room sharing the most wall length with the outline, the earlier room
 // on a tie. Walls count where they run along each other, whether or not
 // they share corners yet.
-function widestNeighbour(map: GameMap, loop: string[]) {
+function widestNeighbour(map: GameMap, corners: Point[]) {
   let best: { sector: Sector; length: number } | null = null;
   for (const sector of map.sectors) {
     let length = 0;
-    for (const edge of loopEdges(loop)) {
+    for (const [index, corner] of corners.entries()) {
+      const next = corners[(index + 1) % corners.length];
       for (const other of sectorLoops(sector).flatMap(loopEdges)) {
         length += overlapLength(
-          map.vertices[edge.from],
-          map.vertices[edge.to],
+          corner,
+          next,
           map.vertices[other.from],
           map.vertices[other.to],
         );
