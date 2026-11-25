@@ -37,17 +37,6 @@ export interface SpeedTestScene {
 
 export const freedoomSlot = "MAP03";
 
-let freedoomScene: Promise<SpeedTestScene> | null = null;
-
-// The bundled map, the same on every device, so runs compare.
-export function loadFreedoomScene() {
-  freedoomScene ??= readFreedoomScene().catch((error: unknown) => {
-    freedoomScene = null;
-    throw error;
-  });
-  return freedoomScene;
-}
-
 export interface SpeedTestEdit {
   name: string;
   apply: (
@@ -339,7 +328,8 @@ export async function runSpeedTest({
   };
 }
 
-async function readFreedoomScene(): Promise<SpeedTestScene> {
+// The bundled map, the same on every device, so runs compare.
+export async function loadFreedoomScene(): Promise<SpeedTestScene> {
   const { data } = await fetchFreedoom();
   const doom = readMaps([{ name: "freedoom2.wad", data }]).find(
     (item) => item.slot === freedoomSlot,

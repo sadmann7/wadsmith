@@ -80,6 +80,7 @@ export function SpeedTestDialog({
   const stage = React.useRef<HTMLDivElement>(null);
   const running = React.useRef<AbortController | null>(null);
   const results = React.useRef<HTMLPreElement>(null);
+  const loaded = React.useRef<Promise<SpeedTestScene> | null>(null);
 
   React.useEffect(() => () => running.current?.abort(), []);
 
@@ -91,7 +92,6 @@ export function SpeedTestDialog({
     const onHidden = () => {
       if (document.hidden) controller.abort(hiddenReason);
     };
-    document.addEventListener("visibilitychange", onHidden);
     const wakeLock = navigator.wakeLock?.request("screen").catch(() => null);
     flushSync(() => {
       setIsCopied(false);
@@ -100,9 +100,10 @@ export function SpeedTestDialog({
     try {
       const scene =
         source === "freedoom"
-          ? await untilAborted(loadScene(), controller.signal)
+          ? await untilAborted(loadOnce(), controller.signal)
           : { name: mapName, map, assets, sky, customSprites };
       controller.signal.throwIfAborted();
+      document.addEventListener("visibilitychange", onHidden);
       flushSync(() =>
         setPhase({ kind: "running", renderer: "columns", frame: 0 }),
       );
@@ -172,6 +173,14 @@ export function SpeedTestDialog({
       stage.current?.replaceChildren();
       if (running.current === controller) running.current = null;
     }
+  };
+
+  const loadOnce = () => {
+    loaded.current ??= loadScene().catch((error: unknown) => {
+      loaded.current = null;
+      throw error;
+    });
+    return loaded.current;
   };
 
   const cancel = () => running.current?.abort();
