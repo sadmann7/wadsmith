@@ -12,6 +12,7 @@ interface Fields {
   int: (key: string, fallback?: number) => number;
   word: (key: string, fallback: number) => number;
   coordinate: (key: string) => number;
+  special: (key: string) => number;
   tag: (key: string) => number;
   flag: (key: string) => boolean;
   texture: (key: string) => string;
@@ -343,7 +344,7 @@ interface LineAction {
 // and tag. Namespaces with Doom specials carry the tag in arg0 and the line's
 // own identity in id, which the classic format keeps as one number.
 function readLineAction(namespace: string, line: Fields): LineAction {
-  const special = line.int("special", 0);
+  const special = line.special("special");
   const id = line.tag("id");
   if (doomSpecials.has(namespace)) {
     const arg0 = line.tag("arg0");
@@ -373,10 +374,10 @@ function readLineAction(namespace: string, line: Fields): LineAction {
 
 function readSectorSpecial(namespace: string, sector: Fields) {
   if (!doomSpecials.has(namespace)) return { special: 0, used: [] };
-  return { special: sector.int("special", 0), used: ["special"] };
+  return { special: sector.special("special"), used: ["special"] };
 }
 
-const wordRange = "between -32768 and 32767";
+const wordRange = "between -32767 and 32767";
 
 function fieldsOf(block: Block, used: Set<string>): Fields {
   const label = `${block.kind} ${block.index}`;
@@ -407,6 +408,12 @@ function fieldsOf(block: Block, used: Set<string>): Fields {
       }
       const rounded = Math.round(value.value) || 0;
       return getIsWord(rounded) ? rounded : wrong(key, wordRange);
+    },
+    special: (key) => {
+      const value = int(key, 0);
+      return value >= 0 && value <= 32767
+        ? value
+        : wrong(key, "between 0 and 32767");
     },
     tag: (key) => {
       const value = Math.max(int(key, 0), 0);
@@ -441,7 +448,7 @@ function fieldsOf(block: Block, used: Set<string>): Fields {
 }
 
 function getIsWord(value: number) {
-  return value >= -32768 && value <= 32767;
+  return Math.abs(value) <= 32767;
 }
 
 function getIsDefault(value: Value) {

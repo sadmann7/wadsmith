@@ -276,6 +276,9 @@ describe("TEXTMAP grammar", () => {
       'sector { heightceiling = 40000; texturefloor = "F"; }',
       "sidedef { sector = 0; offsetx = -40000; }",
       'sector { id = 70000; texturefloor = "F"; }',
+      'sector { heightfloor = -32768; texturefloor = "F"; }',
+      'sector { special = 40000; texturefloor = "F"; }',
+      "linedef { v1 = 0; v2 = 0; sidefront = 0; special = -5; }",
     ]) {
       expect(() => vertex(body), body).toThrow(WadFileError);
     }
