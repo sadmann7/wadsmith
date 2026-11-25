@@ -31,6 +31,8 @@ import {
   atLeast,
   complevelLabels,
   lineLevel,
+  lineBlocksPlayers,
+  lineBlocksWalkers,
   linePassUse,
   sectorLevel,
 } from "./complevel";
@@ -1078,7 +1080,10 @@ function validateLevels(
   const owners = whole ? wallOwners(map) : null;
   for (const [wall, line] of Object.entries(map.lines ?? {})) {
     const special = line.raw?.special ?? 0;
-    const flags = line.passUse ? linePassUse : 0;
+    const flags =
+      (line.passUse ? linePassUse : 0) |
+      (line.blocksPlayers ? lineBlocksPlayers : 0) |
+      (line.blocksWalkers ? lineBlocksWalkers : 0);
     const owner = owners?.get(wall)?.[0];
     const info = owner ? describeLine(map, wall, owner.id) : null;
     const name = info ? lineName(info) : `Line ${wall}`;

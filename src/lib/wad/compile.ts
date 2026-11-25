@@ -536,6 +536,8 @@ function sectorTags(map: GameMap, sectors: Sector[]) {
 }
 
 const lineBlocksEnemies = 0x0002;
+const lineBlocksWalkers = 0x1000;
+const lineBlocksPlayers = 0x2000;
 
 const lineUpperUnpegged = 0x0008;
 
@@ -548,6 +550,8 @@ const linePassUse = 0x0200;
 function lineFlags(line: LineSettings | undefined) {
   return (
     (line?.blocksEnemies ? lineBlocksEnemies : 0) |
+    (line?.blocksPlayers ? lineBlocksPlayers : 0) |
+    (line?.blocksWalkers ? lineBlocksWalkers : 0) |
     (line?.upperFixed ? lineUpperUnpegged : 0) |
     (line?.lowerFixed ? lineLowerUnpegged : 0) |
     (line?.hidden ? lineHidden : 0) |

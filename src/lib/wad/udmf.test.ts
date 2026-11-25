@@ -379,12 +379,11 @@ describe("UDMF maps", () => {
     ).toEqual([[special, 3]]);
   });
 
-  it("report the MBF21 line flags and monsteractivate the map can't keep", () => {
+  it("report the monsteractivate the map can't keep", () => {
     const doom = readTextmap(
       "MAP01",
       `namespace = "zdoom";
-      linedef { v1 = 1; v2 = 0; sidefront = 0; blockplayers = true;
-        blocklandmonsters = true; }
+      linedef { v1 = 1; v2 = 0; sidefront = 0; }
       linedef { v1 = 1; v2 = 0; sidefront = 0; special = 21; arg0 = 3;
         arg1 = 8; playeruse = true; monsteractivate = true; }
       linedef { v1 = 1; v2 = 0; sidefront = 0; special = 200; arg0 = 3;
@@ -396,10 +395,47 @@ describe("UDMF maps", () => {
       0x6000 | 2 | (1 << 5) | (1 << 7),
     ]);
     expect(doom.udmf?.droppedFields).toEqual({
-      "linedef.blockplayers": 1,
-      "linedef.blocklandmonsters": 1,
       "linedef.monsteractivate": 1,
     });
+  });
+
+  it("keep lines that block only players or walking monsters", () => {
+    const [doom] = readMaps([
+      udmfWad([
+        "MAP01",
+        room(
+          "zdoom",
+          `vertex { x = 96.0; y = 32.0; }
+          vertex { x = 96.0; y = 224.0; }
+          vertex { x = 160.0; y = 32.0; }
+          vertex { x = 160.0; y = 224.0; }
+          linedef { v1 = 4; v2 = 5; sidefront = 4; sideback = 5;
+            twosided = true; blockplayers = true; }
+          linedef { v1 = 6; v2 = 7; sidefront = 6; sideback = 7;
+            twosided = true; blocklandmonsters = true; }
+          sidedef { sector = 0; }
+          sidedef { sector = 0; }
+          sidedef { sector = 0; }
+          sidedef { sector = 0; }`,
+        ),
+      ]),
+    ]);
+    expect(doom.udmf?.droppedFields).toEqual({});
+    expect(doom.lines.map((line) => line.flags & 0x3000)).toEqual([
+      0, 0, 0, 0, 0x2000, 0x1000,
+    ]);
+    const { map } = decompileMap(doom);
+    expect(map.complevel).toBe("mbf21");
+    expect(
+      Object.values(map.lines ?? {}).filter(
+        (line) => line.blocksPlayers || line.blocksWalkers,
+      ),
+    ).toEqual([{ blocksPlayers: true }, { blocksWalkers: true }]);
+    expect(parseMapFile(serializeMap(map))).toEqual(map);
+    const [built] = readMaps([{ name: "map.wad", data: compileMap(map) }]);
+    expect(
+      built.lines.map((line) => line.flags & 0x3000).filter(Boolean),
+    ).toEqual([0x2000, 0x1000]);
   });
 
   it("count a generalized action as approximate when Boom can't say it all", () => {

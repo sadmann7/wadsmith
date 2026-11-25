@@ -106,6 +106,8 @@ const lineSoundBlock = 0x0040;
 const lineHidden = 0x0080;
 const lineMapped = 0x0100;
 const linePassUse = 0x0200;
+const lineBlocksWalkers = 0x1000;
+const lineBlocksPlayers = 0x2000;
 // Old editors left junk in the high bits and set this one, so the bits past
 // vanilla's mean nothing on such a line.
 const lineReserved = 0x0800;
@@ -729,6 +731,8 @@ export function decompileMap(
       if (Object.keys(value).length > 0) sides[id] = value;
     }
     if (flags & lineBlocksEnemies) entry.blocksEnemies = true;
+    if (flags & lineBlocksPlayers) entry.blocksPlayers = true;
+    if (flags & lineBlocksWalkers) entry.blocksWalkers = true;
     if (flags & lineUpperUnpegged) entry.upperFixed = true;
     if (flags & lineLowerUnpegged) entry.lowerFixed = true;
     if (flags & lineSecret) entry.secret = true;

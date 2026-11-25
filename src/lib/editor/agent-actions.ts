@@ -205,6 +205,11 @@ const thingToggles = [
 const lineFlags = [
   ["blocksAll", "Blocks players and monsters, like a window."],
   ["blocksEnemies", "Blocks monsters only."],
+  ["blocksPlayers", "Blocks players only. MBF21 and later."],
+  [
+    "blocksWalkers",
+    "Blocks monsters that walk, not ones that fly. MBF21 and later.",
+  ],
   ["upperFixed", "The upper texture hangs from the ceiling."],
   ["lowerFixed", "The lower texture starts at the floor."],
   ["secret", "The automap draws it as a solid wall."],

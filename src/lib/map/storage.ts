@@ -421,6 +421,8 @@ function parseLine(value: unknown, rooms: Set<string>): LineSettings {
     [
       "blocksAll",
       "blocksEnemies",
+      "blocksPlayers",
+      "blocksWalkers",
       "upperFixed",
       "lowerFixed",
       "hidden",

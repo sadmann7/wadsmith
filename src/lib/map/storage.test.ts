@@ -52,6 +52,8 @@ describe("map files", () => {
       updateLineSide(
         updateLine(testMap, wall, {
           hidden: true,
+          blocksPlayers: true,
+          blocksWalkers: true,
           action: {
             kind: "door-open",
             trigger: "switch",

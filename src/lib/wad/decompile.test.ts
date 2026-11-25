@@ -206,6 +206,33 @@ describe("decompileMap", () => {
     expect(parseMapFile(serializeMap(map))).toEqual(map);
   });
 
+  it("keeps MBF21 lines that block only players or walking monsters", () => {
+    const build = doomMap();
+    const room = build.sector();
+    box(build, room, [0, 0, 512, 256]);
+    const lines = [128, 256, 384].map((x) => {
+      build.line(build.vertex(x, 32), build.vertex(x, 224), room, room);
+      return build.map.lines[build.map.lines.length - 1];
+    });
+    lines[0].flags |= 0x2000;
+    lines[1].flags |= 0x1000;
+    // Old editors' junk past the reserved bit means nothing.
+    lines[2].flags |= 0x0800 | 0x3000;
+    build.map.things.push({ x: 32, y: 128, angle: 0, type: 1, flags: 7 });
+
+    const { map } = decompileMap(build.map);
+    expect(map.complevel).toBe("mbf21");
+    expect(map.lines?.[wallKey("v4", "v5")]).toEqual({ blocksPlayers: true });
+    expect(map.lines?.[wallKey("v6", "v7")]).toEqual({ blocksWalkers: true });
+    expect(map.lines?.[wallKey("v8", "v9")]).toBeUndefined();
+    expect(validateMap(map)).toEqual([]);
+    expect(parseMapFile(serializeMap(map))).toEqual(map);
+    const [built] = readMaps([{ name: "map.wad", data: compileMap(map) }]);
+    expect(
+      built.lines.map((line) => line.flags & 0x3000).filter(Boolean),
+    ).toEqual([0x2000, 0x1000]);
+  });
+
   it("keeps walls with nothing behind them solid inside another room", () => {
     const build = doomMap();
     const hall = build.sector();
