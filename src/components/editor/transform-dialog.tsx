@@ -14,6 +14,11 @@ import {
 } from "@/components/ui/dialog";
 import { FieldItem, Label } from "@/components/ui/field";
 import { NumberField } from "@/components/ui/number-field";
+import { stepWay } from "@/lib/editor/step-way";
+
+const percentStep = 10;
+const percentMin = 10;
+const percentMax = 1000;
 
 interface TransformDialogProps {
   onApply: (steps: Transform[]) => void;
@@ -71,11 +76,26 @@ export function TransformDialog({ onApply, onClose }: TransformDialogProps) {
                 <NumberField
                   label="Size, in percent"
                   value={percent}
-                  step={10}
-                  min={10}
-                  max={1000}
-                  onValueChange={(next) => {
-                    if (next !== null) setPercent(Math.round(next));
+                  min={percentMin}
+                  max={percentMax}
+                  step={1}
+                  largeStep={1}
+                  smallStep={1}
+                  onValueChange={(next, details) => {
+                    if (next === null) return;
+                    const way = stepWay(details);
+                    const fine =
+                      details.event instanceof MouseEvent ||
+                      details.event instanceof KeyboardEvent
+                        ? details.event.shiftKey
+                        : false;
+                    // The field steps by 1 so typed sizes never snap; a plain
+                    // step moves by 10 instead.
+                    const size =
+                      way && !fine
+                        ? clampPercent(next - way) + way * percentStep
+                        : next;
+                    setPercent(clampPercent(Math.round(size)));
                   }}
                 />
               </FieldItem>
@@ -95,4 +115,8 @@ export function TransformDialog({ onApply, onClose }: TransformDialogProps) {
       </DialogContent>
     </Dialog>
   );
+}
+
+function clampPercent(percent: number) {
+  return Math.min(percentMax, Math.max(percentMin, percent));
 }
