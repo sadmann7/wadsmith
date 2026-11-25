@@ -8,126 +8,14 @@ export interface UdmfImport {
   droppedActions: Record<string, number>;
 }
 
-type Value =
-  | { type: "int"; value: number }
-  | { type: "float"; value: number }
-  | { type: "string"; value: string }
-  | { type: "keyword"; value: string };
-
-interface Block {
-  kind: string;
-  index: number;
-  fields: Map<string, Value>;
-}
-
-interface Token {
-  text: string;
-  at: number;
-  value: Value | null;
-}
-
-const tokenPattern =
-  /\s+|\/\/[^\n]*|\/\*[\s\S]*?\*\/|(\/\*)|"((?:[^"\\]|\\[\s\S])*)"|(")|([{}=;])|([^{}();"'\s=]+)/y;
-const identifier = /^[A-Za-z_][A-Za-z0-9_]*$/;
-const decimal = /^[+-]?(?:0|[1-9][0-9]*)$/;
-const octal = /^[+-]?0[0-7]+$/;
-const hex = /^0x[0-9A-Fa-f]+$/i;
-const float = /^[+-]?[0-9]+\.[0-9]*(?:[eE][+-]?[0-9]+)?$/;
-
-function tokenize(source: string) {
-  const tokens: Token[] = [];
-  tokenPattern.lastIndex = 0;
-  while (tokenPattern.lastIndex < source.length) {
-    const at = tokenPattern.lastIndex;
-    const match = tokenPattern.exec(source);
-    if (!match) fail(source, at, "can't be read");
-    const [, openComment, quoted, openQuote, punctuation, word] = match;
-    if (openComment !== undefined)
-      fail(source, at, "has a comment that never ends");
-    if (openQuote !== undefined)
-      fail(source, at, "has a string that never ends");
-    if (quoted !== undefined) {
-      tokens.push({
-        text: quoted,
-        at,
-        value: { type: "string", value: quoted.replace(/\\([\s\S])/g, "$1") },
-      });
-    } else if (punctuation !== undefined) {
-      tokens.push({ text: punctuation, at, value: null });
-    } else if (word !== undefined) {
-      tokens.push({ text: word, at, value: valueOf(word) });
-    }
-  }
-  return tokens;
-}
-
-function valueOf(word: string): Value {
-  if (hex.test(word)) return { type: "int", value: Number.parseInt(word, 16) };
-  if (octal.test(word)) return { type: "int", value: Number.parseInt(word, 8) };
-  if (decimal.test(word)) return { type: "int", value: Number(word) };
-  if (float.test(word)) return { type: "float", value: Number(word) };
-  return { type: "keyword", value: word.toLowerCase() };
-}
-
-function fail(source: string, at: number, problem: string): never {
-  const line = source.slice(0, at).split("\n").length;
-  throw new WadFileError(`Its TEXTMAP ${problem} on line ${line}.`);
-}
-
-export function parseTextmap(source: string) {
-  const tokens = tokenize(source);
-  const globals = new Map<string, Value>();
-  const blocks: Block[] = [];
-  const counts = new Map<string, number>();
-  let index = 0;
-  const end = source.length;
-  const expect = (text: string) => {
-    const token = tokens[index];
-    if (token?.text !== text || token.value?.type === "string") {
-      fail(source, token?.at ?? end, `expects "${text}"`);
-    }
-    index += 1;
-  };
-  const name = () => {
-    const token = tokens[index];
-    if (!token || token.value === null || !identifier.test(token.text)) {
-      fail(source, token?.at ?? end, "expects a field or block name");
-    }
-    index += 1;
-    return token.text.toLowerCase();
-  };
-  const assignment = (into: Map<string, Value>, key: string) => {
-    expect("=");
-    const token = tokens[index];
-    if (!token?.value)
-      fail(source, token?.at ?? end, `expects a value for ${key}`);
-    index += 1;
-    expect(";");
-    into.set(key, token.value);
-  };
-  while (index < tokens.length) {
-    const key = name();
-    if (tokens[index]?.text === "=") {
-      assignment(globals, key);
-      continue;
-    }
-    expect("{");
-    const fields = new Map<string, Value>();
-    while (tokens[index]?.text !== "}") {
-      if (index >= tokens.length) fail(source, end, `never closes a ${key}`);
-      assignment(fields, name());
-    }
-    index += 1;
-    const count = counts.get(key) ?? 0;
-    counts.set(key, count + 1);
-    blocks.push({ kind: key, index: count, fields });
-  }
-  const namespace = globals.get("namespace");
-  if (namespace?.type !== "string") {
-    throw new WadFileError("Its TEXTMAP doesn't name a namespace.");
-  }
-  globals.delete("namespace");
-  return { namespace: namespace.value.toLowerCase(), globals, blocks };
+interface Fields {
+  int: (key: string, fallback?: number) => number;
+  float: (key: string, fallback?: number) => number;
+  flag: (key: string) => boolean;
+  texture: (key: string) => string;
+  index: (key: string) => number;
+  side: (key: string) => number | null;
+  use: (keys: string[]) => void;
 }
 
 const lineFlags: [string, number][] = [
@@ -190,153 +78,10 @@ const kept: Record<string, Set<string>> = {
   ]),
 };
 
-const doomSpecials = new Set(["doom", "woof", "zdoomtranslated"]);
-const hexenSpecials = new Set([
-  "zdoom",
-  "dsda",
-  "eternity",
-  "hexen",
-  "vavoom",
-  "k8vavoom",
-  "helion",
-]);
-
-const hexenLineFields = [
-  "special",
-  "arg0",
-  "arg1",
-  "arg2",
-  "arg3",
-  "arg4",
-  "playercross",
-  "playeruse",
-  "playerpush",
-  "monstercross",
-  "monsteruse",
-  "monsterpush",
-  "missilecross",
-  "impact",
-  "anycross",
-  "repeatspecial",
-];
-
-interface LineAction {
-  special: number;
-  tag: number;
-  used: string[];
-  dropped?: string;
-}
-
-// The one place that turns a line's special, args and id into a Doom special
-// and tag. Namespaces with Doom specials carry the tag in arg0 and the line's
-// own identity in id, which the classic format keeps as one number.
-function readLineAction(namespace: string, line: Fields): LineAction {
-  const special = line.int("special", 0);
-  const id = Math.max(line.int("id", 0), 0);
-  if (doomSpecials.has(namespace)) {
-    const arg0 = line.int("arg0", 0);
-    return {
-      special,
-      tag: arg0 || id,
-      used: ["special", "arg0", ...(arg0 && id !== arg0 ? [] : ["id"])],
-    };
-  }
-  return {
-    special: 0,
-    tag: 0,
-    used: id > 0 ? hexenLineFields : [...hexenLineFields, "id"],
-    ...(special !== 0
-      ? {
-          dropped: hexenSpecials.has(namespace)
-            ? "Hexen-style actions"
-            : `Actions from ${namespace} maps`,
-        }
-      : {}),
-  };
-}
-
-function readSectorSpecial(namespace: string, sector: Fields) {
-  if (!doomSpecials.has(namespace)) return { special: 0, used: [] };
-  return { special: sector.int("special", 0), used: ["special"] };
-}
-
-interface Fields {
-  int: (key: string, fallback?: number) => number;
-  float: (key: string, fallback?: number) => number;
-  flag: (key: string) => boolean;
-  texture: (key: string) => string;
-  index: (key: string) => number;
-  side: (key: string) => number | null;
-  use: (keys: string[]) => void;
-}
-
-function fieldsOf(block: Block, used: Set<string>): Fields {
-  const label = `${block.kind} ${block.index}`;
-  const get = (key: string) => block.fields.get(key);
-  const wrong = (key: string, expected: string): never => {
-    throw new WadFileError(
-      `Its TEXTMAP gives ${label} a ${key} that isn't ${expected}.`,
-    );
-  };
-  const missing = (key: string): never => {
-    throw new WadFileError(`Its TEXTMAP gives ${label} no ${key}.`);
-  };
-  const int = (key: string, fallback?: number) => {
-    const value = get(key);
-    if (value === undefined) return fallback ?? missing(key);
-    return value.type === "int" ? value.value : wrong(key, "a whole number");
-  };
-  return {
-    int,
-    float: (key, fallback) => {
-      const value = get(key);
-      if (value === undefined) return fallback ?? missing(key);
-      return value.type === "int" || value.type === "float"
-        ? value.value
-        : wrong(key, "a number");
-    },
-    flag: (key) => {
-      const value = get(key);
-      if (value === undefined) return false;
-      if (value.type === "keyword" && value.value === "true") return true;
-      if (value.type === "keyword" && value.value === "false") return false;
-      return wrong(key, "true or false");
-    },
-    texture: (key) => {
-      const value = get(key);
-      if (value === undefined) return "-";
-      return value.type === "string"
-        ? value.value.toUpperCase()
-        : wrong(key, "a quoted name");
-    },
-    index: (key) => {
-      const value = int(key);
-      return value >= 0 ? value : wrong(key, "zero or more");
-    },
-    side: (key) => {
-      const value = int(key, -1);
-      return value < 0 ? null : value;
-    },
-    use: (keys) => {
-      for (const key of keys) used.add(key);
-    },
-  };
-}
-
-function getIsDefault(value: Value) {
-  return (
-    (value.type === "keyword" && value.value === "false") ||
-    ((value.type === "int" || value.type === "float") && value.value === 0)
-  );
-}
-
 export function readTextmap(slot: string, source: string): DoomMap {
   const { namespace, globals, blocks } = parseTextmap(source);
   const droppedFields: Record<string, number> = {};
   const droppedActions: Record<string, number> = {};
-  const drop = (into: Record<string, number>, key: string) => {
-    into[key] = (into[key] ?? 0) + 1;
-  };
   for (const key of globals.keys()) drop(droppedFields, key);
   const read = <T>(kind: string, build: (fields: Fields) => T) =>
     blocks
@@ -425,4 +170,262 @@ export function readTextmap(slot: string, source: string): DoomMap {
     things,
     udmf: { namespace, droppedFields, droppedActions },
   };
+}
+
+function drop(into: Record<string, number>, key: string) {
+  into[key] = (into[key] ?? 0) + 1;
+}
+
+type Value =
+  | { type: "int"; value: number }
+  | { type: "float"; value: number }
+  | { type: "string"; value: string }
+  | { type: "keyword"; value: string };
+
+interface Block {
+  kind: string;
+  index: number;
+  fields: Map<string, Value>;
+}
+
+interface Token {
+  text: string;
+  at: number;
+  value: Value | null;
+}
+
+const identifier = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+function parseTextmap(source: string) {
+  const tokens = tokenize(source);
+  const globals = new Map<string, Value>();
+  const blocks: Block[] = [];
+  const counts = new Map<string, number>();
+  let index = 0;
+  const end = source.length;
+  const expect = (text: string) => {
+    const token = tokens[index];
+    if (token?.text !== text || token.value?.type === "string") {
+      fail(source, token?.at ?? end, `expects "${text}"`);
+    }
+    index += 1;
+  };
+  const name = () => {
+    const token = tokens[index];
+    if (!token || token.value === null || !identifier.test(token.text)) {
+      fail(source, token?.at ?? end, "expects a field or block name");
+    }
+    index += 1;
+    return token.text.toLowerCase();
+  };
+  const assignment = (into: Map<string, Value>, key: string) => {
+    expect("=");
+    const token = tokens[index];
+    if (!token?.value)
+      fail(source, token?.at ?? end, `expects a value for ${key}`);
+    index += 1;
+    expect(";");
+    into.set(key, token.value);
+  };
+  while (index < tokens.length) {
+    const key = name();
+    if (tokens[index]?.text === "=") {
+      assignment(globals, key);
+      continue;
+    }
+    expect("{");
+    const fields = new Map<string, Value>();
+    while (tokens[index]?.text !== "}") {
+      if (index >= tokens.length) fail(source, end, `never closes a ${key}`);
+      assignment(fields, name());
+    }
+    index += 1;
+    const count = counts.get(key) ?? 0;
+    counts.set(key, count + 1);
+    blocks.push({ kind: key, index: count, fields });
+  }
+  const namespace = globals.get("namespace");
+  if (namespace?.type !== "string") {
+    throw new WadFileError("Its TEXTMAP doesn't name a namespace.");
+  }
+  globals.delete("namespace");
+  return { namespace: namespace.value.toLowerCase(), globals, blocks };
+}
+
+const tokenPattern =
+  /\s+|\/\/[^\n]*|\/\*[\s\S]*?\*\/|(\/\*)|"((?:[^"\\]|\\[\s\S])*)"|(")|([{}=;])|([^{}();"'\s=]+)/y;
+
+function tokenize(source: string) {
+  const tokens: Token[] = [];
+  tokenPattern.lastIndex = 0;
+  while (tokenPattern.lastIndex < source.length) {
+    const at = tokenPattern.lastIndex;
+    const match = tokenPattern.exec(source);
+    if (!match) fail(source, at, "can't be read");
+    const [, openComment, quoted, openQuote, punctuation, word] = match;
+    if (openComment !== undefined)
+      fail(source, at, "has a comment that never ends");
+    if (openQuote !== undefined)
+      fail(source, at, "has a string that never ends");
+    if (quoted !== undefined) {
+      tokens.push({
+        text: quoted,
+        at,
+        value: { type: "string", value: quoted.replace(/\\([\s\S])/g, "$1") },
+      });
+    } else if (punctuation !== undefined) {
+      tokens.push({ text: punctuation, at, value: null });
+    } else if (word !== undefined) {
+      tokens.push({ text: word, at, value: valueOf(word) });
+    }
+  }
+  return tokens;
+}
+
+const decimal = /^[+-]?(?:0|[1-9][0-9]*)$/;
+const octal = /^[+-]?0[0-7]+$/;
+const hex = /^0x[0-9A-Fa-f]+$/i;
+const float = /^[+-]?[0-9]+\.[0-9]*(?:[eE][+-]?[0-9]+)?$/;
+
+function valueOf(word: string): Value {
+  if (hex.test(word)) return { type: "int", value: Number.parseInt(word, 16) };
+  if (octal.test(word)) return { type: "int", value: Number.parseInt(word, 8) };
+  if (decimal.test(word)) return { type: "int", value: Number(word) };
+  if (float.test(word)) return { type: "float", value: Number(word) };
+  return { type: "keyword", value: word.toLowerCase() };
+}
+
+function fail(source: string, at: number, problem: string): never {
+  const line = source.slice(0, at).split("\n").length;
+  throw new WadFileError(`Its TEXTMAP ${problem} on line ${line}.`);
+}
+
+const doomSpecials = new Set(["doom", "woof", "zdoomtranslated"]);
+const hexenSpecials = new Set([
+  "zdoom",
+  "dsda",
+  "eternity",
+  "hexen",
+  "vavoom",
+  "k8vavoom",
+  "helion",
+]);
+
+const hexenLineFields = [
+  "special",
+  "arg0",
+  "arg1",
+  "arg2",
+  "arg3",
+  "arg4",
+  "playercross",
+  "playeruse",
+  "playerpush",
+  "monstercross",
+  "monsteruse",
+  "monsterpush",
+  "missilecross",
+  "impact",
+  "anycross",
+  "repeatspecial",
+];
+
+interface LineAction {
+  special: number;
+  tag: number;
+  used: string[];
+  dropped?: string;
+}
+
+// The one place that turns a line's special, args and id into a Doom special
+// and tag. Namespaces with Doom specials carry the tag in arg0 and the line's
+// own identity in id, which the classic format keeps as one number.
+function readLineAction(namespace: string, line: Fields): LineAction {
+  const special = line.int("special", 0);
+  const id = Math.max(line.int("id", 0), 0);
+  if (doomSpecials.has(namespace)) {
+    const arg0 = line.int("arg0", 0);
+    return {
+      special,
+      tag: arg0 || id,
+      used: ["special", "arg0", ...(arg0 && id !== arg0 ? [] : ["id"])],
+    };
+  }
+  return {
+    special: 0,
+    tag: 0,
+    used: id > 0 ? hexenLineFields : [...hexenLineFields, "id"],
+    ...(special !== 0
+      ? {
+          dropped: hexenSpecials.has(namespace)
+            ? "Hexen-style actions"
+            : `Actions from ${namespace} maps`,
+        }
+      : {}),
+  };
+}
+
+function readSectorSpecial(namespace: string, sector: Fields) {
+  if (!doomSpecials.has(namespace)) return { special: 0, used: [] };
+  return { special: sector.int("special", 0), used: ["special"] };
+}
+
+function fieldsOf(block: Block, used: Set<string>): Fields {
+  const label = `${block.kind} ${block.index}`;
+  const get = (key: string) => block.fields.get(key);
+  const wrong = (key: string, expected: string): never => {
+    throw new WadFileError(
+      `Its TEXTMAP gives ${label} a ${key} that isn't ${expected}.`,
+    );
+  };
+  const missing = (key: string): never => {
+    throw new WadFileError(`Its TEXTMAP gives ${label} no ${key}.`);
+  };
+  const int = (key: string, fallback?: number) => {
+    const value = get(key);
+    if (value === undefined) return fallback ?? missing(key);
+    return value.type === "int" ? value.value : wrong(key, "a whole number");
+  };
+  return {
+    int,
+    float: (key, fallback) => {
+      const value = get(key);
+      if (value === undefined) return fallback ?? missing(key);
+      return value.type === "int" || value.type === "float"
+        ? value.value
+        : wrong(key, "a number");
+    },
+    flag: (key) => {
+      const value = get(key);
+      if (value === undefined) return false;
+      if (value.type === "keyword" && value.value === "true") return true;
+      if (value.type === "keyword" && value.value === "false") return false;
+      return wrong(key, "true or false");
+    },
+    texture: (key) => {
+      const value = get(key);
+      if (value === undefined) return "-";
+      return value.type === "string"
+        ? value.value.toUpperCase()
+        : wrong(key, "a quoted name");
+    },
+    index: (key) => {
+      const value = int(key);
+      return value >= 0 ? value : wrong(key, "zero or more");
+    },
+    side: (key) => {
+      const value = int(key, -1);
+      return value < 0 ? null : value;
+    },
+    use: (keys) => {
+      for (const key of keys) used.add(key);
+    },
+  };
+}
+
+function getIsDefault(value: Value) {
+  return (
+    (value.type === "keyword" && value.value === "false") ||
+    ((value.type === "int" || value.type === "float") && value.value === 0)
+  );
 }

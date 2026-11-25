@@ -14,7 +14,6 @@ import { validateMap } from "@/lib/map/validate";
 
 import { buildLevel, compileEpisode, compileMap } from "./compile";
 import { decompileMap } from "./decompile";
-import { WadFileError } from "./inspect";
 import { type DoomMap, type DoomSector, readMaps } from "./read-map";
 
 const freedoom = resolve(

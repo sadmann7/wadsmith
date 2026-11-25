@@ -30,97 +30,6 @@ const udmfWad = (...maps: [string, string][]) => ({
   ),
 });
 
-const lineFlags = [
-  "blocking",
-  "blockmonsters",
-  "twosided",
-  "dontpegtop",
-  "dontpegbottom",
-  "secret",
-  "blocksound",
-  "dontdraw",
-  "mapped",
-  "passuse",
-];
-
-// Writes a classic map's records as a doom-namespace TEXTMAP, the way
-// Ultimate Doom Builder leaves out fields at their defaults.
-function toTextmap(doom: DoomMap) {
-  const out = ['namespace = "doom";'];
-  const block = (kind: string, fields: [string, unknown][]) => {
-    out.push(`${kind}\n{`);
-    for (const [name, value] of fields) {
-      if (value === undefined || value === false) continue;
-      out.push(`${name} = ${value};`);
-    }
-    out.push("}");
-  };
-  const texture = (name: string) =>
-    name === "-" ? undefined : JSON.stringify(name);
-  for (const thing of doom.things) {
-    const has = (bit: number) => (thing.flags & bit) !== 0;
-    block("thing", [
-      ["x", thing.x.toFixed(3)],
-      ["y", thing.y.toFixed(3)],
-      ["angle", thing.angle],
-      ["type", thing.type],
-      ["skill1", has(0x0001)],
-      ["skill2", has(0x0001)],
-      ["skill3", has(0x0002)],
-      ["skill4", has(0x0004)],
-      ["skill5", has(0x0004)],
-      ["ambush", has(0x0008)],
-      ["single", !has(0x0010)],
-      ["dm", !has(0x0020)],
-      ["coop", !has(0x0040)],
-      ["friend", has(0x0080)],
-    ]);
-  }
-  for (const vertex of doom.vertices) {
-    block("vertex", [
-      ["x", vertex.x.toFixed(3)],
-      ["y", vertex.y.toFixed(3)],
-    ]);
-  }
-  for (const line of doom.lines) {
-    block("linedef", [
-      ["id", line.tag || undefined],
-      ["v1", line.start],
-      ["v2", line.end],
-      ...lineFlags.map((name, bit): [string, boolean] => [
-        name,
-        (line.flags & (1 << bit)) !== 0,
-      ]),
-      ["special", line.special || undefined],
-      ["arg0", line.tag || undefined],
-      ["sidefront", line.front ?? -1],
-      ["sideback", line.back ?? undefined],
-    ]);
-  }
-  for (const side of doom.sides) {
-    block("sidedef", [
-      ["offsetx", side.offsetX || undefined],
-      ["offsety", side.offsetY || undefined],
-      ["texturetop", texture(side.upper)],
-      ["texturebottom", texture(side.lower)],
-      ["texturemiddle", texture(side.middle)],
-      ["sector", side.sector],
-    ]);
-  }
-  for (const sector of doom.sectors) {
-    block("sector", [
-      ["heightfloor", sector.floor],
-      ["heightceiling", sector.ceiling],
-      ["texturefloor", texture(sector.floorTexture)],
-      ["textureceiling", texture(sector.ceilingTexture)],
-      ["lightlevel", sector.light],
-      ["special", sector.special || undefined],
-      ["id", sector.tag || undefined],
-    ]);
-  }
-  return out.join("\n");
-}
-
 const room = (namespace: string, extra = "") => `
   namespace = "${namespace}";
   vertex { x = 0.0; y = 0.0; }
@@ -154,9 +63,8 @@ describe("UDMF maps", () => {
       droppedFields: {},
       droppedActions: {},
     });
-    const { title: _title, ...untitled } = classic;
     const { map, report } = decompileMap(udmf);
-    expect(map).toEqual(decompileMap(untitled).map);
+    expect(map).toEqual(decompileMap({ ...classic, title: undefined }).map);
     expect(report.namespace).toBe("doom");
     expect(report.droppedFields).toEqual({});
   });
@@ -181,7 +89,7 @@ describe("UDMF maps", () => {
       ]);
       expect(maps).toHaveLength(32);
       for (const doom of maps) {
-        const { title: _title, ...plain } = doom;
+        const plain = { ...doom, title: undefined };
         const { udmf, ...read } = readTextmap(doom.slot, toTextmap(doom));
         expect(read, doom.slot).toEqual(plain);
         expect(udmf?.droppedFields, doom.slot).toEqual({});
@@ -372,3 +280,97 @@ describe("TEXTMAP grammar", () => {
     );
   });
 });
+
+const lineFlags = [
+  "blocking",
+  "blockmonsters",
+  "twosided",
+  "dontpegtop",
+  "dontpegbottom",
+  "secret",
+  "blocksound",
+  "dontdraw",
+  "mapped",
+  "passuse",
+];
+
+// Writes a classic map's records as a doom-namespace TEXTMAP, the way
+// Ultimate Doom Builder leaves out fields at their defaults.
+function toTextmap(doom: DoomMap) {
+  const out = ['namespace = "doom";'];
+  const block = (
+    kind: string,
+    fields: [string, string | number | boolean | undefined][],
+  ) => {
+    out.push(`${kind}\n{`);
+    for (const [name, value] of fields) {
+      if (value === undefined || value === false) continue;
+      out.push(`${name} = ${value};`);
+    }
+    out.push("}");
+  };
+  const texture = (name: string) =>
+    name === "-" ? undefined : JSON.stringify(name);
+  for (const thing of doom.things) {
+    const has = (bit: number) => (thing.flags & bit) !== 0;
+    block("thing", [
+      ["x", thing.x.toFixed(3)],
+      ["y", thing.y.toFixed(3)],
+      ["angle", thing.angle],
+      ["type", thing.type],
+      ["skill1", has(0x0001)],
+      ["skill2", has(0x0001)],
+      ["skill3", has(0x0002)],
+      ["skill4", has(0x0004)],
+      ["skill5", has(0x0004)],
+      ["ambush", has(0x0008)],
+      ["single", !has(0x0010)],
+      ["dm", !has(0x0020)],
+      ["coop", !has(0x0040)],
+      ["friend", has(0x0080)],
+    ]);
+  }
+  for (const vertex of doom.vertices) {
+    block("vertex", [
+      ["x", vertex.x.toFixed(3)],
+      ["y", vertex.y.toFixed(3)],
+    ]);
+  }
+  for (const line of doom.lines) {
+    block("linedef", [
+      ["id", line.tag || undefined],
+      ["v1", line.start],
+      ["v2", line.end],
+      ...lineFlags.map((name, bit): [string, boolean] => [
+        name,
+        (line.flags & (1 << bit)) !== 0,
+      ]),
+      ["special", line.special || undefined],
+      ["arg0", line.tag || undefined],
+      ["sidefront", line.front ?? -1],
+      ["sideback", line.back ?? undefined],
+    ]);
+  }
+  for (const side of doom.sides) {
+    block("sidedef", [
+      ["offsetx", side.offsetX || undefined],
+      ["offsety", side.offsetY || undefined],
+      ["texturetop", texture(side.upper)],
+      ["texturebottom", texture(side.lower)],
+      ["texturemiddle", texture(side.middle)],
+      ["sector", side.sector],
+    ]);
+  }
+  for (const sector of doom.sectors) {
+    block("sector", [
+      ["heightfloor", sector.floor],
+      ["heightceiling", sector.ceiling],
+      ["texturefloor", texture(sector.floorTexture)],
+      ["textureceiling", texture(sector.ceilingTexture)],
+      ["lightlevel", sector.light],
+      ["special", sector.special || undefined],
+      ["id", sector.tag || undefined],
+    ]);
+  }
+  return out.join("\n");
+}
