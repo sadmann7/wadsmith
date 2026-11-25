@@ -35,7 +35,7 @@ describe("Hexen line specials", () => {
       expect(doomActionFor(given), `special ${doom}`).toEqual({
         special: doom,
         tag: args.includes("tag") ? 7 : 0,
-        isNearest: false,
+        changes: [],
       });
     }
   });
@@ -44,7 +44,7 @@ describe("Hexen line specials", () => {
     expect(doomActionFor(action(12, [0, 16, 150], "use", true))).toEqual({
       special: 1,
       tag: 0,
-      isNearest: false,
+      changes: [],
     });
     expect(doomActionFor(action(11, [0, 64], "use"))).toMatchObject({
       special: 118,
@@ -56,27 +56,27 @@ describe("Hexen line specials", () => {
     expect(doomActionFor(action(12, [3, 48, 150], "use"))).toEqual({
       special: 111,
       tag: 3,
-      isNearest: true,
+      changes: ["speed"],
     });
     expect(doomActionFor(action(12, [3, 16, 105], "walk", true))).toEqual({
       special: 90,
       tag: 3,
-      isNearest: true,
+      changes: ["delay"],
     });
     expect(doomActionFor(action(21, [3, 24], "walk"))).toMatchObject({
       special: 38,
-      isNearest: true,
+      changes: ["speed"],
     });
   });
 
   it("keep a switch once or repeatable, choosing the other only when Doom has no such one", () => {
     expect(doomActionFor(action(243, [], "use"))).toMatchObject({
       special: 11,
-      isNearest: false,
+      changes: [],
     });
     expect(doomActionFor(action(243, [], "use", true))).toMatchObject({
       special: 11,
-      isNearest: true,
+      changes: ["repeat"],
     });
   });
 
@@ -84,12 +84,12 @@ describe("Hexen line specials", () => {
     expect(doomActionFor(action(13, [0, 16, 150, 129], "use", true))).toEqual({
       special: 28,
       tag: 0,
-      isNearest: false,
+      changes: [],
     });
     expect(doomActionFor(action(13, [0, 16, 150, 3], "use", true))).toEqual({
       special: 27,
       tag: 0,
-      isNearest: true,
+      changes: ["key"],
     });
     expect(doomActionFor(action(13, [4, 64, 0, 2], "use"))).toMatchObject({
       special: 133,
@@ -102,7 +102,7 @@ describe("Hexen line specials", () => {
     expect(doomActionFor(action(62, [5, 32, 105], "walk", true))).toEqual({
       special: 88,
       tag: 5,
-      isNearest: true,
+      changes: ["height"],
     });
     expect(doomActionFor(action(62, [5, 64, 105], "use"))).toMatchObject({
       special: 122,
@@ -110,7 +110,7 @@ describe("Hexen line specials", () => {
     expect(doomActionFor(action(42, [5, 8, 10], "walk"))).toEqual({
       special: 25,
       tag: 5,
-      isNearest: true,
+      changes: ["speed"],
     });
   });
 
@@ -118,7 +118,7 @@ describe("Hexen line specials", () => {
     expect(doomActionFor(action(70, [0, 9], "walk", true))).toEqual({
       special: 97,
       tag: 9,
-      isNearest: false,
+      changes: [],
     });
     expect(doomActionFor(action(70, [0, 9], "monster-walk"))).toMatchObject({
       special: 125,
@@ -132,7 +132,7 @@ describe("Hexen line specials", () => {
     expect(doomActionFor(action(215, [0, 8], "walk", false, 8))).toEqual({
       special: 243,
       tag: 8,
-      isNearest: false,
+      changes: [],
     });
   });
 
@@ -160,7 +160,7 @@ describe("Hexen generalized specials", () => {
       expect(doomActionFor(given), boom.toString(16)).toEqual({
         special: expected,
         tag: given.args[0],
-        isNearest: false,
+        changes: [],
       });
     }
   });
@@ -169,24 +169,24 @@ describe("Hexen generalized specials", () => {
     expect(doomActionFor(action(200, [3, 20, 0, 2], "use"))).toEqual({
       special: 0x6000 | 2 | (1 << 3) | (1 << 7),
       tag: 3,
-      isNearest: true,
+      changes: ["speed"],
     });
     expect(doomActionFor(action(200, [3, 8, 128, 0, 8], "use"))).toEqual({
       special: 0x6000 | 2 | (1 << 6) | (7 << 7),
       tag: 3,
-      isNearest: true,
+      changes: ["height"],
     });
     expect(doomActionFor(action(202, [3, 16, 1, 0, 1], "use"))).toEqual({
       special: 0x3800 | 2 | (1 << 5) | (1 << 6),
       tag: 3,
-      isNearest: false,
+      changes: [],
     });
     expect(doomActionFor(action(202, [3, 16, 0, 8, 1], "use"))).toMatchObject({
       special: 0x3800 | 2 | (1 << 6),
-      isNearest: true,
+      changes: ["delay"],
     });
     expect(doomActionFor(action(204, [3, 4, 8, 0, 1], "use"))).toMatchObject({
-      isNearest: true,
+      changes: ["stairs reset"],
     });
   });
 
@@ -202,14 +202,14 @@ describe("Hexen generalized specials", () => {
     ).toEqual({
       special: 0x4000 | (1 << 5) | (1 << 6),
       tag: 3,
-      isNearest: false,
+      changes: [],
     });
   });
 
   it("keep what Boom can't say as the nearest one", () => {
     expect(doomActionFor(action(202, [3, 16, 2, 34, 1], "use"))).toMatchObject({
       special: 0x3c00 | 2 | (2 << 5) | (1 << 8),
-      isNearest: true,
+      changes: ["key"],
     });
     expect(
       doomActionFor({
@@ -218,18 +218,40 @@ describe("Hexen generalized specials", () => {
       }),
     ).toMatchObject({
       special: 0x6000 | (1 << 7) | (1 << 10),
-      isNearest: true,
+      changes: ["monsters"],
     });
     expect(doomActionFor(action(203, [3, 32, 24, 1], "monster-walk"))).toEqual({
       special: 0x3400 | (1 << 3) | (1 << 5) | (1 << 6),
       tag: 3,
-      isNearest: true,
+      changes: ["trigger"],
     });
     expect(doomActionFor(action(169, [3, 16, 16, 0, 10], "use"))).toEqual({
       special: 0x2f80 | 2 | (1 << 3),
       tag: 3,
-      isNearest: true,
+      changes: ["where it stops", "crushing"],
     });
+  });
+
+  it("say what the nearest one changes", () => {
+    const changes = (given: HexenAction) => doomActionFor(given)?.changes;
+    expect(changes(action(12, [3, 48, 105], "walk", true))).toEqual([
+      "speed",
+      "delay",
+    ]);
+    expect(changes(action(12, [3, 16, 150, 5], "use"))).toEqual(["light"]);
+    expect(changes(action(217, [3, 2, 8, 15, 30], "walk"))).toEqual([
+      "delay",
+      "stairs reset",
+    ]);
+    expect(changes(action(204, [3, 4, 12], "use"))).toEqual(["step"]);
+    expect(changes(action(203, [3, 32, 30, 1], "use"))).toEqual(["delay"]);
+    expect(changes(action(205, [3, 16, 16, 0, 10], "use"))).toEqual([
+      "where it stops",
+    ]);
+    expect(changes(action(284, [3, 16, 8, 0, 20], "use"))).toEqual([
+      "speed",
+      "damage",
+    ]);
   });
 
   it("drop what Boom has no generalized line for", () => {
