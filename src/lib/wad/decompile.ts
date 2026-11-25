@@ -63,6 +63,7 @@ export interface ImportReport {
   multiplayerThings: number;
   outsideThings: number;
   droppedActions: Record<string, number>;
+  nearestActions: Record<string, number>;
   droppedEffects: number;
   replacedTextures: string[];
   seeThroughWalls: number;
@@ -148,6 +149,7 @@ export function decompileMap(
     multiplayerThings: 0,
     outsideThings: 0,
     droppedActions: { ...doom.udmf?.droppedActions },
+    nearestActions: { ...doom.udmf?.nearestActions },
     droppedEffects: 0,
     replacedTextures: [],
     seeThroughWalls: 0,

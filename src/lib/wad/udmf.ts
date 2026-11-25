@@ -1,3 +1,10 @@
+import {
+  doomActionFor,
+  doomSectorSpecialFor,
+  hexenSpecialName,
+  type HexenTrigger,
+} from "@/lib/map/hexen-actions";
+
 import type { DoomLine, DoomMap, DoomSector, DoomThing } from "./read-map";
 
 import { WadFileError } from "./inspect";
@@ -6,6 +13,7 @@ export interface UdmfImport {
   namespace: string;
   droppedFields: Record<string, number>;
   droppedActions: Record<string, number>;
+  nearestActions: Record<string, number>;
 }
 
 interface Fields {
@@ -85,6 +93,7 @@ export function readTextmap(slot: string, source: string): DoomMap {
   const { namespace, globals, blocks } = parseTextmap(source);
   const droppedFields: Record<string, number> = {};
   const droppedActions: Record<string, number> = {};
+  const nearestActions: Record<string, number> = {};
   for (const key of globals.keys()) drop(droppedFields, key);
   const read = <T>(kind: string, build: (fields: Fields) => T) =>
     blocks
@@ -121,6 +130,7 @@ export function readTextmap(slot: string, source: string): DoomMap {
     const action = readLineAction(namespace, line);
     line.use(action.used);
     if (action.dropped) drop(droppedActions, action.dropped);
+    if (action.nearest) drop(nearestActions, action.nearest);
     return {
       start: line.index("v1"),
       end: line.index("v2"),
@@ -171,7 +181,7 @@ export function readTextmap(slot: string, source: string): DoomMap {
     sides,
     sectors,
     things,
-    udmf: { namespace, droppedFields, droppedActions },
+    udmf: { namespace, droppedFields, droppedActions, nearestActions },
   };
 }
 
@@ -321,16 +331,16 @@ const hexenLineFields = [
   "arg2",
   "arg3",
   "arg4",
+  "repeatspecial",
   "playercross",
   "playeruse",
-  "playerpush",
   "monstercross",
+  "impact",
   "monsteruse",
+  "playerpush",
   "monsterpush",
   "missilecross",
-  "impact",
   "anycross",
-  "repeatspecial",
 ];
 
 interface LineAction {
@@ -338,6 +348,7 @@ interface LineAction {
   tag: number;
   used: string[];
   dropped?: string;
+  nearest?: string;
 }
 
 // The one place that turns a line's special, args and id into a Doom special
@@ -358,23 +369,67 @@ function readLineAction(namespace: string, line: Fields): LineAction {
       ],
     };
   }
+  const keepId = (tag: number) =>
+    id === 0 || id === tag ? [...hexenLineFields, "id"] : hexenLineFields;
+  if (special === 0) return { special: 0, tag: 0, used: keepId(0) };
+  if (!hexenSpecials.has(namespace)) {
+    return {
+      special: 0,
+      tag: 0,
+      used: keepId(0),
+      dropped: `Actions from ${namespace} maps`,
+    };
+  }
+  const trigger = readTrigger(line);
+  const action =
+    trigger &&
+    doomActionFor({
+      special,
+      args: [0, 1, 2, 3, 4].map((arg) => line.tag(`arg${arg}`)),
+      trigger,
+      repeat: line.flag("repeatspecial"),
+    });
+  if (!action) {
+    return {
+      special: 0,
+      tag: 0,
+      used: keepId(0),
+      dropped: hexenSpecialName(special),
+    };
+  }
   return {
-    special: 0,
-    tag: 0,
-    used: id > 0 ? hexenLineFields : [...hexenLineFields, "id"],
-    ...(special !== 0
-      ? {
-          dropped: hexenSpecials.has(namespace)
-            ? "Hexen-style actions"
-            : `Actions from ${namespace} maps`,
-        }
-      : {}),
+    special: action.special,
+    tag: action.tag,
+    used: keepId(action.tag),
+    ...(action.isNearest ? { nearest: hexenSpecialName(special) } : {}),
   };
 }
 
+const otherTriggers = [
+  "monsteruse",
+  "playerpush",
+  "monsterpush",
+  "missilecross",
+  "anycross",
+];
+
+function readTrigger(line: Fields): HexenTrigger | null {
+  if (line.flag("playeruse")) return "use";
+  if (line.flag("impact")) return "shoot";
+  if (line.flag("playercross")) return "walk";
+  if (line.flag("monstercross")) return "monster-walk";
+  return otherTriggers.some((key) => line.flag(key)) ? null : "none";
+}
+
 function readSectorSpecial(namespace: string, sector: Fields) {
-  if (!doomSpecials.has(namespace)) return { special: 0, used: [] };
-  return { special: sector.special("special"), used: ["special"] };
+  const special = sector.special("special");
+  if (doomSpecials.has(namespace)) return { special, used: ["special"] };
+  const doom = hexenSpecials.has(namespace)
+    ? doomSectorSpecialFor(special)
+    : null;
+  return doom === null
+    ? { special: 0, used: [] }
+    : { special: doom, used: ["special"] };
 }
 
 const wordRange = "between -32767 and 32767";
