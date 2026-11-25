@@ -95,6 +95,26 @@ describe("a spot to stand on", () => {
     });
   });
 
+  it("steps back from an MBF21 line that blocks players", () => {
+    const fenced = updateLine({ ...testMap, complevel: "mbf21" }, "v3|v4", {
+      blocksPlayers: true,
+    });
+    expect(walkStep(fenced, { x: 360, y: 160 }, { x: 372, y: 160 })).toEqual({
+      x: 360,
+      y: 160,
+    });
+    expect(
+      walkStep(
+        { ...fenced, complevel: "mbf" },
+        { x: 360, y: 160 },
+        {
+          x: 372,
+          y: 160,
+        },
+      ),
+    ).toEqual({ x: 372, y: 160 });
+  });
+
   it("finds no spot under a ceiling too low to stand under", () => {
     const low = updateSector(testMap, "sector-1", { ceiling: 48 });
     expect(standingSpot(low, { x: 96, y: 160 })).toBeNull();

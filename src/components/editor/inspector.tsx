@@ -156,6 +156,8 @@ const partLabels: Record<WallPart, string> = {
 };
 const lineFlags: { flag: keyof LineSettings; label: string }[] = [
   { flag: "blocksEnemies", label: "Blocks enemies" },
+  { flag: "blocksPlayers", label: "Blocks players only (MBF21)" },
+  { flag: "blocksWalkers", label: "Blocks walking enemies (MBF21)" },
   { flag: "soundBlock", label: "Blocks sound" },
   { flag: "upperFixed", label: "Keep upper texture fixed" },
   { flag: "lowerFixed", label: "Keep lower texture fixed" },

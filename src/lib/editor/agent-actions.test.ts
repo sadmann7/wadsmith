@@ -583,6 +583,19 @@ describe("agent actions", () => {
     expect(() =>
       runAgentAction(testMap, "setLineFlags", { wall: "v3|v4", passUse: true }),
     ).toThrow(/needs Boom compatibility/);
+    expect(() =>
+      runAgentAction({ ...testMap, complevel: "mbf" }, "setLineFlags", {
+        wall: "v3|v4",
+        blocksPlayers: true,
+      }),
+    ).toThrow(/needs MBF21 compatibility/);
+    expect(
+      runAgentAction({ ...testMap, complevel: "mbf21" }, "setLineFlags", {
+        wall: "v3|v4",
+        blocksPlayers: true,
+        blocksWalkers: true,
+      }).map.lines?.["v3|v4"],
+    ).toMatchObject({ blocksPlayers: true, blocksWalkers: true });
     const { map } = build(testMap, [
       ["setMapDetails", { complevel: "boom" }],
       [

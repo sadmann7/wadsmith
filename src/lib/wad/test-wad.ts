@@ -126,6 +126,8 @@ const lineFlags: [string, number][] = [
   ["dontdraw", 0x0080],
   ["mapped", 0x0100],
   ["passuse", 0x0200],
+  ["blocklandmonsters", 0x1000],
+  ["blockplayers", 0x2000],
 ];
 
 function writeTextmap(doom: DoomMap, namespace: string) {

@@ -31,6 +31,17 @@ describe("reachable rooms", () => {
     ]);
   });
 
+  it("warns about a room behind an MBF21 line that blocks players", () => {
+    const map = twoRooms(0, 128, { settings: { blocksPlayers: true } });
+    expect(reachWarnings({ ...map, complevel: "mbf21" })).toEqual([
+      "Ledge: the player can't get here from the start.",
+      "Ledge: the player can't reach the stimpack here.",
+    ]);
+    expect(reachWarnings({ ...map, complevel: "mbf" })).toEqual([]);
+    const walkers = twoRooms(0, 128, { settings: { blocksWalkers: true } });
+    expect(reachWarnings({ ...walkers, complevel: "mbf21" })).toEqual([]);
+  });
+
   it("lets the player drop down into a lower room", () => {
     expect(reachWarnings(twoRooms(-200, 128))).toEqual([]);
   });

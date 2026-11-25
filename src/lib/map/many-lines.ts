@@ -26,6 +26,8 @@ const skyFlat = "F_SKY1";
 export type LineFlag =
   | "blocksAll"
   | "blocksEnemies"
+  | "blocksPlayers"
+  | "blocksWalkers"
   | "soundBlock"
   | "upperFixed"
   | "lowerFixed"
@@ -59,6 +61,8 @@ export interface WallsLook {
 const lineFlags: LineFlag[] = [
   "blocksAll",
   "blocksEnemies",
+  "blocksPlayers",
+  "blocksWalkers",
   "soundBlock",
   "upperFixed",
   "lowerFixed",

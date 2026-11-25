@@ -123,6 +123,8 @@ interface RawSpecial {
 interface LineSettings {
   blocksAll?: boolean;
   blocksEnemies?: boolean;
+  blocksPlayers?: boolean;
+  blocksWalkers?: boolean;
   upperFixed?: boolean;
   lowerFixed?: boolean;
   hidden?: boolean;

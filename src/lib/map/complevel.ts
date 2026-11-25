@@ -1,4 +1,4 @@
-import type { Complevel } from "./types";
+import type { Complevel, GameMap, LineSettings } from "./types";
 
 export const complevels: Complevel[] = ["vanilla", "boom", "mbf", "mbf21"];
 
@@ -12,7 +12,9 @@ export const complevelLabels: Record<Complevel, string> = {
 const lastVanillaLine = 141;
 const lastVanillaSector = 17;
 export const linePassUse = 0x0200;
-const lineMbf21Flags = 0x3000;
+export const lineBlocksWalkers = 0x1000;
+export const lineBlocksPlayers = 0x2000;
+const lineMbf21Flags = lineBlocksWalkers | lineBlocksPlayers;
 const sectorMbf21Flags = 0x3000;
 const mbfSkyLines = new Set([271, 272]);
 const mbf21Lines = new Set([1024, 1025, 1026]);
@@ -33,6 +35,14 @@ export function lineLevel(special: number, flags = 0): Complevel {
   if (mbfSkyLines.has(special)) return "mbf";
   if (special > lastVanillaLine || flags & linePassUse) return "boom";
   return "vanilla";
+}
+
+// The game skips a line's MBF21 flags below MBF21.
+export function getBlocksPlayer(map: GameMap, line: LineSettings | undefined) {
+  return Boolean(
+    line?.blocksAll ||
+    (line?.blocksPlayers && atLeast(map.complevel ?? "vanilla", "mbf21")),
+  );
 }
 
 export function sectorLevel(special: number): Complevel {

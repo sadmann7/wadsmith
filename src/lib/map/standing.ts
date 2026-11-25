@@ -1,5 +1,6 @@
 import type { GameMap, Point, Sector } from "./types";
 
+import { getBlocksPlayer } from "./complevel";
 import { sectorAt, wallOwners } from "./geometry";
 
 // In a sharp corner each wall pushes the spot back toward the other, so the
@@ -57,7 +58,12 @@ const settled = 1e-6;
 function pushOff(map: GameMap, spot: Point, floor: number) {
   let next = spot;
   for (const [key, owners] of wallOwners(map)) {
-    if (!map.lines?.[key]?.blocksAll && !getIsBlocking(owners, floor)) continue;
+    if (
+      !getBlocksPlayer(map, map.lines?.[key]) &&
+      !getIsBlocking(owners, floor)
+    ) {
+      continue;
+    }
     const [a, b] = key.split("|").map((id) => map.vertices[id]);
     if (!a || !b) continue;
     const near = nearestOn(a, b, next);
@@ -81,7 +87,7 @@ function pushOff(map: GameMap, spot: Point, floor: number) {
 // ledge's edge, but a camera set down at a ledge's foot stays at the foot.
 function standingFloor(map: GameMap, spot: Point, floor: number) {
   const floors = [...touching(map, spot)].flatMap(({ key, owners }) =>
-    owners.length < 2 || map.lines?.[key]?.blocksAll
+    owners.length < 2 || getBlocksPlayer(map, map.lines?.[key])
       ? []
       : owners.map((owner) => owner.floor),
   );
@@ -128,7 +134,7 @@ function getIsWalkBlocking(
   owners: Sector[],
   floor: number,
 ) {
-  if (map.lines?.[key]?.blocksAll) return true;
+  if (getBlocksPlayer(map, map.lines?.[key])) return true;
   const [front, back] = owners;
   if (!back) return true;
   if (front === back) return false;

@@ -857,6 +857,25 @@ describe("compatibility and raw specials", () => {
     expect(validateMap({ ...map, complevel: undefined })[0].message).toBe(
       "Wall between Stage and Yard (e|f): needs Boom compatibility, but the map is set to Vanilla.",
     );
+    for (const [flag, bit] of [
+      ["blocksPlayers", 0x2000],
+      ["blocksWalkers", 0x1000],
+    ] as const) {
+      const blocking: GameMap = {
+        ...islandMap,
+        complevel: "mbf",
+        lines: { [wallKey("e", "f")]: { [flag]: true } },
+      };
+      expect(validateMap(blocking).map((issue) => issue.message)).toEqual([
+        "Wall between Stage and Yard (e|f): needs MBF21 compatibility, but the map is set to MBF.",
+      ]);
+      const mbf21 = { ...blocking, complevel: "mbf21" } as const;
+      expect(validateMap(mbf21)).toEqual([]);
+      const built = defined(
+        linesOf(mbf21).find((item) => item.line.wall === wallKey("e", "f")),
+      );
+      expect(built.flags & 0x3000).toBe(bit);
+    }
     const copies = duplicateThings(map, ["imp-1"]);
     expect(copies.map.things.at(-1)).toMatchObject({
       multiplayer: true,
