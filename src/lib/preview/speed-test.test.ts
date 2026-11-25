@@ -4,21 +4,22 @@ import { describe, expect, it } from "vitest";
 
 import type { GameMap } from "@/lib/map/types";
 
+import { defined } from "@/lib/defined";
 import { sectorAt } from "@/lib/map/geometry";
 import { testMap } from "@/lib/map/test-map";
 import { createFlatAssets } from "@/lib/wad/assets";
 import { decompileMap } from "@/lib/wad/decompile";
 import { readMaps } from "@/lib/wad/read-map";
 
-import { type Camera, startCamera } from "./render";
 import type { SceneRenderer, SceneRendererKind } from "./scene-renderer";
+import type { SpeedTestClock, SpeedTestResult } from "./speed-test";
+
+import { type Camera, startCamera } from "./render";
 import {
   editAt,
   frameStats,
   measureRenderer,
   runSpeedTest,
-  type SpeedTestClock,
-  type SpeedTestResult,
   speedTestEdits,
   speedTestPath,
   speedTestReport,
@@ -35,64 +36,6 @@ interface Drawn {
   map: GameMap;
   camera: Camera;
   opened: readonly string[];
-}
-
-function fakeRenderer(kind: SceneRendererKind, clock: FakeClock) {
-  const drawn: Drawn[] = [];
-  let destroyed = 0;
-  let reads = 0;
-  const renderer: SceneRenderer = {
-    kind,
-    width: 320,
-    height: 200,
-    focal: 160,
-    sizeFor: () => ({ width: 320, height: 200 }),
-    resize: () => undefined,
-    render(map, camera, options) {
-      drawn.push({ map, camera, opened: options.opened ?? [] });
-      clock.time += 4;
-    },
-    surfaceAt() {
-      reads += 1;
-      clock.time += 2;
-      return { key: null, distance: Infinity };
-    },
-    surfaceCounts: () => new Map(),
-    destroy() {
-      destroyed += 1;
-    },
-  };
-  return {
-    renderer,
-    drawn,
-    destroyed: () => destroyed,
-    reads: () => reads,
-  };
-}
-
-interface FakeClock extends SpeedTestClock {
-  time: number;
-  frames: number;
-}
-
-// Frames start every gap milliseconds, plus whatever onFrame adds.
-function fakeClock(
-  gap = 10,
-  onFrame?: (frame: number) => number | void,
-): FakeClock {
-  let stamp = 0;
-  const clock: FakeClock = {
-    time: 0,
-    frames: 0,
-    frame: async () => {
-      clock.frames += 1;
-      stamp += gap + (onFrame?.(clock.frames) ?? 0);
-      clock.time = stamp;
-      return stamp;
-    },
-    now: () => clock.time,
-  };
-  return clock;
 }
 
 describe("speedTestPath", () => {
@@ -132,7 +75,7 @@ describe.skipIf(!existsSync(wadPath))("speedTestPath on Freedoom", () => {
     const doom = readMaps([
       { name: "freedoom2.wad", data: readFileSync(wadPath) },
     ]).find((item) => item.slot === "MAP03");
-    const map = decompileMap(doom!).map;
+    const map = decompileMap(defined(doom)).map;
     const path = speedTestPath(map);
     expect(new Set(path.map((c) => `${c.x},${c.y}`)).size).toBe(6);
     for (const camera of path) expect(sectorAt(map, camera)).not.toBeNull();
@@ -238,8 +181,8 @@ describe("runSpeedTest", () => {
       },
     });
     expect([...made.keys()]).toEqual(["columns", "webgl"]);
-    expect(made.get("columns")!.destroyed()).toBe(1);
-    expect(made.get("webgl")!.destroyed()).toBe(1);
+    expect(made.get("columns")?.destroyed()).toBe(1);
+    expect(made.get("webgl")?.destroyed()).toBe(1);
     expect(result.renderers.map((item) => item.kind)).toEqual([
       "columns",
       "webgl",
@@ -289,6 +232,64 @@ describe("runSpeedTest", () => {
     expect(testMap).toEqual(before);
   });
 });
+
+interface FakeClock extends SpeedTestClock {
+  time: number;
+  frames: number;
+}
+
+// Frames start every gap milliseconds, plus whatever onFrame adds.
+function fakeClock(
+  gap = 10,
+  onFrame?: (frame: number) => number | void,
+): FakeClock {
+  let stamp = 0;
+  const clock: FakeClock = {
+    time: 0,
+    frames: 0,
+    frame: async () => {
+      clock.frames += 1;
+      stamp += gap + (onFrame?.(clock.frames) ?? 0);
+      clock.time = stamp;
+      return stamp;
+    },
+    now: () => clock.time,
+  };
+  return clock;
+}
+
+function fakeRenderer(kind: SceneRendererKind, clock: FakeClock) {
+  const drawn: Drawn[] = [];
+  let destroyed = 0;
+  let reads = 0;
+  const renderer: SceneRenderer = {
+    kind,
+    width: 320,
+    height: 200,
+    focal: 160,
+    sizeFor: () => ({ width: 320, height: 200 }),
+    resize: () => undefined,
+    render(map, camera, options) {
+      drawn.push({ map, camera, opened: options.opened ?? [] });
+      clock.time += 4;
+    },
+    surfaceAt() {
+      reads += 1;
+      clock.time += 2;
+      return { key: null, distance: Infinity };
+    },
+    surfaceCounts: () => new Map(),
+    destroy() {
+      destroyed += 1;
+    },
+  };
+  return {
+    renderer,
+    drawn,
+    destroyed: () => destroyed,
+    reads: () => reads,
+  };
+}
 
 describe("speedTestReport", () => {
   it("reads as plain text to paste", () => {

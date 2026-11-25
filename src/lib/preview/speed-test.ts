@@ -16,12 +16,13 @@ import { readWadAssets, type SceneAssets } from "@/lib/wad/assets";
 import { decompileMap } from "@/lib/wad/decompile";
 import { readMaps } from "@/lib/wad/read-map";
 
-import { getIsMover } from "./movers";
-import { type Camera, startCamera } from "./render";
 import type { SceneRenderer, SceneRendererKind } from "./scene-renderer";
 
+import { getIsMover } from "./movers";
+import { type Camera, startCamera } from "./render";
+
 export const speedTestFrames = 360;
-const stationLimit = 6;
+
 const warmupFrames = 10;
 const editEvery = 24;
 const pitchSwing = 0.15;
@@ -52,7 +53,11 @@ export async function loadFreedoomScene(): Promise<SpeedTestScene> {
 
 export interface SpeedTestEdit {
   name: string;
-  apply: (map: GameMap, opened: string[], step: number) => {
+  apply: (
+    map: GameMap,
+    opened: string[],
+    step: number,
+  ) => {
     map: GameMap;
     opened: string[];
   };
@@ -112,44 +117,6 @@ export function speedTestPath(map: GameMap, frames = speedTestFrames) {
       lift: 0,
     };
   });
-}
-
-function pathStations(map: GameMap) {
-  const start = startCamera(map);
-  const startRoom = sectorAt(map, start);
-  const rooms = map.sectors
-    .filter((sector) => !sector.door && sector.id !== startRoom?.id)
-    .map((sector) => ({ sector, area: Math.abs(areaOf(map, sector)) }))
-    .filter(({ area }) => area > 0)
-    .sort((a, b) => b.area - a.area || a.sector.id.localeCompare(b.sector.id))
-    .slice(0, stationLimit - 1)
-    .flatMap(({ sector }) => {
-      const at = roomPoint(map, sector);
-      if (sectorAt(map, at)?.id !== sector.id) return [];
-      return [{ ...at, angle: clearView(map, sector, at) }];
-    });
-  const stations = [start];
-  while (rooms.length > 0) {
-    const last = stations[stations.length - 1];
-    let nearest = 0;
-    for (let index = 1; index < rooms.length; index += 1) {
-      if (distance(last, rooms[index]) < distance(last, rooms[nearest])) {
-        nearest = index;
-      }
-    }
-    stations.push(...rooms.splice(nearest, 1));
-  }
-  return stations;
-}
-
-function areaOf(map: GameMap, sector: Sector) {
-  return sector.vertices.length >= 3
-    ? signedArea(sectorPolygon(map, sector))
-    : 0;
-}
-
-function distance(a: { x: number; y: number }, b: { x: number; y: number }) {
-  return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
 // The edits a person makes most, each on the same room, wall, corner, thing
@@ -370,14 +337,50 @@ export async function runSpeedTest({
   };
 }
 
+const stationLimit = 6;
+
+function pathStations(map: GameMap) {
+  const start = startCamera(map);
+  const startRoom = sectorAt(map, start);
+  const rooms = map.sectors
+    .filter((sector) => !sector.door && sector.id !== startRoom?.id)
+    .map((sector) => ({ sector, area: Math.abs(areaOf(map, sector)) }))
+    .filter(({ area }) => area > 0)
+    .sort((a, b) => b.area - a.area || a.sector.id.localeCompare(b.sector.id))
+    .slice(0, stationLimit - 1)
+    .flatMap(({ sector }) => {
+      const at = roomPoint(map, sector);
+      if (sectorAt(map, at)?.id !== sector.id) return [];
+      return [{ ...at, angle: clearView(map, sector, at) }];
+    });
+  const stations = [start];
+  while (rooms.length > 0) {
+    const last = stations[stations.length - 1];
+    let nearest = 0;
+    for (let index = 1; index < rooms.length; index += 1) {
+      if (distance(last, rooms[index]) < distance(last, rooms[nearest])) {
+        nearest = index;
+      }
+    }
+    stations.push(...rooms.splice(nearest, 1));
+  }
+  return stations;
+}
+
+function areaOf(map: GameMap, sector: Sector) {
+  return sector.vertices.length >= 3
+    ? signedArea(sectorPolygon(map, sector))
+    : 0;
+}
+
+function distance(a: { x: number; y: number }, b: { x: number; y: number }) {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
 const rendererNames: Record<SceneRendererKind, string> = {
   columns: "Column renderer",
   webgl: "WebGL renderer",
 };
-
-function ms(value: number) {
-  return `${value.toFixed(1)} ms`;
-}
 
 export function speedTestReport(result: SpeedTestResult) {
   const { device } = result;
@@ -432,3 +435,7 @@ export const animationClock: SpeedTestClock = {
   frame: () => new Promise((resolve) => requestAnimationFrame(resolve)),
   now: () => performance.now(),
 };
+
+function ms(value: number) {
+  return `${value.toFixed(1)} ms`;
+}

@@ -29,9 +29,9 @@ import {
   loadFreedoomScene,
   runSpeedTest,
   type SpeedTestClock,
-  type SpeedTestScene,
   speedTestFrames,
   speedTestReport,
+  type SpeedTestScene,
 } from "@/lib/preview/speed-test";
 
 const renderRows = 400;
@@ -177,9 +177,9 @@ export function SpeedTestDialog({
           {phase.kind === "ready" ? (
             <>
               <p className="m-0 text-sm text-muted-foreground">
-                Flies a fixed path, first with the column renderer and then
-                with WebGL, and makes a few edits along the way. Your map and
-                3D view stay as they are.
+                Flies a fixed path, first with the column renderer and then with
+                WebGL, and makes a few edits along the way. Your map and 3D view
+                stay as they are.
               </p>
               <SegmentedControl
                 aria-label="Map to test"
@@ -190,7 +190,9 @@ export function SpeedTestDialog({
                 <SegmentedControlItem value="freedoom">
                   Freedoom {freedoomSlot}
                 </SegmentedControlItem>
-                <SegmentedControlItem value="map">This map</SegmentedControlItem>
+                <SegmentedControlItem value="map">
+                  This map
+                </SegmentedControlItem>
               </SegmentedControl>
               <p className="m-0 text-sm text-muted-foreground">
                 {source === "freedoom"
@@ -201,8 +203,8 @@ export function SpeedTestDialog({
           ) : null}
           {phase.kind === "running" ? (
             <p role="status" className="m-0 text-sm text-muted-foreground">
-              Testing the {runningNames[phase.renderer]}, frame {phase.frame}{" "}
-              of {speedTestFrames}
+              Testing the {runningNames[phase.renderer]}, frame {phase.frame} of{" "}
+              {speedTestFrames}
             </p>
           ) : null}
           {phase.kind === "done" ? (
@@ -230,7 +232,12 @@ export function SpeedTestDialog({
                   {isCopied ? "Copied" : "Copy results"}
                 </Button>
               ) : null}
-              <Button variant="primary" onClick={start}>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  void start();
+                }}
+              >
                 {phase.kind === "ready" ? "Start" : "Run again"}
               </Button>
             </>
