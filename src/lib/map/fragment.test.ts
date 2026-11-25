@@ -27,6 +27,7 @@ import {
 import { wallKey, wallOwners } from "./geometry";
 import { starterMap } from "./starter-map";
 import { islandMap, testMap } from "./test-map";
+import { freedoomNames } from "./textures";
 import { inspectMap, issuesSince, newProblems, validateMap } from "./validate";
 
 const openWall = wallKey("v3", "v4");
@@ -791,6 +792,29 @@ describe("turning, flipping and resizing", () => {
     expect(inspectMap(defined(grown)).warnings).not.toContainEqual(
       expect.objectContaining({ id: "in-door:zombie-near-door" }),
     );
+    expect(warnings).toEqual([]);
+  });
+
+  it("lists warnings by the map check's game context", () => {
+    const map: GameMap = {
+      ...starterMap,
+      things: [
+        ...starterMap.things,
+        { id: "zombie-near-door", kind: "zombieman", x: 952, y: 160, angle: 0 },
+      ],
+    };
+    const keys = partKeys(map, selectedParts(map, [], "sector-8"));
+    const grow: Transform = { kind: "scale", factor: 1.2 };
+    const context = { names: { ...freedoomNames, flats: [] } };
+    expect(inspectMap(map, context).errors).not.toEqual([]);
+    const { problems, warnings } = transformKeepingDoors(
+      map,
+      keys,
+      [grow],
+      8,
+      context,
+    );
+    expect(problems).toEqual([]);
     expect(warnings).toEqual([]);
   });
 

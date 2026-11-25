@@ -25,7 +25,12 @@ import {
   wallOwners,
 } from "./geometry";
 import { MapFileError, maxFileBytes, parseMap } from "./storage";
-import { inspectMap, issuesSince, type MapIssue } from "./validate";
+import {
+  type CheckContext,
+  inspectMap,
+  issuesSince,
+  type MapIssue,
+} from "./validate";
 
 // What a selection stands for: whole rooms and things.
 export interface SelectedParts {
@@ -510,6 +515,7 @@ export function transformKeepingDoors(
   keys: string[],
   steps: Transform[],
   grid: number,
+  context?: CheckContext,
 ): {
   map: GameMap | null;
   problems: MapIssue[];
@@ -551,7 +557,7 @@ export function transformKeepingDoors(
   const listed = (result: ReturnType<typeof run>) => {
     if (!result) return { map: null, problems: [], warnings: [] };
     const shown = new Set(
-      inspectMap(result.map).warnings.map((issue) => issue.id),
+      inspectMap(result.map, context).warnings.map((issue) => issue.id),
     );
     return {
       ...result,
