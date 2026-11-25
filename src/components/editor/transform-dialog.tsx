@@ -16,9 +16,8 @@ import { FieldItem, Label } from "@/components/ui/field";
 import { NumberField } from "@/components/ui/number-field";
 import { stepWay } from "@/lib/editor/step-way";
 
-const percentStep = 10;
-const percentMin = 10;
-const percentMax = 1000;
+const degreesLimit = { min: -360, max: 360, step: 15 };
+const percentLimit = { min: 10, max: 1000, step: 10 };
 
 interface TransformDialogProps {
   onApply: (steps: Transform[]) => void;
@@ -63,11 +62,15 @@ export function TransformDialog({ onApply, onClose }: TransformDialogProps) {
                 <NumberField
                   label="Turn right, in degrees"
                   value={degrees}
-                  step={15}
-                  min={-360}
-                  max={360}
-                  onValueChange={(next) => {
-                    if (next !== null) setDegrees(Math.round(next));
+                  min={degreesLimit.min}
+                  max={degreesLimit.max}
+                  step={1}
+                  largeStep={1}
+                  smallStep={1}
+                  onValueChange={(next, details) => {
+                    if (next !== null) {
+                      setDegrees(steppedValue(next, details, degreesLimit));
+                    }
                   }}
                 />
               </FieldItem>
@@ -76,26 +79,15 @@ export function TransformDialog({ onApply, onClose }: TransformDialogProps) {
                 <NumberField
                   label="Size, in percent"
                   value={percent}
-                  min={percentMin}
-                  max={percentMax}
+                  min={percentLimit.min}
+                  max={percentLimit.max}
                   step={1}
                   largeStep={1}
                   smallStep={1}
                   onValueChange={(next, details) => {
-                    if (next === null) return;
-                    const way = stepWay(details);
-                    const fine =
-                      details.event instanceof MouseEvent ||
-                      details.event instanceof KeyboardEvent
-                        ? details.event.shiftKey
-                        : false;
-                    // The field steps by 1 so typed sizes never snap; a plain
-                    // step moves by 10 instead.
-                    const size =
-                      way && !fine
-                        ? clampPercent(next - way) + way * percentStep
-                        : next;
-                    setPercent(clampPercent(Math.round(size)));
+                    if (next !== null) {
+                      setPercent(steppedValue(next, details, percentLimit));
+                    }
                   }}
                 />
               </FieldItem>
@@ -117,6 +109,21 @@ export function TransformDialog({ onApply, onClose }: TransformDialogProps) {
   );
 }
 
-function clampPercent(percent: number) {
-  return Math.min(percentMax, Math.max(percentMin, percent));
+// The fields step by 1 so typed values never snap, and a plain step moves by
+// the limit's step instead.
+function steppedValue(
+  next: number,
+  details: Parameters<typeof stepWay>[0],
+  limit: { min: number; max: number; step: number },
+) {
+  const clamp = (value: number) =>
+    Math.min(limit.max, Math.max(limit.min, value));
+  const way = stepWay(details);
+  const fine =
+    details.event instanceof MouseEvent ||
+    details.event instanceof KeyboardEvent
+      ? details.event.shiftKey
+      : false;
+  const value = way && !fine ? clamp(next - way) + way * limit.step : next;
+  return clamp(Math.round(value));
 }
