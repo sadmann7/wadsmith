@@ -245,6 +245,29 @@ function losses(reports: ImportReport[], gameLabel: string) {
       detail: "Lighting and damage effects the editor doesn't have yet.",
     });
   }
+  const tags = sum(reports, (report) => report.renumberedTags);
+  if (tags > 0) {
+    rows.push({
+      label: plural(tags, "tag"),
+      detail:
+        "Over 32767, so given new numbers. The lines and rooms they link still match.",
+    });
+  }
+  const heights = sum(reports, (report) => report.clampedHeights);
+  if (heights > 0) {
+    rows.push({
+      label: plural(heights, "room height"),
+      detail:
+        "Outside −32767 to 32767, so held at the limit. A door near the top opens less.",
+    });
+  }
+  const offsets = sum(reports, (report) => report.clampedOffsets);
+  if (offsets > 0) {
+    rows.push({
+      label: plural(offsets, "texture offset"),
+      detail: "At −32768, so moved to −32767.",
+    });
+  }
   const multiplayer = sum(reports, (report) => report.multiplayerThings);
   if (multiplayer > 0) {
     rows.push({
