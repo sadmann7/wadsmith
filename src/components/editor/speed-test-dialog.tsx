@@ -41,9 +41,12 @@ type Source = "freedoom" | "map";
 
 type Phase =
   | { kind: "ready" }
+  | { kind: "loading" }
   | { kind: "running"; renderer: SceneRendererKind; frame: number }
   | { kind: "done"; report: string }
   | { kind: "failed"; message: string };
+
+const hiddenReason = new Error("The page was hidden.");
 
 const runningNames: Record<SceneRendererKind, string> = {
   columns: "column renderer",
@@ -55,6 +58,7 @@ interface SpeedTestDialogProps {
   mapName: string;
   assets: SceneAssets;
   sky: string;
+  customSprites?: ReadonlyMap<number, string | null>;
   clock?: SpeedTestClock;
   loadScene?: () => Promise<SpeedTestScene>;
   onClose: () => void;
@@ -65,6 +69,7 @@ export function SpeedTestDialog({
   mapName,
   assets,
   sky,
+  customSprites,
   clock = animationClock,
   loadScene = loadFreedoomScene,
   onClose,
@@ -81,16 +86,26 @@ export function SpeedTestDialog({
   const start = async () => {
     const controller = new AbortController();
     running.current = controller;
+    const canvases: HTMLCanvasElement[] = [];
+    // Frames stop while the page is hidden, which would spoil the timings.
+    const onHidden = () => {
+      if (document.hidden) controller.abort(hiddenReason);
+    };
+    document.addEventListener("visibilitychange", onHidden);
+    const wakeLock = navigator.wakeLock?.request("screen").catch(() => null);
     flushSync(() => {
       setIsCopied(false);
-      setPhase({ kind: "running", renderer: "columns", frame: 0 });
+      setPhase({ kind: "loading" });
     });
     try {
       const scene =
         source === "freedoom"
-          ? await loadScene()
-          : { name: mapName, map, assets, sky };
+          ? await untilAborted(loadScene(), controller.signal)
+          : { name: mapName, map, assets, sky, customSprites };
       controller.signal.throwIfAborted();
+      flushSync(() =>
+        setPhase({ kind: "running", renderer: "columns", frame: 0 }),
+      );
       const result = await runSpeedTest({
         scene,
         clock,
@@ -99,6 +114,7 @@ export function SpeedTestDialog({
           const host = stage.current;
           if (!host) return null;
           const canvas = document.createElement("canvas");
+          canvases.push(canvas);
           canvas.className = "block size-full";
           host.replaceChildren(canvas);
           const renderer = createSceneRenderer(canvas, kind, 1, 1);
@@ -115,6 +131,7 @@ export function SpeedTestDialog({
           browser: navigator.userAgent,
           gpu: gpuName(),
           pixelRatio: globalThis.devicePixelRatio || 1,
+          hasTouch: navigator.maxTouchPoints > 0,
           stage: {
             width: stage.current?.clientWidth ?? 0,
             height: stage.current?.clientHeight ?? 0,
@@ -128,7 +145,13 @@ export function SpeedTestDialog({
       });
       setPhase({ kind: "done", report: speedTestReport(result) });
     } catch (error) {
-      if (controller.signal.aborted) setPhase({ kind: "ready" });
+      if (controller.signal.reason === hiddenReason) {
+        setPhase({
+          kind: "failed",
+          message:
+            "the page was hidden, which pauses drawing. Keep it in view and run it again.",
+        });
+      } else if (controller.signal.aborted) setPhase({ kind: "ready" });
       else {
         setPhase({
           kind: "failed",
@@ -136,6 +159,16 @@ export function SpeedTestDialog({
         });
       }
     } finally {
+      document.removeEventListener("visibilitychange", onHidden);
+      void wakeLock?.then((lock) => lock?.release());
+      // Browsers keep only a few WebGL contexts per page and drop the oldest,
+      // which may be the 3D view's, so the test's go at once.
+      for (const canvas of canvases) {
+        canvas
+          .getContext("webgl2")
+          ?.getExtension("WEBGL_lose_context")
+          ?.loseContext();
+      }
       stage.current?.replaceChildren();
       if (running.current === controller) running.current = null;
     }
@@ -207,6 +240,11 @@ export function SpeedTestDialog({
               {speedTestFrames}
             </p>
           ) : null}
+          {phase.kind === "loading" ? (
+            <p role="status" className="m-0 text-sm text-muted-foreground">
+              Loading the map
+            </p>
+          ) : null}
           {phase.kind === "done" ? (
             <pre
               ref={results}
@@ -223,7 +261,7 @@ export function SpeedTestDialog({
           ) : null}
         </div>
         <DialogFooter className="justify-end">
-          {phase.kind === "running" ? (
+          {phase.kind === "running" || phase.kind === "loading" ? (
             <Button onClick={cancel}>Cancel</Button>
           ) : (
             <>
@@ -246,4 +284,13 @@ export function SpeedTestDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+function untilAborted<T>(promise: Promise<T>, signal: AbortSignal) {
+  return new Promise<T>((resolve, reject) => {
+    signal.addEventListener("abort", () => reject(signal.reason), {
+      once: true,
+    });
+    promise.then(resolve, reject);
+  });
 }

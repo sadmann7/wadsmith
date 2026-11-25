@@ -147,6 +147,21 @@ describe("measureRenderer", () => {
     expect(fake.drawn[23].map).toBe(testMap);
   });
 
+  it("draws custom things the way the 3D view does", async () => {
+    const clock = fakeClock();
+    const fake = fakeRenderer("webgl", clock);
+    const customSprites = new Map([[9000, "SP00A"]]);
+    await measureRenderer(
+      fake.renderer,
+      { ...scene, customSprites },
+      {
+        frames: 2,
+        clock,
+      },
+    );
+    expect(fake.options.every((item) => item === customSprites)).toBe(true);
+  });
+
   it("leaves the frame after an edit out of the frame times", async () => {
     const clock = fakeClock(10, (frame) => (frame === 26 ? 50 : 0));
     const fake = fakeRenderer("webgl", clock);
@@ -163,6 +178,7 @@ describe("runSpeedTest", () => {
     browser: "Test browser",
     gpu: "Test GPU",
     pixelRatio: 2,
+    hasTouch: false,
     stage: { width: 640, height: 400 },
   });
 
@@ -260,6 +276,7 @@ function fakeClock(
 
 function fakeRenderer(kind: SceneRendererKind, clock: FakeClock) {
   const drawn: Drawn[] = [];
+  const options: unknown[] = [];
   let destroyed = 0;
   let reads = 0;
   const renderer: SceneRenderer = {
@@ -269,8 +286,9 @@ function fakeRenderer(kind: SceneRendererKind, clock: FakeClock) {
     focal: 160,
     sizeFor: () => ({ width: 320, height: 200 }),
     resize: () => undefined,
-    render(map, camera, options) {
-      drawn.push({ map, camera, opened: options.opened ?? [] });
+    render(map, camera, given) {
+      drawn.push({ map, camera, opened: given.opened ?? [] });
+      options.push(given.customSprites);
       clock.time += 4;
     },
     surfaceAt() {
@@ -286,6 +304,7 @@ function fakeRenderer(kind: SceneRendererKind, clock: FakeClock) {
   return {
     renderer,
     drawn,
+    options,
     destroyed: () => destroyed,
     reads: () => reads,
   };
@@ -300,6 +319,7 @@ describe("speedTestReport", () => {
         browser: "Safari 19",
         gpu: null,
         pixelRatio: 2,
+        hasTouch: true,
         stage: { width: 618, height: 386 },
       },
       renderers: [
@@ -328,6 +348,7 @@ describe("speedTestReport", () => {
         "Browser: Safari 19",
         "GPU: not shown by this browser",
         "Device pixel ratio: 2",
+        "Touch screen: yes",
         "View: 618×386 CSS pixels",
         "",
         "Column renderer",

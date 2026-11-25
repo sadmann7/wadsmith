@@ -3529,6 +3529,7 @@ export function EditorScreen({
           mapName={mapName}
           assets={assets}
           sky={sky ?? defaultSky(slot, iwadGame)}
+          customSprites={customSprites}
           onClose={() => setIsSpeedTesting(false)}
         />
       ) : null}

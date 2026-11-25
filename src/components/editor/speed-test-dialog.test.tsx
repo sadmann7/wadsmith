@@ -106,9 +106,57 @@ it("goes back to the start when cancelled, destroying the renderer", async () =>
   expect(closed).toBe(0);
 });
 
+it("stops and says so when the page is hidden", async () => {
+  const { clock, held, release } = testClock(50);
+  show(clock);
+  await React.act(async () => {
+    button("Start").click();
+    await held;
+  });
+  await React.act(async () => {
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: true,
+    });
+    document.dispatchEvent(new Event("visibilitychange"));
+    release();
+    await settle();
+  });
+  Reflect.deleteProperty(document, "hidden");
+  expect(document.querySelector('[role="alert"]')?.textContent).toContain(
+    "the page was hidden",
+  );
+  expect(renderers.made).toEqual([{ destroyed: true }]);
+});
+
+it("cancels while the map is still loading", async () => {
+  show(testClock().clock, () => new Promise(() => {}));
+  await React.act(async () => {
+    button("Start").click();
+    await settle();
+  });
+  expect(document.querySelector('[role="status"]')?.textContent).toBe(
+    "Loading the map",
+  );
+  await React.act(async () => {
+    button("Cancel").click();
+    await settle();
+  });
+  expect(button("Start")).toBeTruthy();
+  expect(renderers.made).toEqual([]);
+});
+
 const assets = createFlatAssets();
 
-function show(clock: SpeedTestClock) {
+function show(
+  clock: SpeedTestClock,
+  loadScene = async () => ({
+    name: "Bundled map",
+    map: testMap,
+    assets,
+    sky: "SKY1",
+  }),
+) {
   React.act(() =>
     root.render(
       <SpeedTestDialog
@@ -117,12 +165,7 @@ function show(clock: SpeedTestClock) {
         assets={assets}
         sky="SKY1"
         clock={clock}
-        loadScene={async () => ({
-          name: "Bundled map",
-          map: testMap,
-          assets,
-          sky: "SKY1",
-        })}
+        loadScene={loadScene}
         onClose={() => {
           closed += 1;
         }}

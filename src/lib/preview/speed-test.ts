@@ -32,23 +32,20 @@ export interface SpeedTestScene {
   map: GameMap;
   assets: SceneAssets;
   sky: string | null;
+  customSprites?: ReadonlyMap<number, string | null>;
 }
 
 export const freedoomSlot = "MAP03";
 
+let freedoomScene: Promise<SpeedTestScene> | null = null;
+
 // The bundled map, the same on every device, so runs compare.
-export async function loadFreedoomScene(): Promise<SpeedTestScene> {
-  const { data } = await fetchFreedoom();
-  const doom = readMaps([{ name: "freedoom2.wad", data }]).find(
-    (item) => item.slot === freedoomSlot,
-  );
-  if (!doom) throw new Error(`Freedoom has no ${freedoomSlot}.`);
-  return {
-    name: `Freedoom ${freedoomSlot}`,
-    map: decompileMap(doom).map,
-    assets: readWadAssets(data),
-    sky: defaultSky(freedoomSlot, defaultGame),
-  };
+export function loadFreedoomScene() {
+  freedoomScene ??= readFreedoomScene().catch((error: unknown) => {
+    freedoomScene = null;
+    throw error;
+  });
+  return freedoomScene;
 }
 
 export interface SpeedTestEdit {
@@ -84,6 +81,7 @@ export interface SpeedTestDevice {
   browser: string;
   gpu: string | null;
   pixelRatio: number;
+  hasTouch: boolean;
   stage: { width: number; height: number };
 }
 
@@ -236,7 +234,11 @@ export async function measureRenderer(
 ): Promise<RendererResult> {
   const cameras = speedTestPath(scene.map, frames);
   const edits = speedTestEdits(scene.map);
-  const options = { assets: scene.assets, sky: scene.sky };
+  const options = {
+    assets: scene.assets,
+    sky: scene.sky,
+    customSprites: scene.customSprites,
+  };
   const middle = {
     x: Math.floor(renderer.width / 2),
     y: Math.floor(renderer.height / 2),
@@ -337,6 +339,20 @@ export async function runSpeedTest({
   };
 }
 
+async function readFreedoomScene(): Promise<SpeedTestScene> {
+  const { data } = await fetchFreedoom();
+  const doom = readMaps([{ name: "freedoom2.wad", data }]).find(
+    (item) => item.slot === freedoomSlot,
+  );
+  if (!doom) throw new Error(`Freedoom has no ${freedoomSlot}.`);
+  return {
+    name: `Freedoom ${freedoomSlot}`,
+    map: decompileMap(doom).map,
+    assets: readWadAssets(data),
+    sky: defaultSky(freedoomSlot, defaultGame),
+  };
+}
+
 const stationLimit = 6;
 
 function pathStations(map: GameMap) {
@@ -390,6 +406,7 @@ export function speedTestReport(result: SpeedTestResult) {
     `Browser: ${device.browser}`,
     `GPU: ${device.gpu ?? "not shown by this browser"}`,
     `Device pixel ratio: ${device.pixelRatio}`,
+    `Touch screen: ${device.hasTouch ? "yes" : "no"}`,
     `View: ${device.stage.width}×${device.stage.height} CSS pixels`,
   ];
   for (const item of result.renderers) {
