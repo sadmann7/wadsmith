@@ -4,12 +4,13 @@ import { describe, expect, it } from "vitest";
 
 import { starterMap } from "@/lib/map/starter-map";
 import { parseMapFile, serializeMap } from "@/lib/map/storage";
+import { testMap } from "@/lib/map/test-map";
 
 import { compileMap } from "./compile";
 import { decompileMap } from "./decompile";
 import { WadFileError } from "./inspect";
 import { type DoomMap, readMaps } from "./read-map";
-import { packTestWad } from "./test-wad";
+import { packTestWad, packUdmfTestWad } from "./test-wad";
 import { readTextmap } from "./udmf";
 
 const freedoom = resolve(
@@ -94,9 +95,9 @@ describe("UDMF maps", () => {
         const { udmf, ...read } = readTextmap(doom.slot, toTextmap(doom));
         expect(read, doom.slot).toEqual(plain);
         expect(udmf?.droppedFields, doom.slot).toEqual({});
-        expect(decompileMap({ ...read, udmf }).map, doom.slot).toEqual(
-          decompileMap(plain).map,
-        );
+        const { map } = decompileMap({ ...read, udmf });
+        expect(map, doom.slot).toEqual(decompileMap(plain).map);
+        expect(parseMapFile(serializeMap(map)), doom.slot).toEqual(map);
       }
     },
     300_000,
@@ -202,7 +203,95 @@ describe("UDMF maps", () => {
     ]);
     expect(doom.things[0].angle).toBe(0);
   });
+
+  it("renumber tags over 32767 and keep what they link", () => {
+    const [doom] = readMaps([udmfWad(["MAP01", bigTagRoom])]);
+    expect(doom.sectors[0].tag).toBe(40000);
+    const { map, report } = decompileMap(doom);
+    expect(parseMapFile(serializeMap(map))).toEqual(map);
+    expect(report.renumberedTags).toBe(1);
+    const [line] = Object.values(map.lines ?? {});
+    expect(line.action?.tag).toBe(map.sectors[0].tag);
+  });
+
+  it("open a door at the height limit only as far as the limit", () => {
+    const [doom] = readMaps([udmfWad(["MAP01", doorAtLimit()])]);
+    const { map, report } = decompileMap(doom);
+    expect(parseMapFile(serializeMap(map))).toEqual(map);
+    expect(map.sectors.find((sector) => sector.door)?.ceiling).toBe(32767);
+    expect(report.clampedHeights).toBe(1);
+  });
+
+  it("save and reload every sample map", () => {
+    const classic = [starterMap, testMap].map(
+      (source) => readMaps([{ name: "map.wad", data: compileMap(source) }])[0],
+    );
+    const wads = [
+      udmfWad(
+        ["MAP01", room("doom")],
+        ["MAP02", room("woof")],
+        ["MAP03", bigTagRoom],
+        ["MAP04", doorAtLimit()],
+        ...classic.map((doom, at): [string, string] => [
+          `MAP1${at}`,
+          toTextmap(doom),
+        ]),
+      ),
+      ...["doom", "woof"].flatMap((namespace) =>
+        [starterMap, testMap].map((source) => ({
+          name: `${namespace}.wad`,
+          data: packUdmfTestWad(source, { namespace }),
+        })),
+      ),
+    ];
+    for (const wad of wads) {
+      for (const doom of readMaps([wad])) {
+        const { map } = decompileMap(doom);
+        expect(parseMapFile(serializeMap(map)), doom.slot).toEqual(map);
+      }
+    }
+  });
 });
+
+const bigTagRoom = room("doom")
+  .replace("heightceiling = 128;", "heightceiling = 128; id = 40000;")
+  .replace(
+    "v2 = 0; sidefront = 0;",
+    "v2 = 0; sidefront = 0; special = 23; arg0 = 40000;",
+  );
+
+function doorAtLimit() {
+  const out = ['namespace = "doom";'];
+  const sides: string[] = [];
+  for (const y of [0, 128]) {
+    for (const x of [0, 256, 288, 544]) {
+      out.push(`vertex { x = ${x}.0; y = ${y}.0; }`);
+    }
+  }
+  const side = (sector: number, texture: string) =>
+    sides.push(`sidedef { sector = ${sector}; ${texture} = "STARTAN3"; }`) -
+    1;
+  const line = (v1: number, v2: number, front: number, back?: number) =>
+    out.push(
+      back === undefined
+        ? `linedef { v1 = ${v1}; v2 = ${v2}; blocking = true; sidefront = ${side(front, "texturemiddle")}; }`
+        : `linedef { v1 = ${v1}; v2 = ${v2}; twosided = true; special = 1; sidefront = ${side(front, "texturetop")}; sideback = ${side(back, "texturetop")}; }`,
+    );
+  line(0, 4, 0);
+  line(7, 3, 2);
+  for (const at of [0, 1, 2]) {
+    line(4 + at, 5 + at, at);
+    line(1 + at, at, at);
+  }
+  line(5, 1, 0, 1);
+  line(2, 6, 2, 1);
+  for (const ceiling of [32722, 32720, 32722]) {
+    out.push(
+      `sector { heightfloor = 32720; heightceiling = ${ceiling}; texturefloor = "FLOOR4_8"; textureceiling = "CEIL3_5"; }`,
+    );
+  }
+  return [...out, ...sides].join("\n");
+}
 
 describe("TEXTMAP grammar", () => {
   const vertex = (body: string) =>

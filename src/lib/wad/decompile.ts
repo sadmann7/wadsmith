@@ -71,6 +71,9 @@ export interface ImportReport {
   solidSectors: number;
   namespace: string | null;
   droppedFields: Record<string, number>;
+  renumberedTags: number;
+  clampedHeights: number;
+  clampedOffsets: number;
 }
 
 interface Edge {
@@ -117,6 +120,7 @@ const skillFlags: [ThingSkill, number][] = [
 ];
 const doorOpenGap = 4;
 const fallbackDoorHeight = 72;
+const wordLimit = 32767;
 const fallbackWall = "STARTAN3";
 const fallbackFloor = "FLOOR4_8";
 const fallbackCeiling = "CEIL3_5";
@@ -134,7 +138,7 @@ const thingKindOf = new Map<number, ThingKind>(
   thingKinds.map((kind) => [thingCatalog[kind].doomType, kind]),
 );
 export function decompileMap(
-  doom: DoomMap,
+  wad: DoomMap,
   names: TextureNames = freedoomNames,
 ): { map: GameMap; report: ImportReport } {
   const walls = new Set(names.walls);
@@ -147,16 +151,21 @@ export function decompileMap(
     droppedThings: {},
     multiplayerThings: 0,
     outsideThings: 0,
-    droppedActions: { ...doom.udmf?.droppedActions },
+    droppedActions: { ...wad.udmf?.droppedActions },
     droppedEffects: 0,
     replacedTextures: [],
     seeThroughWalls: 0,
     innerLines: 0,
     plainDoors: 0,
     solidSectors: 0,
-    namespace: doom.udmf?.namespace ?? null,
-    droppedFields: { ...doom.udmf?.droppedFields },
+    namespace: wad.udmf?.namespace ?? null,
+    droppedFields: { ...wad.udmf?.droppedFields },
+    renumberedTags: 0,
+    clampedHeights: 0,
+    clampedOffsets: 0,
   };
+  const clamped = new Set<number>();
+  const doom = fitWords(wad, report, clamped);
   const replaced = new Set<string>();
   const wall = (name: string, fallback = fallbackWall) => {
     if (walls.has(name)) return name;
@@ -456,13 +465,16 @@ export function decompileMap(
     const lowest = Math.min(
       ...[...neighbors[index]].map((other) => doom.sectors[other].ceiling),
     );
-    const opened =
-      Number.isFinite(lowest) && lowest - doorOpenGap > source.floor
-        ? lowest - doorOpenGap
-        : source.floor + fallbackDoorHeight;
+    const hasRoom =
+      Number.isFinite(lowest) && lowest - doorOpenGap > source.floor;
+    const opened = hasRoom
+      ? lowest - doorOpenGap
+      : Math.min(source.floor + fallbackDoorHeight, wordLimit);
+    const isCut = !hasRoom && source.floor + fallbackDoorHeight > wordLimit;
     // A door the editor can't hold stays open, so the level can still be played.
     if (doorCandidates.get(index) && source.ceiling <= source.floor) {
       ceiling = opened;
+      if (isCut) clamped.add(index);
     }
     if (doors.has(index)) {
       const uppers = ownLines.map(
@@ -493,6 +505,7 @@ export function decompileMap(
       doorOf.set(index, door);
       if (upper) doorFaceOf.set(index, upper);
       ceiling = opened;
+      if (isCut) clamped.add(index);
     }
 
     pieces[index].forEach((region, part) => {
@@ -525,6 +538,7 @@ export function decompileMap(
     });
   });
   report.rooms = sectors.length;
+  report.clampedHeights = clamped.size;
 
   // One sector can be two doors apart, opened together by either one's
   // lines. Cut into pieces, a piece with no opening line of its own would
@@ -836,6 +850,57 @@ export function decompileMap(
     },
     report,
   };
+}
+
+// The saved map holds words up to 32767 only, where a WAD's tags and
+// specials run to 65535 and its heights and offsets down to -32768.
+function fitWords(
+  doom: DoomMap,
+  report: ImportReport,
+  clamped: Set<number>,
+): DoomMap {
+  const used = new Set([...doom.lines, ...doom.sectors].map(({ tag }) => tag));
+  const renumbered = new Map<number, number>();
+  let free = 1;
+  const tag = (value: number) => {
+    if (value <= wordLimit) return value;
+    let next = renumbered.get(value);
+    if (next === undefined) {
+      while (used.has(free)) free += 1;
+      next = Math.min(free, wordLimit);
+      used.add(next);
+      renumbered.set(value, next);
+    }
+    return next;
+  };
+  const word = (value: number) => Math.max(value, -wordLimit);
+  const pastSpecials = "Specials past 32767";
+
+  const lines = doom.lines.map((line) => {
+    if (line.special <= wordLimit) return { ...line, tag: tag(line.tag) };
+    report.droppedActions[pastSpecials] =
+      (report.droppedActions[pastSpecials] ?? 0) + 1;
+    return { ...line, special: 0, tag: tag(line.tag) };
+  });
+  const sectors = doom.sectors.map((sector, index) => {
+    const floor = word(sector.floor);
+    const ceiling = word(sector.ceiling);
+    if (floor !== sector.floor || ceiling !== sector.ceiling) {
+      clamped.add(index);
+    }
+    const special = sector.special <= wordLimit ? sector.special : 0;
+    if (special !== sector.special) report.droppedEffects += 1;
+    return { ...sector, floor, ceiling, special, tag: tag(sector.tag) };
+  });
+  const sides = doom.sides.map((side) => {
+    const offsetX = word(side.offsetX);
+    const offsetY = word(side.offsetY);
+    if (offsetX === side.offsetX && offsetY === side.offsetY) return side;
+    report.clampedOffsets += 1;
+    return { ...side, offsetX, offsetY };
+  });
+  report.renumberedTags = renumbered.size;
+  return { ...doom, lines, sectors, sides };
 }
 
 // The engine raises these doors from the sector behind the line that's used.
