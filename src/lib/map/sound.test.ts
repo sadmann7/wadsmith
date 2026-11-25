@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { createFlatAssets } from "@/lib/wad/assets";
+
 import type { GameMap, LineActionKind } from "./types";
 
 import { setLineTarget, updateLine, updateSector } from "./edit";
@@ -7,9 +9,11 @@ import { wallKey, wallOwners } from "./geometry";
 import { soundReach } from "./sound";
 import { testMap } from "./test-map";
 
+const assets = createFlatAssets();
+
 describe("soundReach", () => {
   it("stops at a shut door", () => {
-    const reach = soundReach(testMap, "sector-1");
+    const reach = soundReach(testMap, "sector-1", assets);
     expect([...reach.rooms]).toEqual([
       ["sector-1", "heard"],
       ["sector-2", "heard"],
@@ -18,7 +22,7 @@ describe("soundReach", () => {
   });
 
   it("wakes the monsters past an open door", () => {
-    const reach = soundReach(testMap, "sector-1", { doorsOpen: true });
+    const reach = soundReach(testMap, "sector-1", assets, { doorsOpen: true });
     expect(reach.rooms.get("sector-3")).toBe("heard");
     expect(reach.woken).toEqual(["zombieman-1", "imp-1"]);
   });
@@ -35,7 +39,7 @@ describe("soundReach", () => {
       ...testMap,
       lines: { ...testMap.lines, [wall]: { soundBlock: true } },
     };
-    const reach = soundReach(blocked, "sector-1", { doorsOpen: true });
+    const reach = soundReach(blocked, "sector-1", assets, { doorsOpen: true });
     expect(reach.rooms.get("sector-1")).toBe("heard");
     expect(reach.rooms.get("sector-2")).toBe("muffled");
     expect(reach.rooms.get("sector-3")).toBe("muffled");
@@ -48,7 +52,7 @@ describe("soundReach", () => {
         thing.id === "imp-1" ? { ...thing, ambush: true } : thing,
       ),
     };
-    const reach = soundReach(deafMap, "sector-1", { doorsOpen: true });
+    const reach = soundReach(deafMap, "sector-1", assets, { doorsOpen: true });
     expect(reach.woken).toEqual(["zombieman-1"]);
     expect(reach.deaf).toEqual(["imp-1"]);
   });
@@ -58,10 +62,10 @@ describe("soundReach", () => {
       updateSector(testMap, "sector-2", { floor: 96 }),
       "lift",
     );
-    expect([...soundReach(lift, "sector-1").rooms.keys()]).toEqual([
+    expect([...soundReach(lift, "sector-1", assets).rooms.keys()]).toEqual([
       "sector-1",
     ]);
-    const lowered = soundReach(lift, "sector-1", { floorsMoved: true });
+    const lowered = soundReach(lift, "sector-1", assets, { floorsMoved: true });
     expect(lowered.rooms.get("sector-2")).toBe("heard");
   });
 
@@ -71,10 +75,31 @@ describe("soundReach", () => {
       updateSector(testMap, "sector-4", { door: undefined }),
       "floor-raise",
     );
-    expect(soundReach(raising, "sector-1").rooms.get("sector-2")).toBe("heard");
-    const raised = soundReach(raising, "sector-1", { floorsMoved: true });
+    expect(soundReach(raising, "sector-1", assets).rooms.get("sector-2")).toBe(
+      "heard",
+    );
+    const raised = soundReach(raising, "sector-1", assets, {
+      floorsMoved: true,
+    });
     expect([...raised.rooms.keys()]).toEqual(["sector-1"]);
     expect(raised.woken).toEqual([]);
+  });
+
+  it("raises a floor by its shortest lower texture, as the 3D view does", () => {
+    const raising = corridorMover(
+      updateSector(testMap, "sector-4", { door: undefined }),
+      "floor-raise-texture",
+    );
+    const tall = {
+      ...assets,
+      texture: (name: string) => ({ ...assets.texture(name), height: 128 }),
+    };
+    const raised = soundReach(raising, "sector-1", tall, { floorsMoved: true });
+    expect([...raised.rooms.keys()]).toEqual(["sector-1"]);
+    const still = soundReach(raising, "sector-1", assets, {
+      floorsMoved: true,
+    });
+    expect(still.rooms.get("sector-2")).toBe("heard");
   });
 });
 
