@@ -199,7 +199,13 @@ function losses(reports: ImportReport[], gameLabel: string) {
   const fields = tally(reports.map((report) => report.droppedFields));
   if (fields.length > 0) {
     const namespaces = [
-      ...new Set(reports.flatMap((report) => report.namespace ?? [])),
+      ...new Set(
+        reports.flatMap((report) =>
+          report.namespace && Object.keys(report.droppedFields).length > 0
+            ? report.namespace
+            : [],
+        ),
+      ),
     ];
     rows.push({
       label: plural(
