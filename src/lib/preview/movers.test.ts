@@ -14,10 +14,10 @@ import { wallKey } from "@/lib/map/geometry";
 import { testMap } from "@/lib/map/test-map";
 
 import {
+  type GameTextures,
   getIsMover,
   movedRooms,
   moverAt,
-  type TextureHeight,
   withMovers,
 } from "./movers";
 
@@ -145,6 +145,9 @@ describe("doors and lifts in the 3D view", () => {
 
 const westWall = wallKey("t0", "b0");
 const between = (at: number) => wallKey(`t${at}`, `b${at}`);
+const textures = gameTextures((name) =>
+  name === "AASHITTY" ? 16 : name === "NOSUCH" ? null : 128,
+);
 
 describe("stairs, donuts, platforms and crushers in the 3D view", () => {
   it("builds stairs through the rooms each step is in front of, while the floor matches", () => {
@@ -255,10 +258,11 @@ describe("stairs, donuts, platforms and crushers in the 3D view", () => {
       [{}, { tag: 1, wallTexture: "SHORT" }, {}],
       acting("floor-raise-texture"),
     );
-    const textureHeight = (name: string) => (name === "SHORT" ? 64 : 128);
-    expect(heights(map, ["r1"], textureHeight)[1]).toEqual([64, 128]);
+    const textures = gameTextures((name) => (name === "SHORT" ? 64 : 128));
+    expect(heights(map, ["r1"], textures)[1]).toEqual([64, 128]);
     expect(heights(map, ["r1"])[1]).toEqual([0, 128]);
-    expect(heights(map, ["r1"], () => null)[1]).toEqual([0, 128]);
+    const none = { height: () => null, first: null, flats: [] };
+    expect(heights(map, ["r1"], none)[1]).toEqual([0, 128]);
     expect(getIsMover(map, "r1")).toBe(true);
   });
 });
@@ -408,6 +412,184 @@ describe("several movers on one room", () => {
   });
 });
 
+describe("vanilla's rarer mover quirks in the 3D view", () => {
+  it("stops a second opened mover at the other plane only when it moves towards it", () => {
+    const map = row(
+      [{}, { tag: 1 }, { tag: 2 }],
+      {
+        ...acting("stairs"),
+        [wallKey("t2", "t3")]: boom("ceiling", { direction: 1, target: 4 }, 2)[
+          westWall
+        ],
+      },
+      "boom",
+    );
+    expect(heights(map, ["r1", "r2"])[2]).toEqual([16, 0]);
+  });
+
+  it("stops a rising floor at a ceiling an earlier opened mover has moved", () => {
+    const map = row(
+      [{}, { tag: 2, ceiling: 8 }, { tag: 1 }],
+      {
+        [between(2)]: { front: "r2" },
+        [westWall]: boom("ceiling", { direction: 1, target: 0 }, 2)[westWall],
+        [wallKey("t3", "b3")]: acting("stairs")[westWall],
+      },
+      "boom",
+    );
+    expect(heights(map, ["r1", "r2"])[1]).toEqual([16, 128]);
+  });
+
+  it("changes the floor texture where the action takes one", () => {
+    const rooms = [
+      { floor: -16, floorTexture: "NUKAGE1" },
+      { tag: 1 },
+      { floor: 24, floorTexture: "FLAT5_4" },
+    ];
+    const floorTexture = (
+      lines: Record<string, LineSettings>,
+      complevel: GameMap["complevel"] = "vanilla",
+    ) =>
+      withMovers(row(rooms, lines, complevel), ["r1"]).sectors[1].floorTexture;
+    expect(floorTexture({})).toBe("FLOOR4_8");
+    expect(floorTexture(acting("floor-raise-24-texture"))).toBe("NUKAGE1");
+    expect(floorTexture(acting("floor-raise-next-texture"))).toBe("NUKAGE1");
+    expect(floorTexture(acting("floor-lower-texture"))).toBe("NUKAGE1");
+    expect(floorTexture(acting("floor-raise-24"))).toBe("FLOOR4_8");
+    const changed = (values: Record<string, number>) =>
+      floorTexture(boom("floor", { change: 2, ...values }), "boom");
+    expect(changed({ direction: 1, target: 0, model: 0 })).toBe("NUKAGE1");
+    expect(changed({ direction: 1, target: 0, model: 1 })).toBe("FLAT5_4");
+    expect(changed({ direction: 1, target: 6, model: 1 })).toBe("FLAT5_4");
+    expect(changed({ direction: 1, target: 7, model: 1 })).toBe("FLOOR4_8");
+    expect(changed({ direction: 1, target: 0, change: 0 })).toBe("FLOOR4_8");
+    const ceiling = withMovers(
+      row(
+        [{ ceilingTexture: "F_SKY1" }, { tag: 1 }, {}],
+        boom("ceiling", { direction: 0, target: 4, change: 2 }),
+        "boom",
+      ),
+      ["r1"],
+    ).sectors[1];
+    expect(ceiling.ceilingTexture).toBe("F_SKY1");
+    const donut = row(
+      [
+        { floor: 16, floorTexture: "NUKAGE1" },
+        { floor: -32 },
+        { floor: 64, tag: 1 },
+      ],
+      { ...acting("donut"), [between(1)]: { front: "r1" } },
+    );
+    expect(
+      withMovers(donut, ["r2"]).sectors.map((sector) => sector.floorTexture),
+    ).toEqual(["NUKAGE1", "NUKAGE1", "FLOOR4_8"]);
+  });
+
+  it("counts a line drawn inside a room as the first texture for the shortest lower wall on vanilla", () => {
+    const map = (complevel: GameMap["complevel"]) => {
+      const rooms = row(
+        [{}, { tag: 1 }, {}],
+        acting("floor-raise-texture"),
+        complevel,
+      );
+      return {
+        ...rooms,
+        vertices: {
+          ...rooms.vertices,
+          d0: { x: 80, y: 64 },
+          d1: { x: 112, y: 64 },
+        },
+        sectors: rooms.sectors.map((sector) =>
+          sector.id === "r1" ? { ...sector, details: [["d0", "d1"]] } : sector,
+        ),
+      };
+    };
+    expect(heights(map("vanilla"), ["r1"], textures)[1]).toEqual([16, 128]);
+    expect(heights(map("boom"), ["r1"], textures)[1]).toEqual([128, 128]);
+  });
+
+  it("counts a wall that names the first texture, or one the game lacks, as the first texture on vanilla", () => {
+    const map = (lower: string, complevel: GameMap["complevel"]) =>
+      row(
+        [{}, { tag: 1 }, {}],
+        {
+          ...acting("floor-raise-texture"),
+          [between(2)]: { sides: { r1: { lower } } },
+        },
+        complevel,
+      );
+    const floor = (lower: string, complevel: GameMap["complevel"]) =>
+      heights(map(lower, complevel), ["r1"], textures)[1][0];
+    expect(floor("AASHITTY", "vanilla")).toBe(16);
+    expect(floor("NOSUCH", "vanilla")).toBe(16);
+    expect(floor("AASHITTY", "boom")).toBe(128);
+    expect(floor("NOSUCH", "boom")).toBe(128);
+    const unknown = { ...textures, first: null };
+    expect(heights(map("NOSUCH", "vanilla"), ["r1"], unknown)[1][0]).toBe(128);
+  });
+
+  it("gives the pool the flat vanilla's donut overrun reads", () => {
+    const map = (complevel: GameMap["complevel"]) =>
+      row(
+        [
+          { floor: -32, floorTexture: "NUKAGE1" },
+          { floor: 64, tag: 1 },
+        ],
+        acting("donut"),
+        complevel,
+      );
+    const pool = (
+      complevel: GameMap["complevel"],
+      flats?: GameTextures["flats"],
+    ) => {
+      const [first] = withMovers(
+        map(complevel),
+        ["r1"],
+        flats && { ...textures, flats },
+      ).sectors;
+      return [first.floor, first.floorTexture];
+    };
+    const numbered = Array.from({ length: 30 }, (_, at) => `FLAT${at}`);
+    expect(pool("vanilla", numbered)).toEqual([0x199257 / 0x10000, "FLAT22"]);
+    expect(pool("vanilla", numbered.slice(0, 5))).toEqual([
+      0x199257 / 0x10000,
+      "FLAT4",
+    ]);
+    expect(pool("vanilla")).toEqual([0x199257 / 0x10000, "NUKAGE1"]);
+    expect(pool("boom", numbered)).toEqual([-32, "NUKAGE1"]);
+  });
+
+  it("skips a tagged room before a vanilla stair's last step", () => {
+    const map = (complevel: GameMap["complevel"]) => {
+      const rooms = row(
+        [
+          { tag: 1 },
+          {},
+          {},
+          { floorTexture: "FLAT5_4" },
+          { tag: 1, floorTexture: "FLAT5_4" },
+        ],
+        acting("stairs"),
+        complevel,
+      );
+      const [first, second, third, fourth, fifth] = rooms.sectors;
+      return { ...rooms, sectors: [first, fifth, second, third, fourth] };
+    };
+    const floors = (complevel: GameMap["complevel"]) =>
+      withMovers(map(complevel), ["r0", "r4"]).sectors.map(
+        (sector) => `${sector.id} ${sector.floor}`,
+      );
+    expect(floors("vanilla")).toEqual([
+      "r0 8",
+      "r4 0",
+      "r1 16",
+      "r2 24",
+      "r3 0",
+    ]);
+    expect(floors("boom")).toEqual(["r0 8", "r4 8", "r1 16", "r2 24", "r3 16"]);
+  });
+});
+
 // Rooms side by side from west to east, each 64 wide, so each room is in
 // front of the line to the next.
 function row(
@@ -457,12 +639,13 @@ function boom(name: string, values: Record<string, number>, tag = 1) {
   return { [westWall]: { raw: { special, tag } } };
 }
 
-function heights(
-  map: GameMap,
-  opened: string[],
-  textureHeight?: TextureHeight,
-) {
-  return withMovers(map, opened, textureHeight).sectors.map(
-    ({ floor, ceiling }) => [floor, ceiling],
-  );
+function heights(map: GameMap, opened: string[], textures?: GameTextures) {
+  return withMovers(map, opened, textures).sectors.map(({ floor, ceiling }) => [
+    floor,
+    ceiling,
+  ]);
+}
+
+function gameTextures(height: GameTextures["height"]): GameTextures {
+  return { height, first: "AASHITTY", flats: [] };
 }

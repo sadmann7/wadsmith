@@ -2,7 +2,7 @@ import type { GameMap } from "@/lib/map/types";
 import type { Picture, SceneAssets } from "@/lib/wad/assets";
 
 import { defined } from "@/lib/defined";
-import { shadeLevels, textureHeightOf } from "@/lib/wad/assets";
+import { gameTexturesOf, shadeLevels } from "@/lib/wad/assets";
 
 import type { SceneRenderer } from "./scene-renderer";
 
@@ -482,7 +482,7 @@ function buildRenderer(
       const map = withMovers(
         sourceMap,
         options.opened ?? noMovers,
-        textureHeightOf(options.assets),
+        gameTexturesOf(options.assets),
       );
       const current = meshFor(map, options);
       const { mesh } = current;

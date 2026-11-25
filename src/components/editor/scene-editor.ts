@@ -66,7 +66,7 @@ import {
   type SceneRendererKind,
 } from "@/lib/preview/scene-renderer";
 import { countNotches } from "@/lib/preview/wheel";
-import { type SceneAssets, textureHeightOf } from "@/lib/wad/assets";
+import { gameTexturesOf, type SceneAssets } from "@/lib/wad/assets";
 
 export type DraftSource = (
   listener: (map: GameMap | null) => void,
@@ -303,7 +303,7 @@ const sceneEditor = definePrimitive({
     const viewMap = () => {
       const map = shownMap();
       const { assets, opened } = store.get();
-      return map ? withMovers(map, opened, heightsOf(assets)) : null;
+      return map ? withMovers(map, opened, gameTexturesFor(assets)) : null;
     };
 
     // A door or lift that is gone, or no longer one, stops being shown open.
@@ -877,7 +877,7 @@ const sceneEditor = definePrimitive({
         !(
           map &&
           info.sector &&
-          movedRooms(map, opened, heightsOf(assets)).has(info.sector.id)
+          movedRooms(map, opened, gameTexturesFor(assets)).has(info.sector.id)
         )
       );
     };
@@ -1423,9 +1423,9 @@ const sceneEditor = definePrimitive({
           // The door or lift under the pointer, or else the selected one,
           // stands open until the key is pressed on it again.
           const { hovered, selected, opened, assets } = store.get();
-          const heights = heightsOf(assets);
+          const textures = gameTexturesFor(assets);
           const mover =
-            moverAt(map, hovered, heights) ?? moverAt(map, selected, heights);
+            moverAt(map, hovered, textures) ?? moverAt(map, selected, textures);
           if (!mover) return;
           event.preventDefault();
           store.set({
@@ -1471,9 +1471,11 @@ const sceneEditor = definePrimitive({
           (surface?.kind === "floor" || surface?.kind === "ceiling") &&
           !(
             state.map &&
-            movedRooms(state.map, state.opened, heightsOf(state.assets)).has(
-              surface.sector,
-            )
+            movedRooms(
+              state.map,
+              state.opened,
+              gameTexturesFor(state.assets),
+            ).has(surface.sector)
           )
         ) {
           hover = "height";
@@ -1563,8 +1565,8 @@ function liftWithin(map: GameMap, point: Point, lift: number) {
   return Math.max(lowest, Math.min(highest, lift));
 }
 
-function heightsOf(assets: SceneAssets | null) {
-  return assets ? textureHeightOf(assets) : undefined;
+function gameTexturesFor(assets: SceneAssets | null) {
+  return assets ? gameTexturesOf(assets) : undefined;
 }
 
 function standable(map: GameMap, point: Point) {

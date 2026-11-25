@@ -112,6 +112,9 @@ export function WadImportDialog({
                       <span className="min-w-0 truncate text-muted-foreground">
                         {plural(entry.report.rooms, "room")} ·{" "}
                         {plural(entry.map.things.length, "thing")}
+                        {entry.report.namespace
+                          ? ` · UDMF, ${entry.report.namespace}`
+                          : ""}
                       </span>
                       <span className="font-mono text-xs text-muted-foreground">
                         {on ? `→ ${target(entry)}` : ""}
@@ -193,6 +196,35 @@ function losses(reports: ImportReport[], gameLabel: string) {
       detail: actions.map(([name, count]) => `${name} ×${count}`).join(", "),
     });
   }
+  const nearest = tally(reports.map((report) => report.nearestActions));
+  if (nearest.length > 0) {
+    rows.push({
+      label: plural(
+        nearest.reduce((total, [, count]) => total + count, 0),
+        "approximate action",
+      ),
+      detail: `Doom has no exact match for their speed, delay, key or repeat, so the closest one is used: ${nearest.map(([name, count]) => `${name} ×${count}`).join(", ")}.`,
+    });
+  }
+  const fields = tally(reports.map((report) => report.droppedFields));
+  if (fields.length > 0) {
+    const namespaces = [
+      ...new Set(
+        reports.flatMap((report) =>
+          report.namespace && Object.keys(report.droppedFields).length > 0
+            ? report.namespace
+            : [],
+        ),
+      ),
+    ];
+    rows.push({
+      label: plural(
+        fields.reduce((total, [, count]) => total + count, 0),
+        "UDMF field",
+      ),
+      detail: `Not kept from the ${namespaces.join(" and ")} ${namespaces.length === 1 ? "namespace" : "namespaces"}: ${fields.map(([name, count]) => `${name} ×${count}`).join(", ")}.`,
+    });
+  }
   const seeThrough = sum(reports, (report) => report.seeThroughWalls);
   if (seeThrough > 0) {
     rows.push({
@@ -211,6 +243,29 @@ function losses(reports: ImportReport[], gameLabel: string) {
     rows.push({
       label: plural(effects, "room effect"),
       detail: "Lighting and damage effects the editor doesn't have yet.",
+    });
+  }
+  const tags = sum(reports, (report) => report.renumberedTags);
+  if (tags > 0) {
+    rows.push({
+      label: plural(tags, "tag"),
+      detail:
+        "Over 32767, so given new numbers. The lines and rooms they link still match.",
+    });
+  }
+  const heights = sum(reports, (report) => report.clampedHeights);
+  if (heights > 0) {
+    rows.push({
+      label: plural(heights, "room height"),
+      detail:
+        "Outside −32767 to 32767, so held at the limit. A door near the top opens less.",
+    });
+  }
+  const offsets = sum(reports, (report) => report.clampedOffsets);
+  if (offsets > 0) {
+    rows.push({
+      label: plural(offsets, "texture offset"),
+      detail: "At −32768, so moved to −32767.",
     });
   }
   const multiplayer = sum(reports, (report) => report.multiplayerThings);

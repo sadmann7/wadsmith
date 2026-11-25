@@ -1,5 +1,6 @@
 import type { TextureNames } from "@/lib/map/textures";
 import type { ThingKind } from "@/lib/map/types";
+import type { GameTextures } from "@/lib/preview/movers";
 
 import { defined } from "@/lib/defined";
 import { thingCatalog, thingKinds } from "@/lib/map/catalog";
@@ -26,6 +27,11 @@ export interface SceneAssets {
   shades: Uint32Array;
   names: TextureNames;
   texture: (name: string) => Picture;
+  // The game's first texture, which the engine reads for "-" and for a name
+  // it doesn't know.
+  firstTexture: { name: string; height: number } | null;
+  // The game's flats as the engine numbers them, null for a marker.
+  flatOrder: readonly (string | null)[];
   flat: (name: string) => Picture;
   sprite: (kind: ThingKind) => Picture | null;
   // A sprite by its name and frame, like "TROOA", facing front.
@@ -34,24 +40,27 @@ export interface SceneAssets {
 
 export const shadeLevels = 32;
 
-const textureHeights = new WeakMap<
-  SceneAssets,
-  (name: string) => number | null
->();
+const gameTextures = new WeakMap<SceneAssets, GameTextures>();
 
-// One function per set of assets, so the views that read texture heights
-// share what they work out from them. A texture with no picture to draw, or
-// any texture without an IWAD, comes back 1 high, so its height is unknown.
-export function textureHeightOf(assets: SceneAssets) {
-  let height = textureHeights.get(assets);
-  if (!height) {
-    height = (name: string) => {
-      const picture = assets.texture(name);
-      return picture.height > 1 ? picture.height : null;
+// One lookup per set of assets, so the views that read it share what they
+// work out from it. A texture with no picture to draw, or any texture without
+// an IWAD, comes back 1 high, so its height is unknown.
+export function gameTexturesOf(assets: SceneAssets) {
+  let textures = gameTextures.get(assets);
+  if (!textures) {
+    const first = assets.firstTexture;
+    textures = {
+      height(name) {
+        if (name === first?.name) return first.height;
+        const picture = assets.texture(name);
+        return picture.height > 1 ? picture.height : null;
+      },
+      first: first?.name ?? null,
+      flats: assets.flatOrder,
     };
-    textureHeights.set(assets, height);
+    gameTextures.set(assets, textures);
   }
-  return height;
+  return textures;
 }
 
 // A sprite's name and frame, matched to its first lump facing front.
@@ -278,6 +287,13 @@ export function readWadAssets(
       textureCache.set(name, picture);
       return picture;
     },
+    firstTexture: catalog.placeholder
+      ? {
+          name: catalog.placeholder,
+          height: defined(definitions.get(catalog.placeholder)).height,
+        }
+      : null,
+    flatOrder: catalog.flatOrder.map((name) => (flats.has(name) ? name : null)),
     flat(name) {
       const cached = flatCache.get(name);
       if (cached) return cached;
@@ -418,6 +434,8 @@ export function createFlatAssets(): SceneAssets {
     shades,
     names: freedoomNames,
     texture: tile,
+    firstTexture: null,
+    flatOrder: [],
     flat: tile,
     sprite(kind) {
       const monster =

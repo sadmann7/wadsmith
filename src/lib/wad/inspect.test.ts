@@ -6,7 +6,7 @@ import { starterMap } from "@/lib/map/starter-map";
 
 import { compileLumps, compileMap } from "./compile";
 import { inspectWads, readLumps, WadFileError } from "./inspect";
-import { packTestWad as pack } from "./test-wad";
+import { packTestWad as pack, packUdmfTestWad } from "./test-wad";
 import { getIsZip, unzip } from "./zip";
 
 const encode = (value: string) => new TextEncoder().encode(value);
@@ -86,16 +86,69 @@ describe("inspectWads", () => {
       }
     };
     expect(fails("notes.txt", encode("hello"))).toMatch(/isn't a WAD/);
-    expect(
-      fails(
-        "udmf.wad",
-        pack([
-          { name: "MAP01", data: new Uint8Array() },
-          { name: "TEXTMAP", data: encode('namespace = "zdoom";') },
-        ]),
-      ),
-    ).toMatch(/UDMF/);
     expect(fails("empty.wad", pack([]))).toMatch(/has a map/);
+  });
+});
+
+describe("inspectWads with UDMF maps", () => {
+  const textmap = (source: string) =>
+    pack([
+      { name: "MAP01", data: new Uint8Array() },
+      { name: "TEXTMAP", data: encode(source) },
+      { name: "ZNODES", data: encode("XNOD") },
+      { name: "ENDMAP", data: new Uint8Array() },
+    ]);
+  const refusal = (data: Uint8Array) => {
+    try {
+      inspectWads([{ name: "udmf.wad", data }]);
+      return null;
+    } catch (error) {
+      expect(error).toBeInstanceOf(WadFileError);
+      return (error as Error).message;
+    }
+  };
+
+  it("accepts doom and woof maps with ZNODES", () => {
+    for (const namespace of ["doom", "woof"]) {
+      const summary = inspectWads([
+        {
+          name: "udmf.wad",
+          data: packUdmfTestWad(starterMap, { namespace }),
+        },
+      ]);
+      expect(summary).toMatchObject({ maps: [1], complevel: "mbf21" });
+    }
+  });
+
+  it("reads the namespace past comments and in any case", () => {
+    const source = '// Made in a text editor.\n/* doom */ NameSpace = "WOOF";';
+    expect(refusal(textmap(source))).toBeNull();
+  });
+
+  it("follows a COMPLVL lump", () => {
+    const data = pack([
+      { name: "COMPLVL", data: encode("boom") },
+      ...readLumps({ name: "udmf.wad", data: textmap('namespace = "doom";') }),
+    ]);
+    expect(inspectWads([{ name: "udmf.wad", data }]).complevel).toBe("boom");
+  });
+
+  it("refuses a map without ZNODES", () => {
+    expect(refusal(packUdmfTestWad(starterMap, { hasNodes: false }))).toMatch(
+      /MAP01.*ZNODES/,
+    );
+  });
+
+  it("names the port other namespaces need", () => {
+    const port = (namespace: string) =>
+      refusal(textmap(`namespace = "${namespace}";`));
+    expect(port("zdoom")).toMatch(/GZDoom/);
+    expect(port("dsda")).toMatch(/DSDA-Doom/);
+    expect(port("eternity")).toMatch(/Eternity/);
+    expect(port("hexen")).toMatch(/"hexen".*GZDoom/);
+    expect(refusal(textmap("vertex { x = 0.0; y = 0.0; }"))).toMatch(
+      /namespace/,
+    );
   });
 });
 

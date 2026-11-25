@@ -8,7 +8,7 @@ import { addDetail, updateLine, updateLineSide } from "@/lib/map/edit";
 import { sectorAt, sectorEdges, wallKey } from "@/lib/map/geometry";
 import { islandMap, pillarMap, testMap } from "@/lib/map/test-map";
 import { freedoomNames } from "@/lib/map/textures";
-import { textureHeightOf } from "@/lib/wad/assets";
+import { gameTexturesOf } from "@/lib/wad/assets";
 
 import { withMovers } from "./movers";
 import {
@@ -33,6 +33,8 @@ const texelAssets: SceneAssets = {
   shades: Uint32Array.from({ length: 32 * 256 }, (_, index) => index & 255),
   names: freedoomNames,
   texture: () => texelPicture(64, 128),
+  firstTexture: null,
+  flatOrder: [],
   flat: () => texelPicture(64, 64),
   sprite: () => null,
   frame: () => null,
@@ -87,7 +89,7 @@ describe("buildSceneMesh", () => {
     const camera = startCamera(islandMap);
     renderScene(target, islandMap, camera, { assets: texelAssets });
     const mesh = buildSceneMesh(
-      withMovers(islandMap, [], textureHeightOf(texelAssets)),
+      withMovers(islandMap, [], gameTexturesOf(texelAssets)),
       {
         assets: texelAssets,
       },
@@ -141,7 +143,7 @@ function compareWalls(map: GameMap, camera: Camera) {
     things: false,
   });
   const mesh = buildSceneMesh(
-    withMovers(map, [], textureHeightOf(texelAssets)),
+    withMovers(map, [], gameTexturesOf(texelAssets)),
     { assets: texelAssets },
   );
   const { forward, right } = cameraBasis(camera);

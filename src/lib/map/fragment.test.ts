@@ -27,7 +27,8 @@ import {
 import { wallKey, wallOwners } from "./geometry";
 import { starterMap } from "./starter-map";
 import { islandMap, testMap } from "./test-map";
-import { issuesSince, newProblems, validateMap } from "./validate";
+import { freedoomNames } from "./textures";
+import { inspectMap, issuesSince, newProblems, validateMap } from "./validate";
 
 const openWall = wallKey("v3", "v4");
 const lowerFloor: LineAction = {
@@ -661,7 +662,7 @@ describe("turning, flipping and resizing", () => {
     expect(plain.vertices.v13).toEqual(starterMap.vertices.v13);
   });
 
-  it("leaves the doors behind rather than carry one onto a monster", () => {
+  it("leaves behind only the door it would carry onto a monster", () => {
     const map: GameMap = {
       ...starterMap,
       things: [
@@ -679,15 +680,142 @@ describe("turning, flipping and resizing", () => {
     const {
       map: grown,
       problems,
+      warnings,
       stranded,
     } = transformKeepingDoors(map, keys, [grow], 8);
     expect(problems).toEqual([]);
-    expect(stranded).toEqual(["sector-4", "sector-7"]);
+    expect(warnings).toEqual([]);
+    expect(stranded).toEqual(["sector-4"]);
     expect(defined(grown).vertices.v13).toEqual(map.vertices.v13);
+    expect(defined(grown).vertices.v17).toEqual(carried.vertices.v17);
     expect(issuesSince(map)(defined(grown))).toEqual({
       errors: [],
       warnings: [],
     });
+  });
+
+  it("weighs each door with the other doors carried", () => {
+    const map: GameMap = {
+      ...starterMap,
+      vertices: {
+        ...starterMap.vertices,
+        v13: { x: 480, y: 96 },
+        v14: { x: 480, y: 224 },
+      },
+      things: [
+        ...starterMap.things,
+        { id: "imp-in-corridor", kind: "imp", x: 468, y: 160, angle: 0 },
+      ],
+    };
+    const keys = partKeys(map, selectedParts(map, [], "sector-3"));
+    const grow: Transform = { kind: "scale", factor: 1.1 };
+    expect(
+      newProblems(map, defined(transformParts(map, keys, grow, 8, "none")))
+        .length,
+    ).toBeGreaterThan(0);
+    const {
+      map: grown,
+      problems,
+      warnings,
+      stranded,
+    } = transformKeepingDoors(map, keys, [grow], 8);
+    expect(problems).toEqual([]);
+    expect(warnings).toEqual([]);
+    expect(stranded).toEqual(["sector-4"]);
+    expect(defined(grown).vertices.v13).toEqual(map.vertices.v13);
+  });
+
+  it("weighs a monster in a door on a map without a player start", () => {
+    const map: GameMap = {
+      ...starterMap,
+      things: [
+        ...starterMap.things.filter((thing) => thing.kind !== "player"),
+        { id: "imp-near-door", kind: "imp", x: 490, y: 160, angle: 0 },
+      ],
+    };
+    const keys = partKeys(map, selectedParts(map, [], "sector-3"));
+    const grow: Transform = { kind: "scale", factor: 1.05 };
+    const { problems, stranded } = transformKeepingDoors(map, keys, [grow], 8);
+    expect(problems).toEqual([]);
+    expect(stranded).toEqual(["sector-4"]);
+  });
+
+  it("carries a door onto a monster with a warning when leaving it breaks it", () => {
+    const map: GameMap = {
+      ...starterMap,
+      things: [
+        ...starterMap.things,
+        { id: "zombie-near-door", kind: "zombieman", x: 952, y: 160, angle: 0 },
+      ],
+    };
+    const keys = partKeys(map, selectedParts(map, [], "sector-8"));
+    const grow: Transform = { kind: "scale", factor: 1.2 };
+    expect(
+      newProblems(map, defined(transformParts(map, keys, grow, 8, "none")))
+        .length,
+    ).toBeGreaterThan(0);
+    const {
+      map: grown,
+      problems,
+      warnings,
+      stranded,
+    } = transformKeepingDoors(map, keys, [grow], 8);
+    expect(problems).toEqual([]);
+    expect(stranded).toEqual([]);
+    expect(warnings).toEqual([
+      expect.objectContaining({ id: "in-door:zombie-near-door" }),
+    ]);
+    expect(defined(grown).vertices.v17).toEqual({ x: 944, y: 80 });
+  });
+
+  it("names only the warnings the map check lists while an error stands", () => {
+    const map: GameMap = {
+      ...starterMap,
+      things: [
+        ...starterMap.things.filter((thing) => thing.kind !== "player"),
+        { id: "zombie-near-door", kind: "zombieman", x: 952, y: 160, angle: 0 },
+      ],
+    };
+    const keys = partKeys(map, selectedParts(map, [], "sector-8"));
+    const grow: Transform = { kind: "scale", factor: 1.2 };
+    const {
+      map: grown,
+      problems,
+      warnings,
+      stranded,
+    } = transformKeepingDoors(map, keys, [grow], 8);
+    expect(problems).toEqual([]);
+    expect(stranded).toEqual([]);
+    expect(issuesSince(map)(defined(grown)).warnings).toEqual([
+      expect.objectContaining({ id: "in-door:zombie-near-door" }),
+    ]);
+    expect(inspectMap(defined(grown)).warnings).not.toContainEqual(
+      expect.objectContaining({ id: "in-door:zombie-near-door" }),
+    );
+    expect(warnings).toEqual([]);
+  });
+
+  it("lists warnings by the map check's game context", () => {
+    const map: GameMap = {
+      ...starterMap,
+      things: [
+        ...starterMap.things,
+        { id: "zombie-near-door", kind: "zombieman", x: 952, y: 160, angle: 0 },
+      ],
+    };
+    const keys = partKeys(map, selectedParts(map, [], "sector-8"));
+    const grow: Transform = { kind: "scale", factor: 1.2 };
+    const context = { names: { ...freedoomNames, flats: [] } };
+    expect(inspectMap(map, context).errors).not.toEqual([]);
+    const { problems, warnings } = transformKeepingDoors(
+      map,
+      keys,
+      [grow],
+      8,
+      context,
+    );
+    expect(problems).toEqual([]);
+    expect(warnings).toEqual([]);
   });
 
   it("keeps the far room's wall straight around a door set into it", () => {

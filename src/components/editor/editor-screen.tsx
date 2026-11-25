@@ -214,11 +214,7 @@ import {
   swapWallSides,
 } from "@/lib/map/wall-tools";
 import { SceneCamera } from "@/lib/preview/scene-camera";
-import {
-  createFlatAssets,
-  readWadAssets,
-  textureHeightOf,
-} from "@/lib/wad/assets";
+import { createFlatAssets, readWadAssets } from "@/lib/wad/assets";
 import { compileMap } from "@/lib/wad/compile";
 import {
   customThingsOf,
@@ -843,8 +839,9 @@ export function EditorScreen({
     const {
       map: next,
       problems,
+      warnings,
       stranded,
-    } = transformKeepingDoors(map, keys, steps, grid);
+    } = transformKeepingDoors(map, keys, steps, grid, context);
     if (!next) {
       setNotice(
         "That would press two corners of a room together, or change nothing.",
@@ -860,9 +857,16 @@ export function EditorScreen({
       .filter((sector) => stranded.includes(sector.id))
       .map((sector) => sector.name);
     setNotice(
-      doors.length === 0
-        ? ""
-        : `${new Intl.ListFormat("en").format(doors)} couldn't move with the room, so ${doors.length === 1 ? "its depth" : "their depths"} changed.`,
+      [
+        doors.length === 0
+          ? ""
+          : `${new Intl.ListFormat("en").format(doors)} couldn't move with the room, so ${doors.length === 1 ? "its depth" : "their depths"} changed.`,
+        warnings[0]
+          ? `That gave the map a new warning. ${warnings[0].message}`
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" "),
     );
     commit(next);
     // Corners that met others on the way are gone, and so are the walls and
@@ -1849,11 +1853,7 @@ export function EditorScreen({
     (playerStart ? sectorAt(map, playerStart) : undefined);
   const soundReached =
     sound && soundRoom
-      ? soundReach(map, soundRoom.id, {
-          ...sound,
-          custom: customThings,
-          textureHeight: textureHeightOf(assets),
-        })
+      ? soundReach(map, soundRoom.id, { ...sound, custom: customThings })
       : null;
 
   const thingRoom = thing ? sectorAt(map, thing) : null;
@@ -2013,6 +2013,7 @@ export function EditorScreen({
     setActiveSector(null);
     setSurface(null);
     setFileError(null);
+    setNotice("");
     setDraftCorners([]);
     camera.reset(next);
     setMapVersion((version) => version + 1);
