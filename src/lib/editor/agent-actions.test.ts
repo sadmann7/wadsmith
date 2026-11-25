@@ -12,6 +12,7 @@ import {
 import { checkMap } from "@/lib/map/checks";
 import { wallKey } from "@/lib/map/geometry";
 import { starterMap } from "@/lib/map/starter-map";
+import { parseMapFile, serializeMap } from "@/lib/map/storage";
 import { testMap } from "@/lib/map/test-map";
 import { freedoomNames } from "@/lib/map/textures";
 import { compileMap } from "@/lib/wad/compile";
@@ -610,6 +611,16 @@ describe("agent actions", () => {
     const cleared = runAgentAction(map, "clearLineAction", ["v3|v4"]).map;
     expect(cleared.lines?.["v3|v4"]?.raw).toBeUndefined();
     expect(cleared.lines?.["v3|v4"]?.mapped).toBe(true);
+  });
+
+  it("keeps specials and tags within what a saved map reloads", () => {
+    const { map } = build(testMap, [
+      ["setMapDetails", { complevel: "mbf21" }],
+      ["setLineSpecial", ["v3|v4", 40000, "Corridor"]],
+      ["updateRoom", { room: "Corridor", special: 40000, tag: 40000 }],
+    ]);
+    expect(map.lines?.["v3|v4"]?.raw?.special).toBe(32767);
+    expect(parseMapFile(serializeMap(map))).toEqual(map);
   });
 
   it("swaps a texture everywhere, joins a moved corner and sets thing flags", () => {

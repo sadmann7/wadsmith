@@ -85,6 +85,7 @@ import {
   joinRooms,
   removeCorner,
 } from "@/lib/map/reshape";
+import { wordLimit } from "@/lib/map/storage";
 import { describeSurface, paintSurface } from "@/lib/map/surfaces";
 import { countTexture, replaceTexture } from "@/lib/map/texture-tools";
 import { freedoomNames } from "@/lib/map/textures";
@@ -619,11 +620,11 @@ export const agentActions: AgentAction[] = [
       const tag =
         args.tag === undefined
           ? {}
-          : { tag: number(args, "tag", 0, 32767) || undefined };
+          : { tag: number(args, "tag", 0, wordLimit) || undefined };
       const special =
         args.special === undefined
           ? {}
-          : sectorSpecialPatch(number(args, "special", 0, 65535));
+          : sectorSpecialPatch(number(args, "special", 0, wordLimit));
       const updated = updateSector(map, sector.id, {
         ...patch,
         ...effect,
@@ -988,7 +989,7 @@ export const agentActions: AgentAction[] = [
     ],
     run: (map, args) => {
       const key = findWall(map, args.wall);
-      const special = number(args, "special", 0, 65535);
+      const special = number(args, "special", 0, wordLimit);
       const acted = updateLine(map, key, {
         ...soleSpecial,
         ...(special > 0 && { raw: { special, tag: 0 } }),
@@ -1064,7 +1065,7 @@ export const agentActions: AgentAction[] = [
       const offsets = (["offsetX", "offsetY"] as const).flatMap((name) =>
         args[name] === undefined
           ? []
-          : [[name, number(args, name, -32767, 32767) || undefined]],
+          : [[name, number(args, name, -wordLimit, wordLimit) || undefined]],
       );
       const textures = (["upper", "lower", "middle"] as const).flatMap(
         (name) => {
@@ -1443,7 +1444,7 @@ export function getIsAgentAskFirst(name: string, input: unknown[] | Args = []) {
   const action = byName.get(name);
   try {
     return action
-      ? number(named(action, input), "special", 0, 65535) === 0
+      ? number(named(action, input), "special", 0, wordLimit) === 0
       : false;
   } catch {
     return false;
@@ -1564,7 +1565,7 @@ export function agentRisk(
     }
     if (
       name === "clearLineAction" ||
-      (name === "setLineSpecial" && number(args, "special", 0, 65535) === 0)
+      (name === "setLineSpecial" && number(args, "special", 0, wordLimit) === 0)
     ) {
       return {
         title: "Take this wall's action away?",
