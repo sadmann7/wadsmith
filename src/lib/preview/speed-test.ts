@@ -406,7 +406,7 @@ export function speedTestReport(result: SpeedTestResult) {
     lines.push(
       `  Canvas: ${item.width}×${item.height}`,
       `  Frame time: median ${ms(item.frame.median)}, p95 ${ms(item.frame.p95)}, ${item.fps.toFixed(1)} fps`,
-      `  Draw time: median ${ms(item.draw.median)}, p95 ${ms(item.draw.p95)}`,
+      `  CPU time per frame: median ${ms(item.draw.median)}, p95 ${ms(item.draw.p95)}`,
       `  First frame: ${ms(item.firstFrame)}`,
     );
     if (editMs.length > 0) {

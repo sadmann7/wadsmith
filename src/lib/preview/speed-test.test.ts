@@ -333,7 +333,7 @@ describe("speedTestReport", () => {
         "Column renderer",
         "  Canvas: 989×400",
         "  Frame time: median 16.7 ms, p95 18.2 ms, 59.8 fps",
-        "  Draw time: median 9.1 ms, p95 12.0 ms",
+        "  CPU time per frame: median 9.1 ms, p95 12.0 ms",
         "  First frame: 25.3 ms",
         "  Edit to screen: median 10.0 ms, max 11.0 ms, 3 edits",
         "  By edit: floor height 10.0 ms, light 11.0 ms",
