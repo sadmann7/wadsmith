@@ -501,12 +501,10 @@ export function transformParts(
   return changed ? mergeCorners(next, corners) : null;
 }
 
-// Runs the steps carrying doors as far as the map allows. Each door in turn is
-// carried with the far wall it meets kept straight, or bent, or left behind to
-// stretch, whichever adds the fewest new errors, then new warnings, in that
-// order on a tie. Doors left behind are named in `stranded`. The ranking also
-// weighs warnings the map check hides while an error stands, but `warnings`
-// holds only the ones it lists.
+// Each door in turn is carried with the far wall it meets kept straight, bent,
+// or left behind to stretch, whichever adds the fewest new errors, then new
+// warnings, even ones the map check hides while an error stands. `stranded`
+// names the doors left behind, and `warnings` only the new ones it lists.
 export function transformKeepingDoors(
   map: GameMap,
   keys: string[],

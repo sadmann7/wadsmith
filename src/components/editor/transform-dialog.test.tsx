@@ -61,26 +61,6 @@ function apply() {
   React.act(() => submit.click());
 }
 
-function type(input: HTMLInputElement, text: string) {
-  React.act(() => {
-    input.focus();
-    // React tracks the value it set, so only the prototype's setter makes
-    // the change look typed.
-    Object.getOwnPropertyDescriptor(
-      HTMLInputElement.prototype,
-      "value",
-    )?.set?.call(input, text);
-    input.dispatchEvent(
-      new InputEvent("input", {
-        bubbles: true,
-        inputType: "insertText",
-        data: text,
-      }),
-    );
-  });
-  key(input, "Enter");
-}
-
 function press(target: HTMLElement, shiftKey = false) {
   React.act(() => {
     const init = { bubbles: true, cancelable: true, button: 0, shiftKey };
@@ -105,6 +85,26 @@ function button(name: string) {
   const found = document.querySelector<HTMLElement>(`[aria-label="${name}"]`);
   if (!found) throw new Error(`No ${name} button.`);
   return found;
+}
+
+function type(input: HTMLInputElement, text: string) {
+  React.act(() => {
+    input.focus();
+    // React tracks the value it set, so only the prototype's setter makes
+    // the change look typed.
+    Object.getOwnPropertyDescriptor(
+      HTMLInputElement.prototype,
+      "value",
+    )?.set?.call(input, text);
+    input.dispatchEvent(
+      new InputEvent("input", {
+        bubbles: true,
+        inputType: "insertText",
+        data: text,
+      }),
+    );
+  });
+  key(input, "Enter");
 }
 
 function field(name: string) {
