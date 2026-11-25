@@ -495,8 +495,11 @@ function parseLineAction(value: unknown, label: string): LineAction {
 function parseRawSpecial(value: unknown, label: string): RawSpecial {
   const raw = record(value, label);
   const special = integer(raw.special, wordLimit, label);
-  if (special <= 0) fail(`${label} has an invalid special.`);
-  return { special, tag: tagNumber(raw.tag, label) };
+  const tag = tagNumber(raw.tag, label);
+  if (special < 0 || (special === 0 && tag === 0)) {
+    fail(`${label} has an invalid special.`);
+  }
+  return { special, tag };
 }
 
 function parseLineSide(value: unknown, label: string): LineSide {

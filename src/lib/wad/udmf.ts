@@ -373,12 +373,12 @@ function readLineAction(namespace: string, line: Fields): LineAction {
   }
   const keepId = (tag: number) =>
     id === 0 || id === tag ? [...hexenLineFields, "id"] : hexenLineFields;
-  if (special === 0) return { special: 0, tag: 0, used: keepId(0) };
+  if (special === 0) return { special: 0, tag: id, used: keepId(id) };
   if (!hexenSpecials.has(namespace)) {
     return {
       special: 0,
-      tag: 0,
-      used: keepId(0),
+      tag: id,
+      used: keepId(id),
       dropped: `Actions from ${namespace} maps`,
     };
   }
@@ -395,8 +395,8 @@ function readLineAction(namespace: string, line: Fields): LineAction {
   if (!action) {
     return {
       special: 0,
-      tag: 0,
-      used: keepId(0),
+      tag: id,
+      used: keepId(id),
       dropped: hexenSpecialName(special),
     };
   }

@@ -588,6 +588,40 @@ describe("decompileMap", () => {
     expect(validateMap(map)).toEqual([]);
     expect(parseMapFile(serializeMap(map))).toEqual(map);
   });
+
+  it("keeps the tag of a line another line points at", () => {
+    const build = doomMap();
+    const room = build.sector();
+    const next = build.sector();
+    const [a, b, c, d] = box(build, room, [0, 0, 256, 256]);
+    build.map.lines.length = 0;
+    build.map.sides.length = 0;
+    const e = build.vertex(512, 256);
+    const f = build.vertex(512, 0);
+    build.line(a, b, room, null, { tag: 5 });
+    build.line(b, c, room);
+    build.line(c, d, room, next, { special: 260, tag: 5 });
+    build.line(d, a, room);
+    build.line(c, e, next);
+    build.line(e, f, next);
+    build.line(f, d, next);
+    build.map.things.push({ x: 32, y: 32, angle: 0, type: 1, flags: 7 });
+
+    const { map } = decompileMap(build.map);
+    expect(map.lines?.[wallKey("v0", "v1")]?.raw).toEqual({
+      special: 0,
+      tag: 5,
+    });
+    expect(validateMap(map)).toEqual([]);
+    expect(parseMapFile(serializeMap(map))).toEqual(map);
+    const [doom] = readMaps([{ name: "map.wad", data: compileMap(map) }]);
+    expect(
+      doom.lines
+        .filter((line) => line.tag === 5)
+        .map((line) => line.special)
+        .toSorted((x, y) => x - y),
+    ).toEqual([0, 260]);
+  });
 });
 
 describe("values a saved map can't hold", () => {

@@ -2158,7 +2158,8 @@ function roomCornerKeys(map: GameMap, key: string) {
 
 function taggedBy(map: GameMap, wall: string) {
   const line = map.lines?.[wall];
-  return line?.action?.tag ?? line?.raw?.tag ?? 0;
+  if (line?.action) return line.action.tag;
+  return line?.raw?.special ? line.raw.tag : 0;
 }
 
 function getHasName(value: unknown, index: number) {

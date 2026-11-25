@@ -600,6 +600,7 @@ export function decompileMap(
       ) {
         entry.shut = true;
       }
+      if (line.tag !== 0) entry.raw = { special: 0, tag: line.tag };
     } else {
       const action = actionForSpecial(line.special, line.tag);
       // A line that opens the door the door's own way adds nothing, unless
