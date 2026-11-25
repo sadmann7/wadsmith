@@ -379,6 +379,29 @@ describe("UDMF maps", () => {
     ).toEqual([[special, 3]]);
   });
 
+  it("report the MBF21 line flags and monsteractivate the map can't keep", () => {
+    const doom = readTextmap(
+      "MAP01",
+      `namespace = "zdoom";
+      linedef { v1 = 1; v2 = 0; sidefront = 0; blockplayers = true;
+        blocklandmonsters = true; }
+      linedef { v1 = 1; v2 = 0; sidefront = 0; special = 21; arg0 = 3;
+        arg1 = 8; playeruse = true; monsteractivate = true; }
+      linedef { v1 = 1; v2 = 0; sidefront = 0; special = 200; arg0 = 3;
+        arg1 = 8; arg3 = 2; playeruse = true; monsteractivate = true; }`,
+    );
+    expect(doom.lines.map((line) => line.special)).toEqual([
+      0,
+      23,
+      0x6000 | 2 | (1 << 5) | (1 << 7),
+    ]);
+    expect(doom.udmf?.droppedFields).toEqual({
+      "linedef.blockplayers": 1,
+      "linedef.blocklandmonsters": 1,
+      "linedef.monsteractivate": 1,
+    });
+  });
+
   it("count a generalized action as approximate when Boom can't say it all", () => {
     const [doom] = readMaps([
       udmfWad([

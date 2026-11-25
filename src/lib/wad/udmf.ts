@@ -40,8 +40,6 @@ const lineFlags: [string, number][] = [
   ["dontdraw", 0x0080],
   ["mapped", 0x0100],
   ["passuse", 0x0200],
-  ["blocklandmonsters", 0x1000],
-  ["blockplayers", 0x2000],
 ];
 
 const thingFlags: [string, number][] = [
@@ -342,7 +340,6 @@ const hexenLineFields = [
   "monsterpush",
   "missilecross",
   "anycross",
-  "monsteractivate",
 ];
 
 const playerTriggers = ["playeruse", "impact", "playercross"];
@@ -418,7 +415,10 @@ function readLineAction(namespace: string, line: Fields): LineAction {
   return {
     special: action.special,
     tag: action.tag,
-    used: keepId(action.tag),
+    used: [
+      ...keepId(action.tag),
+      ...(getIsGeneralized(action.special) ? ["monsteractivate"] : []),
+    ],
     ...(action.isNearest || triggers > 1 || anyCross
       ? { nearest: hexenSpecialName(special) }
       : {}),

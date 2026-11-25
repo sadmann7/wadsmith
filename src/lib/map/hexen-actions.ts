@@ -389,11 +389,11 @@ export function hexenSpecialName(special: number) {
   return hexenSpecials[special]?.name ?? `Hexen special ${special}`;
 }
 
-// A Doom special that matches exactly wins, since it plays in every engine;
-// otherwise a Boom generalized one, which can say more than a Doom one.
+// A Doom special that matches exactly wins, since it plays in every engine,
+// unless monsters can trigger the line, which only a generalized one can say.
 export function doomActionFor(given: HexenAction): DoomAction | null {
   const doom = fixedActionFor(given);
-  if (doom && !doom.isNearest) return doom;
+  if (doom && !doom.isNearest && !given.monsters) return doom;
   return generalizedActionFor(given) ?? doom;
 }
 
@@ -418,6 +418,7 @@ const aliases: Record<
 };
 
 const translucentLine = 208;
+const offsetScroller = 225;
 const teleportLine = 215;
 const lockedDoor = 13;
 const lockArg = 3;
@@ -439,7 +440,13 @@ function fixedActionFor(given: HexenAction): DoomAction | null {
       const wanted = index < args.length ? args[index] : 0;
       if (wanted === null) continue;
       if (wanted === "tag") {
-        if (value === 0 && index === 0 && action.special !== translucentLine) {
+        // Woof refuses an MBF21 scroller that names no line.
+        if (
+          value === 0 &&
+          (index === 0
+            ? action.special !== translucentLine
+            : action.special === offsetScroller)
+        ) {
           distance = Infinity;
         }
         tag ??= value;

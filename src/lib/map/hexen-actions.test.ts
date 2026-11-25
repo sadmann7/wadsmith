@@ -190,6 +190,22 @@ describe("Hexen generalized specials", () => {
     });
   });
 
+  it("use a generalized special over a Doom one when monsters can trigger it", () => {
+    expect(doomActionFor(action(201, [3, 8, 0, 1, 8], "walk"))).toMatchObject({
+      special: 40,
+    });
+    expect(
+      doomActionFor({
+        ...action(201, [3, 8, 0, 1, 8], "walk"),
+        monsters: true,
+      }),
+    ).toEqual({
+      special: 0x4000 | (1 << 5) | (1 << 6),
+      tag: 3,
+      isNearest: false,
+    });
+  });
+
   it("keep what Boom can't say as the nearest one", () => {
     expect(doomActionFor(action(202, [3, 16, 2, 34, 1], "use"))).toMatchObject({
       special: 0x3c00 | 2 | (2 << 5) | (1 << 8),
@@ -225,6 +241,7 @@ describe("Hexen generalized specials", () => {
       action(200, [0, 8, 0, 2], "walk"),
       action(205, [0, 8, 8], "shoot"),
       action(204, [3, 4, 8], "none"),
+      action(225, [0, 0, 0, 8], "none"),
     ]) {
       expect(doomActionFor(given), JSON.stringify(given)).toBeNull();
     }
