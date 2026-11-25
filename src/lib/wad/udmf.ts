@@ -13,7 +13,6 @@ export interface UdmfImport {
   namespace: string;
   droppedFields: Record<string, number>;
   droppedActions: Record<string, number>;
-  nearestActions: Record<string, number>;
 }
 
 interface Fields {
@@ -93,7 +92,6 @@ export function readTextmap(slot: string, source: string): DoomMap {
   const { namespace, globals, blocks } = parseTextmap(source);
   const droppedFields: Record<string, number> = {};
   const droppedActions: Record<string, number> = {};
-  const nearestActions: Record<string, number> = {};
   for (const key of globals.keys()) drop(droppedFields, key);
   const read = <T>(kind: string, build: (fields: Fields) => T) =>
     blocks
@@ -130,7 +128,6 @@ export function readTextmap(slot: string, source: string): DoomMap {
     const action = readLineAction(namespace, line);
     line.use(action.used);
     if (action.dropped) drop(droppedActions, action.dropped);
-    if (action.nearest) drop(nearestActions, action.nearest);
     return {
       start: line.index("v1"),
       end: line.index("v2"),
@@ -142,6 +139,7 @@ export function readTextmap(slot: string, source: string): DoomMap {
       tag: action.tag,
       front: inRange(line.side("sidefront")),
       back: inRange(line.side("sideback")),
+      ...(action.nearest ? { approximates: action.nearest } : {}),
     };
   });
   const sectors = read("sector", (sector): DoomSector => {
@@ -181,7 +179,7 @@ export function readTextmap(slot: string, source: string): DoomMap {
     sides,
     sectors,
     things,
-    udmf: { namespace, droppedFields, droppedActions, nearestActions },
+    udmf: { namespace, droppedFields, droppedActions },
   };
 }
 
@@ -373,12 +371,12 @@ function readLineAction(namespace: string, line: Fields): LineAction {
   }
   const keepId = (tag: number) =>
     id === 0 || id === tag ? [...hexenLineFields, "id"] : hexenLineFields;
-  if (special === 0) return { special: 0, tag: 0, used: keepId(0) };
+  if (special === 0) return { special: 0, tag: id, used: keepId(id) };
   if (!hexenSpecials.has(namespace)) {
     return {
       special: 0,
-      tag: 0,
-      used: keepId(0),
+      tag: id,
+      used: keepId(id),
       dropped: `Actions from ${namespace} maps`,
     };
   }
@@ -395,8 +393,8 @@ function readLineAction(namespace: string, line: Fields): LineAction {
   if (!action) {
     return {
       special: 0,
-      tag: 0,
-      used: keepId(0),
+      tag: id,
+      used: keepId(id),
       dropped: hexenSpecialName(special),
     };
   }

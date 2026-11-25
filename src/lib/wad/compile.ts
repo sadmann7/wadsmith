@@ -337,7 +337,7 @@ export function compileLumps(map: GameMap, slot = mapLumpName): Lump[] {
       special = lineSpecial(settings.action) ?? 0;
       tag = settings.action.tag;
     } else if (settings?.raw && !wired) {
-      special = settings.raw.special;
+      special = settings.raw.special || special;
       tag = settings.raw.tag;
     }
     if (settings?.scrolls && special === 0) special = specialScrollLeft;

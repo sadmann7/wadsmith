@@ -135,7 +135,9 @@ export function inspectMap(map: GameMap, context: CheckContext = {}) {
         )
         .map(({ action }) => action.tag),
       ...Object.values(map.lines ?? {}).flatMap((line) =>
-        line.raw && line.raw.tag > 0 && !line.action ? [line.raw.tag] : [],
+        line.raw?.special && line.raw.tag > 0 && !line.action
+          ? [line.raw.tag]
+          : [],
       ),
     ]));
   for (const sector of map.sectors) {
@@ -776,7 +778,7 @@ function validateDoors(
         return false;
       }
       return (
-        !line?.raw ||
+        !line?.raw?.special ||
         (getIsGeneralized(line.raw.special) &&
           generalizedTrigger(line.raw.special).trigger === "door")
       );

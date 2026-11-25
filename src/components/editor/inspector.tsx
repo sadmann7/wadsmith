@@ -895,7 +895,10 @@ export function LineInspector({
                   onChange={(checked) =>
                     onLineChange({
                       scrolls: checked || undefined,
-                      raw: checked ? undefined : settings.raw,
+                      raw:
+                        checked && settings.raw?.special
+                          ? undefined
+                          : settings.raw,
                     })
                   }
                 />
@@ -964,7 +967,7 @@ export function LineInspector({
                       }
                     : {
                         action: undefined,
-                        raw: special ? { special, tag } : undefined,
+                        raw: special || tag ? { special, tag } : undefined,
                         scrolls:
                           special || action ? undefined : settings.scrolls,
                       },
@@ -977,7 +980,10 @@ export function LineInspector({
                 free={freeTag(map)}
                 onChange={(tag) =>
                   onLineChange({
-                    raw: { special: raw.special, tag },
+                    raw:
+                      raw.special || tag
+                        ? { special: raw.special, tag }
+                        : undefined,
                   })
                 }
               />

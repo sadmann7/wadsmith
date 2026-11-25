@@ -35,7 +35,7 @@ export function sectorLinks(map: GameMap, id: string): MapLink[] {
 
 function tagOf(line: LineSettings | undefined) {
   if (line?.action) return lineUsesTag(line.action) ? line.action.tag : 0;
-  return line?.raw?.tag ?? 0;
+  return line?.raw?.special ? line.raw.tag : 0;
 }
 
 function wallMiddle(map: GameMap, wall: string): Point {
