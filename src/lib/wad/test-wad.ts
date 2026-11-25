@@ -93,8 +93,8 @@ interface UdmfTestWadOptions {
   hasNodes?: boolean;
 }
 
-// Rewrites a compiled map as a UDMF map with only TEXTMAP and ZNODES, the
-// way Ultimate Doom Builder saves one.
+// Rewrites a compiled map as a UDMF map with no classic map lumps, the way
+// Ultimate Doom Builder saves one.
 export function packUdmfTestWad(
   map: GameMap,
   { namespace = "woof", hasNodes = true }: UdmfTestWadOptions = {},

@@ -197,7 +197,7 @@ function checkUdmfMap(fileName: string, slot: string, rest: Lump[]) {
     .toLowerCase();
   if (namespace === undefined) {
     throw new WadFileError(
-      `${slot} in ${fileName} is a UDMF map with no namespace, so no port can play it.`,
+      `${slot} in ${fileName} isn't a valid UDMF map, since it names no namespace.`,
     );
   }
   if (!playableNamespaces.has(namespace)) {
