@@ -178,7 +178,9 @@ describe("UDMF maps", () => {
     expect(parseMapFile(serializeMap(map))).toEqual(map);
     expect(report.namespace).toBe("zdoom");
     expect(report.droppedActions).toEqual({});
-    expect(report.nearestActions).toEqual({ Door_Raise: 1 });
+    expect(report.nearestActions).toEqual({
+      Door_Raise: { count: 1, changes: ["delay"] },
+    });
     expect(report.droppedFields).toEqual({
       user_score: 1,
       zdoom_extras: 1,
@@ -268,9 +270,30 @@ describe("UDMF maps", () => {
     );
     expect(doom.lines.map(({ special }) => special)).toEqual([11, 197]);
     expect(doom.lines.map(({ approximates }) => approximates)).toEqual([
-      "Exit_Normal",
+      { name: "Exit_Normal", changes: ["trigger"] },
       undefined,
     ]);
+  });
+
+  it("say what each approximate action changes, across its lines", () => {
+    const source = room("zdoom")
+      .replace(
+        "v1 = 1; v2 = 0; sidefront = 0; blocking = true;",
+        "v1 = 1; v2 = 0; sidefront = 0; blocking = true; special = 12; arg0 = 3; arg1 = 48; arg2 = 150; playeruse = true;",
+      )
+      .replace(
+        "v1 = 2; v2 = 1; sidefront = 1; blocking = true;",
+        "v1 = 2; v2 = 1; sidefront = 1; blocking = true; special = 12; arg0 = 3; arg1 = 16; arg2 = 150; arg3 = 5; playeruse = true;",
+      )
+      .replace(
+        "v1 = 3; v2 = 2; sidefront = 2; blocking = true;",
+        "v1 = 3; v2 = 2; sidefront = 2; blocking = true; special = 204; arg0 = 3; arg1 = 4; arg2 = 8; arg4 = 30; playeruse = true;",
+      );
+    const { report } = decompileMap(readMaps([udmfWad(["MAP01", source])])[0]);
+    expect(report.nearestActions).toEqual({
+      Door_Raise: { count: 2, changes: ["speed", "light"] },
+      Generic_Stairs: { count: 1, changes: ["stairs reset"] },
+    });
   });
 
   it("count an approximate action only when the import keeps it", () => {
@@ -451,7 +474,9 @@ describe("UDMF maps", () => {
     const { report } = decompileMap(doom);
     expect(doom.lines[0].special).toBe(0x2f80 | 2 | (1 << 3));
     expect(report.droppedActions).toEqual({});
-    expect(report.nearestActions).toEqual({ Generic_Crusher: 1 });
+    expect(report.nearestActions).toEqual({
+      Generic_Crusher: { count: 1, changes: ["where it stops"] },
+    });
   });
 
   it("save and reload every sample map", () => {

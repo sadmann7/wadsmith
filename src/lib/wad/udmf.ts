@@ -1,12 +1,19 @@
 import { getIsGeneralized } from "@/lib/map/boom";
 import {
+  type ActionChange,
   doomActionFor,
   doomSectorSpecialFor,
   hexenSpecialName,
   type HexenTrigger,
 } from "@/lib/map/hexen-actions";
 
-import type { DoomLine, DoomMap, DoomSector, DoomThing } from "./read-map";
+import type {
+  ApproximateAction,
+  DoomLine,
+  DoomMap,
+  DoomSector,
+  DoomThing,
+} from "./read-map";
 
 import { WadFileError } from "./inspect";
 
@@ -142,7 +149,7 @@ export function readTextmap(slot: string, source: string): DoomMap {
       tag: action.tag,
       front: inRange(line.side("sidefront")),
       back: inRange(line.side("sideback")),
-      ...(action.nearest ? { approximates: action.nearest } : {}),
+      ...(action.approximates ? { approximates: action.approximates } : {}),
     };
   });
   const sectors = read("sector", (sector): DoomSector => {
@@ -351,7 +358,7 @@ interface LineAction {
   tag: number;
   used: string[];
   dropped?: string;
-  nearest?: string;
+  approximates?: ApproximateAction;
 }
 
 // The one place that turns a line's special, args and id into a Doom special
@@ -414,6 +421,10 @@ function readLineAction(namespace: string, line: Fields): LineAction {
     line.flag("anycross") &&
     !line.flag("playercross") &&
     !getIsGeneralized(action.special);
+  const changes: ActionChange[] =
+    (triggers > 1 || anyCross) && !action.changes.includes("trigger")
+      ? ["trigger", ...action.changes]
+      : action.changes;
   return {
     special: action.special,
     tag: action.tag,
@@ -421,8 +432,8 @@ function readLineAction(namespace: string, line: Fields): LineAction {
       ...keepId(action.tag),
       ...(getIsGeneralized(action.special) ? ["monsteractivate"] : []),
     ],
-    ...(action.isNearest || triggers > 1 || anyCross
-      ? { nearest: hexenSpecialName(special) }
+    ...(changes.length > 0
+      ? { approximates: { name: hexenSpecialName(special), changes } }
       : {}),
   };
 }

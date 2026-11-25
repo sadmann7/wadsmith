@@ -41,6 +41,7 @@ import {
   signedArea,
   wallKey,
 } from "@/lib/map/geometry";
+import { type ActionChange, orderedChanges } from "@/lib/map/hexen-actions";
 import {
   actionForSpecial,
   closesDoor,
@@ -53,7 +54,12 @@ import {
 } from "@/lib/map/lines";
 import { freedoomNames } from "@/lib/map/textures";
 
-import type { DoomMap, DoomSide } from "./read-map";
+import type { ApproximateAction, DoomMap, DoomSide } from "./read-map";
+
+export interface ApproximateCount {
+  count: number;
+  changes: ActionChange[];
+}
 
 export interface ImportReport {
   rooms: number;
@@ -63,7 +69,7 @@ export interface ImportReport {
   multiplayerThings: number;
   outsideThings: number;
   droppedActions: Record<string, number>;
-  nearestActions: Record<string, number>;
+  nearestActions: Record<string, ApproximateCount>;
   droppedEffects: number;
   replacedTextures: string[];
   seeThroughWalls: number;
@@ -561,7 +567,7 @@ export function decompileMap(
   }
 
   const settings: Record<string, LineSettings> = {};
-  const approximated = new Map<string, string>();
+  const approximated = new Map<string, ApproximateAction>();
   const switches: MapSwitch[] = [];
   const keptFittedSides = new Set<DoomSide>();
   for (const line of [...lines, ...details]) {
@@ -823,9 +829,13 @@ export function decompileMap(
     const group = "Teleporters with nowhere to land";
     report.droppedActions[group] = (report.droppedActions[group] ?? 0) + 1;
   }
-  for (const [key, name] of approximated) {
+  for (const [key, { name, changes }] of approximated) {
     if (!settings[key]?.action && !settings[key]?.raw?.special) continue;
-    report.nearestActions[name] = (report.nearestActions[name] ?? 0) + 1;
+    const counted = report.nearestActions[name];
+    report.nearestActions[name] = {
+      count: (counted?.count ?? 0) + 1,
+      changes: orderedChanges([...(counted?.changes ?? []), ...changes]),
+    };
   }
 
   const used = new Set(sectors.flatMap(sectorVertices));
