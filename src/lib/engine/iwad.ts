@@ -162,7 +162,7 @@ async function readIwad(): Promise<Iwad> {
 // Hosts don't compress WAD files, so setup:engine writes this one gzipped.
 const iwadFile = "freedoom-0.13.0.wad.gz";
 
-async function fetchFreedoom(): Promise<Omit<Iwad, "resources">> {
+export async function fetchFreedoom(): Promise<Omit<Iwad, "resources">> {
   const response = await fetch(`${engineBase}${iwadFile}`);
   if (!response.ok || !response.body) {
     throw new Error(`${iwadFile} is missing.`);

@@ -259,6 +259,7 @@ import {
 import { CurveDialog, StairsDialog } from "./shape-dialogs";
 import { ShortcutSheet } from "./shortcut-sheet";
 import { SoundPanel } from "./sound-panel";
+import { SpeedTestDialog } from "./speed-test-dialog";
 import { SurfacePanel } from "./surface-panel";
 import { TexturePicker } from "./texture-picker";
 import { TransformDialog } from "./transform-dialog";
@@ -549,6 +550,7 @@ export function EditorScreen({
   const [contextMenuOpen, setContextMenuOpen] = React.useState(false);
   const [building, setBuilding] = React.useState(false);
   const [showShortcuts, setShowShortcuts] = React.useState(false);
+  const [isSpeedTesting, setIsSpeedTesting] = React.useState(false);
   const [draftCorners, setDraftCorners] = React.useState<Point[]>([]);
   const [showDock, setShowDock] = React.useState(initialLayout.dock);
   const [isDockCollapsed, setIsDockCollapsed] = React.useState(
@@ -1818,6 +1820,7 @@ export function EditorScreen({
     else if (action === "dock") toggleDock();
     else if (action === "collapseDock") collapseDock(!isDockCollapsed);
     else if (action === "camera") findCameraOnMap();
+    else if (action === "speedTest") setIsSpeedTesting(true);
     else if (action === "sound") {
       setSound((current) =>
         current ? null : { doorsOpen: false, floorsMoved: false },
@@ -2306,6 +2309,7 @@ export function EditorScreen({
                     <Check size={14} />
                   </MenuItemIndicator>
                 </MenuCheckboxItem>
+                <MenuItem value="speedTest">3D speed test…</MenuItem>
                 <MenuSeparator />
                 <MenuItem value="shortcuts" shortcut={shortcutKeys.help}>
                   Keyboard shortcuts
@@ -3517,6 +3521,15 @@ export function EditorScreen({
           custom={customThings}
           onSelect={selectFound}
           onClose={() => setFinding(false)}
+        />
+      ) : null}
+      {isSpeedTesting ? (
+        <SpeedTestDialog
+          map={map}
+          mapName={mapName}
+          assets={assets}
+          sky={sky ?? defaultSky(slot, iwadGame)}
+          onClose={() => setIsSpeedTesting(false)}
         />
       ) : null}
       {transforming ? (
