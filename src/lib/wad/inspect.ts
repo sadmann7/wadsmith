@@ -119,13 +119,14 @@ export function inspectWads(files: GameFile[], game?: GameInfo): WadSummary {
       if (slot === null) continue;
       if (episodeLump.test(lump.name)) episodes = true;
       const rest = lumps.slice(index + 1);
+      if (rest[0]?.name === "TEXTMAP") {
+        checkUdmfMap(file.name, lump.name, rest);
+        maps.add(slot);
+        levels.push("mbf21");
+        continue;
+      }
       const next = rest.findIndex((entry) => !mapParts.has(entry.name));
       const parts = next < 0 ? rest : rest.slice(0, next);
-      if (parts[0]?.name === "TEXTMAP") {
-        throw new WadFileError(
-          `${file.name} uses UDMF maps, which need GZDoom or a similar port.`,
-        );
-      }
       if (parts.some((part) => part.name === "BEHAVIOR")) {
         throw new WadFileError(
           `${file.name} uses Hexen-format maps, which need ZDoom or a similar port.`,
@@ -160,6 +161,59 @@ export function inspectWads(files: GameFile[], game?: GameInfo): WadSummary {
     complevel: declared ?? detected,
     declared: declared !== null,
   };
+}
+
+const playableNamespaces = new Set(["doom", "woof"]);
+const namespacePorts: Record<string, string> = {
+  zdoom: "GZDoom",
+  zdoomtranslated: "GZDoom",
+  dsda: "DSDA-Doom",
+  eternity: "Eternity",
+};
+const nodeFormats = new Set([
+  "XNOD",
+  "ZNOD",
+  "XGLN",
+  "ZGLN",
+  "XGL2",
+  "ZGL2",
+  "XGL3",
+  "ZGL3",
+]);
+const namespaceStatement =
+  /^(?:\s|\/\/[^\n]*|\/\*[\s\S]*?\*\/)*namespace\s*=\s*"([^"]*)"\s*;/i;
+
+// Woof plays only these namespaces, and only with prebuilt ZDoom nodes.
+function checkUdmfMap(fileName: string, slot: string, rest: Lump[]) {
+  const [textmap] = rest;
+  const end = rest.findIndex(
+    (entry, index) =>
+      index > 0 &&
+      (entry.name === "ENDMAP" || lumpSlotIndex(entry.name) !== null),
+  );
+  const parts = end < 0 ? rest : rest.slice(0, end);
+  const namespace = namespaceStatement
+    .exec(text.decode(textmap.data))?.[1]
+    .toLowerCase();
+  if (namespace === undefined) {
+    throw new WadFileError(
+      `${slot} in ${fileName} is a UDMF map with no namespace, so no port can play it.`,
+    );
+  }
+  if (!playableNamespaces.has(namespace)) {
+    const port = namespacePorts[namespace];
+    throw new WadFileError(
+      port
+        ? `${fileName} has UDMF maps for ${port}, which the built-in game can't play.`
+        : `${fileName} has UDMF maps in the "${namespace}" namespace, which need GZDoom or a similar port.`,
+    );
+  }
+  const nodes = parts.find((part) => part.name === "ZNODES");
+  if (!nodes || !nodeFormats.has(text.decode(nodes.data.subarray(0, 4)))) {
+    throw new WadFileError(
+      `${slot} in ${fileName} is a UDMF map without ZNODES, which the built-in game needs. Save it again in Ultimate Doom Builder to build them.`,
+    );
+  }
 }
 
 function lumpName(bytes: Uint8Array) {
