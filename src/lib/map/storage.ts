@@ -34,7 +34,7 @@ const backupKey = "wadsmith:map:unreadable";
 
 const maxNameLength = 80;
 
-const wordLimit = 32767;
+export const wordLimit = 32767;
 
 const maxItems = 20000;
 export const maxFileBytes = 5 * 1024 * 1024;

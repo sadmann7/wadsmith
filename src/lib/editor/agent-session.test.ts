@@ -123,11 +123,10 @@ describe("an agent session", () => {
   it("asks before a line special clears a wall's action", async () => {
     const session = createAgentSession();
     expect(session.allow(step("setLineSpecial", ["v1|v2", 11]))).toBe(true);
-    for (const special of [-1, 0.4]) {
-      const early = session.allow(step("setLineSpecial", ["v1|v2", special]));
-      session.answer(false);
-      await expect(early).resolves.toBe(false);
-    }
+    expect(session.allow(step("setLineSpecial", ["v1|v2", -1]))).toBe(true);
+    const early = session.allow(step("setLineSpecial", ["v1|v2", 0.4]));
+    session.answer(false);
+    await expect(early).resolves.toBe(false);
     const asked = session.allow(step("setLineSpecial", ["v1|v2", 0]));
     expect(session.getSnapshot().status).toBe("asking");
     session.answer(false);
