@@ -26,6 +26,9 @@ export interface WadTextures {
   second: TextureDefinition[];
   patchNames: string[];
   flats: Map<string, Uint8Array>;
+  // Every lump between the flat markers in WAD order, sub-markers too, as the
+  // engine numbers flats.
+  flatOrder: string[];
   lumps: Map<string, Uint8Array>;
   hasPatchMarkers: boolean;
 }
@@ -41,6 +44,8 @@ export interface TextureCatalog {
   // The game's first texture, which the engine can't draw.
   placeholder: string | null;
   flats: Map<string, Uint8Array>;
+  // The game's flat lumps as the engine numbers them.
+  flatOrder: string[];
   lumps: Map<string, Uint8Array>;
   // What a resource adds or changes, which a built WAD has to carry.
   customTextures: Set<string>;
@@ -104,12 +109,14 @@ export function readWadTextures(data: Uint8Array, name = "resource.wad") {
   if (known) return known;
   const lumps = new Map<string, Uint8Array>();
   const flats = new Map<string, Uint8Array>();
+  const flatOrder: string[] = [];
   let inFlats = false;
   let hasPatchMarkers = false;
   for (const lump of readLumps({ name, data })) {
     if (flatStarts.has(lump.name)) inFlats = true;
     else if (flatEnds.has(lump.name)) inFlats = false;
     else if (inFlats) {
+      flatOrder.push(lump.name);
       if (lump.data.length === flatBytes) flats.set(lump.name, lump.data);
       continue;
     }
@@ -131,6 +138,7 @@ export function readWadTextures(data: Uint8Array, name = "resource.wad") {
     second,
     patchNames,
     flats,
+    flatOrder,
     lumps,
     hasPatchMarkers,
   };
@@ -545,6 +553,7 @@ function mergeTextures(source: TextureSource): TextureCatalog {
     definitions,
     placeholder: base.first[0]?.name ?? null,
     flats,
+    flatOrder: base.flatOrder,
     lumps,
     customTextures,
     customFlats,
