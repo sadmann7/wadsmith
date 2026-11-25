@@ -69,6 +69,8 @@ export interface ImportReport {
   innerLines: number;
   plainDoors: number;
   solidSectors: number;
+  namespace: string | null;
+  droppedFields: Record<string, number>;
 }
 
 interface Edge {
@@ -145,13 +147,15 @@ export function decompileMap(
     droppedThings: {},
     multiplayerThings: 0,
     outsideThings: 0,
-    droppedActions: {},
+    droppedActions: { ...doom.udmf?.droppedActions },
     droppedEffects: 0,
     replacedTextures: [],
     seeThroughWalls: 0,
     innerLines: 0,
     plainDoors: 0,
     solidSectors: 0,
+    namespace: doom.udmf?.namespace ?? null,
+    droppedFields: { ...doom.udmf?.droppedFields },
   };
   const replaced = new Set<string>();
   const wall = (name: string, fallback = fallbackWall) => {

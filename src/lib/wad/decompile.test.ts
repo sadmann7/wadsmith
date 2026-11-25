@@ -930,7 +930,9 @@ describe("readMaps", () => {
     );
     expect(() =>
       readMaps([{ name: "a.wad", data: wad(["MAP01", "TEXTMAP"]) }]),
-    ).toThrow(WadFileError);
+    ).toThrow(
+      "MAP01 in a.wad can't be opened. Its TEXTMAP doesn't name a namespace.",
+    );
   });
 });
 

@@ -3,6 +3,7 @@ import type { Point } from "@/lib/map/types";
 import { getIsMapLump } from "@/lib/engine/game";
 
 import { type GameFile, readLumps, WadFileError } from "./inspect";
+import { readTextmap, type UdmfImport } from "./udmf";
 
 export interface DoomLine {
   start: number;
@@ -43,6 +44,7 @@ export interface DoomMap {
   sectors: DoomSector[];
   things: DoomThing[];
   title?: string;
+  udmf?: UdmfImport;
 }
 
 const text = new TextDecoder("latin1");
@@ -60,13 +62,15 @@ export function readMaps(files: GameFile[]): DoomMap[] {
         }
       }
       if (!getIsMapLump(lump.name)) continue;
+      if (lumps[index + 1]?.name === "TEXTMAP") {
+        maps.set(
+          lump.name,
+          readUdmfMap(lump.name, file.name, lumps[index + 1].data),
+        );
+        continue;
+      }
       const parts = new Map<string, Uint8Array>();
       for (const part of lumps.slice(index + 1, index + 12)) {
-        if (part.name === "TEXTMAP") {
-          throw new WadFileError(
-            `${lump.name} in ${file.name} is a UDMF map, which the editor can't open.`,
-          );
-        }
         if (parts.has(part.name) || getIsMapLump(part.name)) break;
         parts.set(part.name, part.data);
       }
@@ -86,6 +90,19 @@ export function readMaps(files: GameFile[]): DoomMap[] {
       titles.has(map.slot) ? { ...map, title: titles.get(map.slot) } : map,
     )
     .toSorted((a, b) => a.slot.localeCompare(b.slot));
+}
+
+const utf8 = new TextDecoder();
+
+function readUdmfMap(slot: string, fileName: string, data: Uint8Array) {
+  try {
+    return readTextmap(slot, utf8.decode(data));
+  } catch (error) {
+    if (!(error instanceof WadFileError)) throw error;
+    throw new WadFileError(
+      `${slot} in ${fileName} can't be opened. ${error.message}`,
+    );
+  }
 }
 
 const levelString = /^\s*HUSTR_(\d+)\s*=\s*(.*?)\s*$/gim;
