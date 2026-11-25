@@ -376,6 +376,8 @@ function readSectorSpecial(namespace: string, sector: Fields) {
   return { special: sector.int("special", 0), used: ["special"] };
 }
 
+const wordRange = "between -32768 and 32767";
+
 function fieldsOf(block: Block, used: Set<string>): Fields {
   const label = `${block.kind} ${block.index}`;
   const get = (key: string) => block.fields.get(key);
@@ -437,8 +439,6 @@ function fieldsOf(block: Block, used: Set<string>): Fields {
     },
   };
 }
-
-const wordRange = "between -32768 and 32767";
 
 function getIsWord(value: number) {
   return value >= -32768 && value <= 32767;
