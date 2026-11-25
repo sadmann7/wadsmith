@@ -11,6 +11,7 @@ import {
   drawPatch,
   flatSize,
   readTextureCatalog,
+  readWadTextures,
   type TextureDefinition,
 } from "./resources";
 
@@ -30,7 +31,8 @@ export interface SceneAssets {
   // The game's first texture, which the engine reads for "-" and for a name
   // it doesn't know.
   firstTexture: { name: string; height: number } | null;
-  // The game's flats as the engine numbers them, null for a marker.
+  // The game's flats as the engine numbers them, null for a marker. Each
+  // name passes to `flat`, which draws the game's copy of a replaced one.
   flatOrder: readonly (string | null)[];
   flat: (name: string) => Picture;
   sprite: (kind: ThingKind) => Picture | null;
@@ -251,6 +253,18 @@ export function readWadAssets(
     .filter((name) => name !== catalog.placeholder)
     .toSorted();
   const flatNames = [...flats.keys()].toSorted();
+  // The engine finds a flat by number in the game's own copy, ahead of a
+  // resource's, so a replaced flat is numbered under a key for that copy.
+  const gameFlats = readWadTextures(iwad, "iwad.wad").flats;
+  const gameCopies = new Map<string, Uint8Array>();
+  const flatOrder = catalog.flatOrder.map((name) => {
+    if (!flats.has(name)) return null;
+    const game = gameFlats.get(name);
+    if (!game || !catalog.customFlats.has(name)) return name;
+    const key = `${name} in the game`;
+    gameCopies.set(key, game);
+    return key;
+  });
   // A texture with a hole in it shows through, so it suits an open line and
   // not a solid wall. Telling them apart means drawing each one once.
   let sorted: { walls: string[]; middles: string[] } | null = null;
@@ -293,11 +307,11 @@ export function readWadAssets(
           height: defined(definitions.get(catalog.placeholder)).height,
         }
       : null,
-    flatOrder: catalog.flatOrder.map((name) => (flats.has(name) ? name : null)),
+    flatOrder,
     flat(name) {
       const cached = flatCache.get(name);
       if (cached) return cached;
-      const lump = flats.get(name);
+      const lump = gameCopies.get(name) ?? flats.get(name);
       if (!lump) return missing;
       const picture = createPicture(flatSize, flatSize);
       picture.opaque.fill(1);

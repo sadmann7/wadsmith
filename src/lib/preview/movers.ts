@@ -19,7 +19,7 @@ export interface GameTextures {
   height: (name: string) => number | null;
   /** The texture the engine numbers 0, or null without an IWAD. */
   first: string | null;
-  /** The flats as the engine numbers them, null for a marker. */
+  /** The flats as the engine numbers them, null for a marker, each a key the scene assets draw a flat by. */
   flats: readonly (string | null)[];
 }
 
