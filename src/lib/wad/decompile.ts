@@ -53,7 +53,7 @@ import {
 } from "@/lib/map/lines";
 import { freedoomNames } from "@/lib/map/textures";
 
-import type { DoomMap } from "./read-map";
+import type { DoomMap, DoomSide } from "./read-map";
 
 export interface ImportReport {
   rooms: number;
@@ -91,6 +91,7 @@ interface Region {
 }
 
 type TracedLine = DoomMap["lines"][number] & {
+  index: number;
   frontSector: number;
   backSector: number | null;
 };
@@ -164,8 +165,7 @@ export function decompileMap(
     clampedHeights: 0,
     clampedOffsets: 0,
   };
-  const clamped = new Set<number>();
-  const doom = fitWords(wad, report, clamped);
+  const { doom, clamped, fittedSides, pastSpecials } = fitWords(wad, report);
   const replaced = new Set<string>();
   const wall = (name: string, fallback = fallbackWall) => {
     if (walls.has(name)) return name;
@@ -196,7 +196,7 @@ export function decompileMap(
     side === null ? null : doom.sides[side].sector;
 
   const inner: TracedLine[] = [];
-  const lines = doom.lines.flatMap((line): TracedLine[] => {
+  const lines = doom.lines.flatMap((line, index): TracedLine[] => {
     if (line.start >= points.length || line.end >= points.length) return [];
     const start = canonical[line.start];
     const end = canonical[line.end];
@@ -208,6 +208,7 @@ export function decompileMap(
     if (back !== null && back >= doom.sectors.length) return [];
     const traced = {
       ...line,
+      index,
       start,
       end,
       frontSector: front,
@@ -538,7 +539,9 @@ export function decompileMap(
     });
   });
   report.rooms = sectors.length;
-  report.clampedHeights = clamped.size;
+  report.clampedHeights = [...clamped].filter(
+    (index) => pieces[index].length > 0,
+  ).length;
 
   // One sector can be two doors apart, opened together by either one's
   // lines. Cut into pieces, a piece with no opening line of its own would
@@ -555,6 +558,7 @@ export function decompileMap(
 
   const settings: Record<string, LineSettings> = {};
   const switches: MapSwitch[] = [];
+  const keptFittedSides = new Set<DoomSide>();
   for (const line of [...lines, ...details]) {
     const detail = line.frontSector === line.backSector;
     const kept = (
@@ -568,6 +572,10 @@ export function decompileMap(
       return id ? [{ id, sector, side: doom.sides[side] }] : [];
     });
     if (kept.length === 0) continue;
+    if (pastSpecials.has(line.index)) {
+      const group = "Specials past 32767";
+      report.droppedActions[group] = (report.droppedActions[group] ?? 0) + 1;
+    }
     const key = keyOf(line.start, line.end);
     const entry: LineSettings = {};
     const sides: Record<string, LineSide> = {};
@@ -613,10 +621,13 @@ export function decompileMap(
       }
     }
 
-    const offsets = (side: (typeof doom.sides)[number]) => ({
-      ...(side.offsetX ? { offsetX: side.offsetX } : {}),
-      ...(side.offsetY ? { offsetY: side.offsetY } : {}),
-    });
+    const offsets = (side: DoomSide) => {
+      if (fittedSides.has(side)) keptFittedSides.add(side);
+      return {
+        ...(side.offsetX ? { offsetX: side.offsetX } : {}),
+        ...(side.offsetY ? { offsetY: side.offsetY } : {}),
+      };
+    };
     if (kept.length === 2) {
       const opening = kept.some(({ sector }) => doors.has(sector));
       if (
@@ -806,6 +817,7 @@ export function decompileMap(
     }),
   );
   report.replacedTextures = [...replaced].toSorted();
+  report.clampedOffsets = keptFittedSides.size;
 
   // A wall with nothing behind it in the WAD stays solid even where the
   // editor sees a room around the one it belongs to.
@@ -854,11 +866,10 @@ export function decompileMap(
 
 // The saved map holds words up to 32767 only, where a WAD's tags and
 // specials run to 65535 and its heights and offsets down to -32768.
-function fitWords(
-  doom: DoomMap,
-  report: ImportReport,
-  clamped: Set<number>,
-): DoomMap {
+function fitWords(doom: DoomMap, report: ImportReport) {
+  const clamped = new Set<number>();
+  const fittedSides = new Set<DoomSide>();
+  const pastSpecials = new Set<number>();
   const used = new Set([...doom.lines, ...doom.sectors].map(({ tag }) => tag));
   const renumbered = new Map<number, number>();
   let free = 1;
@@ -873,12 +884,9 @@ function fitWords(
     }
     return next;
   };
-  const pastSpecials = "Specials past 32767";
-
-  const lines = doom.lines.map((line) => {
+  const lines = doom.lines.map((line, index) => {
     if (line.special <= wordLimit) return { ...line, tag: tag(line.tag) };
-    report.droppedActions[pastSpecials] =
-      (report.droppedActions[pastSpecials] ?? 0) + 1;
+    pastSpecials.add(index);
     return { ...line, special: 0, tag: tag(line.tag) };
   });
   const sectors = doom.sectors.map((sector, index) => {
@@ -887,23 +895,51 @@ function fitWords(
     if (floor !== sector.floor || ceiling !== sector.ceiling) {
       clamped.add(index);
     }
-    const special = sector.special <= wordLimit ? sector.special : 0;
-    if (special !== sector.special) report.droppedEffects += 1;
+    const special = fitSectorSpecial(sector.special);
     return { ...sector, floor, ceiling, special, tag: tag(sector.tag) };
   });
   const sides = doom.sides.map((side) => {
     const offsetX = fitWord(side.offsetX);
     const offsetY = fitWord(side.offsetY);
     if (offsetX === side.offsetX && offsetY === side.offsetY) return side;
-    report.clampedOffsets += 1;
-    return { ...side, offsetX, offsetY };
+    const fitted = { ...side, offsetX, offsetY };
+    fittedSides.add(fitted);
+    return fitted;
   });
   report.renumberedTags = renumbered.size;
-  return { ...doom, lines, sectors, sides };
+  return {
+    doom: { ...doom, lines, sectors, sides },
+    clamped,
+    fittedSides,
+    pastSpecials,
+  };
 }
 
 function fitWord(value: number) {
   return Math.max(value, -wordLimit);
+}
+
+// With the sign bit set the engine reads a negative special, which keeps only
+// the light or door spawned from its low five bits, friction, pushers and
+// MBF21's monster kill. Kind 4's damage never applies, so it is kind 2.
+const signedSectorKinds = new Map([
+  [1, 1],
+  [2, 2],
+  [3, 3],
+  [4, 2],
+  [8, 8],
+  [10, 10],
+  [12, 12],
+  [13, 13],
+  [14, 14],
+  [17, 17],
+]);
+
+const signedBits = 0x0100 | 0x0200 | 0x2000;
+
+function fitSectorSpecial(special: number) {
+  if (special <= wordLimit) return special;
+  return (signedSectorKinds.get(special & 31) ?? 0) | (special & signedBits);
 }
 
 // The engine raises these doors from the sector behind the line that's used.

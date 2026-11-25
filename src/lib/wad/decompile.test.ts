@@ -675,15 +675,51 @@ describe("values a saved map can't hold", () => {
     expect(report.clampedOffsets).toBe(1);
   });
 
-  it("drops line and sector specials over 32767, as the engine ignores them", () => {
+  it("counts only what the imported map keeps", () => {
     const build = doomMap();
-    room(build, { special: 40000 }, 0, 40000);
+    room(build, {}, 0, 0);
+    build.sector({ floor: -32768, ceiling: -32768 });
+    build.map.sides.push({ ...build.map.sides[0], offsetX: -32768 });
+    build.line(0, 0, 0, null, { special: 40000 });
     const { map, report } = decompileMap(build.map);
     reloads(map);
-    expect(map.sectors[0].rawEffect).toBeUndefined();
+    expect(report.clampedHeights).toBe(0);
+    expect(report.clampedOffsets).toBe(0);
+    expect(report.droppedActions).toEqual({});
+  });
+
+  it("drops line specials over 32767, as the engine ignores them", () => {
+    const build = doomMap();
+    room(build, {}, 0, 40000);
+    const { map, report } = decompileMap(build.map);
+    reloads(map);
     expect(map.lines).toBeUndefined();
-    expect(report.droppedEffects).toBe(1);
     expect(report.droppedActions).toEqual({ "Specials past 32767": 1 });
+  });
+
+  it("keeps what the engine applies of a sector special with its sign bit set", () => {
+    const cases = [
+      [0x8008, { effect: "glow" }],
+      [0x8004, { effect: "strobe-fast" }],
+      [0x8007, {}],
+      [0x8080, {}],
+      [0x8000, {}],
+      [0x8108, { rawEffect: 0x108 }],
+      [0xa000, { rawEffect: 0x2000 }],
+    ] as const;
+    for (const [special, kept] of cases) {
+      const build = doomMap();
+      room(build, { special }, 0, 0);
+      const { map, report } = decompileMap(build.map);
+      reloads(map);
+      const { effect, rawEffect } = map.sectors[0];
+      expect({ effect, rawEffect }, special.toString(16)).toEqual({
+        effect: undefined,
+        rawEffect: undefined,
+        ...kept,
+      });
+      expect(report.droppedEffects).toBe(0);
+    }
   });
 });
 
