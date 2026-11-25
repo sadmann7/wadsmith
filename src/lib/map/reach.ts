@@ -9,6 +9,7 @@ import type {
   Thing,
 } from "./types";
 
+import { getBlocksPlayer } from "./complevel";
 import { loopPolygon, sectorAt, wallOwners } from "./geometry";
 import {
   actionForSpecial,
@@ -115,7 +116,7 @@ function reachableRooms(
         if (room) leads.set(room, [...(leads.get(room) ?? []), tag]);
       }
     }
-    if (!a || !b || a === b || line?.blocksAll) continue;
+    if (!a || !b || a === b || getBlocksPlayer(map, line)) continue;
     for (const [from, to] of [
       [a, b],
       [b, a],
@@ -129,7 +130,7 @@ function reachableRooms(
     if (moving.has(middle)) continue;
     const open = list.filter(
       (item): item is RoomWall & { other: Sector } =>
-        Boolean(item.other) && !map.lines?.[item.wall]?.blocksAll,
+        Boolean(item.other) && !getBlocksPlayer(map, map.lines?.[item.wall]),
     );
     const narrow = !hasRoom(middle);
     for (const from of open) {

@@ -30,6 +30,7 @@ import {
 import {
   atLeast,
   complevelLabels,
+  getBlocksPlayer,
   lineBlocksPlayers,
   lineBlocksWalkers,
   lineLevel,
@@ -766,7 +767,7 @@ function validateDoors(
     if (
       sector.door.opensBy === "switch" &&
       !map.switches.some((item) => item.door === sector.id) &&
-      !actions.some((entry) => lineOpensDoor(entry, sector))
+      !actions.some((entry) => lineOpensDoor(map, entry, sector))
     ) {
       add("door-unwired", "connect a switch to open this door.");
     }
@@ -789,7 +790,7 @@ function validateDoors(
       sector.door.opensBy === "use" &&
       !fromLines &&
       !map.switches.some((item) => item.door === sector.id) &&
-      !actions.some((entry) => lineOpensDoor(entry, sector)) &&
+      !actions.some((entry) => lineOpensDoor(map, entry, sector)) &&
       !(sector.tag && opened.has(sector.tag))
     ) {
       add("door-shut", "no line opens it from any side.", warnings);
@@ -886,6 +887,7 @@ function wallReach(from: [Point, Point][], to: [Point, Point][]) {
 
 // A closed door can't be crossed, and its track walls are out of reach.
 function lineOpensDoor(
+  map: GameMap,
   { action, line }: ReturnType<typeof activeLineActions>[number],
   door: Sector,
 ) {
@@ -895,7 +897,10 @@ function lineOpensDoor(
   return (
     action.tag === door.tag &&
     line.front.id !== door.id &&
-    !(action.trigger === "walk" && (behind || line.settings.blocksAll))
+    !(
+      action.trigger === "walk" &&
+      (behind || getBlocksPlayer(map, line.settings))
+    )
   );
 }
 
