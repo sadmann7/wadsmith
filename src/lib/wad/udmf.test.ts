@@ -269,8 +269,7 @@ function doorAtLimit() {
     }
   }
   const side = (sector: number, texture: string) =>
-    sides.push(`sidedef { sector = ${sector}; ${texture} = "STARTAN3"; }`) -
-    1;
+    sides.push(`sidedef { sector = ${sector}; ${texture} = "STARTAN3"; }`) - 1;
   const line = (v1: number, v2: number, front: number, back?: number) =>
     out.push(
       back === undefined

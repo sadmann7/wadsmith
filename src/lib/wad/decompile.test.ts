@@ -590,6 +590,103 @@ describe("decompileMap", () => {
   });
 });
 
+describe("values a saved map can't hold", () => {
+  const reloads = (map: GameMap) =>
+    expect(parseMapFile(serializeMap(map))).toEqual(map);
+  const room = (
+    build: ReturnType<typeof doomMap>,
+    sector: Partial<DoomSector>,
+    left: number,
+    special: number,
+  ) => {
+    const index = build.sector(sector);
+    box(build, index, [left, 0, left + 256, 256]);
+    Object.assign(defined(build.map.lines.at(-3)), {
+      special,
+      tag: sector.tag ?? 0,
+    });
+  };
+
+  it("renumbers tags over 32767 and keeps what they link", () => {
+    const build = doomMap();
+    [40000, 65535, 1].forEach((tag, index) =>
+      room(build, { tag }, index * 512, 23),
+    );
+    const { map, report } = decompileMap(build.map);
+    reloads(map);
+    expect(report.renumberedTags).toBe(2);
+    const tags = map.sectors.map((sector) => sector.tag);
+    expect(new Set(tags).size).toBe(3);
+    expect(tags[2]).toBe(1);
+    const actions = Object.values(map.lines ?? {}).flatMap(
+      (line) => line.action?.tag ?? [],
+    );
+    expect(actions.toSorted((a, b) => a - b)).toEqual(
+      tags.toSorted((a, b) => (a ?? 0) - (b ?? 0)),
+    );
+  });
+
+  it("keeps a raw special's tag over 32767 linked to its room", () => {
+    const build = doomMap();
+    room(build, { tag: 50000 }, 0, 9999);
+    const { map, report } = decompileMap(build.map);
+    reloads(map);
+    expect(report.renumberedTags).toBe(1);
+    const [raw] = Object.values(map.lines ?? {}).flatMap(
+      (line) => line.raw ?? [],
+    );
+    expect(raw.tag).toBe(map.sectors[0].tag);
+    expect(raw.tag).toBeLessThanOrEqual(32767);
+  });
+
+  it("opens a door at the height limit only as far as the limit", () => {
+    const build = doomMap();
+    const rooms = [
+      build.sector({ floor: 32720, ceiling: 32722 }),
+      build.sector({ floor: 32720, ceiling: 32720 }),
+      build.sector({ floor: 32720, ceiling: 32722 }),
+    ];
+    const xs = [0, 256, 288, 544];
+    const top = xs.map((x) => build.vertex(x, 128));
+    const bottom = xs.map((x) => build.vertex(x, 0));
+    build.line(bottom[0], top[0], rooms[0]);
+    build.line(top[3], bottom[3], rooms[2]);
+    rooms.forEach((room, index) => {
+      build.line(top[index], top[index + 1], room);
+      build.line(bottom[index + 1], bottom[index], room);
+    });
+    build.line(top[1], bottom[1], rooms[0], rooms[1], { special: 1 });
+    build.line(bottom[2], top[2], rooms[2], rooms[1], { special: 1 });
+    const { map, report } = decompileMap(build.map);
+    reloads(map);
+    const door = defined(map.sectors.find((sector) => sector.door));
+    expect(door.ceiling).toBe(32767);
+    expect(report.clampedHeights).toBe(1);
+  });
+
+  it("raises heights and offsets of -32768 to -32767", () => {
+    const build = doomMap();
+    room(build, { floor: -32768, ceiling: -32640 }, 0, 0);
+    build.map.sides[0].offsetX = -32768;
+    const { map, report } = decompileMap(build.map);
+    reloads(map);
+    expect(map.sectors[0].floor).toBe(-32767);
+    expect(report.clampedHeights).toBe(1);
+    expect(report.clampedOffsets).toBe(1);
+  });
+
+  it("drops line and sector specials over 32767, as the engine ignores them", () => {
+    const build = doomMap();
+    room(build, { special: 40000 }, 0, 40000);
+    const { map, report } = decompileMap(build.map);
+    reloads(map);
+    expect(map.sectors[0].rawEffect).toBeUndefined();
+    expect(map.lines).toBeUndefined();
+    expect(report.droppedEffects).toBe(1);
+    expect(report.droppedActions).toEqual({ "Specials past 32767": 1 });
+  });
+});
+
 function kinds(map: GameMap) {
   return map.things.map((thing) => thing.kind).toSorted();
 }
@@ -779,100 +876,6 @@ describe("doors line by line", () => {
     expect(
       tracks.map((line) => line.flags & 0x10).toSorted((a, b) => a - b),
     ).toEqual([0, 0x10]);
-  });
-});
-
-describe("values a saved map can't hold", () => {
-  const reloads = (map: GameMap) =>
-    expect(parseMapFile(serializeMap(map))).toEqual(map);
-  const room = (
-    build: ReturnType<typeof doomMap>,
-    sector: Partial<DoomSector>,
-    left: number,
-    special: number,
-  ) => {
-    const index = build.sector(sector);
-    box(build, index, [left, 0, left + 256, 256]);
-    Object.assign(defined(build.map.lines.at(-3)), { special, tag: sector.tag ?? 0 });
-  };
-
-  it("renumbers tags over 32767 and keeps what they link", () => {
-    const build = doomMap();
-    [40000, 65535, 1].forEach((tag, index) =>
-      room(build, { tag }, index * 512, 23),
-    );
-    const { map, report } = decompileMap(build.map);
-    reloads(map);
-    expect(report.renumberedTags).toBe(2);
-    const tags = map.sectors.map((sector) => sector.tag);
-    expect(new Set(tags).size).toBe(3);
-    expect(tags[2]).toBe(1);
-    const actions = Object.values(map.lines ?? {}).flatMap(
-      (line) => line.action?.tag ?? [],
-    );
-    expect(actions.toSorted((a, b) => a - b)).toEqual(
-      tags.toSorted((a, b) => (a ?? 0) - (b ?? 0)),
-    );
-  });
-
-  it("keeps a raw special's tag over 32767 linked to its room", () => {
-    const build = doomMap();
-    room(build, { tag: 50000 }, 0, 9999);
-    const { map, report } = decompileMap(build.map);
-    reloads(map);
-    expect(report.renumberedTags).toBe(1);
-    const [raw] = Object.values(map.lines ?? {}).flatMap(
-      (line) => line.raw ?? [],
-    );
-    expect(raw.tag).toBe(map.sectors[0].tag);
-    expect(raw.tag).toBeLessThanOrEqual(32767);
-  });
-
-  it("opens a door at the height limit only as far as the limit", () => {
-    const build = doomMap();
-    const rooms = [
-      build.sector({ floor: 32720, ceiling: 32722 }),
-      build.sector({ floor: 32720, ceiling: 32720 }),
-      build.sector({ floor: 32720, ceiling: 32722 }),
-    ];
-    const xs = [0, 256, 288, 544];
-    const top = xs.map((x) => build.vertex(x, 128));
-    const bottom = xs.map((x) => build.vertex(x, 0));
-    build.line(bottom[0], top[0], rooms[0]);
-    build.line(top[3], bottom[3], rooms[2]);
-    rooms.forEach((room, index) => {
-      build.line(top[index], top[index + 1], room);
-      build.line(bottom[index + 1], bottom[index], room);
-    });
-    build.line(top[1], bottom[1], rooms[0], rooms[1], { special: 1 });
-    build.line(bottom[2], top[2], rooms[2], rooms[1], { special: 1 });
-    const { map, report } = decompileMap(build.map);
-    reloads(map);
-    const door = defined(map.sectors.find((sector) => sector.door));
-    expect(door.ceiling).toBe(32767);
-    expect(report.clampedHeights).toBe(1);
-  });
-
-  it("raises heights and offsets of -32768 to -32767", () => {
-    const build = doomMap();
-    room(build, { floor: -32768, ceiling: -32640 }, 0, 0);
-    build.map.sides[0].offsetX = -32768;
-    const { map, report } = decompileMap(build.map);
-    reloads(map);
-    expect(map.sectors[0].floor).toBe(-32767);
-    expect(report.clampedHeights).toBe(1);
-    expect(report.clampedOffsets).toBe(1);
-  });
-
-  it("drops line and sector specials over 32767, as the engine ignores them", () => {
-    const build = doomMap();
-    room(build, { special: 40000 }, 0, 40000);
-    const { map, report } = decompileMap(build.map);
-    reloads(map);
-    expect(map.sectors[0].rawEffect).toBeUndefined();
-    expect(map.lines).toBeUndefined();
-    expect(report.droppedEffects).toBe(1);
-    expect(report.droppedActions).toEqual({ "Specials past 32767": 1 });
   });
 });
 

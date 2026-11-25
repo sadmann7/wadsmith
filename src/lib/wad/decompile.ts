@@ -873,7 +873,6 @@ function fitWords(
     }
     return next;
   };
-  const word = (value: number) => Math.max(value, -wordLimit);
   const pastSpecials = "Specials past 32767";
 
   const lines = doom.lines.map((line) => {
@@ -883,8 +882,8 @@ function fitWords(
     return { ...line, special: 0, tag: tag(line.tag) };
   });
   const sectors = doom.sectors.map((sector, index) => {
-    const floor = word(sector.floor);
-    const ceiling = word(sector.ceiling);
+    const floor = fitWord(sector.floor);
+    const ceiling = fitWord(sector.ceiling);
     if (floor !== sector.floor || ceiling !== sector.ceiling) {
       clamped.add(index);
     }
@@ -893,14 +892,18 @@ function fitWords(
     return { ...sector, floor, ceiling, special, tag: tag(sector.tag) };
   });
   const sides = doom.sides.map((side) => {
-    const offsetX = word(side.offsetX);
-    const offsetY = word(side.offsetY);
+    const offsetX = fitWord(side.offsetX);
+    const offsetY = fitWord(side.offsetY);
     if (offsetX === side.offsetX && offsetY === side.offsetY) return side;
     report.clampedOffsets += 1;
     return { ...side, offsetX, offsetY };
   });
   report.renumberedTags = renumbered.size;
   return { ...doom, lines, sectors, sides };
+}
+
+function fitWord(value: number) {
+  return Math.max(value, -wordLimit);
 }
 
 // The engine raises these doors from the sector behind the line that's used.
