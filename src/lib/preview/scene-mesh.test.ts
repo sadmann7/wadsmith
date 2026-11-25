@@ -46,7 +46,7 @@ const texelAssets: SceneAssets = {
   firstTexture: null,
   flatOrder: [],
   flat: () => texelPicture(64, 64),
-  sprite: () => null,
+  sprite: () => texelPicture(16, 32),
   frame: () => null,
 };
 
@@ -270,6 +270,14 @@ describe("updateSceneMesh", () => {
       }),
     ],
     [
+      "a corner moved past a thing",
+      updateSector(testMap, "sector-4", { floor: -8, light: 64 }),
+      (map) => ({
+        ...map,
+        vertices: { ...map.vertices, v14: { x: 390, y: 224 } },
+      }),
+    ],
+    [
       "a thing",
       testMap,
       (map) => updateThing(map, "imp-1", { x: 400, y: 120 }),
@@ -373,7 +381,10 @@ function described(mesh: SceneMesh) {
     }),
   );
   const things = Object.fromEntries(
-    [...mesh.sprites].map(([id, sprite]) => [id, named(sprite)]),
+    [...mesh.sprites].map(([id, sprite]) => [
+      id,
+      { owner: mesh.things.get(id)?.owner, sprite: named(sprite) },
+    ]),
   );
   return { sectors, things };
 }

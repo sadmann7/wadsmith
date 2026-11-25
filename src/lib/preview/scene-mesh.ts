@@ -255,10 +255,18 @@ export function updateSceneMesh(
     }
     reach();
 
+    // A moved corner sweeps the whole of each wall it ends, so the touched
+    // area spans those walls, before and after.
     const touched: Point[] = [];
-    for (const id of moved) {
-      for (const point of [previous.vertices[id], map.vertices[id]]) {
-        if (point) touched.push(point);
+    for (const id of reached) {
+      const sector = sectors.get(id);
+      for (const { from, to } of sector ? sectorEdges(sector) : []) {
+        if (!movedSet.has(from) && !movedSet.has(to)) continue;
+        for (const source of [previous, map]) {
+          for (const point of [source.vertices[from], source.vertices[to]]) {
+            if (point) touched.push(point);
+          }
+        }
       }
     }
     for (const id of reshaped) {
