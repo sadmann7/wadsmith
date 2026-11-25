@@ -318,6 +318,106 @@ describe("UDMF maps", () => {
     expect(report.clampedHeights).toBe(1);
   });
 
+  it.each([
+    [
+      "Generic_Floor",
+      "special = 200; arg0 = 3; arg1 = 16; arg3 = 2; arg4 = 14; playeruse = true; repeatspecial = true;",
+      0x6000 | 3 | (1 << 3) | (1 << 5) | (1 << 6) | (1 << 7) | (2 << 10),
+    ],
+    [
+      "Generic_Ceiling",
+      "special = 201; arg0 = 3; arg1 = 64; arg2 = 32; arg4 = 16; impact = true;",
+      0x4000 | 4 | (3 << 3) | (7 << 7) | (1 << 12),
+    ],
+    [
+      "Generic_Door",
+      "special = 202; arg0 = 3; arg1 = 64; arg3 = 69; playeruse = true; monsteruse = true; repeatspecial = true;",
+      0x3c00 | 3 | (2 << 3) | (1 << 7) | (2 << 8),
+    ],
+    [
+      "Generic_Door with a lock",
+      "special = 202; arg0 = 3; arg1 = 16; arg2 = 1; arg4 = 130; playeruse = true;",
+      0x3800 | 2 | (1 << 5) | (2 << 6) | (1 << 9),
+    ],
+    [
+      "Generic_Lift",
+      "special = 203; arg0 = 3; arg1 = 64; arg2 = 24; arg3 = 4; playeruse = true;",
+      0x3400 | 2 | (2 << 3) | (1 << 6) | (3 << 8),
+    ],
+    [
+      "Generic_Stairs",
+      "special = 204; arg0 = 3; arg1 = 4; arg2 = 16; arg3 = 3; playeruse = true;",
+      0x3000 | 2 | (1 << 3) | (2 << 6) | (1 << 8) | (1 << 9),
+    ],
+    [
+      "Generic_CrusherDist",
+      "special = 284; arg0 = 3; arg1 = 16; arg2 = 16; arg3 = 1; arg4 = 10; playeruse = true; repeatspecial = true;",
+      0x2f80 | 3 | (1 << 3) | (1 << 6),
+    ],
+    [
+      "MBF21 Scroll_Texture_Offsets",
+      "special = 225; arg1 = 3; arg2 = 2; arg3 = 8;",
+      1026,
+    ],
+  ])("keep %s through import, save and build", (_, fields, special) => {
+    const textmap = room("zdoom")
+      .replace(
+        "sidefront = 0; blocking = true;",
+        `sidefront = 0; blocking = true; ${fields}`,
+      )
+      .replace("heightceiling = 128;", "heightceiling = 128; id = 3;");
+    const [doom] = readMaps([udmfWad(["MAP01", textmap])]);
+    const { map, report } = decompileMap(doom);
+    expect(report.droppedActions).toEqual({});
+    expect(report.nearestActions).toEqual({});
+    expect(parseMapFile(serializeMap(map))).toEqual(map);
+    const [built] = readMaps([{ name: "map.wad", data: compileMap(map) }]);
+    expect(
+      built.lines
+        .filter((line) => line.special !== 0)
+        .map((line) => [line.special, line.tag]),
+    ).toEqual([[special, 3]]);
+  });
+
+  it("report the MBF21 line flags and monsteractivate the map can't keep", () => {
+    const doom = readTextmap(
+      "MAP01",
+      `namespace = "zdoom";
+      linedef { v1 = 1; v2 = 0; sidefront = 0; blockplayers = true;
+        blocklandmonsters = true; }
+      linedef { v1 = 1; v2 = 0; sidefront = 0; special = 21; arg0 = 3;
+        arg1 = 8; playeruse = true; monsteractivate = true; }
+      linedef { v1 = 1; v2 = 0; sidefront = 0; special = 200; arg0 = 3;
+        arg1 = 8; arg3 = 2; playeruse = true; monsteractivate = true; }`,
+    );
+    expect(doom.lines.map((line) => line.special)).toEqual([
+      0,
+      23,
+      0x6000 | 2 | (1 << 5) | (1 << 7),
+    ]);
+    expect(doom.udmf?.droppedFields).toEqual({
+      "linedef.blockplayers": 1,
+      "linedef.blocklandmonsters": 1,
+      "linedef.monsteractivate": 1,
+    });
+  });
+
+  it("count a generalized action as approximate when Boom can't say it all", () => {
+    const [doom] = readMaps([
+      udmfWad([
+        "MAP01",
+        room("zdoom").replace(
+          "sidefront = 0; blocking = true;",
+          "sidefront = 0; blocking = true; special = 205; arg0 = 3; arg1 = 16; arg2 = 16; arg4 = 10; playeruse = true;",
+        ),
+      ]),
+    ]);
+    const { report } = decompileMap(doom);
+    expect(doom.lines[0].special).toBe(0x2f80 | 2 | (1 << 3));
+    expect(report.droppedActions).toEqual({});
+    expect(report.nearestActions).toEqual({ Generic_Crusher: 1 });
+  });
+
   it("save and reload every sample map", () => {
     const classic = [starterMap, testMap].map(
       (source) => readMaps([{ name: "map.wad", data: compileMap(source) }])[0],
