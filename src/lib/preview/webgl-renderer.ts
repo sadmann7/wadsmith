@@ -25,9 +25,9 @@ import {
   updateSceneMesh,
   vertexFloats,
 } from "./scene-mesh";
+import { skyCapOf, skyCapRows } from "./sky-cap";
 
 const far = 65536;
-const skyCapRows = 64;
 
 const rectColumns = 256;
 const markColumns = 1024;
@@ -62,7 +62,6 @@ interface Program {
 interface Uploaded {
   mesh: SceneMesh;
   slotCount: number;
-  skyCap: Float32Array;
 }
 
 interface AtlasRect {
@@ -177,6 +176,7 @@ function buildRenderer(
   const rects = createTexture(gl);
   const shadesTexture = createTexture(gl);
   const marksTexture = createTexture(gl);
+  const skyCapTexture = createTexture(gl);
 
   const color = createTexture(gl);
   const pick = createTexture(gl);
@@ -387,11 +387,20 @@ function buildRenderer(
     spritePool.fill(mesh.sprites);
     for (const pool of pools) pool.flush();
     uploadRects(mesh);
-    uploaded = {
-      mesh,
-      slotCount: mesh.pictures.length,
-      skyCap: skyCapOf(mesh.heavens, assets.shades),
-    };
+    const { width: capWidth, cap } = skyCapOf(mesh.heavens, assets.shades);
+    gl.bindTexture(gl.TEXTURE_2D, skyCapTexture);
+    gl.texImage2D(
+      gl.TEXTURE_2D,
+      0,
+      gl.RGBA8,
+      capWidth,
+      skyCapRows,
+      0,
+      gl.RGBA,
+      gl.UNSIGNED_BYTE,
+      cap,
+    );
+    uploaded = { mesh, slotCount: mesh.pictures.length };
     return uploaded;
   };
 
@@ -514,7 +523,7 @@ function buildRenderer(
       bindWorld(world, map, camera);
       bindTexture(gl, world, "uShades", 2, shadesTexture);
       gl.uniform1i(world.uniform("uFullbright"), options.fullbright ? 1 : 0);
-      gl.uniform4fv(world.uniform("uSkyCap"), current.skyCap);
+      bindTexture(gl, world, "uSkyCap", 3, skyCapTexture);
       gl.enable(gl.CULL_FACE);
       solidPool.draw();
       maskedPool.draw();
@@ -605,6 +614,7 @@ function buildRenderer(
         rects,
         shadesTexture,
         marksTexture,
+        skyCapTexture,
         color,
         pick,
         extent,
@@ -620,22 +630,6 @@ function buildRenderer(
       }
     },
   };
-}
-
-// The average color of a sky's top row.
-function skyCapOf(heavens: Picture | null, shades: Uint32Array) {
-  const sum = [0, 0, 0];
-  const width = heavens?.width ?? 0;
-  if (heavens) {
-    for (let column = 0; column < width; column += 1) {
-      const color = shades[heavens.pixels[column * heavens.height]];
-      sum[0] += color & 255;
-      sum[1] += (color >>> 8) & 255;
-      sum[2] += (color >>> 16) & 255;
-    }
-  }
-  const scale = 1 / 255 / Math.max(1, width);
-  return Float32Array.of(sum[0] * scale, sum[1] * scale, sum[2] * scale, 1);
 }
 
 let canRunWebgl: boolean | undefined;
@@ -705,7 +699,7 @@ precision highp sampler2D;
 ${shared}
 uniform sampler2D uShades;
 uniform bool uFullbright;
-uniform vec4 uSkyCap;
+uniform sampler2D uSkyCap;
 layout(location = 0) out vec4 oColor;
 layout(location = 1) out vec4 oPick;
 int lightStart(int light, int contrast) {
@@ -722,7 +716,7 @@ void main() {
   int column;
   int row;
   int level = 0;
-  float capped = 0.0;
+  int capRow = -1;
   if ((vFlags & ${meshFlags.sky}) != 0) {
     float turn = atan(-toward.y, toward.x) / 6.28318530718;
     if (turn < 0.0) turn += 1.0;
@@ -732,9 +726,9 @@ void main() {
     // Sky almost straight below the eye keeps one row rather than stripes.
     float rise = max(toward.z / max(ahead, 0.001), -1.0);
     float down = ${skyHorizon.toFixed(1)} - rise * ${(skyView / 2).toFixed(1)};
-    // Above its top row the sky fades into one color, which a view that
+    // Above its top row the sky rises into one color, which a view that
     // looks straight up would otherwise see wrapped into rings.
-    capped = clamp(-down / ${skyCapRows.toFixed(1)}, 0.0, 1.0);
+    if (down < 0.0) capRow = int(min(-down, ${(skyCapRows - 1).toFixed(1)}));
     row = down < 0.0 ? 0 : wrapped(down, height);
   } else {
     bool cut = (vFlags & ${meshFlags.masked | meshFlags.sprite}) != 0;
@@ -762,7 +756,9 @@ void main() {
     discard;
   }
   int index = int(texel.r * 255.0 + 0.5);
-  oColor = mix(texelFetch(uShades, ivec2(index, level), 0), uSkyCap, capped);
+  oColor = capRow < 0
+    ? texelFetch(uShades, ivec2(index, level), 0)
+    : texelFetch(uSkyCap, ivec2(column, capRow), 0);
   // Picks report the depth along the view, as the column renderer's do.
   oPick = vec4(vId, dot(toward, uLook), 0.0, 1.0);
 }`;
