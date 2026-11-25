@@ -361,7 +361,11 @@ export function removeCorner(map: GameMap, id: string): GameMap | null {
   const pair = halves.map((key) => map.lines?.[key]);
   if (joined && (pair[0] || pair[1])) {
     const [first, second] = pair;
-    if ((first?.action ?? first?.raw) && (second?.action ?? second?.raw)) {
+    if (
+      (first?.action ?? first?.raw) &&
+      (second?.action ?? second?.raw) &&
+      (tagOnly(first) === null || tagOnly(first) !== tagOnly(second))
+    ) {
       return null;
     }
     const line: LineSettings = { ...second, ...first };
@@ -498,6 +502,10 @@ export function joinCornersToWalls(map: GameMap, ids: string[]): GameMap {
     if (!joined) break;
   }
   return next;
+}
+
+function tagOnly(line: LineSettings | undefined) {
+  return !line?.action && line?.raw?.special === 0 ? line.raw.tag : null;
 }
 
 function drawOver(

@@ -176,7 +176,7 @@ function wallTextures(map: GameMap, wall: string, rooms: Sector[]) {
 function actionOf(map: GameMap, wall: string) {
   const line = map.lines?.[wall];
   if (line?.action) return line.action.kind;
-  if (line?.raw) return `raw:${line.raw.special}`;
+  if (line?.raw?.special) return `raw:${line.raw.special}`;
   return map.switches.some((item) => wallKey(item.from, item.to) === wall)
     ? "switch"
     : null;

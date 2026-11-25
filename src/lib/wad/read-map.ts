@@ -13,6 +13,7 @@ export interface DoomLine {
   tag: number;
   front: number | null;
   back: number | null;
+  approximates?: string;
 }
 
 export interface DoomSide {

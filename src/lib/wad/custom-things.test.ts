@@ -15,6 +15,7 @@ import { soundReach } from "@/lib/map/sound";
 import { parseMapFile, serializeMap } from "@/lib/map/storage";
 import { testMap } from "@/lib/map/test-map";
 
+import { createFlatAssets } from "./assets";
 import { compileMap } from "./compile";
 import {
   customThingsOf,
@@ -91,11 +92,13 @@ describe("custom things", () => {
       ),
     };
     const open = { doorsOpen: true };
-    expect(soundReach(map, "sector-1", open).woken).toEqual(["zombieman-1"]);
-    expect(soundReach(map, "sector-1", { ...open, custom }).woken).toEqual([
+    const assets = createFlatAssets();
+    expect(soundReach(map, "sector-1", assets, open).woken).toEqual([
       "zombieman-1",
-      "imp-1",
     ]);
+    expect(
+      soundReach(map, "sector-1", assets, { ...open, custom }).woken,
+    ).toEqual(["zombieman-1", "imp-1"]);
     expect(mapBalance(map, "medium").enemies).toBe(1);
     expect(mapBalance(map, "medium", custom).enemies).toBe(2);
   });

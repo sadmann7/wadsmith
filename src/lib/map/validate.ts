@@ -135,7 +135,9 @@ export function inspectMap(map: GameMap, context: CheckContext = {}) {
         )
         .map(({ action }) => action.tag),
       ...Object.values(map.lines ?? {}).flatMap((line) =>
-        line.raw && line.raw.tag > 0 && !line.action ? [line.raw.tag] : [],
+        line.raw?.special && line.raw.tag > 0 && !line.action
+          ? [line.raw.tag]
+          : [],
       ),
     ]));
   for (const sector of map.sectors) {
@@ -199,10 +201,10 @@ export function newProblems(before: GameMap, after: GameMap): MapIssue[] {
   return freshIssues(validateMap(before), validateMap(after));
 }
 
-export function issuesSince(before: GameMap) {
-  const old = inspectStanding(before);
+export function issuesSince(before: GameMap, context: CheckContext = {}) {
+  const old = inspectStanding(before, context);
   return (after: GameMap) => {
-    const found = inspectStanding(after);
+    const found = inspectStanding(after, context);
     return {
       errors: freshIssues(old.errors, found.errors),
       warnings: freshIssues(old.warnings, found.warnings),
@@ -238,12 +240,12 @@ function validateStanding(
 
 // Where things stand is still checked on a map whose only errors leave its
 // rooms sound, such as one with no player start yet.
-function inspectStanding(map: GameMap) {
-  const found = inspectMap(map);
+function inspectStanding(map: GameMap, context: CheckContext) {
+  const found = inspectMap(map, context);
   if (found.layers.things || found.layers.rooms?.length !== 0) return found;
   const errors: MapIssue[] = [];
   const warnings = [...found.warnings];
-  validateStanding(map, errors, warnings);
+  validateStanding(map, errors, warnings, context.custom);
   return { errors: [...found.errors, ...errors], warnings };
 }
 
@@ -776,7 +778,7 @@ function validateDoors(
         return false;
       }
       return (
-        !line?.raw ||
+        !line?.raw?.special ||
         (getIsGeneralized(line.raw.special) &&
           generalizedTrigger(line.raw.special).trigger === "door")
       );

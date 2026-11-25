@@ -12,6 +12,7 @@ import {
 import { checkMap } from "@/lib/map/checks";
 import { wallKey } from "@/lib/map/geometry";
 import { starterMap } from "@/lib/map/starter-map";
+import { parseMapFile, serializeMap } from "@/lib/map/storage";
 import { testMap } from "@/lib/map/test-map";
 import { freedoomNames } from "@/lib/map/textures";
 import { compileMap } from "@/lib/wad/compile";
@@ -610,6 +611,40 @@ describe("agent actions", () => {
     const cleared = runAgentAction(map, "clearLineAction", ["v3|v4"]).map;
     expect(cleared.lines?.["v3|v4"]?.raw).toBeUndefined();
     expect(cleared.lines?.["v3|v4"]?.mapped).toBe(true);
+    const tagOnly = {
+      ...map,
+      lines: { ...map.lines, "v3|v4": { raw: { special: 0, tag: 5 } } },
+    };
+    const scrolled = runAgentAction(tagOnly, "setLineFlags", {
+      wall: "v3|v4",
+      scrolls: true,
+    }).map.lines?.["v3|v4"];
+    expect(scrolled).toMatchObject({
+      scrolls: true,
+      raw: { special: 0, tag: 5 },
+    });
+  });
+
+  it("keeps specials and tags within what a saved map reloads", () => {
+    const { map } = build(testMap, [
+      ["setMapDetails", { complevel: "mbf21" }],
+      ["setLineSpecial", ["v3|v4", 32767, "Corridor"]],
+      ["updateRoom", { room: "Corridor", special: 32767, tag: 32767 }],
+    ]);
+    expect(parseMapFile(serializeMap(map))).toEqual(map);
+    const outOfRange: [string, unknown[] | Record<string, unknown>][] = [
+      ["setLineSpecial", ["v3|v4", 40000]],
+      ["setLineSpecial", ["v3|v4", -1]],
+      ["updateRoom", { room: "Corridor", special: 40000 }],
+      ["updateRoom", { room: "Corridor", tag: 40000 }],
+      ["addThing", { kind: "custom", type: 40000, x: 64, y: 64 }],
+      ["addThing", { kind: "custom", type: 0, x: 64, y: 64 }],
+    ];
+    for (const [name, args] of outOfRange) {
+      expect(() => runAgentAction(map, name, args)).toThrow(
+        /must be from [01] to 32767/,
+      );
+    }
   });
 
   it("swaps a texture everywhere, joins a moved corner and sets thing flags", () => {
