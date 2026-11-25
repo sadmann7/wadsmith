@@ -611,6 +611,18 @@ describe("agent actions", () => {
     const cleared = runAgentAction(map, "clearLineAction", ["v3|v4"]).map;
     expect(cleared.lines?.["v3|v4"]?.raw).toBeUndefined();
     expect(cleared.lines?.["v3|v4"]?.mapped).toBe(true);
+    const tagOnly = {
+      ...map,
+      lines: { ...map.lines, "v3|v4": { raw: { special: 0, tag: 5 } } },
+    };
+    const scrolled = runAgentAction(tagOnly, "setLineFlags", {
+      wall: "v3|v4",
+      scrolls: true,
+    }).map.lines?.["v3|v4"];
+    expect(scrolled).toMatchObject({
+      scrolls: true,
+      raw: { special: 0, tag: 5 },
+    });
   });
 
   it("keeps specials and tags within what a saved map reloads", () => {

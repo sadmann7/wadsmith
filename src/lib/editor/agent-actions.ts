@@ -1026,7 +1026,7 @@ export const agentActions: AgentAction[] = [
         }),
       );
       const line = map.lines?.[key];
-      if (patch.scrolls && (line?.action || line?.raw)) {
+      if (patch.scrolls && (line?.action || line?.raw?.special)) {
         throw new Error("A wall with an action can't scroll its texture.");
       }
       if (args.room === undefined) return { map: updateLine(map, key, patch) };
