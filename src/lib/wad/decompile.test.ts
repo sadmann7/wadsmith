@@ -462,6 +462,9 @@ describe("decompileMap", () => {
       "Teleporters with nowhere to land": 1,
     });
     expect(validateMap(read)).toEqual([]);
+    expect(
+      Object.values(read.lines ?? {}).flatMap((line) => line.raw ?? []),
+    ).toEqual([{ special: 0, tag: 5 }]);
   });
 
   it("keeps scrolling walls on the side that scrolls", () => {
@@ -599,9 +602,9 @@ describe("decompileMap", () => {
     const e = build.vertex(512, 256);
     const f = build.vertex(512, 0);
     build.line(a, b, room, null, { tag: 5 });
-    build.line(b, c, room);
+    build.line(b, c, room, null, { special: 48, tag: 5 });
     build.line(c, d, room, next, { special: 260, tag: 5 });
-    build.line(d, a, room);
+    build.line(d, a, room, null, { special: 88, tag: 5 });
     build.line(c, e, next);
     build.line(e, f, next);
     build.line(f, d, next);
@@ -620,7 +623,7 @@ describe("decompileMap", () => {
         .filter((line) => line.tag === 5)
         .map((line) => line.special)
         .toSorted((x, y) => x - y),
-    ).toEqual([0, 260]);
+    ).toEqual([0, 0, 48, 260]);
   });
 });
 

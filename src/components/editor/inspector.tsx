@@ -895,7 +895,10 @@ export function LineInspector({
                   onChange={(checked) =>
                     onLineChange({
                       scrolls: checked || undefined,
-                      raw: checked ? undefined : settings.raw,
+                      raw:
+                        checked && settings.raw?.special
+                          ? undefined
+                          : settings.raw,
                     })
                   }
                 />

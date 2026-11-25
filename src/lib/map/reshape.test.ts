@@ -686,6 +686,29 @@ describe("removing a corner", () => {
     expect(removeCorner(both, split.id)).toBeNull();
   });
 
+  it("joins walls that carry only the same tag", () => {
+    const room = addRoom(empty, box(0, 0, 512, 256), {}, 1);
+    const split = defined(
+      splitWall(room.map, wallKey("v1", "v2"), { x: 200, y: 0 }, 1),
+    );
+    const tagged = (tags: number[]) =>
+      tags.reduce(
+        (map, tag, at) =>
+          updateLine(
+            map,
+            at === 0 ? wallKey("v1", split.id) : wallKey(split.id, "v2"),
+            { raw: { special: 0, tag } },
+          ),
+        split.map,
+      );
+    const joined = defined(removeCorner(tagged([5, 5]), split.id));
+    expect(joined.lines?.[wallKey("v1", "v2")]?.raw).toEqual({
+      special: 0,
+      tag: 5,
+    });
+    expect(removeCorner(tagged([5, 6]), split.id)).toBeNull();
+  });
+
   it("keeps a corner whose triangle holds a pillar", () => {
     const pillar = addRoom(hall.map, box(400, 20, 480, 60), {}, 1);
     const holed = defined(makePillar(pillar.map, pillar.id));

@@ -601,7 +601,6 @@ export function decompileMap(
       ) {
         entry.shut = true;
       }
-      if (line.tag !== 0) entry.raw = { special: 0, tag: line.tag };
     } else {
       const action = actionForSpecial(line.special, line.tag);
       // A line that opens the door the door's own way adds nothing, unless
@@ -626,6 +625,10 @@ export function decompileMap(
       if (line.approximates && (entry.action || entry.raw)) {
         approximated.set(key, line.approximates);
       }
+    }
+    // Another line can point at this one by its tag.
+    if (line.tag !== 0 && !entry.action && !entry.raw) {
+      entry.raw = { special: 0, tag: line.tag };
     }
 
     const offsets = (side: DoomSide) => {
@@ -811,12 +814,13 @@ export function decompileMap(
       continue;
     }
     delete entry.action;
+    if (action.tag !== 0) entry.raw = { special: 0, tag: action.tag };
     if (Object.keys(entry).length === 0) delete settings[key];
     const group = "Teleporters with nowhere to land";
     report.droppedActions[group] = (report.droppedActions[group] ?? 0) + 1;
   }
   for (const [key, name] of approximated) {
-    if (!settings[key]?.action && !settings[key]?.raw) continue;
+    if (!settings[key]?.action && !settings[key]?.raw?.special) continue;
     report.nearestActions[name] = (report.nearestActions[name] ?? 0) + 1;
   }
 
