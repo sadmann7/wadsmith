@@ -14,10 +14,10 @@ import { wallKey } from "@/lib/map/geometry";
 import { testMap } from "@/lib/map/test-map";
 
 import {
+  type GameTextures,
   getIsMover,
   movedRooms,
   moverAt,
-  type TextureHeight,
   withMovers,
 } from "./movers";
 
@@ -145,6 +145,9 @@ describe("doors and lifts in the 3D view", () => {
 
 const westWall = wallKey("t0", "b0");
 const between = (at: number) => wallKey(`t${at}`, `b${at}`);
+const textures = gameTextures((name) =>
+  name === "AASHITTY" ? 16 : name === "NOSUCH" ? null : 128,
+);
 
 describe("stairs, donuts, platforms and crushers in the 3D view", () => {
   it("builds stairs through the rooms each step is in front of, while the floor matches", () => {
@@ -255,10 +258,11 @@ describe("stairs, donuts, platforms and crushers in the 3D view", () => {
       [{}, { tag: 1, wallTexture: "SHORT" }, {}],
       acting("floor-raise-texture"),
     );
-    const textureHeight = (name: string) => (name === "SHORT" ? 64 : 128);
-    expect(heights(map, ["r1"], textureHeight)[1]).toEqual([64, 128]);
+    const textures = gameTextures((name) => (name === "SHORT" ? 64 : 128));
+    expect(heights(map, ["r1"], textures)[1]).toEqual([64, 128]);
     expect(heights(map, ["r1"])[1]).toEqual([0, 128]);
-    expect(heights(map, ["r1"], () => null)[1]).toEqual([0, 128]);
+    const none = { height: () => null, first: null, flats: [] };
+    expect(heights(map, ["r1"], none)[1]).toEqual([0, 128]);
     expect(getIsMover(map, "r1")).toBe(true);
   });
 });
@@ -500,11 +504,59 @@ describe("vanilla's rarer mover quirks in the 3D view", () => {
         ),
       };
     };
-    const textureHeight = (name: string) => (name === "-" ? 16 : 128);
-    expect(heights(map("vanilla"), ["r1"], textureHeight)[1]).toEqual([
-      16, 128,
+    expect(heights(map("vanilla"), ["r1"], textures)[1]).toEqual([16, 128]);
+    expect(heights(map("boom"), ["r1"], textures)[1]).toEqual([128, 128]);
+  });
+
+  it("counts a wall that names the first texture, or one the game lacks, as the first texture on vanilla", () => {
+    const map = (lower: string, complevel: GameMap["complevel"]) =>
+      row(
+        [{}, { tag: 1 }, {}],
+        {
+          ...acting("floor-raise-texture"),
+          [between(2)]: { sides: { r1: { lower } } },
+        },
+        complevel,
+      );
+    const floor = (lower: string, complevel: GameMap["complevel"]) =>
+      heights(map(lower, complevel), ["r1"], textures)[1][0];
+    expect(floor("AASHITTY", "vanilla")).toBe(16);
+    expect(floor("NOSUCH", "vanilla")).toBe(16);
+    expect(floor("AASHITTY", "boom")).toBe(128);
+    expect(floor("NOSUCH", "boom")).toBe(128);
+    const unknown = { ...textures, first: null };
+    expect(heights(map("NOSUCH", "vanilla"), ["r1"], unknown)[1][0]).toBe(128);
+  });
+
+  it("gives the pool the flat vanilla's donut overrun reads", () => {
+    const map = (complevel: GameMap["complevel"]) =>
+      row(
+        [
+          { floor: -32, floorTexture: "NUKAGE1" },
+          { floor: 64, tag: 1 },
+        ],
+        acting("donut"),
+        complevel,
+      );
+    const pool = (
+      complevel: GameMap["complevel"],
+      flats?: GameTextures["flats"],
+    ) => {
+      const [first] = withMovers(
+        map(complevel),
+        ["r1"],
+        flats && { ...textures, flats },
+      ).sectors;
+      return [first.floor, first.floorTexture];
+    };
+    const numbered = Array.from({ length: 30 }, (_, at) => `FLAT${at}`);
+    expect(pool("vanilla", numbered)).toEqual([0x199257 / 0x10000, "FLAT22"]);
+    expect(pool("vanilla", numbered.slice(0, 5))).toEqual([
+      0x199257 / 0x10000,
+      "FLAT4",
     ]);
-    expect(heights(map("boom"), ["r1"], textureHeight)[1]).toEqual([128, 128]);
+    expect(pool("vanilla")).toEqual([0x199257 / 0x10000, "NUKAGE1"]);
+    expect(pool("boom", numbered)).toEqual([-32, "NUKAGE1"]);
   });
 
   it("skips a tagged room before a vanilla stair's last step", () => {
@@ -587,12 +639,13 @@ function boom(name: string, values: Record<string, number>, tag = 1) {
   return { [westWall]: { raw: { special, tag } } };
 }
 
-function heights(
-  map: GameMap,
-  opened: string[],
-  textureHeight?: TextureHeight,
-) {
-  return withMovers(map, opened, textureHeight).sectors.map(
-    ({ floor, ceiling }) => [floor, ceiling],
-  );
+function heights(map: GameMap, opened: string[], textures?: GameTextures) {
+  return withMovers(map, opened, textures).sectors.map(({ floor, ceiling }) => [
+    floor,
+    ceiling,
+  ]);
+}
+
+function gameTextures(height: GameTextures["height"]): GameTextures {
+  return { height, first: "AASHITTY", flats: [] };
 }

@@ -1,4 +1,4 @@
-import { type TextureHeight, withMovers } from "@/lib/preview/movers";
+import { type GameTextures, withMovers } from "@/lib/preview/movers";
 import { type CustomThings, thingCategory } from "@/lib/wad/custom-things";
 
 import type { GameMap, Sector } from "./types";
@@ -26,12 +26,12 @@ export function soundReach(
     doorsOpen = false,
     floorsMoved = false,
     custom = new Map(),
-    textureHeight,
+    textures,
   }: {
     doorsOpen?: boolean;
     floorsMoved?: boolean;
     custom?: CustomThings;
-    textureHeight?: TextureHeight;
+    textures?: GameTextures;
   } = {},
 ): SoundReach {
   const map = withMovers(
@@ -39,7 +39,7 @@ export function soundReach(
     source.sectors
       .filter((sector) => (sector.door ? doorsOpen : floorsMoved))
       .map((sector) => sector.id),
-    textureHeight,
+    textures,
   );
   const rooms = new Map<string, Hearing>();
   const neighbours = new Map<string, { room: Sector; blocks: boolean }[]>();
