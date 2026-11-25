@@ -196,6 +196,16 @@ function losses(reports: ImportReport[], gameLabel: string) {
       detail: actions.map(([name, count]) => `${name} ×${count}`).join(", "),
     });
   }
+  const nearest = tally(reports.map((report) => report.nearestActions));
+  if (nearest.length > 0) {
+    rows.push({
+      label: plural(
+        nearest.reduce((total, [, count]) => total + count, 0),
+        "approximate action",
+      ),
+      detail: `Doom has no exact match for their speed, delay, key or repeat, so the closest one is used: ${nearest.map(([name, count]) => `${name} ×${count}`).join(", ")}.`,
+    });
+  }
   const fields = tally(reports.map((report) => report.droppedFields));
   if (fields.length > 0) {
     const namespaces = [

@@ -13,8 +13,15 @@ import { actionForSpecial, lineUsesTag } from "@/lib/map/lines";
 import { parseSurface } from "@/lib/map/surfaces";
 import { buildLevel } from "@/lib/wad/compile";
 
-/** The height of a wall texture by its name, or of the texture Doom reads for "-", or null when it has no picture. */
-export type TextureHeight = (name: string) => number | null;
+/** What the opened view reads from the game's wall textures and flats. */
+export interface GameTextures {
+  /** The height of a wall texture by its name, or null when the game has no such texture. */
+  height: (name: string) => number | null;
+  /** The texture the engine numbers 0, or null without an IWAD. */
+  first: string | null;
+  /** The flats as the engine numbers them, null for a marker. */
+  flats: readonly (string | null)[];
+}
 
 interface Heights {
   floor?: number;
@@ -31,7 +38,7 @@ interface Move extends Heights {
 type Moves = Map<string, Move>;
 
 interface Mover {
-  work: (room: Sector, textureHeight: TextureHeight | null) => Moves;
+  work: (room: Sector, textures: GameTextures | null) => Moves;
 }
 
 interface LevelLine {
@@ -78,18 +85,18 @@ interface Plans {
 export function withMovers(
   map: GameMap,
   opened: readonly string[],
-  textureHeight?: TextureHeight,
+  textures?: GameTextures,
 ): GameMap {
-  return shownWith(map, opened, textureHeight).map;
+  return shownWith(map, opened, textures).map;
 }
 
 // Every room the view shows moved, with the movers named in `opened` worked.
 export function movedRooms(
   map: GameMap,
   opened: readonly string[],
-  textureHeight?: TextureHeight,
+  textures?: GameTextures,
 ): ReadonlySet<string> {
-  return shownWith(map, opened, textureHeight).rooms;
+  return shownWith(map, opened, textures).rooms;
 }
 
 // A room that moves when worked: a door, or one a line's action starts a
@@ -104,12 +111,12 @@ export function getIsMover(map: GameMap, id: string) {
 export function moverAt(
   map: GameMap,
   key: string | null,
-  textureHeight?: TextureHeight,
+  textures?: GameTextures,
 ) {
   const surface = key ? parseSurface(key) : null;
   if (!surface || surface.kind === "thing") return null;
   const of = (id: string) =>
-    getIsMover(map, id) ? id : (movedByOf(map, textureHeight).get(id) ?? null);
+    getIsMover(map, id) ? id : (movedByOf(map, textures).get(id) ?? null);
   const behind =
     surface.kind === "wall"
       ? wallOwners(map)
@@ -125,11 +132,11 @@ const doorClearance = 4;
 function shownWith(
   map: GameMap,
   opened: readonly string[],
-  textureHeight: TextureHeight | undefined,
+  textures: GameTextures | undefined,
 ): Shown {
   if (opened.length === 0) return shutOf(map).shown;
   const { shut, around, candidates, boom } = moversOf(map);
-  const { shown } = plansOf(map, textureHeight);
+  const { shown } = plansOf(map, textures);
   const wanted = new Set(opened);
   const open = map.sectors.filter(
     (sector) =>
@@ -153,7 +160,7 @@ function shownWith(
       });
       continue;
     }
-    for (const [id, move] of planOf(map, sector.id, textureHeight) ?? []) {
+    for (const [id, move] of planOf(map, sector.id, textures) ?? []) {
       const earlier = moved.get(id) ?? {};
       const room = { ...defined(shut.get(id)), ...earlier };
       const later = { ...earlier };
@@ -207,8 +214,8 @@ const plansCache = new WeakMap<object, WeakMap<GameMap, Plans>>();
 
 const noTextures = {};
 
-function plansOf(map: GameMap, textureHeight?: TextureHeight): Plans {
-  const byTextures = textureHeight ?? noTextures;
+function plansOf(map: GameMap, textures?: GameTextures): Plans {
+  const byTextures = textures ?? noTextures;
   let byMap = plansCache.get(byTextures);
   if (!byMap) {
     byMap = new WeakMap();
@@ -222,15 +229,15 @@ function plansOf(map: GameMap, textureHeight?: TextureHeight): Plans {
   return plans;
 }
 
-function planOf(map: GameMap, id: string, textureHeight?: TextureHeight) {
-  const { plans } = plansOf(map, textureHeight);
+function planOf(map: GameMap, id: string, textures?: GameTextures) {
+  const { plans } = plansOf(map, textures);
   if (plans.has(id)) return plans.get(id) ?? null;
   const { shut, candidates, boom } = moversOf(map);
   const room = shut.get(id);
   let best: { moves: Moves; gap: number } | null = null;
   for (const mover of room ? (candidates.get(id) ?? []) : []) {
     const start = defined(room);
-    const moves = mover.work(start, textureHeight ?? null);
+    const moves = mover.work(start, textures ?? null);
     const move = moves.get(id);
     const settled: Heights = move ? settle(start, move, boom) : {};
     const floor = settled.floor ?? start.floor;
@@ -244,12 +251,12 @@ function planOf(map: GameMap, id: string, textureHeight?: TextureHeight) {
   return plan;
 }
 
-function movedByOf(map: GameMap, textureHeight?: TextureHeight) {
-  const plans = plansOf(map, textureHeight);
+function movedByOf(map: GameMap, textures?: GameTextures) {
+  const plans = plansOf(map, textures);
   if (plans.movedBy) return plans.movedBy;
   const movedBy = new Map<string, string>();
   for (const sector of map.sectors) {
-    for (const id of planOf(map, sector.id, textureHeight)?.keys() ?? []) {
+    for (const id of planOf(map, sector.id, textures)?.keys() ?? []) {
       if (!movedBy.has(id)) movedBy.set(id, sector.id);
     }
   }
@@ -406,15 +413,16 @@ function vanillaWork(
       search: movers.vanilla,
     });
   }
-  if (kind === "donut") return (room) => donut(movers, room);
+  if (kind === "donut")
+    return (room, textures) => donut(movers, room, textures);
   const heights = vanillaHeights(kind);
   if (!heights) return null;
-  return (room, textureHeight) => {
+  return (room, textures) => {
     const beside = movers.around.get(room.id) ?? [];
     if (beside.length === 0) return still;
     const near = nearby(room, beside);
     const moves = heights(room, near, () =>
-      shortestTexture(movers, room, "lower", textureHeight),
+      shortestTexture(movers, room, "lower", textures),
     );
     if (kind === "floor-lower-texture") {
       const model = modelOf(movers, room, "floor", near.lowestFloor);
@@ -602,11 +610,11 @@ function boomWork(
   const heights = boomHeights(movers, kind.class, value, wall);
   if (!heights) return null;
   const part = kind.class === "ceiling" ? "upper" : "lower";
-  return (room, textureHeight) => {
+  return (room, textures) => {
     const beside = movers.around.get(room.id) ?? [];
     return beside.length > 0
       ? heights(room, nearby(room, beside), () =>
-          shortestTexture(movers, room, part, textureHeight),
+          shortestTexture(movers, room, part, textures),
         )
       : still;
   };
@@ -813,7 +821,11 @@ const donutOverrunFloor = 0x199257 / 0x10000;
 // the floor of the room behind the pool's first line that doesn't face the
 // start, and the pool takes that room's floor texture. Vanilla doesn't skip a
 // one-sided line there.
-function donut(movers: Movers, start: Sector): Moves {
+function donut(
+  movers: Movers,
+  start: Sector,
+  textures: GameTextures | null,
+): Moves {
   const { map, shut, boom } = movers;
   const bySector = movers.level()?.bySector;
   const index = map.sectors.findIndex((sector) => sector.id === start.id);
@@ -827,33 +839,43 @@ function donut(movers: Movers, start: Sector): Moves {
     const model =
       line.back === null ? null : defined(shut.get(map.sectors[line.back].id));
     const floor = model?.floor ?? donutOverrunFloor;
+    const floorTexture = model ? model.floorTexture : overrunFlat(textures);
     return new Map([
-      [
-        pool.id,
-        {
-          floor,
-          rises: true,
-          ...(model && { floorTexture: model.floorTexture }),
-        },
-      ],
+      [pool.id, { floor, rises: true, ...(floorTexture && { floorTexture }) }],
       [start.id, { floor }],
     ]);
   }
   return still;
 }
 
+// The flat number read from the same memory, or the last flat when there
+// are fewer.
+const donutOverrunFlat = 0x16;
+
+function overrunFlat(textures: GameTextures | null) {
+  const flats = textures?.flats ?? [];
+  return flats[Math.min(flats.length - 1, donutOverrunFlat)] ?? null;
+}
+
 // A line drawn inside a room has no lower or upper texture, which vanilla
-// reads as the first texture and Boom skips.
+// reads as the first texture, like a name the game doesn't have, and Boom
+// skips.
 function shortestTexture(
   movers: Movers,
   room: Sector,
   part: "upper" | "lower",
-  textureHeight: TextureHeight | null,
+  textures: GameTextures | null,
 ) {
-  if (!textureHeight) return null;
+  if (!textures) return null;
   const { map, vanilla } = movers;
-  const heightOf = (name: string) =>
-    name === "-" && !vanilla ? Infinity : (textureHeight(name) ?? Infinity);
+  const { first } = textures;
+  const heightOf = (name: string) => {
+    const height = name === "-" ? null : textures.height(name);
+    if (first === null || (height !== null && name !== first)) {
+      return height ?? Infinity;
+    }
+    return vanilla ? (textures.height(first) ?? Infinity) : Infinity;
+  };
   let least = Infinity;
   for (const [wall, [one, other]] of wallOwners(map)) {
     if (!other || (one.id !== room.id && other.id !== room.id)) continue;

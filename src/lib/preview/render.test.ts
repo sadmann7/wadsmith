@@ -19,6 +19,7 @@ import { islandMap, testMap } from "@/lib/map/test-map";
 import {
   createFlatAssets,
   gameFlatShade,
+  gameTexturesOf,
   gameWallShade,
   readWadAssets,
   type SceneAssets,
@@ -631,6 +632,16 @@ describe.skipIf(!existsSync(wadPath))("readWadAssets", () => {
     );
     expect(wad.names.walls).not.toContain("MIDGRATE");
     expect(wad.names.textures).toContain("MIDGRATE");
+  });
+
+  it("numbers the flats and names the first texture as the engine does", () => {
+    const textures = gameTexturesOf(readWadAssets(readFileSync(wadPath)));
+    expect(textures.flats[0]).toBeNull();
+    expect(textures.flats[0x16]).toBe("FLAT1_1");
+    expect(textures.first).toBe("AASHITTY");
+    expect(textures.height("AASHITTY")).toBe(64);
+    expect(textures.height("STARTAN3")).toBe(128);
+    expect(textures.height("NOSUCH")).toBeNull();
   });
 });
 

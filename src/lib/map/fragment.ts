@@ -25,7 +25,12 @@ import {
   wallOwners,
 } from "./geometry";
 import { MapFileError, maxFileBytes, parseMap } from "./storage";
-import { issuesSince, type MapIssue } from "./validate";
+import {
+  type CheckContext,
+  inspectMap,
+  issuesSince,
+  type MapIssue,
+} from "./validate";
 
 // What a selection stands for: whole rooms and things.
 export interface SelectedParts {
@@ -501,15 +506,16 @@ export function transformParts(
   return changed ? mergeCorners(next, corners) : null;
 }
 
-// Runs the steps carrying doors as far as the map allows. Each door in turn is
-// carried with the far wall it meets kept straight, or bent, or left behind to
-// stretch, whichever adds the fewest new errors, then new warnings, in that
-// order on a tie. Doors left behind are named in `stranded`.
+// Each door in turn is carried with the far wall it meets kept straight, bent,
+// or left behind to stretch, whichever adds the fewest new errors, then new
+// warnings, even ones the map check hides while an error stands. `stranded`
+// names the doors left behind, and `warnings` only the new ones it lists.
 export function transformKeepingDoors(
   map: GameMap,
   keys: string[],
   steps: Transform[],
   grid: number,
+  context?: CheckContext,
 ): {
   map: GameMap | null;
   problems: MapIssue[];
@@ -548,12 +554,21 @@ export function transformKeepingDoors(
         .filter((sector) => sector.door && farFace(sector.vertices, moved))
         .map((sector) => sector.id)
     : [];
-  const empty = { map: null, problems: [], warnings: [] };
+  const listed = (result: ReturnType<typeof run>) => {
+    if (!result) return { map: null, problems: [], warnings: [] };
+    const shown = new Set(
+      inspectMap(result.map, context).warnings.map((issue) => issue.id),
+    );
+    return {
+      ...result,
+      warnings: result.warnings.filter((issue) => shown.has(issue.id)),
+    };
+  };
   if (
     doors.length === 0 ||
     (carried?.problems.length === 0 && carried.warnings.length === 0)
   ) {
-    return { ...(carried ?? empty), stranded: [] };
+    return { ...listed(carried), stranded: [] };
   }
   let plan = new Map<string, DoorMove>(doors.map((door) => [door, "straight"]));
   let best = carried;
@@ -577,7 +592,7 @@ export function transformKeepingDoors(
     plan = fallback;
   }
   return {
-    ...(best ?? empty),
+    ...listed(best),
     stranded: best ? doors.filter((door) => !plan.has(door)) : [],
   };
 }

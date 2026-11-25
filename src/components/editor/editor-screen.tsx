@@ -833,7 +833,7 @@ export function EditorScreen({
       problems,
       warnings,
       stranded,
-    } = transformKeepingDoors(map, keys, steps, grid);
+    } = transformKeepingDoors(map, keys, steps, grid, context);
     if (!next) {
       setNotice(
         "That would press two corners of a room together, or change nothing.",
