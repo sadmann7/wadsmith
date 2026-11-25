@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import type {
@@ -12,6 +14,9 @@ import { generalizedClass, withField } from "@/lib/map/boom";
 import { setLineTarget, updateLine, updateSector } from "@/lib/map/edit";
 import { wallKey } from "@/lib/map/geometry";
 import { testMap } from "@/lib/map/test-map";
+import { gameTexturesOf, readWadAssets } from "@/lib/wad/assets";
+import { buildTextureWad } from "@/lib/wad/resources";
+import { solid } from "@/lib/wad/test-wad";
 
 import {
   type GameTextures,
@@ -21,6 +26,10 @@ import {
   withMovers,
 } from "./movers";
 
+const wadPath = resolve(
+  import.meta.dirname,
+  "../../../public/engine/freedoom2.wad",
+);
 const doorWall = wallKey("v13", "v14");
 const openWall = wallKey("v3", "v4");
 
@@ -558,6 +567,32 @@ describe("vanilla's rarer mover quirks in the 3D view", () => {
     expect(pool("vanilla")).toEqual([0x199257 / 0x10000, "NUKAGE1"]);
     expect(pool("boom", numbered)).toEqual([-32, "NUKAGE1"]);
   });
+
+  it.skipIf(!existsSync(wadPath))(
+    "draws the game's copy of the overrun flat when a resource replaces it",
+    () => {
+      const iwad = readFileSync(wadPath);
+      const resource = buildTextureWad([
+        { name: "FLAT1_1", image: solid(64, 64, 200) },
+      ]);
+      const assets = readWadAssets(iwad, [resource]);
+      const donutMap = row(
+        [{ floor: -32 }, { floor: 64, tag: 1 }],
+        acting("donut"),
+      );
+      const [pool] = withMovers(
+        donutMap,
+        ["r1"],
+        gameTexturesOf(assets),
+      ).sectors;
+      expect(assets.flat("FLAT1_1").pixels.every((at) => at === 200)).toBe(
+        true,
+      );
+      expect(assets.flat(pool.floorTexture).pixels).toEqual(
+        readWadAssets(iwad).flat("FLAT1_1").pixels,
+      );
+    },
+  );
 
   it("skips a tagged room before a vanilla stair's last step", () => {
     const map = (complevel: GameMap["complevel"]) => {
