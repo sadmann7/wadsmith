@@ -171,7 +171,7 @@ export function SpeedTestDialog({
           <div
             ref={stage}
             aria-hidden="true"
-            className="aspect-[8/5] w-full overflow-hidden rounded-[3px] bg-black"
+            className="aspect-[8/5] w-full overflow-hidden rounded-[3px] bg-muted"
             hidden={phase.kind !== "running"}
           />
           {phase.kind === "ready" ? (
