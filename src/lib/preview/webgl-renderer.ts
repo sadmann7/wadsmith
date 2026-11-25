@@ -20,9 +20,9 @@ import {
 } from "./render";
 import {
   buildGhost,
-  buildSceneMesh,
   meshFlags,
   type SceneMesh,
+  updateSceneMesh,
   vertexFloats,
 } from "./scene-mesh";
 
@@ -60,10 +60,6 @@ interface Program {
 }
 
 interface Uploaded {
-  map: GameMap;
-  assets: SceneAssets;
-  sky: string | null;
-  customSprites: ReadonlyMap<number, string | null> | undefined;
   mesh: SceneMesh;
   slotCount: number;
   skyCap: Float32Array;
@@ -136,13 +132,13 @@ export function createWebglRenderer(
   };
 }
 
-const atlasSize = 4096;
-
 const maxRows = 1440;
 const maxWidth = 3840;
 const noMovers: readonly string[] = [];
 
 const eyeBack = 0.01;
+
+const atlasSize = 4096;
 
 function buildRenderer(
   canvas: HTMLCanvasElement,
@@ -157,11 +153,12 @@ function buildRenderer(
   if (!programs) return null;
   const { world, span, composite } = programs;
 
-  const meshBuffer = defined(gl.createBuffer());
-  const spriteBuffer = defined(gl.createBuffer());
+  const solidPool = createPool(gl);
+  const flatPool = createPool(gl);
+  const maskedPool = createPool(gl);
+  const spritePool = createPool(gl);
+  const pools = [solidPool, flatPool, maskedPool, spritePool];
   const ghostBuffer = defined(gl.createBuffer());
-  const meshArray = vertexArray(gl, meshBuffer);
-  const spriteArray = vertexArray(gl, spriteBuffer);
   const ghostArray = vertexArray(gl, ghostBuffer);
   const screenArray = defined(gl.createVertexArray());
 
@@ -346,15 +343,25 @@ function buildRenderer(
   };
 
   const meshFor = (map: GameMap, options: SceneOptions) => {
-    const sky = options.sky ?? null;
-    const { assets, customSprites } = options;
-    if (
-      uploaded &&
-      uploaded.map === map &&
-      uploaded.assets === assets &&
-      uploaded.sky === sky &&
-      uploaded.customSprites === customSprites
-    ) {
+    const { assets } = options;
+    const { mesh, changes } = updateSceneMesh(uploaded?.mesh ?? null, map, {
+      assets,
+      sky: options.sky,
+      customSprites: options.customSprites,
+    });
+    if (uploaded && !changes.full) {
+      for (const id of changes.sectors) {
+        const chunk = mesh.chunks.get(id);
+        solidPool.set(id, chunk?.solid);
+        flatPool.set(id, chunk?.flats);
+        maskedPool.set(id, chunk?.masked);
+      }
+      for (const id of changes.things) spritePool.set(id, mesh.sprites.get(id));
+      for (const pool of pools) pool.flush();
+      if (mesh.pictures.length !== uploaded.slotCount) {
+        uploaded.slotCount = mesh.pictures.length;
+        uploadRects(mesh);
+      }
       return uploaded;
     }
     if (assets !== atlasAssets) resetAtlas(assets);
@@ -373,17 +380,14 @@ function buildRenderer(
         new Uint8Array(assets.shades.buffer),
       );
     }
-    const mesh = buildSceneMesh(map, { assets, sky, customSprites });
-    gl.bindBuffer(gl.ARRAY_BUFFER, meshBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, mesh.vertices, gl.STATIC_DRAW);
-    gl.bindBuffer(gl.ARRAY_BUFFER, spriteBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, mesh.sprites, gl.STATIC_DRAW);
+    const chunks = [...mesh.chunks];
+    solidPool.fill(chunks.map(([id, chunk]) => [id, chunk.solid]));
+    flatPool.fill(chunks.map(([id, chunk]) => [id, chunk.flats]));
+    maskedPool.fill(chunks.map(([id, chunk]) => [id, chunk.masked]));
+    spritePool.fill(mesh.sprites);
+    for (const pool of pools) pool.flush();
     uploadRects(mesh);
     uploaded = {
-      map,
-      assets,
-      sky,
-      customSprites,
       mesh,
       slotCount: mesh.pictures.length,
       skyCap: skyCapOf(mesh.heavens, assets.shades),
@@ -394,7 +398,9 @@ function buildRenderer(
   const uploadMarks = (mesh: SceneMesh, options: SceneOptions) => {
     const rows = Math.max(1, Math.ceil(mesh.surfaces.length / markColumns));
     const data = new Uint8Array(markColumns * rows);
-    for (const id of mesh.seeThrough) data[id] |= marks.seeThrough;
+    for (const chunk of mesh.chunks.values()) {
+      for (const id of chunk.seeThrough) data[id] |= marks.seeThrough;
+    }
     const hovered = options.hovered ? mesh.ids.get(options.hovered) : undefined;
     if (hovered !== undefined) data[hovered] |= marks.hovered;
     for (const key of [options.selected, ...(options.picked ?? [])]) {
@@ -487,15 +493,7 @@ function buildRenderer(
       const current = meshFor(map, options);
       const { mesh } = current;
       lastSurfaces = mesh.surfaces;
-      const ghost = options.ghost
-        ? buildGhost(
-            map,
-            mesh,
-            options.assets,
-            options.ghost,
-            options.customSprites,
-          )
-        : null;
+      const ghost = options.ghost ? buildGhost(map, mesh, options.ghost) : null;
       if (mesh.pictures.length !== current.slotCount) {
         current.slotCount = mesh.pictures.length;
         uploadRects(mesh);
@@ -517,20 +515,12 @@ function buildRenderer(
       bindTexture(gl, world, "uShades", 2, shadesTexture);
       gl.uniform1i(world.uniform("uFullbright"), options.fullbright ? 1 : 0);
       gl.uniform4fv(world.uniform("uSkyCap"), current.skyCap);
-      gl.bindVertexArray(meshArray);
       gl.enable(gl.CULL_FACE);
-      gl.drawArrays(gl.TRIANGLES, 0, mesh.flatStart);
-      gl.drawArrays(gl.TRIANGLES, mesh.maskedStart, mesh.maskedCount);
+      solidPool.draw();
+      maskedPool.draw();
       gl.disable(gl.CULL_FACE);
-      gl.drawArrays(
-        gl.TRIANGLES,
-        mesh.flatStart,
-        mesh.maskedStart - mesh.flatStart,
-      );
-      if (options.things !== false && mesh.sprites.length > 0) {
-        gl.bindVertexArray(spriteArray);
-        gl.drawArrays(gl.TRIANGLES, 0, mesh.sprites.length / vertexFloats);
-      }
+      flatPool.draw();
+      if (options.things !== false) spritePool.draw();
       if (ghost) {
         gl.bindBuffer(gl.ARRAY_BUFFER, ghostBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, ghost, gl.DYNAMIC_DRAW);
@@ -549,12 +539,11 @@ function buildRenderer(
       gl.drawBuffers([gl.COLOR_ATTACHMENT0]);
       gl.clearBufferfv(gl.COLOR, 0, [0, far, 0, 1]);
       gl.clearBufferfv(gl.DEPTH, 0, [1]);
-      if (mesh.maskedCount > 0) {
+      if (maskedPool.count() > 0) {
         bindWorld(span, map, camera);
         bindTexture(gl, span, "uPick", 2, pick);
-        gl.bindVertexArray(meshArray);
         gl.enable(gl.CULL_FACE);
-        gl.drawArrays(gl.TRIANGLES, mesh.maskedStart, mesh.maskedCount);
+        maskedPool.draw();
         gl.disable(gl.CULL_FACE);
       }
 
@@ -607,12 +596,10 @@ function buildRenderer(
       return counts;
     },
     destroy() {
-      for (const buffer of [meshBuffer, spriteBuffer, ghostBuffer]) {
-        gl.deleteBuffer(buffer);
-      }
-      for (const array of [meshArray, spriteArray, ghostArray, screenArray]) {
-        gl.deleteVertexArray(array);
-      }
+      for (const pool of pools) pool.destroy();
+      gl.deleteBuffer(ghostBuffer);
+      gl.deleteVertexArray(ghostArray);
+      gl.deleteVertexArray(screenArray);
       for (const texture of [
         atlas,
         rects,
@@ -961,6 +948,119 @@ function vertexArray(gl: WebGL2RenderingContext, buffer: WebGLBuffer) {
   });
   gl.bindVertexArray(null);
   return array;
+}
+
+const triangleFloats = vertexFloats * 3;
+
+// Triangles kept in one buffer, a slot per key with room to grow, so a
+// changed key rewrites only its own slot. Unused room holds zeros, which make
+// triangles with no area that draw nothing.
+function createPool(gl: WebGL2RenderingContext) {
+  const buffer = defined(gl.createBuffer());
+  const array = vertexArray(gl, buffer);
+  const slots = new Map<
+    string,
+    { start: number; size: number; length: number }
+  >();
+  let data = new Float32Array(0);
+  let used = 0;
+  let unused = 0;
+  let isStale = false;
+  const ranges: [number, number][] = [];
+
+  const fill = (entries: Iterable<readonly [string, Float32Array]>) => {
+    const kept = [...entries].filter(([, vertices]) => vertices.length > 0);
+    const total = kept.reduce(
+      (sum, [, vertices]) => sum + sizeFor(vertices.length),
+      0,
+    );
+    data = new Float32Array(Math.max(triangleFloats, Math.ceil(total * 1.5)));
+    slots.clear();
+    used = 0;
+    unused = 0;
+    for (const [key, vertices] of kept) {
+      const size = sizeFor(vertices.length);
+      data.set(vertices, used);
+      slots.set(key, { start: used, size, length: vertices.length });
+      used += size;
+    }
+    ranges.length = 0;
+    isStale = true;
+  };
+
+  return {
+    fill,
+    set(key: string, vertices: Float32Array | undefined) {
+      const slot = slots.get(key);
+      const length = vertices?.length ?? 0;
+      if (slot && vertices && length <= slot.size) {
+        data.set(vertices, slot.start);
+        data.fill(0, slot.start + length, slot.start + slot.length);
+        ranges.push([slot.start, slot.start + Math.max(length, slot.length)]);
+        slot.length = length;
+        return;
+      }
+      if (slot) {
+        data.fill(0, slot.start, slot.start + slot.size);
+        ranges.push([slot.start, slot.start + slot.size]);
+        slots.delete(key);
+        unused += slot.size;
+      }
+      if (!vertices || length === 0) return;
+      const size = sizeFor(length);
+      if (used + size > data.length || unused > used / 2) {
+        const entries = [...slots].map(
+          ([name, slot]) =>
+            [
+              name,
+              data.subarray(slot.start, slot.start + slot.length),
+            ] as const,
+        );
+        fill([...entries, [key, vertices]]);
+        return;
+      }
+      data.set(vertices, used);
+      slots.set(key, { start: used, size, length });
+      ranges.push([used, used + length]);
+      used += size;
+    },
+    flush() {
+      gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+      if (isStale) {
+        gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
+        isStale = false;
+        return;
+      }
+      ranges.sort((a, b) => a[0] - b[0]);
+      let at = 0;
+      while (at < ranges.length) {
+        let [start, end] = ranges[at];
+        at += 1;
+        while (at < ranges.length && ranges[at][0] <= end) {
+          end = Math.max(end, ranges[at][1]);
+          at += 1;
+        }
+        gl.bufferSubData(gl.ARRAY_BUFFER, start * 4, data, start, end - start);
+      }
+      ranges.length = 0;
+    },
+    count() {
+      return used / vertexFloats;
+    },
+    draw() {
+      if (used === 0) return;
+      gl.bindVertexArray(array);
+      gl.drawArrays(gl.TRIANGLES, 0, used / vertexFloats);
+    },
+    destroy() {
+      gl.deleteBuffer(buffer);
+      gl.deleteVertexArray(array);
+    },
+  };
+}
+
+function sizeFor(length: number) {
+  return Math.ceil((length * 1.25) / triangleFloats) * triangleFloats;
 }
 
 function createTexture(gl: WebGL2RenderingContext) {

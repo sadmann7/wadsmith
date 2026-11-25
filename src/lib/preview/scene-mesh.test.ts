@@ -4,7 +4,15 @@ import type { GameMap } from "@/lib/map/types";
 import type { Picture, SceneAssets } from "@/lib/wad/assets";
 
 import { defined } from "@/lib/defined";
-import { addDetail, updateLine, updateLineSide } from "@/lib/map/edit";
+import {
+  addDetail,
+  addThing,
+  removeSector,
+  updateLine,
+  updateLineSide,
+  updateSector,
+  updateThing,
+} from "@/lib/map/edit";
 import { sectorAt, sectorEdges, wallKey } from "@/lib/map/geometry";
 import { islandMap, pillarMap, testMap } from "@/lib/map/test-map";
 import { freedoomNames } from "@/lib/map/textures";
@@ -26,6 +34,8 @@ import {
   buildSceneMesh,
   flatPieces,
   meshFlags,
+  type SceneMesh,
+  updateSceneMesh,
   vertexFloats,
 } from "./scene-mesh";
 
@@ -120,13 +130,12 @@ describe("buildSceneMesh", () => {
     const map = updateLineSide(added.map, detail, sector.id, {
       middle: "MIDGRATE",
     });
-    const mesh = buildSceneMesh(map, { assets: texelAssets });
-    expect(mesh.maskedCount).toBe(12);
+    const masked = layers(buildSceneMesh(map, { assets: texelAssets })).masked;
+    expect(masked.length).toBe(12 * vertexFloats);
     const heights = new Set<number>();
-    for (let at = mesh.maskedStart; at < mesh.maskedStart + 12; at += 1) {
-      const base = at * vertexFloats;
-      expect(mesh.vertices[base + 9]).toBe(meshFlags.masked);
-      heights.add(mesh.vertices[base + 2]);
+    for (let base = 0; base < masked.length; base += vertexFloats) {
+      expect(masked[base + 9]).toBe(meshFlags.masked);
+      heights.add(masked[base + 2]);
     }
     const tallest = Math.max(...heights) - Math.min(...heights);
     expect(tallest).toBeLessThanOrEqual(128);
@@ -148,7 +157,7 @@ function compareWalls(map: GameMap, camera: Camera) {
   );
   const { forward, right } = cameraBasis(camera);
   const eye = eyeOf(map, camera);
-  const { vertices } = mesh;
+  const vertices = layers(mesh).solid;
   let checked = 0;
   let matched = 0;
   for (let y = 0; y < target.height; y += 1) {
@@ -204,8 +213,169 @@ function compareWalls(map: GameMap, camera: Camera) {
   return { checked, matched };
 }
 
+function layers(mesh: SceneMesh) {
+  const join = (part: "solid" | "flats" | "masked") => {
+    const chunks = [...mesh.chunks.values()].map((chunk) => chunk[part]);
+    const out = new Float32Array(chunks.reduce((sum, c) => sum + c.length, 0));
+    let at = 0;
+    for (const chunk of chunks) {
+      out.set(chunk, at);
+      at += chunk.length;
+    }
+    return out;
+  };
+  return { solid: join("solid"), flats: join("flats"), masked: join("masked") };
+}
+
 function wrap(value: number, size: number) {
   return ((Math.floor(value) % size) + size) % size;
+}
+
+describe("updateSceneMesh", () => {
+  const [wall] = sectorEdges(testMap.sectors[0]).map(({ from, to }) =>
+    wallKey(from, to),
+  );
+  const corner = testMap.sectors[1].vertices[0];
+  const edits: [string, GameMap, (map: GameMap) => GameMap][] = [
+    ["a floor", testMap, (map) => updateSector(map, "sector-2", { floor: 24 })],
+    ["a light", testMap, (map) => updateSector(map, "sector-1", { light: 96 })],
+    [
+      "a sky",
+      testMap,
+      (map) => updateSector(map, "sector-3", { ceilingTexture: "F_SKY1" }),
+    ],
+    [
+      "an offset",
+      testMap,
+      (map) =>
+        updateLineSide(map, wall, "sector-1", { offsetX: 13, offsetY: 7 }),
+    ],
+    [
+      "a pegged line",
+      testMap,
+      (map) => updateLine(map, wall, { lowerFixed: true }),
+    ],
+    [
+      "a corner",
+      testMap,
+      (map) => ({
+        ...map,
+        vertices: {
+          ...map.vertices,
+          [corner]: {
+            x: map.vertices[corner].x + 16,
+            y: map.vertices[corner].y - 8,
+          },
+        },
+      }),
+    ],
+    [
+      "a thing",
+      testMap,
+      (map) => updateThing(map, "imp-1", { x: 400, y: 120 }),
+    ],
+    [
+      "a new thing",
+      testMap,
+      (map) => addThing(map, "medikit", { x: 300, y: 150 }).map,
+    ],
+    [
+      "a removed room",
+      islandMap,
+      (map) => removeSector(map, map.sectors[1].id),
+    ],
+    [
+      "a moved island",
+      islandMap,
+      (map) => ({
+        ...map,
+        vertices: Object.fromEntries(
+          Object.entries(map.vertices).map(([id, point]) => [
+            id,
+            map.sectors[1].vertices.includes(id)
+              ? { x: point.x + 32, y: point.y + 16 }
+              : point,
+          ]),
+        ),
+      }),
+    ],
+    [
+      "an opened door",
+      testMap,
+      (map) => withMovers(map, ["sector-4"], gameTexturesOf(texelAssets)),
+    ],
+  ];
+
+  it.each(edits)("ends where a fresh build does after %s", (_, start, edit) => {
+    const options = { assets: texelAssets, sky: "SKY1" };
+    const before = buildSceneMesh(start, options);
+    const after = edit(start);
+    const { mesh, changes } = updateSceneMesh(before, after, options);
+    expect(changes.full).toBe(false);
+    expect(described(mesh)).toEqual(described(buildSceneMesh(after, options)));
+  });
+
+  it("rebuilds only the rooms a height reaches", () => {
+    const options = { assets: texelAssets };
+    const mesh = buildSceneMesh(testMap, options);
+    const { changes } = updateSceneMesh(
+      mesh,
+      updateSector(testMap, "sector-1", { light: 200 }),
+      options,
+    );
+    expect(changes.sectors.toSorted()).toEqual(["sector-1", "sector-2"]);
+    expect(changes.things).toEqual(["player-1"]);
+  });
+});
+
+// A mesh by room and thing, with pictures and surfaces named, and floors and
+// ceilings by the area they cover, since an update may cut them differently.
+function described(mesh: SceneMesh) {
+  const named = (vertices: Float32Array) => {
+    const out: string[] = [];
+    for (let at = 0; at < vertices.length; at += vertexFloats) {
+      const row = [...vertices.subarray(at, at + vertexFloats)];
+      row[5] = mesh.pictures[row[5]].key as never;
+      row[6] = mesh.surfaces[row[6]] as never;
+      out.push(row.join(","));
+    }
+    return out;
+  };
+  const sectors = Object.fromEntries(
+    [...mesh.chunks].map(([id, chunk]) => {
+      const planes = new Map<string, number>();
+      for (let at = 0; at < chunk.flats.length; at += vertexFloats * 3) {
+        const point = (index: number) => {
+          const base = at + index * vertexFloats;
+          return { x: chunk.flats[base], y: chunk.flats[base + 1] };
+        };
+        const [a, b, c] = [point(0), point(1), point(2)];
+        const area = Math.abs(
+          (b.x - a.x) * (c.y - a.y) - (c.x - a.x) * (b.y - a.y),
+        );
+        const key = named(chunk.flats.subarray(at, at + vertexFloats))[0]
+          .split(",")
+          .filter((_, index) => index === 2 || index > 4)
+          .join(",");
+        planes.set(key, (planes.get(key) ?? 0) + area / 2);
+      }
+      return [
+        id,
+        {
+          solid: named(chunk.solid),
+          masked: named(chunk.masked),
+          seeThrough: chunk.seeThrough.map((item) => mesh.surfaces[item]),
+          planes: Object.fromEntries(
+            [...planes].map(([key, area]) => [key, Math.round(area)]),
+          ),
+        },
+      ];
+    }),
+  );
+  const things = Object.fromEntries(
+    [...mesh.sprites].map(([id, sprite]) => [id, named(sprite)]),
+  );
+  return { sectors, things };
 }
 
 describe("flatPieces", () => {
