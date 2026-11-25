@@ -2,6 +2,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { mapWarnings } from "@/lib/map/checks";
+import { hexenTranslations } from "@/lib/map/hexen-actions";
 import { starterMap } from "@/lib/map/starter-map";
 import { parseMapFile, serializeMap } from "@/lib/map/storage";
 
@@ -63,6 +65,7 @@ describe("UDMF maps", () => {
       namespace: "doom",
       droppedFields: {},
       droppedActions: {},
+      nearestActions: {},
     });
     const { map, report } = decompileMap(udmf);
     expect(map).toEqual(decompileMap({ ...classic, title: undefined }).map);
@@ -102,6 +105,40 @@ describe("UDMF maps", () => {
     300_000,
   );
 
+  it.skipIf(!existsSync(freedoom))(
+    "keep every Freedoom map's actions through a zdoom TEXTMAP",
+    () => {
+      const maps = readMaps([
+        { name: "freedoom2.wad", data: new Uint8Array(readFileSync(freedoom)) },
+      ]);
+      for (const doom of maps) {
+        const plain = { ...doom, title: undefined };
+        const read = readTextmap(doom.slot, toTextmap(doom, "zdoom"));
+        expect(read.udmf, doom.slot).toEqual({
+          namespace: "zdoom",
+          droppedFields: {},
+          droppedActions: {},
+          nearestActions: {},
+        });
+        expect(
+          read.lines.map(({ special, tag }) => [special, tag]),
+          doom.slot,
+        ).toEqual(
+          doom.lines.map(({ special, tag }) => [special, special && tag]),
+        );
+        expect(read.sectors, doom.slot).toEqual(doom.sectors);
+        const { map } = decompileMap(read);
+        const classic = decompileMap(plain).map;
+        expect(map, doom.slot).toEqual(classic);
+        expect(mapWarnings(map).length, doom.slot).toBe(
+          mapWarnings(classic).length,
+        );
+        expect(parseMapFile(serializeMap(map)), doom.slot).toEqual(map);
+      }
+    },
+    300_000,
+  );
+
   it("report each field a zdoom map loses, with the namespace", () => {
     const source = `
       // Written by Ultimate Doom Builder.
@@ -134,16 +171,17 @@ describe("UDMF maps", () => {
     `;
     const [doom] = readMaps([udmfWad(["MAP01", source])]);
     expect(doom.vertices[1]).toEqual({ x: 256, y: 0 });
-    expect(doom.lines[0]).toMatchObject({ flags: 1, special: 0, tag: 0 });
-    expect(doom.lines.map((line) => line.tag)).toEqual([0, 0, 0, 0]);
+    expect(doom.lines[0]).toMatchObject({ flags: 1, special: 63, tag: 7 });
+    expect(doom.lines.map((line) => line.tag)).toEqual([7, 0, 0, 0]);
     expect(doom.sides[0].middle).toBe("STARTAN3");
-    expect(doom.sectors[0]).toMatchObject({ light: 160, special: 0 });
+    expect(doom.sectors[0]).toMatchObject({ light: 160, special: 1 });
     const { map, report } = decompileMap(doom);
     expect(map.sectors).toHaveLength(1);
     expect(map.things).toHaveLength(2);
     expect(parseMapFile(serializeMap(map))).toEqual(map);
     expect(report.namespace).toBe("zdoom");
-    expect(report.droppedActions).toEqual({ "Hexen-style actions": 1 });
+    expect(report.droppedActions).toEqual({});
+    expect(report.nearestActions).toEqual({ Door_Raise: 1 });
     expect(report.droppedFields).toEqual({
       user_score: 1,
       zdoom_extras: 1,
@@ -153,7 +191,6 @@ describe("UDMF maps", () => {
       "linedef.moreids": 1,
       "sidedef.offsetx_mid": 1,
       "sidedef.scalex_mid": 1,
-      "sector.special": 1,
       "sector.lightcolor": 1,
       "thing.height": 1,
       "thing.user_tag": 1,
@@ -188,6 +225,18 @@ describe("UDMF maps", () => {
       expect(doom.udmf?.droppedFields).toEqual({ "linedef.id": 2 });
       expect(doom.udmf?.droppedActions).toEqual({});
     }
+  });
+
+  it("count a Hexen action as approximate when it has a trigger Doom can't add", () => {
+    const doom = readTextmap(
+      "MAP01",
+      `namespace = "zdoom";
+      linedef { v1 = 1; v2 = 0; sidefront = 0; special = 243; playeruse = true;
+        playercross = true; }
+      linedef { v1 = 1; v2 = 0; sidefront = 0; special = 243; impact = true; }`,
+    );
+    expect(doom.lines.map(({ special }) => special)).toEqual([11, 197]);
+    expect(doom.udmf?.nearestActions).toEqual({ Exit_Normal: 1 });
   });
 
   it("place things on no difficulty and no game mode unless they say so", () => {
@@ -304,6 +353,8 @@ describe("TEXTMAP grammar", () => {
   });
 });
 
+type Field = [string, string | number | boolean | undefined];
+
 const lineFlags = [
   "blocking",
   "blockmonsters",
@@ -317,14 +368,11 @@ const lineFlags = [
   "passuse",
 ];
 
-// Writes a classic map's records as a doom-namespace TEXTMAP, the way
-// Ultimate Doom Builder leaves out fields at their defaults.
-function toTextmap(doom: DoomMap) {
-  const out = ['namespace = "doom";'];
-  const block = (
-    kind: string,
-    fields: [string, string | number | boolean | undefined][],
-  ) => {
+// Writes a classic map's records as a TEXTMAP, the way Ultimate Doom Builder
+// leaves out fields at their defaults. In zdoom, actions take their Hexen form.
+function toTextmap(doom: DoomMap, namespace: "doom" | "zdoom" = "doom") {
+  const out = [`namespace = "${namespace}";`];
+  const block = (kind: string, fields: Field[]) => {
     out.push(`${kind}\n{`);
     for (const [name, value] of fields) {
       if (value === undefined || value === false) continue;
@@ -361,15 +409,19 @@ function toTextmap(doom: DoomMap) {
   }
   for (const line of doom.lines) {
     block("linedef", [
-      ["id", line.tag || undefined],
+      ...(namespace === "doom"
+        ? ([
+            ["id", line.tag || undefined],
+            ["special", line.special || undefined],
+            ["arg0", line.tag || undefined],
+          ] satisfies Field[])
+        : toHexenLine(line.special, line.tag)),
       ["v1", line.start],
       ["v2", line.end],
       ...lineFlags.map((name, bit): [string, boolean] => [
         name,
         (line.flags & (1 << bit)) !== 0,
       ]),
-      ["special", line.special || undefined],
-      ["arg0", line.tag || undefined],
       ["sidefront", line.front ?? -1],
       ["sideback", line.back ?? undefined],
     ]);
@@ -391,9 +443,49 @@ function toTextmap(doom: DoomMap) {
       ["texturefloor", texture(sector.floorTexture)],
       ["textureceiling", texture(sector.ceilingTexture)],
       ["lightlevel", sector.light],
-      ["special", sector.special || undefined],
+      [
+        "special",
+        (namespace === "doom"
+          ? sector.special
+          : toHexenSector(sector.special)) || undefined,
+      ],
       ["id", sector.tag || undefined],
     ]);
   }
   return out.join("\n");
+}
+
+const hexenTriggers = {
+  walk: "playercross",
+  use: "playeruse",
+  shoot: "impact",
+  "monster-walk": "monstercross",
+};
+
+function toHexenLine(special: number, tag: number): Field[] {
+  if (special === 0) return [];
+  const row = hexenTranslations.find(([doom]) => doom === special);
+  if (!row) throw new Error(`No Hexen form for line special ${special}.`);
+  const [, trigger, repeat, hexen, args] = row;
+  return [
+    ["special", hexen],
+    ...args.map((arg, index): Field => {
+      const value = arg === "tag" ? tag : (arg ?? 0);
+      return [`arg${index}`, value || undefined];
+    }),
+    ...(trigger === "none"
+      ? []
+      : [[hexenTriggers[trigger], true] satisfies Field]),
+    ["repeatspecial", repeat],
+  ];
+}
+
+const hexenSectorTypes = [
+  0, 65, 66, 67, 68, 69, -1, 71, 72, 0x400, 74, 75, 76, 77, 78, -1, 80, 81,
+];
+
+function toHexenSector(special: number) {
+  const type = hexenSectorTypes[special & 0x1f] ?? -1;
+  if (type < 0) throw new Error(`No Hexen form for sector special ${special}.`);
+  return type | ((special & ~0x1f) << 3);
 }
