@@ -729,7 +729,8 @@ void main() {
     column = wrapped(turn * ${skyTurn.toFixed(1)}, width);
     // The engine spreads the sky flat across the view, so a pixel's row
     // follows its height over its distance ahead, not over its true distance.
-    float rise = toward.z / max(ahead, 0.001);
+    // Sky almost straight below the eye keeps one row rather than stripes.
+    float rise = max(toward.z / max(ahead, 0.001), -1.0);
     float down = ${skyHorizon.toFixed(1)} - rise * ${(skyView / 2).toFixed(1)};
     // Above its top row the sky fades into one color, which a view that
     // looks straight up would otherwise see wrapped into rings.
