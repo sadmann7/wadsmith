@@ -15,10 +15,39 @@ export interface HexenAction {
   monsters?: boolean;
 }
 
+export const actionChanges = [
+  "trigger",
+  "repeat",
+  "monsters",
+  "key",
+  "speed",
+  "delay",
+  "height",
+  "step",
+  "stairs reset",
+  "where it stops",
+  "damage",
+  "crushing",
+  "stopping",
+  "texture",
+  "light",
+  "timing",
+  "sound",
+  "fog",
+  "angle",
+  "start spot",
+  "which parts scroll",
+  "opacity",
+  "blending",
+  "Boom bug",
+] as const;
+
+export type ActionChange = (typeof actionChanges)[number];
+
 export interface DoomAction {
   special: number;
   tag: number;
-  isNearest: boolean;
+  changes: ActionChange[];
 }
 
 // Each Doom line special as the Hexen special, trigger and arguments that
@@ -306,80 +335,216 @@ export const hexenTranslations: [
 
 // The arguments listed under nearest are speeds, delays and other amounts
 // that only change how an action feels, so a map's own values pick the
-// closest Doom special instead of ruling it out.
-const hexenSpecials: Record<number, { name: string; nearest: number[] }> = {
-  10: { name: "Door_Close", nearest: [1, 2] },
-  11: { name: "Door_Open", nearest: [1, 2] },
-  12: { name: "Door_Raise", nearest: [1, 2, 3] },
-  13: { name: "Door_LockedRaise", nearest: [1, 2, 4] },
-  21: { name: "Floor_LowerToLowest", nearest: [1, 2] },
-  22: { name: "Floor_LowerToNearest", nearest: [1, 2] },
-  23: { name: "Floor_RaiseByValue", nearest: [1] },
-  25: { name: "Floor_RaiseToNearest", nearest: [1, 2] },
-  35: { name: "Floor_RaiseByValueTimes8", nearest: [1] },
-  42: { name: "Ceiling_CrushAndRaise", nearest: [] },
-  43: { name: "Ceiling_LowerAndCrush", nearest: [1, 2, 3] },
-  44: { name: "Ceiling_CrushStop", nearest: [1] },
-  60: { name: "Plat_PerpetualRaise", nearest: [] },
-  61: { name: "Plat_Stop", nearest: [1] },
-  62: { name: "Plat_DownWaitUpStay", nearest: [] },
-  70: { name: "Teleport", nearest: [2] },
-  71: { name: "Teleport_NoFog", nearest: [1, 3] },
-  99: { name: "Floor_RaiseAndCrushDoom", nearest: [1, 2, 3] },
-  100: { name: "Scroll_Texture_Left", nearest: [0, 1] },
-  101: { name: "Scroll_Texture_Right", nearest: [0, 1] },
-  104: { name: "Ceiling_CrushAndRaiseSilentDist", nearest: [1, 2, 3, 4] },
-  112: { name: "Light_ChangeToValue", nearest: [] },
-  168: { name: "Ceiling_CrushAndRaiseDist", nearest: [1, 2, 3, 4] },
-  169: { name: "Generic_Crusher2", nearest: [] },
-  192: { name: "Ceiling_LowerToHighestFloor", nearest: [1, 2, 3, 4] },
-  200: { name: "Generic_Floor", nearest: [] },
-  201: { name: "Generic_Ceiling", nearest: [1] },
-  202: { name: "Generic_Door", nearest: [] },
-  203: { name: "Generic_Lift", nearest: [] },
-  204: { name: "Generic_Stairs", nearest: [] },
-  205: { name: "Generic_Crusher", nearest: [] },
-  206: { name: "Plat_DownWaitUpStayLip", nearest: [1, 2, 3, 4] },
-  207: { name: "Plat_PerpetualRaiseLip", nearest: [1, 2, 3] },
-  208: { name: "TranslucentLine", nearest: [1, 2] },
-  209: { name: "Transfer_Heights", nearest: [] },
-  210: { name: "Transfer_FloorLight", nearest: [] },
-  211: { name: "Transfer_CeilingLight", nearest: [] },
-  215: { name: "Teleport_Line", nearest: [] },
-  217: { name: "Stairs_BuildUpDoom", nearest: [1, 3, 4] },
-  218: { name: "Sector_SetWind", nearest: [] },
-  219: { name: "Sector_SetFriction", nearest: [] },
-  220: { name: "Sector_SetCurrent", nearest: [] },
-  222: { name: "Scroll_Texture_Model", nearest: [] },
-  223: { name: "Scroll_Floor", nearest: [] },
-  224: { name: "Scroll_Ceiling", nearest: [] },
-  225: { name: "Scroll_Texture_Offsets", nearest: [] },
-  227: { name: "PointPush_SetForce", nearest: [] },
-  228: { name: "Plat_RaiseAndStayTx0", nearest: [1, 2] },
-  230: { name: "Plat_UpByValueStayTx", nearest: [1] },
-  231: { name: "Plat_ToggleCeiling", nearest: [] },
-  232: { name: "Light_StrobeDoom", nearest: [1, 2] },
-  233: { name: "Light_MinNeighbor", nearest: [] },
-  234: { name: "Light_MaxNeighbor", nearest: [] },
-  235: { name: "Floor_TransferTrigger", nearest: [] },
-  236: { name: "Floor_TransferNumeric", nearest: [] },
-  238: { name: "Floor_RaiseToLowestCeiling", nearest: [1, 2, 3, 4] },
-  239: { name: "Floor_RaiseByValueTxTy", nearest: [1] },
-  240: { name: "Floor_RaiseByTexture", nearest: [1, 2, 3] },
-  241: { name: "Floor_LowerToLowestTxTy", nearest: [1] },
-  242: { name: "Floor_LowerToHighest", nearest: [1, 3] },
-  243: { name: "Exit_Normal", nearest: [0] },
-  244: { name: "Exit_Secret", nearest: [0] },
-  245: { name: "Elevator_RaiseToNearest", nearest: [1] },
-  246: { name: "Elevator_MoveToFloor", nearest: [1] },
-  247: { name: "Elevator_LowerToNearest", nearest: [1] },
-  249: { name: "Door_CloseWaitOpen", nearest: [1, 2, 3] },
-  250: { name: "Floor_Donut", nearest: [1, 2] },
-  251: { name: "FloorAndCeiling_LowerRaise", nearest: [1, 2, 3] },
-  253: { name: "Ceiling_LowerToLowest", nearest: [1, 2, 3] },
-  254: { name: "Ceiling_LowerToFloor", nearest: [1, 2, 3, 4] },
-  273: { name: "Stairs_BuildUpDoomCrush", nearest: [1, 3, 4] },
-  284: { name: "Generic_CrusherDist", nearest: [] },
+// closest Doom special instead of ruling it out. Each names what it changes,
+// or is null where GZDoom ignores it.
+const hexenSpecials: Record<
+  number,
+  { name: string; nearest: Partial<Record<number, ActionChange | null>> }
+> = {
+  10: {
+    name: "Door_Close",
+    nearest: { 1: "speed", 2: "light" },
+  },
+  11: {
+    name: "Door_Open",
+    nearest: { 1: "speed", 2: "light" },
+  },
+  12: {
+    name: "Door_Raise",
+    nearest: { 1: "speed", 2: "delay", 3: "light" },
+  },
+  13: {
+    name: "Door_LockedRaise",
+    nearest: { 1: "speed", 2: "delay", 4: "light" },
+  },
+  21: {
+    name: "Floor_LowerToLowest",
+    nearest: { 1: "speed", 2: "texture" },
+  },
+  22: {
+    name: "Floor_LowerToNearest",
+    nearest: { 1: "speed", 2: "texture" },
+  },
+  23: {
+    name: "Floor_RaiseByValue",
+    nearest: { 1: "speed" },
+  },
+  25: {
+    name: "Floor_RaiseToNearest",
+    nearest: { 1: "speed", 2: "texture" },
+  },
+  35: {
+    name: "Floor_RaiseByValueTimes8",
+    nearest: { 1: "speed" },
+  },
+  42: { name: "Ceiling_CrushAndRaise", nearest: {} },
+  43: {
+    name: "Ceiling_LowerAndCrush",
+    nearest: { 1: "speed", 2: "damage", 3: "crushing" },
+  },
+  44: {
+    name: "Ceiling_CrushStop",
+    nearest: { 1: "stopping" },
+  },
+  60: { name: "Plat_PerpetualRaise", nearest: {} },
+  61: {
+    name: "Plat_Stop",
+    nearest: { 1: null },
+  },
+  62: { name: "Plat_DownWaitUpStay", nearest: {} },
+  70: {
+    name: "Teleport",
+    nearest: { 2: "fog" },
+  },
+  71: {
+    name: "Teleport_NoFog",
+    nearest: { 1: "angle", 3: "height" },
+  },
+  99: {
+    name: "Floor_RaiseAndCrushDoom",
+    nearest: { 1: "speed", 2: "damage", 3: "crushing" },
+  },
+  100: {
+    name: "Scroll_Texture_Left",
+    nearest: { 0: "speed", 1: "which parts scroll" },
+  },
+  101: {
+    name: "Scroll_Texture_Right",
+    nearest: { 0: "speed", 1: "which parts scroll" },
+  },
+  104: {
+    name: "Ceiling_CrushAndRaiseSilentDist",
+    nearest: { 1: "where it stops", 2: "speed", 3: "damage", 4: "crushing" },
+  },
+  112: { name: "Light_ChangeToValue", nearest: {} },
+  168: {
+    name: "Ceiling_CrushAndRaiseDist",
+    nearest: { 1: "where it stops", 2: "speed", 3: "damage", 4: "crushing" },
+  },
+  169: { name: "Generic_Crusher2", nearest: {} },
+  192: {
+    name: "Ceiling_LowerToHighestFloor",
+    nearest: { 1: "speed", 2: "texture", 3: "damage", 4: "where it stops" },
+  },
+  200: { name: "Generic_Floor", nearest: {} },
+  201: {
+    name: "Generic_Ceiling",
+    nearest: { 1: "speed" },
+  },
+  202: { name: "Generic_Door", nearest: {} },
+  203: { name: "Generic_Lift", nearest: {} },
+  204: { name: "Generic_Stairs", nearest: {} },
+  205: { name: "Generic_Crusher", nearest: {} },
+  206: {
+    name: "Plat_DownWaitUpStayLip",
+    nearest: { 1: "speed", 2: "delay", 3: "height", 4: "sound" },
+  },
+  207: {
+    name: "Plat_PerpetualRaiseLip",
+    nearest: { 1: "speed", 2: "delay", 3: "height" },
+  },
+  208: {
+    name: "TranslucentLine",
+    nearest: { 1: "opacity", 2: "blending" },
+  },
+  209: { name: "Transfer_Heights", nearest: {} },
+  210: { name: "Transfer_FloorLight", nearest: {} },
+  211: { name: "Transfer_CeilingLight", nearest: {} },
+  215: { name: "Teleport_Line", nearest: {} },
+  217: {
+    name: "Stairs_BuildUpDoom",
+    nearest: { 1: "speed", 3: "delay", 4: "stairs reset" },
+  },
+  218: { name: "Sector_SetWind", nearest: {} },
+  219: { name: "Sector_SetFriction", nearest: {} },
+  220: { name: "Sector_SetCurrent", nearest: {} },
+  222: { name: "Scroll_Texture_Model", nearest: {} },
+  223: { name: "Scroll_Floor", nearest: {} },
+  224: { name: "Scroll_Ceiling", nearest: {} },
+  225: { name: "Scroll_Texture_Offsets", nearest: {} },
+  227: { name: "PointPush_SetForce", nearest: {} },
+  228: {
+    name: "Plat_RaiseAndStayTx0",
+    nearest: { 1: "speed", 2: null },
+  },
+  230: {
+    name: "Plat_UpByValueStayTx",
+    nearest: { 1: "speed" },
+  },
+  231: { name: "Plat_ToggleCeiling", nearest: {} },
+  232: {
+    name: "Light_StrobeDoom",
+    nearest: { 1: "timing", 2: "timing" },
+  },
+  233: { name: "Light_MinNeighbor", nearest: {} },
+  234: { name: "Light_MaxNeighbor", nearest: {} },
+  235: { name: "Floor_TransferTrigger", nearest: {} },
+  236: { name: "Floor_TransferNumeric", nearest: {} },
+  238: {
+    name: "Floor_RaiseToLowestCeiling",
+    nearest: { 1: "speed", 2: "texture", 3: "damage", 4: null },
+  },
+  239: {
+    name: "Floor_RaiseByValueTxTy",
+    nearest: { 1: "speed" },
+  },
+  240: {
+    name: "Floor_RaiseByTexture",
+    nearest: { 1: "speed", 2: "texture", 3: "damage" },
+  },
+  241: {
+    name: "Floor_LowerToLowestTxTy",
+    nearest: { 1: "speed" },
+  },
+  242: {
+    name: "Floor_LowerToHighest",
+    nearest: { 1: "speed", 3: "height" },
+  },
+  243: {
+    name: "Exit_Normal",
+    nearest: { 0: "start spot" },
+  },
+  244: {
+    name: "Exit_Secret",
+    nearest: { 0: "start spot" },
+  },
+  245: {
+    name: "Elevator_RaiseToNearest",
+    nearest: { 1: "speed" },
+  },
+  246: {
+    name: "Elevator_MoveToFloor",
+    nearest: { 1: "speed" },
+  },
+  247: {
+    name: "Elevator_LowerToNearest",
+    nearest: { 1: "speed" },
+  },
+  249: {
+    name: "Door_CloseWaitOpen",
+    nearest: { 1: "speed", 2: "delay", 3: "light" },
+  },
+  250: {
+    name: "Floor_Donut",
+    nearest: { 1: "speed", 2: "speed" },
+  },
+  251: {
+    name: "FloorAndCeiling_LowerRaise",
+    nearest: { 1: "speed", 2: "speed", 3: "Boom bug" },
+  },
+  253: {
+    name: "Ceiling_LowerToLowest",
+    nearest: { 1: "speed", 2: "texture", 3: "damage" },
+  },
+  254: {
+    name: "Ceiling_LowerToFloor",
+    nearest: { 1: "speed", 2: "texture", 3: "damage", 4: "where it stops" },
+  },
+  273: {
+    name: "Stairs_BuildUpDoomCrush",
+    nearest: { 1: "speed", 3: "delay", 4: "stairs reset" },
+  },
+  284: { name: "Generic_CrusherDist", nearest: {} },
 };
 
 const scripts = new Set([80, 81, 82, 83, 84, 226]);
@@ -393,9 +558,25 @@ export function hexenSpecialName(special: number) {
 // unless monsters can trigger the line, which only a generalized one can say.
 export function doomActionFor(given: HexenAction): DoomAction | null {
   const doom = fixedActionFor(given);
-  if (doom && !doom.isNearest && !given.monsters) return doom;
-  return generalizedActionFor(given) ?? doom;
+  if (doom && doom.changes.length === 0 && !given.monsters) return doom;
+  const generalized = generalizedActionFor(given);
+  if (generalized || !doom) return generalized ?? doom;
+  if (
+    !given.monsters ||
+    given.trigger === "monster-walk" ||
+    given.trigger === "none" ||
+    monsterSpecials.has(doom.special)
+  ) {
+    return doom;
+  }
+  return { ...doom, changes: orderedChanges([...doom.changes, "monsters"]) };
 }
+
+// The Doom specials GZDoom's xlat/base.txt lets monsters trigger.
+const monsterSpecials = new Set([
+  1, 4, 10, 32, 33, 34, 39, 46, 88, 97, 174, 195, 207, 208, 209, 210, 243, 244,
+  262, 263,
+]);
 
 const candidates = new Map<number, typeof hexenTranslations>();
 for (const translation of hexenTranslations) {
@@ -404,14 +585,20 @@ for (const translation of hexenTranslations) {
 }
 
 // Specials Doom has no row for, as the row that moves the same way, with the
-// lip or distance each one has built in. They never match exactly.
+// lip or distance each one has built in, and what the row always changes.
 const aliases: Record<
   number,
-  { special: number; args: (args: number[]) => number[] }
+  {
+    special: number;
+    args: (args: number[]) => number[];
+    changes?: ActionChange[];
+  }
 > = {
+  // Ceiling_CrushAndRaise rises at half its speed down.
   42: {
     special: 168,
     args: ([tag, speed, crush, mode]) => [tag, 8, speed, crush, mode],
+    changes: ["speed"],
   },
   60: { special: 207, args: ([tag, speed, delay]) => [tag, speed, delay, 8] },
   62: { special: 206, args: ([tag, speed, delay]) => [tag, speed, delay, 8] },
@@ -428,7 +615,7 @@ function fixedActionFor(given: HexenAction): DoomAction | null {
   const action = alias
     ? { ...given, special: alias.special, args: alias.args(given.args) }
     : given;
-  const nearest = new Set(hexenSpecials[action.special]?.nearest);
+  const nearest = hexenSpecials[action.special]?.nearest ?? {};
   let best: { action: DoomAction; distance: number } | null = null;
   for (const [doom, trigger, repeat, , args] of candidates.get(
     action.special,
@@ -436,6 +623,8 @@ function fixedActionFor(given: HexenAction): DoomAction | null {
     if (trigger !== action.trigger) continue;
     let tag: number | null = null;
     let distance = repeat === action.repeat ? 0 : 10;
+    const changes = new Set<ActionChange>(alias?.changes);
+    if (repeat !== action.repeat) changes.add("repeat");
     for (const [index, value] of action.args.entries()) {
       const wanted = index < args.length ? args[index] : 0;
       if (wanted === null) continue;
@@ -452,11 +641,18 @@ function fixedActionFor(given: HexenAction): DoomAction | null {
         tag ??= value;
       } else if (action.special === lockedDoor && index === lockArg) {
         if (keyOf(value) !== keyOf(wanted)) distance = Infinity;
-        else if (value !== wanted) distance += 0.5;
+        else if (value !== wanted) {
+          distance += 0.5;
+          changes.add("key");
+        }
       } else if (value !== wanted) {
-        distance += nearest.has(index)
-          ? Math.abs(Math.log((value + 1) / (wanted + 1)))
-          : Infinity;
+        const change = nearest[index];
+        if (change === undefined) {
+          distance = Infinity;
+        } else {
+          distance += Math.abs(Math.log((value + 1) / (wanted + 1)));
+          if (change) changes.add(change);
+        }
       }
     }
     // Boom sends a line teleport to the other line with its own tag, so the
@@ -469,12 +665,17 @@ function fixedActionFor(given: HexenAction): DoomAction | null {
       action: {
         special: doom,
         tag: tag ?? 0,
-        isNearest: alias !== undefined || distance > 0,
+        changes: orderedChanges(changes),
       },
       distance,
     };
   }
   return best?.action ?? null;
+}
+
+export function orderedChanges(changes: Iterable<ActionChange>) {
+  const given = new Set(changes);
+  return actionChanges.filter((change) => given.has(change));
 }
 
 function keyOf(lock: number) {
@@ -526,11 +727,13 @@ function generalizedActionFor({
   monsters = false,
 }: HexenAction): DoomAction | null {
   const [tag, speed, third, fourth, fifth] = args;
-  let isNearest = trigger === "monster-walk";
+  const changes = new Set<ActionChange>();
+  // Boom lets players walk over a line that monsters can.
+  if (trigger === "monster-walk") changes.add("trigger");
   const canMonsters = trigger === "monster-walk" || monsters;
-  const pick = (value: number, options: number[]) => {
+  const pick = (value: number, options: number[], change: ActionChange) => {
     const index = closest(value, options);
-    if (options[index] !== value) isNearest = true;
+    if (options[index] !== value) changes.add(change);
     return index;
   };
   // A pressed line with no tag works the sector behind it, as Boom's door
@@ -552,22 +755,26 @@ function generalizedActionFor({
     name: GeneralizedClass,
     values: Record<string, number> | null,
   ): DoomAction | null =>
-    values && { special: encodeGeneralized(name, values), tag, isNearest };
+    values && {
+      special: encodeGeneralized(name, values),
+      tag,
+      changes: orderedChanges(changes),
+    };
 
   if (special === genericFloor || special === genericCeiling) {
     const flags = fifth;
     const change = flags & 3;
     const boom = boomTrigger(tag === 0);
     if (boom === null) return null;
-    if (change !== 0 && canMonsters) isNearest = true;
+    if (change !== 0 && canMonsters) changes.add("monsters");
     return result(special === genericFloor ? "floor" : "ceiling", {
       trigger: boom,
-      speed: pick(speed, moverSpeeds),
+      speed: pick(speed, moverSpeeds, "speed"),
       direction: flags & 8 ? 1 : 0,
       target:
         fourth >= 1 && fourth <= moverTargets
           ? fourth - 1
-          : moverTargets + pick(third, moverHeights),
+          : moverTargets + pick(third, moverHeights, "height"),
       change,
       ...(change === 0
         ? { monsters: canMonsters ? 1 : 0 }
@@ -583,23 +790,25 @@ function generalizedActionFor({
     const key = fifth === 0 ? null : boomKeys.get(fifth & ~cardIsSkull);
     if (boom === null || key === undefined) return null;
     if (key !== null && kind <= 1) {
-      if (kind === 0 && fourth !== lockedDoorWait) isNearest = true;
-      if (canMonsters) isNearest = true;
+      if (kind === 0 && fourth !== lockedDoorWait) changes.add("delay");
+      if (canMonsters) changes.add("monsters");
       return result("locked", {
         trigger: boom,
-        speed: pick(speed, doorSpeeds),
+        speed: pick(speed, doorSpeeds, "speed"),
         kind,
         key,
         skulls: fifth & cardIsSkull ? 1 : 0,
       });
     }
-    if (key !== null) isNearest = true;
+    if (key !== null) changes.add("key");
     const waits = kind === 0 || kind === 2;
     return result("door", {
       trigger: boom,
-      speed: pick(speed, doorSpeeds),
+      speed: pick(speed, doorSpeeds, "speed"),
       kind,
-      delay: waits ? pick(fourth, doorDelays) : closest(fourth, doorDelays),
+      delay: waits
+        ? pick(fourth, doorDelays, "delay")
+        : closest(fourth, doorDelays),
       monsters: canMonsters ? 1 : 0,
     });
   }
@@ -612,8 +821,8 @@ function generalizedActionFor({
         ? null
         : {
             trigger: boom,
-            speed: pick(speed, liftSpeeds),
-            delay: pick(third, liftDelays),
+            speed: pick(speed, liftSpeeds, "speed"),
+            delay: pick(third, liftDelays, "delay"),
             target: fourth - 1,
             monsters: canMonsters ? 1 : 0,
           },
@@ -621,15 +830,15 @@ function generalizedActionFor({
   }
   if (special === genericStairs) {
     const boom = boomTrigger(tag === 0);
-    if (fifth !== 0) isNearest = true;
+    if (fifth !== 0) changes.add("stairs reset");
     return result(
       "stairs",
       boom === null
         ? null
         : {
             trigger: boom,
-            speed: pick(speed, stairSpeeds),
-            step: pick(third, stairSteps),
+            speed: pick(speed, stairSpeeds, "speed"),
+            step: pick(third, stairSteps, "step"),
             direction: fourth & 1,
             ignore: (fourth >> 1) & 1,
             monsters: canMonsters ? 1 : 0,
@@ -642,20 +851,17 @@ function generalizedActionFor({
     special === genericCrusher2
   ) {
     const boom = boomTrigger(tag === 0);
-    if (
-      special !== genericCrusherDist ||
-      third !== speed ||
-      fifth !== crusherDamage
-    ) {
-      isNearest = true;
-    }
+    if (special !== genericCrusherDist) changes.add("where it stops");
+    if (special === genericCrusher2) changes.add("crushing");
+    if (third !== speed) changes.add("speed");
+    if (fifth !== crusherDamage) changes.add("damage");
     return result(
       "crusher",
       boom === null
         ? null
         : {
             trigger: boom,
-            speed: pick(speed, moverSpeeds),
+            speed: pick(speed, moverSpeeds, "speed"),
             silent: fourth ? 1 : 0,
             monsters: canMonsters ? 1 : 0,
           },

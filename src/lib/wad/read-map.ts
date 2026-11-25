@@ -1,3 +1,4 @@
+import type { ActionChange } from "@/lib/map/hexen-actions";
 import type { Point } from "@/lib/map/types";
 
 import { getIsMapLump } from "@/lib/engine/game";
@@ -13,7 +14,12 @@ export interface DoomLine {
   tag: number;
   front: number | null;
   back: number | null;
-  approximates?: string;
+  approximates?: ApproximateAction;
+}
+
+export interface ApproximateAction {
+  name: string;
+  changes: ActionChange[];
 }
 
 export interface DoomSide {

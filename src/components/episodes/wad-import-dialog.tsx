@@ -2,7 +2,7 @@ import * as React from "react";
 
 import type { GameInfo } from "@/lib/engine/game";
 import type { GameMap } from "@/lib/map/types";
-import type { ImportReport } from "@/lib/wad/decompile";
+import type { ApproximateCount, ImportReport } from "@/lib/wad/decompile";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -16,6 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { orderedChanges } from "@/lib/map/hexen-actions";
 
 export interface ImportedMap {
   slot: string;
@@ -196,14 +197,14 @@ function losses(reports: ImportReport[], gameLabel: string) {
       detail: actions.map(([name, count]) => `${name} ×${count}`).join(", "),
     });
   }
-  const nearest = tally(reports.map((report) => report.nearestActions));
+  const nearest = tallyApproximate(reports);
   if (nearest.length > 0) {
     rows.push({
       label: plural(
-        nearest.reduce((total, [, count]) => total + count, 0),
+        nearest.reduce((total, [, { count }]) => total + count, 0),
         "approximate action",
       ),
-      detail: `Doom has no exact match for their speed, delay, key or repeat, so the closest one is used: ${nearest.map(([name, count]) => `${name} ×${count}`).join(", ")}.`,
+      detail: `Doom has no exact match, so the closest one is used: ${nearest.map(([name, { count, changes }]) => `${name} ×${count} (${changes.join(", ")})`).join(", ")}.`,
     });
   }
   const fields = tally(reports.map((report) => report.droppedFields));
@@ -312,6 +313,22 @@ function tally(entries: Record<string, number>[]) {
     }
   }
   return [...total].toSorted((a, b) => b[1] - a[1]);
+}
+
+function tallyApproximate(reports: ImportReport[]) {
+  const total = new Map<string, ApproximateCount>();
+  for (const report of reports) {
+    for (const [name, { count, changes }] of Object.entries(
+      report.nearestActions,
+    )) {
+      const counted = total.get(name);
+      total.set(name, {
+        count: (counted?.count ?? 0) + count,
+        changes: orderedChanges([...(counted?.changes ?? []), ...changes]),
+      });
+    }
+  }
+  return [...total].toSorted((a, b) => b[1].count - a[1].count);
 }
 
 function sum(reports: ImportReport[], pick: (report: ImportReport) => number) {
