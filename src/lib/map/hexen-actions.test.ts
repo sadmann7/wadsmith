@@ -252,6 +252,42 @@ describe("Hexen generalized specials", () => {
       "speed",
       "damage",
     ]);
+    expect(changes(action(100, [64, 2], "none"))).toEqual([
+      "which parts scroll",
+    ]);
+    expect(changes({ ...action(21, [3, 8], "walk"), monsters: true })).toEqual([
+      "monsters",
+    ]);
+  });
+
+  it("leave monsters out of the changes when Doom lets them trigger it too", () => {
+    expect(
+      doomActionFor({
+        ...action(12, [0, 16, 150], "use", true),
+        monsters: true,
+      }),
+    ).toEqual({ special: 1, tag: 0, changes: [] });
+    expect(
+      doomActionFor({ ...action(70, [0, 9], "walk", true), monsters: true }),
+    ).toMatchObject({ special: 97, changes: [] });
+    expect(
+      doomActionFor({ ...action(70, [0, 9], "monster-walk"), monsters: true }),
+    ).toMatchObject({ special: 125, changes: [] });
+    expect(
+      doomActionFor({ ...action(100, [64], "none"), monsters: true }),
+    ).toMatchObject({ special: 48, changes: [] });
+  });
+
+  it("leave out the arguments GZDoom ignores", () => {
+    expect(doomActionFor(action(238, [3, 8, 0, 0, 8], "walk"))).toEqual({
+      special: 5,
+      tag: 3,
+      changes: [],
+    });
+    expect(doomActionFor(action(61, [3, 1], "walk"))).toMatchObject({
+      special: 54,
+      changes: [],
+    });
   });
 
   it("drop what Boom has no generalized line for", () => {

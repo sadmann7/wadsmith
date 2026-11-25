@@ -36,10 +36,9 @@ export const actionChanges = [
   "fog",
   "angle",
   "start spot",
-  "offset",
+  "which parts scroll",
   "opacity",
   "blending",
-  "lockout",
   "Boom bug",
 ] as const;
 
@@ -336,10 +335,11 @@ export const hexenTranslations: [
 
 // The arguments listed under nearest are speeds, delays and other amounts
 // that only change how an action feels, so a map's own values pick the
-// closest Doom special instead of ruling it out. Each names what it changes.
+// closest Doom special instead of ruling it out. Each names what it changes,
+// or is null where GZDoom ignores it.
 const hexenSpecials: Record<
   number,
-  { name: string; nearest: Partial<Record<number, ActionChange>> }
+  { name: string; nearest: Partial<Record<number, ActionChange | null>> }
 > = {
   10: {
     name: "Door_Close",
@@ -389,7 +389,7 @@ const hexenSpecials: Record<
   60: { name: "Plat_PerpetualRaise", nearest: {} },
   61: {
     name: "Plat_Stop",
-    nearest: { 1: "stopping" },
+    nearest: { 1: null },
   },
   62: { name: "Plat_DownWaitUpStay", nearest: {} },
   70: {
@@ -406,11 +406,11 @@ const hexenSpecials: Record<
   },
   100: {
     name: "Scroll_Texture_Left",
-    nearest: { 0: "speed", 1: "offset" },
+    nearest: { 0: "speed", 1: "which parts scroll" },
   },
   101: {
     name: "Scroll_Texture_Right",
-    nearest: { 0: "speed", 1: "offset" },
+    nearest: { 0: "speed", 1: "which parts scroll" },
   },
   104: {
     name: "Ceiling_CrushAndRaiseSilentDist",
@@ -465,7 +465,7 @@ const hexenSpecials: Record<
   227: { name: "PointPush_SetForce", nearest: {} },
   228: {
     name: "Plat_RaiseAndStayTx0",
-    nearest: { 1: "speed", 2: "lockout" },
+    nearest: { 1: "speed", 2: null },
   },
   230: {
     name: "Plat_UpByValueStayTx",
@@ -482,7 +482,7 @@ const hexenSpecials: Record<
   236: { name: "Floor_TransferNumeric", nearest: {} },
   238: {
     name: "Floor_RaiseToLowestCeiling",
-    nearest: { 1: "speed", 2: "texture", 3: "damage", 4: "where it stops" },
+    nearest: { 1: "speed", 2: "texture", 3: "damage", 4: null },
   },
   239: {
     name: "Floor_RaiseByValueTxTy",
@@ -559,8 +559,24 @@ export function hexenSpecialName(special: number) {
 export function doomActionFor(given: HexenAction): DoomAction | null {
   const doom = fixedActionFor(given);
   if (doom && doom.changes.length === 0 && !given.monsters) return doom;
-  return generalizedActionFor(given) ?? doom;
+  const generalized = generalizedActionFor(given);
+  if (generalized || !doom) return generalized ?? doom;
+  if (
+    !given.monsters ||
+    given.trigger === "monster-walk" ||
+    given.trigger === "none" ||
+    monsterSpecials.has(doom.special)
+  ) {
+    return doom;
+  }
+  return { ...doom, changes: orderedChanges([...doom.changes, "monsters"]) };
 }
+
+// The Doom specials GZDoom's xlat/base.txt lets monsters trigger.
+const monsterSpecials = new Set([
+  1, 4, 10, 32, 33, 34, 39, 46, 88, 97, 174, 195, 207, 208, 209, 210, 243, 244,
+  262, 263,
+]);
 
 const candidates = new Map<number, typeof hexenTranslations>();
 for (const translation of hexenTranslations) {
@@ -631,11 +647,11 @@ function fixedActionFor(given: HexenAction): DoomAction | null {
         }
       } else if (value !== wanted) {
         const change = nearest[index];
-        if (change) {
-          distance += Math.abs(Math.log((value + 1) / (wanted + 1)));
-          changes.add(change);
-        } else {
+        if (change === undefined) {
           distance = Infinity;
+        } else {
+          distance += Math.abs(Math.log((value + 1) / (wanted + 1)));
+          if (change) changes.add(change);
         }
       }
     }
