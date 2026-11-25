@@ -10,7 +10,9 @@ export interface UdmfImport {
 
 interface Fields {
   int: (key: string, fallback?: number) => number;
-  float: (key: string, fallback?: number) => number;
+  word: (key: string, fallback: number) => number;
+  coordinate: (key: string) => number;
+  tag: (key: string) => number;
   flag: (key: string) => boolean;
   texture: (key: string) => string;
   index: (key: string) => number;
@@ -101,12 +103,12 @@ export function readTextmap(slot: string, source: string): DoomMap {
   }
 
   const vertices = read("vertex", (vertex) => ({
-    x: vertex.float("x"),
-    y: vertex.float("y"),
+    x: vertex.coordinate("x"),
+    y: vertex.coordinate("y"),
   }));
   const sides = read("sidedef", (side) => ({
-    offsetX: side.int("offsetx", 0),
-    offsetY: side.int("offsety", 0),
+    offsetX: side.word("offsetx", 0),
+    offsetY: side.word("offsety", 0),
     upper: side.texture("texturetop"),
     lower: side.texture("texturebottom"),
     middle: side.texture("texturemiddle"),
@@ -135,13 +137,13 @@ export function readTextmap(slot: string, source: string): DoomMap {
     const effect = readSectorSpecial(namespace, sector);
     sector.use(effect.used);
     return {
-      floor: sector.int("heightfloor", 0),
-      ceiling: sector.int("heightceiling", 0),
+      floor: sector.word("heightfloor", 0),
+      ceiling: sector.word("heightceiling", 0),
       floorTexture: sector.texture("texturefloor"),
       ceilingTexture: sector.texture("textureceiling"),
-      light: sector.int("lightlevel", 160),
+      light: sector.word("lightlevel", 160),
       special: effect.special,
-      tag: Math.max(sector.int("id", 0), 0),
+      tag: sector.tag("id"),
     };
   });
   const things = read("thing", (thing): DoomThing => {
@@ -150,8 +152,8 @@ export function readTextmap(slot: string, source: string): DoomMap {
       0,
     );
     return {
-      x: thing.float("x"),
-      y: thing.float("y"),
+      x: thing.coordinate("x"),
+      y: thing.coordinate("y"),
       angle: thing.int("angle", 0),
       type: thing.int("type"),
       flags:
@@ -253,7 +255,7 @@ function parseTextmap(source: string) {
 }
 
 const tokenPattern =
-  /\s+|\/\/[^\n]*|\/\*[\s\S]*?\*\/|(\/\*)|"((?:[^"\\]|\\[\s\S])*)"|(")|([{}=;])|([^{}();"'\s=]+)/y;
+  /\s+|\/\/[^\n]*|\/\*[\s\S]*?\*\/|(\/\*)|"((?:[^"\\]|\\[\s\S])*)"|(")|([{}=;])|((?:[^{}();"'\s=/]|\/(?![/*]))+)/y;
 
 function tokenize(source: string) {
   const tokens: Token[] = [];
@@ -342,13 +344,17 @@ interface LineAction {
 // own identity in id, which the classic format keeps as one number.
 function readLineAction(namespace: string, line: Fields): LineAction {
   const special = line.int("special", 0);
-  const id = Math.max(line.int("id", 0), 0);
+  const id = line.tag("id");
   if (doomSpecials.has(namespace)) {
-    const arg0 = line.int("arg0", 0);
+    const arg0 = line.tag("arg0");
     return {
       special,
-      tag: arg0 || id,
-      used: ["special", "arg0", ...(arg0 && id !== arg0 ? [] : ["id"])],
+      tag: special === 0 ? id : arg0,
+      used: [
+        "special",
+        "arg0",
+        ...(special !== 0 && id !== 0 && id !== arg0 ? [] : ["id"]),
+      ],
     };
   }
   return {
@@ -388,12 +394,21 @@ function fieldsOf(block: Block, used: Set<string>): Fields {
   };
   return {
     int,
-    float: (key, fallback) => {
-      const value = get(key);
-      if (value === undefined) return fallback ?? missing(key);
-      return value.type === "int" || value.type === "float"
-        ? value.value
-        : wrong(key, "a number");
+    word: (key, fallback) => {
+      const value = int(key, fallback);
+      return getIsWord(value) ? value : wrong(key, wordRange);
+    },
+    coordinate: (key) => {
+      const value = get(key) ?? missing(key);
+      if (value.type !== "int" && value.type !== "float") {
+        return wrong(key, "a number");
+      }
+      const rounded = Math.round(value.value) || 0;
+      return getIsWord(rounded) ? rounded : wrong(key, wordRange);
+    },
+    tag: (key) => {
+      const value = Math.max(int(key, 0), 0);
+      return value <= 0xffff ? value : wrong(key, "between 0 and 65535");
     },
     flag: (key) => {
       const value = get(key);
@@ -421,6 +436,12 @@ function fieldsOf(block: Block, used: Set<string>): Fields {
       for (const key of keys) used.add(key);
     },
   };
+}
+
+const wordRange = "between -32768 and 32767";
+
+function getIsWord(value: number) {
+  return value >= -32768 && value <= 32767;
 }
 
 function getIsDefault(value: Value) {

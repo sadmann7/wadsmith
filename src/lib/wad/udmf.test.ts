@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { starterMap } from "@/lib/map/starter-map";
+import { parseMapFile, serializeMap } from "@/lib/map/storage";
 
 import { compileMap } from "./compile";
 import { decompileMap } from "./decompile";
@@ -125,7 +126,7 @@ describe("UDMF maps", () => {
       sector { texturefloor = "floor4_8"; textureceiling = "ceil3_5";
         heightceiling = 128; special = 65; lightcolor = 0xff0000;
         comment = "a \\"room\\""; }
-      thing { x = 128.0; y = 128.0; height = 24; type = 1; skill1 = true;
+      thing { x = 127.6; y = 128.0; height = 24; type = 1; skill1 = true;
         skill2 = true; skill3 = true; single = true; user_tag = "boss"; }
       thing { x = 64.0; y = 64.0; type = 3001; skill3 = true; single = true;
         id = 9; special = 80; arg0 = 1; }
@@ -140,6 +141,7 @@ describe("UDMF maps", () => {
     const { map, report } = decompileMap(doom);
     expect(map.sectors).toHaveLength(1);
     expect(map.things).toHaveLength(2);
+    expect(parseMapFile(serializeMap(map))).toEqual(map);
     expect(report.namespace).toBe("zdoom");
     expect(report.droppedActions).toEqual({ "Hexen-style actions": 1 });
     expect(report.droppedFields).toEqual({
@@ -171,6 +173,7 @@ describe("UDMF maps", () => {
         linedef { v1 = 1; v2 = 0; sidefront = 0; id = 6; }
         linedef { v1 = 1; v2 = 0; sidefront = 0; special = 23; arg0 = 4;
           id = 6; }
+        linedef { v1 = 1; v2 = 0; sidefront = 0; special = 23; id = 7; }
         sector { texturefloor = "F"; textureceiling = "C"; special = 9;
           id = 4; }`,
       );
@@ -179,9 +182,10 @@ describe("UDMF maps", () => {
         [23, 4],
         [0, 6],
         [23, 4],
+        [23, 0],
       ]);
       expect(doom.sectors[0]).toMatchObject({ special: 9, tag: 4 });
-      expect(doom.udmf?.droppedFields).toEqual({ "linedef.id": 1 });
+      expect(doom.udmf?.droppedFields).toEqual({ "linedef.id": 2 });
       expect(doom.udmf?.droppedActions).toEqual({});
     }
   });
@@ -235,7 +239,19 @@ describe("TEXTMAP grammar", () => {
       { x: 8, y: 31 },
       { x: -12, y: 3 },
       { x: 0, y: 150 },
-      { x: 2, y: -0.25 },
+      { x: 2, y: 0 },
+    ]);
+  });
+
+  it("ends a value where a comment starts", () => {
+    expect(vertex("vertex { x = 1.0/* a */; y = 2// b\n; }")).toEqual([
+      { x: 1, y: 2 },
+    ]);
+  });
+
+  it("rounds coordinates to whole units, as classic maps hold them", () => {
+    expect(vertex("vertex { x = 64.5; y = -12.25; }")).toEqual([
+      { x: 65, y: -12 },
     ]);
   });
 
@@ -256,6 +272,10 @@ describe("TEXTMAP grammar", () => {
       "linedef { v1 = 0; v2 = 0; sidefront = 0; blocking = 1; }",
       "sidedef { sector = 0; texturemiddle = STARTAN3; }",
       "sidedef { sector = -1; }",
+      "vertex { x = 40000.0; y = 0.0; }",
+      'sector { heightceiling = 40000; texturefloor = "F"; }',
+      "sidedef { sector = 0; offsetx = -40000; }",
+      'sector { id = 70000; texturefloor = "F"; }',
     ]) {
       expect(() => vertex(body), body).toThrow(WadFileError);
     }
