@@ -27,7 +27,7 @@ import {
 import { wallKey, wallOwners } from "./geometry";
 import { starterMap } from "./starter-map";
 import { islandMap, testMap } from "./test-map";
-import { issuesSince, newProblems, validateMap } from "./validate";
+import { inspectMap, issuesSince, newProblems, validateMap } from "./validate";
 
 const openWall = wallKey("v3", "v4");
 const lowerFloor: LineAction = {
@@ -765,6 +765,33 @@ describe("turning, flipping and resizing", () => {
       expect.objectContaining({ id: "in-door:zombie-near-door" }),
     ]);
     expect(defined(grown).vertices.v17).toEqual({ x: 944, y: 80 });
+  });
+
+  it("names only the warnings the map check lists while an error stands", () => {
+    const map: GameMap = {
+      ...starterMap,
+      things: [
+        ...starterMap.things.filter((thing) => thing.kind !== "player"),
+        { id: "zombie-near-door", kind: "zombieman", x: 952, y: 160, angle: 0 },
+      ],
+    };
+    const keys = partKeys(map, selectedParts(map, [], "sector-8"));
+    const grow: Transform = { kind: "scale", factor: 1.2 };
+    const {
+      map: grown,
+      problems,
+      warnings,
+      stranded,
+    } = transformKeepingDoors(map, keys, [grow], 8);
+    expect(problems).toEqual([]);
+    expect(stranded).toEqual([]);
+    expect(issuesSince(map)(defined(grown)).warnings).toEqual([
+      expect.objectContaining({ id: "in-door:zombie-near-door" }),
+    ]);
+    expect(inspectMap(defined(grown)).warnings).not.toContainEqual(
+      expect.objectContaining({ id: "in-door:zombie-near-door" }),
+    );
+    expect(warnings).toEqual([]);
   });
 
   it("keeps the far room's wall straight around a door set into it", () => {
