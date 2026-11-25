@@ -728,7 +728,7 @@ void main() {
     float down = ${skyHorizon.toFixed(1)} - rise * ${(skyView / 2).toFixed(1)};
     // Above its top row the sky rises into one color, which a view that
     // looks straight up would otherwise see wrapped into rings.
-    if (down < 0.0) capRow = min(int(-down), ${skyCapRows - 1});
+    if (down < 0.0) capRow = int(min(-down, ${(skyCapRows - 1).toFixed(1)}));
     row = down < 0.0 ? 0 : wrapped(down, height);
   } else {
     bool cut = (vFlags & ${meshFlags.masked | meshFlags.sprite}) != 0;
