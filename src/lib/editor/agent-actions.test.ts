@@ -620,13 +620,15 @@ describe("agent actions", () => {
       ["updateRoom", { room: "Corridor", special: 32767, tag: 32767 }],
     ]);
     expect(parseMapFile(serializeMap(map))).toEqual(map);
-    const tooBig: [string, unknown[] | Record<string, unknown>][] = [
+    const outOfRange: [string, unknown[] | Record<string, unknown>][] = [
       ["setLineSpecial", ["v3|v4", 40000]],
+      ["setLineSpecial", ["v3|v4", -1]],
       ["updateRoom", { room: "Corridor", special: 40000 }],
       ["updateRoom", { room: "Corridor", tag: 40000 }],
       ["addThing", { kind: "custom", type: 40000, x: 64, y: 64 }],
+      ["addThing", { kind: "custom", type: 0, x: 64, y: 64 }],
     ];
-    for (const [name, args] of tooBig) {
+    for (const [name, args] of outOfRange) {
       expect(() => runAgentAction(map, name, args)).toThrow(
         /must be from [01] to 32767/,
       );
