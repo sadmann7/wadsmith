@@ -112,6 +112,9 @@ export function WadImportDialog({
                       <span className="min-w-0 truncate text-muted-foreground">
                         {plural(entry.report.rooms, "room")} ·{" "}
                         {plural(entry.map.things.length, "thing")}
+                        {entry.report.namespace
+                          ? ` · UDMF, ${entry.report.namespace}`
+                          : ""}
                       </span>
                       <span className="font-mono text-xs text-muted-foreground">
                         {on ? `→ ${target(entry)}` : ""}
@@ -191,6 +194,25 @@ function losses(reports: ImportReport[], gameLabel: string) {
         "line action",
       ),
       detail: actions.map(([name, count]) => `${name} ×${count}`).join(", "),
+    });
+  }
+  const fields = tally(reports.map((report) => report.droppedFields));
+  if (fields.length > 0) {
+    const namespaces = [
+      ...new Set(
+        reports.flatMap((report) =>
+          report.namespace && Object.keys(report.droppedFields).length > 0
+            ? report.namespace
+            : [],
+        ),
+      ),
+    ];
+    rows.push({
+      label: plural(
+        fields.reduce((total, [, count]) => total + count, 0),
+        "UDMF field",
+      ),
+      detail: `Not kept from the ${namespaces.join(" and ")} ${namespaces.length === 1 ? "namespace" : "namespaces"}: ${fields.map(([name, count]) => `${name} ×${count}`).join(", ")}.`,
     });
   }
   const seeThrough = sum(reports, (report) => report.seeThroughWalls);

@@ -14,7 +14,6 @@ import { validateMap } from "@/lib/map/validate";
 
 import { buildLevel, compileEpisode, compileMap } from "./compile";
 import { decompileMap } from "./decompile";
-import { WadFileError } from "./inspect";
 import { type DoomMap, type DoomSector, readMaps } from "./read-map";
 
 const freedoom = resolve(
@@ -930,7 +929,9 @@ describe("readMaps", () => {
     );
     expect(() =>
       readMaps([{ name: "a.wad", data: wad(["MAP01", "TEXTMAP"]) }]),
-    ).toThrow(WadFileError);
+    ).toThrow(
+      "MAP01 in a.wad can't be opened. Its TEXTMAP doesn't name a namespace.",
+    );
   });
 });
 
