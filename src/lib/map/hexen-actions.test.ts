@@ -152,6 +152,170 @@ describe("Hexen line specials", () => {
   });
 });
 
+describe("Hexen generalized specials", () => {
+  it("bring every Boom generalized special back from GZDoom's translation", () => {
+    for (let boom = 0x2f80; boom < 0x8000; boom += 1) {
+      const given = gzdoomForm(boom);
+      const expected = boom === 0x4040 ? 40 : boom;
+      expect(doomActionFor(given), boom.toString(16)).toEqual({
+        special: expected,
+        tag: given.args[0],
+        isNearest: false,
+      });
+    }
+  });
+
+  it("pick the nearest speed, height and wait and say so", () => {
+    expect(doomActionFor(action(200, [3, 20, 0, 2], "use"))).toEqual({
+      special: 0x6000 | 2 | (1 << 3) | (1 << 7),
+      tag: 3,
+      isNearest: true,
+    });
+    expect(doomActionFor(action(200, [3, 8, 128, 0, 8], "use"))).toEqual({
+      special: 0x6000 | 2 | (1 << 6) | (7 << 7),
+      tag: 3,
+      isNearest: true,
+    });
+    expect(doomActionFor(action(202, [3, 16, 1, 0, 1], "use"))).toEqual({
+      special: 0x3800 | 2 | (1 << 5) | (1 << 6),
+      tag: 3,
+      isNearest: false,
+    });
+    expect(doomActionFor(action(202, [3, 16, 0, 8, 1], "use"))).toMatchObject({
+      special: 0x3800 | 2 | (1 << 6),
+      isNearest: true,
+    });
+    expect(doomActionFor(action(204, [3, 4, 8, 0, 1], "use"))).toMatchObject({
+      isNearest: true,
+    });
+  });
+
+  it("keep what Boom can't say as the nearest one", () => {
+    expect(doomActionFor(action(202, [3, 16, 2, 34, 1], "use"))).toMatchObject({
+      special: 0x3c00 | 2 | (2 << 5) | (1 << 8),
+      isNearest: true,
+    });
+    expect(
+      doomActionFor({
+        ...action(200, [3, 8, 0, 2, 1], "walk"),
+        monsters: true,
+      }),
+    ).toMatchObject({
+      special: 0x6000 | (1 << 7) | (1 << 10),
+      isNearest: true,
+    });
+    expect(doomActionFor(action(203, [3, 32, 24, 1], "monster-walk"))).toEqual({
+      special: 0x3400 | (1 << 3) | (1 << 5) | (1 << 6),
+      tag: 3,
+      isNearest: true,
+    });
+    expect(doomActionFor(action(169, [3, 16, 16, 0, 10], "use"))).toEqual({
+      special: 0x2f80 | 2 | (1 << 3),
+      tag: 3,
+      isNearest: true,
+    });
+  });
+
+  it("drop what Boom has no generalized line for", () => {
+    for (const given of [
+      action(203, [3, 32, 24, 0, 8], "use"),
+      action(202, [3, 16, 5], "use"),
+      action(202, [3, 16, 0, 34, 102], "use"),
+      action(202, [3, 16, 128], "walk"),
+      action(200, [0, 8, 0, 2], "walk"),
+      action(205, [0, 8, 8], "shoot"),
+      action(204, [3, 4, 8], "none"),
+    ]) {
+      expect(doomActionFor(given), JSON.stringify(given)).toBeNull();
+    }
+  });
+});
+
+const boomKeyLocks = [100, 1, 2, 3, 4, 5, 6, 101];
+
+// The Hexen special and arguments GZDoom's xlat/base.txt gives a Boom
+// generalized special, with the tag as 3.
+function gzdoomForm(boom: number): HexenAction {
+  const bits = (shift: number, width: number) =>
+    (boom >> shift) & ((1 << width) - 1);
+  const trigger = boom & 7;
+  const isPush = trigger >= 6;
+  const tag = isPush ? 0 : 3;
+  const speed = bits(3, 2);
+  const given = (
+    special: number,
+    args: number[],
+    monsters: boolean,
+  ): HexenAction => ({
+    special,
+    id: 0,
+    args,
+    trigger: trigger < 2 ? "walk" : trigger < 4 || isPush ? "use" : "shoot",
+    repeat: (trigger & 1) === 1,
+    monsters,
+  });
+  if (boom >= 0x4000) {
+    const target = bits(7, 3);
+    const change = bits(10, 2);
+    const model = bits(5, 1);
+    return given(
+      boom >= 0x6000 ? 200 : 201,
+      [
+        tag,
+        [8, 16, 32, 64][speed],
+        target >= 6 ? [24, 32][target - 6] : 0,
+        target < 6 ? target + 1 : 0,
+        change | (model << 2) | (bits(6, 1) << 3) | (bits(12, 1) << 4),
+      ],
+      change === 0 && model === 1,
+    );
+  }
+  const doorSpeed = [16, 32, 64, 128][speed];
+  const light = isPush ? 128 : 0;
+  if (boom >= 0x3c00) {
+    return given(
+      202,
+      [3, doorSpeed, 64 + bits(5, 2) + light, [8, 34, 69, 240][bits(8, 2)], 0],
+      bits(7, 1) === 1,
+    );
+  }
+  if (boom >= 0x3800) {
+    const kind = bits(5, 1);
+    return given(
+      202,
+      [
+        3,
+        doorSpeed,
+        kind + light,
+        kind ? 0 : 34,
+        boomKeyLocks[bits(6, 3)] | (bits(9, 1) << 7),
+      ],
+      false,
+    );
+  }
+  const monsters = bits(5, 1) === 1;
+  if (boom >= 0x3400) {
+    return given(
+      203,
+      [tag, doorSpeed, [8, 24, 40, 80][bits(6, 2)], bits(8, 2) + 1, 0],
+      monsters,
+    );
+  }
+  if (boom >= 0x3000) {
+    return given(
+      204,
+      [tag, [2, 4, 16, 32][speed], [4, 8, 16, 24][bits(6, 2)], bits(8, 2), 0],
+      monsters,
+    );
+  }
+  const crusherSpeed = [8, 16, 32, 64][speed];
+  return given(
+    284,
+    [tag, crusherSpeed, crusherSpeed, bits(6, 1), 10],
+    monsters,
+  );
+}
+
 describe("Hexen sector specials", () => {
   it("become the Doom ones, with Boom's damage, secret and friction bits", () => {
     expect(doomSectorSpecialFor(0)).toBe(0);

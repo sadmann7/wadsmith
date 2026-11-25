@@ -1,3 +1,4 @@
+import { getIsGeneralized } from "@/lib/map/boom";
 import {
   doomActionFor,
   doomSectorSpecialFor,
@@ -39,6 +40,8 @@ const lineFlags: [string, number][] = [
   ["dontdraw", 0x0080],
   ["mapped", 0x0100],
   ["passuse", 0x0200],
+  ["blocklandmonsters", 0x1000],
+  ["blockplayers", 0x2000],
 ];
 
 const thingFlags: [string, number][] = [
@@ -339,6 +342,7 @@ const hexenLineFields = [
   "monsterpush",
   "missilecross",
   "anycross",
+  "monsteractivate",
 ];
 
 const playerTriggers = ["playeruse", "impact", "playercross"];
@@ -389,6 +393,12 @@ function readLineAction(namespace: string, line: Fields): LineAction {
       args: [0, 1, 2, 3, 4].map((arg) => line.tag(`arg${arg}`)),
       trigger,
       repeat: line.flag("repeatspecial"),
+      monsters:
+        line.flag("monsteractivate") ||
+        (trigger === "use"
+          ? line.flag("monsteruse")
+          : trigger === "walk" &&
+            (line.flag("monstercross") || line.flag("anycross"))),
     });
   if (!action) {
     return {
@@ -399,11 +409,17 @@ function readLineAction(namespace: string, line: Fields): LineAction {
     };
   }
   const triggers = playerTriggers.filter((key) => line.flag(key)).length;
+  // GZDoom gives a Boom line that monsters can walk over anycross, which also
+  // lets missiles through; only a generalized special says the same.
+  const anyCross =
+    line.flag("anycross") &&
+    !line.flag("playercross") &&
+    !getIsGeneralized(action.special);
   return {
     special: action.special,
     tag: action.tag,
     used: keepId(action.tag),
-    ...(action.isNearest || triggers > 1
+    ...(action.isNearest || triggers > 1 || anyCross
       ? { nearest: hexenSpecialName(special) }
       : {}),
   };
@@ -414,13 +430,12 @@ const otherTriggers = [
   "playerpush",
   "monsterpush",
   "missilecross",
-  "anycross",
 ];
 
 function readTrigger(line: Fields): HexenTrigger | null {
   if (line.flag("playeruse")) return "use";
   if (line.flag("impact")) return "shoot";
-  if (line.flag("playercross")) return "walk";
+  if (line.flag("playercross") || line.flag("anycross")) return "walk";
   if (line.flag("monstercross")) return "monster-walk";
   return otherTriggers.some((key) => line.flag(key)) ? null : "none";
 }

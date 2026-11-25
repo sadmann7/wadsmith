@@ -1,3 +1,7 @@
+import { defined } from "@/lib/defined";
+
+import { type GeneralizedClass, generalizedClass, withField } from "./boom";
+
 export type HexenTrigger = "walk" | "use" | "shoot" | "monster-walk" | "none";
 
 type HexenArg = number | "tag" | null;
@@ -8,6 +12,7 @@ export interface HexenAction {
   args: number[];
   trigger: HexenTrigger;
   repeat: boolean;
+  monsters?: boolean;
 }
 
 export interface DoomAction {
@@ -294,6 +299,9 @@ export const hexenTranslations: [
   [267, "monster-walk", true, 215, [null, "tag"]],
   [268, "monster-walk", false, 71, [0, 2, "tag", 1]],
   [269, "monster-walk", true, 71, [0, 2, "tag", 1]],
+  [1024, "none", false, 225, [0, "tag", 0, 8]],
+  [1025, "none", false, 225, [0, "tag", 1, 8]],
+  [1026, "none", false, 225, [0, "tag", 2, 8]],
 ];
 
 // The arguments listed under nearest are speeds, delays and other amounts
@@ -323,8 +331,14 @@ const hexenSpecials: Record<number, { name: string; nearest: number[] }> = {
   104: { name: "Ceiling_CrushAndRaiseSilentDist", nearest: [1, 2, 3, 4] },
   112: { name: "Light_ChangeToValue", nearest: [] },
   168: { name: "Ceiling_CrushAndRaiseDist", nearest: [1, 2, 3, 4] },
+  169: { name: "Generic_Crusher2", nearest: [] },
   192: { name: "Ceiling_LowerToHighestFloor", nearest: [1, 2, 3, 4] },
+  200: { name: "Generic_Floor", nearest: [] },
   201: { name: "Generic_Ceiling", nearest: [1] },
+  202: { name: "Generic_Door", nearest: [] },
+  203: { name: "Generic_Lift", nearest: [] },
+  204: { name: "Generic_Stairs", nearest: [] },
+  205: { name: "Generic_Crusher", nearest: [] },
   206: { name: "Plat_DownWaitUpStayLip", nearest: [1, 2, 3, 4] },
   207: { name: "Plat_PerpetualRaiseLip", nearest: [1, 2, 3] },
   208: { name: "TranslucentLine", nearest: [1, 2] },
@@ -365,7 +379,29 @@ const hexenSpecials: Record<number, { name: string; nearest: number[] }> = {
   253: { name: "Ceiling_LowerToLowest", nearest: [1, 2, 3] },
   254: { name: "Ceiling_LowerToFloor", nearest: [1, 2, 3, 4] },
   273: { name: "Stairs_BuildUpDoomCrush", nearest: [1, 3, 4] },
+  284: { name: "Generic_CrusherDist", nearest: [] },
 };
+
+const scripts = new Set([80, 81, 82, 83, 84, 226]);
+
+export function hexenSpecialName(special: number) {
+  if (scripts.has(special)) return "ACS scripts";
+  return hexenSpecials[special]?.name ?? `Hexen special ${special}`;
+}
+
+// A Doom special that matches exactly wins, since it plays in every engine;
+// otherwise a Boom generalized one, which can say more than a Doom one.
+export function doomActionFor(given: HexenAction): DoomAction | null {
+  const doom = fixedActionFor(given);
+  if (doom && !doom.isNearest) return doom;
+  return generalizedActionFor(given) ?? doom;
+}
+
+const candidates = new Map<number, typeof hexenTranslations>();
+for (const translation of hexenTranslations) {
+  const [, , , special] = translation;
+  candidates.set(special, [...(candidates.get(special) ?? []), translation]);
+}
 
 // Specials Doom has no row for, as the row that moves the same way, with the
 // lip or distance each one has built in. They never match exactly.
@@ -381,24 +417,12 @@ const aliases: Record<
   62: { special: 206, args: ([tag, speed, delay]) => [tag, speed, delay, 8] },
 };
 
-const scripts = new Set([80, 81, 82, 83, 84, 226]);
 const translucentLine = 208;
 const teleportLine = 215;
 const lockedDoor = 13;
 const lockArg = 3;
 
-const candidates = new Map<number, typeof hexenTranslations>();
-for (const translation of hexenTranslations) {
-  const [, , , special] = translation;
-  candidates.set(special, [...(candidates.get(special) ?? []), translation]);
-}
-
-export function hexenSpecialName(special: number) {
-  if (scripts.has(special)) return "ACS scripts";
-  return hexenSpecials[special]?.name ?? `Hexen special ${special}`;
-}
-
-export function doomActionFor(given: HexenAction): DoomAction | null {
+function fixedActionFor(given: HexenAction): DoomAction | null {
   const alias = aliases[given.special];
   const action = alias
     ? { ...given, special: alias.special, args: alias.args(given.args) }
@@ -449,6 +473,212 @@ export function doomActionFor(given: HexenAction): DoomAction | null {
 function keyOf(lock: number) {
   const card = lock & 0x7f;
   return card >= 1 && card <= 6 ? ((card - 1) % 3) + 1 : null;
+}
+
+// GZDoom's xlat/base.txt turns each Boom generalized range into one of these,
+// with each bit field's options as the argument values listed here.
+const genericCrusher2 = 169;
+const genericFloor = 200;
+const genericCeiling = 201;
+const genericDoor = 202;
+const genericLift = 203;
+const genericStairs = 204;
+const genericCrusher = 205;
+const genericCrusherDist = 284;
+const moverSpeeds = [8, 16, 32, 64];
+const doorSpeeds = [16, 32, 64, 128];
+const liftSpeeds = [16, 32, 64, 128];
+const stairSpeeds = [2, 4, 16, 32];
+const stairSteps = [4, 8, 16, 24];
+const doorDelays = [8, 34, 69, 240];
+const liftDelays = [8, 24, 40, 80];
+const moverHeights = [24, 32];
+const moverTargets = 6;
+const liftTargets = 4;
+const lockedDoorWait = 34;
+const crusherDamage = 10;
+const doorKindMask = 63;
+const doorLightTag = 128;
+const cardIsSkull = 128;
+const boomKeys = new Map([
+  [100, 0],
+  [1, 1],
+  [2, 2],
+  [3, 3],
+  [4, 4],
+  [5, 5],
+  [6, 6],
+  [101, 7],
+]);
+
+function generalizedActionFor({
+  special,
+  args,
+  trigger,
+  repeat,
+  monsters = false,
+}: HexenAction): DoomAction | null {
+  const [tag, speed, third, fourth, fifth] = args;
+  let isNearest = trigger === "monster-walk";
+  const canMonsters = trigger === "monster-walk" || monsters;
+  const pick = (value: number, options: number[]) => {
+    const index = closest(value, options);
+    if (options[index] !== value) isNearest = true;
+    return index;
+  };
+  // A pressed line with no tag works the sector behind it, as Boom's door
+  // triggers do; GZDoom writes them that way.
+  const boomTrigger = (isManual: boolean) => {
+    const base =
+      trigger === "use"
+        ? isManual
+          ? 6
+          : 2
+        : (trigger === "walk" || trigger === "monster-walk") && tag !== 0
+          ? 0
+          : trigger === "shoot" && tag !== 0
+            ? 4
+            : null;
+    return base === null ? null : base | (repeat ? 1 : 0);
+  };
+  const result = (
+    name: GeneralizedClass,
+    values: Record<string, number> | null,
+  ): DoomAction | null =>
+    values && { special: encodeGeneralized(name, values), tag, isNearest };
+
+  if (special === genericFloor || special === genericCeiling) {
+    const flags = fifth;
+    const change = flags & 3;
+    const boom = boomTrigger(tag === 0);
+    if (boom === null) return null;
+    if (change !== 0 && canMonsters) isNearest = true;
+    return result(special === genericFloor ? "floor" : "ceiling", {
+      trigger: boom,
+      speed: pick(speed, moverSpeeds),
+      direction: flags & 8 ? 1 : 0,
+      target:
+        fourth >= 1 && fourth <= moverTargets
+          ? fourth - 1
+          : moverTargets + pick(third, moverHeights),
+      change,
+      ...(change === 0
+        ? { monsters: canMonsters ? 1 : 0 }
+        : { model: flags & 4 ? 1 : 0 }),
+      crush: flags & 16 ? 1 : 0,
+    });
+  }
+  if (special === genericDoor) {
+    const kind = third & doorKindMask;
+    if (kind > 3) return null;
+    if (third & doorLightTag && trigger !== "use") return null;
+    const boom = boomTrigger(tag === 0 || (third & doorLightTag) !== 0);
+    const key = fifth === 0 ? null : boomKeys.get(fifth & ~cardIsSkull);
+    if (boom === null || key === undefined) return null;
+    if (key !== null && kind <= 1) {
+      if (kind === 0 && fourth !== lockedDoorWait) isNearest = true;
+      if (canMonsters) isNearest = true;
+      return result("locked", {
+        trigger: boom,
+        speed: pick(speed, doorSpeeds),
+        kind,
+        key,
+        skulls: fifth & cardIsSkull ? 1 : 0,
+      });
+    }
+    if (key !== null) isNearest = true;
+    const waits = kind === 0 || kind === 2;
+    return result("door", {
+      trigger: boom,
+      speed: pick(speed, doorSpeeds),
+      kind,
+      delay: waits ? pick(fourth, doorDelays) : closest(fourth, doorDelays),
+      monsters: canMonsters ? 1 : 0,
+    });
+  }
+  if (special === genericLift) {
+    if (fourth < 1 || fourth > liftTargets) return null;
+    const boom = boomTrigger(tag === 0);
+    return result(
+      "lift",
+      boom === null
+        ? null
+        : {
+            trigger: boom,
+            speed: pick(speed, liftSpeeds),
+            delay: pick(third, liftDelays),
+            target: fourth - 1,
+            monsters: canMonsters ? 1 : 0,
+          },
+    );
+  }
+  if (special === genericStairs) {
+    const boom = boomTrigger(tag === 0);
+    if (fifth !== 0) isNearest = true;
+    return result(
+      "stairs",
+      boom === null
+        ? null
+        : {
+            trigger: boom,
+            speed: pick(speed, stairSpeeds),
+            step: pick(third, stairSteps),
+            direction: fourth & 1,
+            ignore: (fourth >> 1) & 1,
+            monsters: canMonsters ? 1 : 0,
+          },
+    );
+  }
+  if (
+    special === genericCrusherDist ||
+    special === genericCrusher ||
+    special === genericCrusher2
+  ) {
+    const boom = boomTrigger(tag === 0);
+    if (
+      special !== genericCrusherDist ||
+      third !== speed ||
+      fifth !== crusherDamage
+    ) {
+      isNearest = true;
+    }
+    return result(
+      "crusher",
+      boom === null
+        ? null
+        : {
+            trigger: boom,
+            speed: pick(speed, moverSpeeds),
+            silent: fourth ? 1 : 0,
+            monsters: canMonsters ? 1 : 0,
+          },
+    );
+  }
+  return null;
+}
+
+function encodeGeneralized(
+  name: GeneralizedClass,
+  values: Record<string, number>,
+) {
+  const kind = defined(generalizedClass(name));
+  return kind.fields.reduce(
+    (special, field) =>
+      field.id in values
+        ? withField(special, field, values[field.id])
+        : special,
+    kind.base,
+  );
+}
+
+function closest(value: number, options: number[]) {
+  const distance = (option: number) =>
+    Math.abs(Math.log((value + 1) / (option + 1)));
+  return options.reduce(
+    (best, option, index) =>
+      distance(option) < distance(options[best]) ? index : best,
+    0,
+  );
 }
 
 const sectorTypes = new Map([
