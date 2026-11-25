@@ -55,12 +55,16 @@ import {
 } from "@/lib/preview/movers";
 import {
   cameraBasis,
-  createRenderTarget,
+  focalShare,
   pointOnPlane,
   projectPoint,
-  renderScene,
-  type RenderTarget,
+  shearLimit,
 } from "@/lib/preview/render";
+import {
+  createSceneRenderer,
+  type SceneRenderer,
+  type SceneRendererKind,
+} from "@/lib/preview/scene-renderer";
 import { countNotches } from "@/lib/preview/wheel";
 import { gameTexturesOf, type SceneAssets } from "@/lib/wad/assets";
 
@@ -131,6 +135,9 @@ interface SceneOptions {
   // How the view moves and draws, kept by the page so it outlasts the view.
   view?: SceneView;
   onViewChange?: (view: SceneView) => void;
+  // What draws the picture, read once as the canvas attaches. WebGL falls
+  // back to the column renderer where the browser can't run it.
+  renderer?: SceneRendererKind;
 }
 
 interface SceneState {
@@ -166,7 +173,8 @@ const riseSpeed = 160;
 // the mouse moves while it looks.
 const lookTurn = 0.15;
 const lookTilt = 0.002;
-const mostTilt = 0.5;
+// A view that tilts can look nearly straight up or down.
+const mostPerspectiveTilt = focalShare * ((85 * Math.PI) / 180);
 // Windows asks for the menu once the right button comes up after a drag.
 const menuAfterDragMs = 300;
 const thingTurn = 45;
@@ -205,6 +213,7 @@ const sceneEditor = definePrimitive({
     onSelectedChange: "callback",
     view: "value",
     onViewChange: "callback",
+    renderer: "value",
   },
   controlled: ["map", "selected"],
   state: (options: SceneOptions): SceneState => ({
@@ -241,8 +250,7 @@ const sceneEditor = definePrimitive({
     const { store } = context;
     const change = createChange(context);
     let canvas: HTMLCanvasElement | null = null;
-    let target: RenderTarget | null = null;
-    let image: ImageData | null = null;
+    let target: SceneRenderer | null = null;
     let drawFrame = 0;
     let walkFrame = 0;
     let stopDrag: (() => void) | undefined;
@@ -349,19 +357,10 @@ const sceneEditor = definePrimitive({
         view: shown,
       } = store.get();
       const view = cameraState();
-      const output = canvas?.getContext("2d");
-      if (!map || !assets || !view || !target || !image || !output) return;
-      // Setting a canvas's size clears it, so the size changes only here,
-      // right before the frame that fills it.
-      if (output.canvas.width !== target.width) {
-        output.canvas.width = target.width;
-      }
-      if (output.canvas.height !== target.height) {
-        output.canvas.height = target.height;
-      }
+      if (!map || !assets || !view || !target || !canvas) return;
       view.sync(map, draftMap !== null);
-      renderScene(
-        target,
+      const { looking } = store.get();
+      target.render(
         map,
         {
           ...(eyeCamera(viewMap() ?? map) ?? view.position),
@@ -382,22 +381,23 @@ const sceneEditor = definePrimitive({
           things: shown.things,
           customSprites: context.options().customSprites,
         },
+        // The crosshair takes the page's text color.
+        looking ? getComputedStyle(canvas).color : null,
       );
-      output.putImageData(image, 0, 0);
-      // The crosshair takes the page's text color.
-      if (store.get().looking && canvas) {
-        drawCrosshair(output, target, getComputedStyle(canvas).color);
+      if (looking) {
         // What the crosshair is over changes as the camera turns or walks,
         // so it is read again from each frame.
-        const middle =
-          Math.floor(target.height / 2) * target.width +
-          Math.floor(target.width / 2);
-        const aimed = target.surfaces[target.pick[middle]] || null;
+        const aimed = target.surfaceAt(
+          Math.floor(target.width / 2),
+          Math.floor(target.height / 2),
+        ).key;
         if (aimed !== store.get().hovered || store.get().ghost) {
           store.set({ hovered: aimed, ghost: null });
         }
       }
     };
+
+    const tiltLimit = () => (target?.tilts ? mostPerspectiveTilt : shearLimit);
 
     const turnView = (dx: number, dy: number) => {
       const view = cameraState();
@@ -406,8 +406,8 @@ const sceneEditor = definePrimitive({
         ...view.position,
         angle: view.position.angle - dx * lookTurn,
         pitch: Math.max(
-          -mostTilt,
-          Math.min(mostTilt, (view.position.pitch ?? 0) - dy * lookTilt),
+          -tiltLimit(),
+          Math.min(tiltLimit(), (view.position.pitch ?? 0) - dy * lookTilt),
         ),
       };
       view.walked = true;
@@ -435,11 +435,7 @@ const sceneEditor = definePrimitive({
       if (x < 0 || y < 0 || x >= target.width || y >= target.height) {
         return null;
       }
-      const index = y * target.width + x;
-      return {
-        key: target.surfaces[target.pick[index]] || null,
-        distance: target.depth[index],
-      };
+      return target.surfaceAt(x, y);
     };
 
     const targetPoint = (event: MouseEvent) => {
@@ -924,14 +920,9 @@ const sceneEditor = definePrimitive({
 
     const cycle = (direction: number) => {
       if (!target) return;
-      const counts = new Map<number, number>();
-      for (const id of target.pick) {
-        if (id) counts.set(id, (counts.get(id) ?? 0) + 1);
-      }
-      const { surfaces } = target;
-      const keys = [...counts]
+      const keys = [...target.surfaceCounts()]
         .toSorted((a, b) => b[1] - a[1])
-        .map(([id]) => surfaces[id]);
+        .map(([key]) => key);
       if (keys.length === 0) return;
       const at = keys.indexOf(store.get().selected ?? "");
       const next = at < 0 ? 0 : (at + direction + keys.length) % keys.length;
@@ -1009,8 +1000,14 @@ const sceneEditor = definePrimitive({
       attach(element: HTMLElement) {
         const { width, height } = store.get();
         canvas = element as HTMLCanvasElement;
-        target = createRenderTarget(width, height);
-        image = new ImageData(target.pixels, width, height);
+        target = createSceneRenderer(
+          canvas,
+          context.options().renderer ?? "columns",
+          width,
+          height,
+          scheduleDraw,
+        );
+        if (target) element.dataset.renderer = target.kind;
         const stopStore = store.subscribe(scheduleDraw);
         const stopCamera = context.options().camera?.subscribe(scheduleDraw);
         const stopDraft = context
@@ -1029,17 +1026,17 @@ const sceneEditor = definePrimitive({
         // The picture takes the shape of the panel, as many rows as asked for
         // and as many columns as that shape needs, so nothing is letterboxed.
         const resized = new ResizeObserver(() => {
-          const rows = store.get().height;
-          const wide = element.clientWidth / (element.clientHeight || 1);
-          if (!element.clientWidth || !element.clientHeight) return;
-          const columns = Math.max(
-            minColumns,
-            Math.min(maxColumns, Math.round(rows * wide)),
+          if (!target || !element.clientWidth || !element.clientHeight) return;
+          const size = target.sizeFor(
+            element.clientWidth,
+            element.clientHeight,
+            store.get().height,
           );
-          if (columns === store.get().width) return;
-          store.set({ width: columns });
-          target = createRenderTarget(columns, rows);
-          image = new ImageData(target.pixels, columns, rows);
+          if (size.width === target.width && size.height === target.height) {
+            return;
+          }
+          if (target.kind === "columns") store.set({ width: size.width });
+          target.resize(size.width, size.height);
           scheduleDraw();
         });
         resized.observe(element);
@@ -1053,9 +1050,10 @@ const sceneEditor = definePrimitive({
           if (document.pointerLockElement === element) {
             document.exitPointerLock();
           }
+          target?.destroy();
+          delete element.dataset.renderer;
           canvas = null;
           target = null;
-          image = null;
         };
       },
       pointermove(event: PointerEvent) {
@@ -1543,9 +1541,6 @@ function clampOffset(value: number) {
   return Math.max(-offsetLimit, Math.min(offsetLimit, Math.round(value)));
 }
 
-const minColumns = 64;
-const maxColumns = 1600;
-
 const lightLimit = 255;
 
 function lightOf(value: number) {
@@ -1568,18 +1563,6 @@ function liftWithin(map: GameMap, point: Point, lift: number) {
     room.ceiling - room.floor - eyeRoom - standingEye,
   );
   return Math.max(lowest, Math.min(highest, lift));
-}
-
-function drawCrosshair(
-  output: CanvasRenderingContext2D,
-  target: RenderTarget,
-  color: string,
-) {
-  const x = Math.floor(target.width / 2);
-  const y = Math.floor(target.height / 2);
-  output.fillStyle = color;
-  output.fillRect(x - 6, y, 13, 1);
-  output.fillRect(x, y - 6, 1, 13);
 }
 
 function gameTexturesFor(assets: SceneAssets | null) {
