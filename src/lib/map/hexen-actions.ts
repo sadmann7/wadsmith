@@ -4,6 +4,7 @@ type HexenArg = number | "tag" | null;
 
 export interface HexenAction {
   special: number;
+  id: number;
   args: number[];
   trigger: HexenTrigger;
   repeat: boolean;
@@ -367,7 +368,7 @@ const hexenSpecials: Record<number, { name: string; nearest: number[] }> = {
 };
 
 // Specials Doom has no row for, as the row that moves the same way, with the
-// lip or distance each one has built in.
+// lip or distance each one has built in. They never match exactly.
 const aliases: Record<
   number,
   { special: number; args: (args: number[]) => number[] }
@@ -377,11 +378,12 @@ const aliases: Record<
     args: ([tag, speed, crush, mode]) => [tag, 8, speed, crush, mode],
   },
   60: { special: 207, args: ([tag, speed, delay]) => [tag, speed, delay, 8] },
-  62: { special: 206, args: ([tag, speed, delay]) => [tag, speed, delay, 4] },
+  62: { special: 206, args: ([tag, speed, delay]) => [tag, speed, delay, 8] },
 };
 
 const scripts = new Set([80, 81, 82, 83, 84, 226]);
 const translucentLine = 208;
+const teleportLine = 215;
 const lockedDoor = 13;
 const lockArg = 3;
 
@@ -426,9 +428,18 @@ export function doomActionFor(given: HexenAction): DoomAction | null {
           : Infinity;
       }
     }
+    // Boom sends a line teleport to the other line with its own tag, so the
+    // line has to carry the number of the one it sends to.
+    if (action.special === teleportLine && (!tag || action.id !== tag)) {
+      continue;
+    }
     if (distance === Infinity || (best && best.distance <= distance)) continue;
     best = {
-      action: { special: doom, tag: tag ?? 0, isNearest: distance > 0 },
+      action: {
+        special: doom,
+        tag: tag ?? 0,
+        isNearest: alias !== undefined || distance > 0,
+      },
       distance,
     };
   }

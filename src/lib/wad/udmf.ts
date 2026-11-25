@@ -343,6 +343,8 @@ const hexenLineFields = [
   "anycross",
 ];
 
+const playerTriggers = ["playeruse", "impact", "playercross"];
+
 interface LineAction {
   special: number;
   tag: number;
@@ -385,6 +387,7 @@ function readLineAction(namespace: string, line: Fields): LineAction {
     trigger &&
     doomActionFor({
       special,
+      id,
       args: [0, 1, 2, 3, 4].map((arg) => line.tag(`arg${arg}`)),
       trigger,
       repeat: line.flag("repeatspecial"),
@@ -397,11 +400,14 @@ function readLineAction(namespace: string, line: Fields): LineAction {
       dropped: hexenSpecialName(special),
     };
   }
+  const triggers = playerTriggers.filter((key) => line.flag(key)).length;
   return {
     special: action.special,
     tag: action.tag,
     used: keepId(action.tag),
-    ...(action.isNearest ? { nearest: hexenSpecialName(special) } : {}),
+    ...(action.isNearest || triggers > 1
+      ? { nearest: hexenSpecialName(special) }
+      : {}),
   };
 }
 

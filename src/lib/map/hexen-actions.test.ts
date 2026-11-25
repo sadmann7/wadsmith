@@ -13,8 +13,10 @@ const action = (
   args: number[],
   trigger: HexenTrigger,
   repeat = false,
+  id = 0,
 ): HexenAction => ({
   special,
+  id,
   args: [...args, 0, 0, 0, 0, 0].slice(0, 5),
   trigger,
   repeat,
@@ -28,6 +30,7 @@ describe("Hexen line specials", () => {
         args.map((arg) => (arg === "tag" ? 7 : (arg ?? 0))),
         trigger,
         repeat,
+        7,
       );
       expect(doomActionFor(given), `special ${doom}`).toEqual({
         special: doom,
@@ -104,9 +107,10 @@ describe("Hexen line specials", () => {
     expect(doomActionFor(action(62, [5, 64, 105], "use"))).toMatchObject({
       special: 122,
     });
-    expect(doomActionFor(action(42, [5, 8, 10], "walk"))).toMatchObject({
+    expect(doomActionFor(action(42, [5, 8, 10], "walk"))).toEqual({
       special: 25,
       tag: 5,
+      isNearest: true,
     });
   });
 
@@ -125,7 +129,7 @@ describe("Hexen line specials", () => {
     expect(doomActionFor(action(243, [], "shoot"))).toMatchObject({
       special: 197,
     });
-    expect(doomActionFor(action(215, [3, 8], "walk"))).toEqual({
+    expect(doomActionFor(action(215, [0, 8], "walk", false, 8))).toEqual({
       special: 243,
       tag: 8,
       isNearest: false,
@@ -140,6 +144,8 @@ describe("Hexen line specials", () => {
       action(23, [3, 8, 64], "walk"),
       action(112, [3, 128], "walk"),
       action(100, [64], "walk"),
+      action(215, [1, 2], "walk", true, 1),
+      action(215, [0, 0], "walk"),
     ]) {
       expect(doomActionFor(given), JSON.stringify(given)).toBeNull();
     }

@@ -227,6 +227,18 @@ describe("UDMF maps", () => {
     }
   });
 
+  it("count a Hexen action as approximate when it has a trigger Doom can't add", () => {
+    const doom = readTextmap(
+      "MAP01",
+      `namespace = "zdoom";
+      linedef { v1 = 1; v2 = 0; sidefront = 0; special = 243; playeruse = true;
+        playercross = true; }
+      linedef { v1 = 1; v2 = 0; sidefront = 0; special = 243; impact = true; }`,
+    );
+    expect(doom.lines.map(({ special }) => special)).toEqual([11, 197]);
+    expect(doom.udmf?.nearestActions).toEqual({ Exit_Normal: 1 });
+  });
+
   it("place things on no difficulty and no game mode unless they say so", () => {
     const doom = readTextmap(
       "MAP01",
