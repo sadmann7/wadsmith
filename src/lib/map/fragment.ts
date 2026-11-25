@@ -522,7 +522,7 @@ export function transformKeepingDoors(
   warnings: MapIssue[];
   stranded: string[];
 } {
-  const newIssues = issuesSince(map);
+  const newIssues = issuesSince(map, context);
   const run = (carry: DoorCarry) => {
     let next: GameMap | null = map;
     for (const step of steps) {

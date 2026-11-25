@@ -1841,7 +1841,10 @@ export function EditorScreen({
     (playerStart ? sectorAt(map, playerStart) : undefined);
   const soundReached =
     sound && soundRoom
-      ? soundReach(map, soundRoom.id, { ...sound, custom: customThings })
+      ? soundReach(map, soundRoom.id, assets, {
+          ...sound,
+          custom: customThings,
+        })
       : null;
 
   const thingRoom = thing ? sectorAt(map, thing) : null;
