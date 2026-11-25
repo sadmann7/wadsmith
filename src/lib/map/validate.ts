@@ -30,9 +30,9 @@ import {
 import {
   atLeast,
   complevelLabels,
-  lineLevel,
   lineBlocksPlayers,
   lineBlocksWalkers,
+  lineLevel,
   linePassUse,
   sectorLevel,
 } from "./complevel";
