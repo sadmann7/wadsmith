@@ -413,7 +413,8 @@ function vanillaWork(
       search: movers.vanilla,
     });
   }
-  if (kind === "donut") return (room, textures) => donut(movers, room, textures);
+  if (kind === "donut")
+    return (room, textures) => donut(movers, room, textures);
   const heights = vanillaHeights(kind);
   if (!heights) return null;
   return (room, textures) => {
@@ -812,10 +813,9 @@ function stairs(
   }
 }
 
-// The floor and flat number vanilla's donut reads when the pool's first line
-// has no back, from the DOS memory Woof emulates.
+// The floor vanilla's donut reads when the pool's first line has no back,
+// from the DOS memory Woof emulates.
 const donutOverrunFloor = 0x199257 / 0x10000;
-const donutOverrunFlat = 0x16;
 
 // A donut lowers the room it starts in and raises the pool round it, both to
 // the floor of the room behind the pool's first line that doesn't face the
@@ -847,6 +847,10 @@ function donut(
   }
   return still;
 }
+
+// The flat number read from the same memory, or the last flat when there
+// are fewer.
+const donutOverrunFlat = 0x16;
 
 function overrunFlat(textures: GameTextures | null) {
   const flats = textures?.flats ?? [];

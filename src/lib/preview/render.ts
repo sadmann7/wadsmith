@@ -28,10 +28,10 @@ import {
 import { surfaceKey } from "@/lib/map/surfaces";
 import {
   gameFlatShade,
+  gameTexturesOf,
   gameWallShade,
   type Picture,
   type SceneAssets,
-  gameTexturesOf,
 } from "@/lib/wad/assets";
 
 import { withMovers } from "./movers";

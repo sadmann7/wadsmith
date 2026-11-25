@@ -14,10 +14,10 @@ import { wallKey } from "@/lib/map/geometry";
 import { testMap } from "@/lib/map/test-map";
 
 import {
+  type GameTextures,
   getIsMover,
   movedRooms,
   moverAt,
-  type GameTextures,
   withMovers,
 } from "./movers";
 
@@ -531,7 +531,10 @@ describe("vanilla's rarer mover quirks in the 3D view", () => {
   it("gives the pool the flat vanilla's donut overrun reads", () => {
     const map = (complevel: GameMap["complevel"]) =>
       row(
-        [{ floor: -32, floorTexture: "NUKAGE1" }, { floor: 64, tag: 1 }],
+        [
+          { floor: -32, floorTexture: "NUKAGE1" },
+          { floor: 64, tag: 1 },
+        ],
         acting("donut"),
         complevel,
       );
@@ -636,17 +639,13 @@ function boom(name: string, values: Record<string, number>, tag = 1) {
   return { [westWall]: { raw: { special, tag } } };
 }
 
-function heights(
-  map: GameMap,
-  opened: string[],
-  textures?: GameTextures,
-) {
-  return withMovers(map, opened, textures).sectors.map(
-    ({ floor, ceiling }) => [floor, ceiling],
-  );
+function heights(map: GameMap, opened: string[], textures?: GameTextures) {
+  return withMovers(map, opened, textures).sectors.map(({ floor, ceiling }) => [
+    floor,
+    ceiling,
+  ]);
 }
 
 function gameTextures(height: GameTextures["height"]): GameTextures {
   return { height, first: "AASHITTY", flats: [] };
 }
-
