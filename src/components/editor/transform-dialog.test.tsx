@@ -53,6 +53,23 @@ it("steps the size by 10, and by 1 with Shift", () => {
   expect(field("Size, in percent").value).toBe("104");
 });
 
+it("turns by a typed angle as it is", () => {
+  type(field("Turn right, in degrees"), "10");
+  expect(field("Turn right, in degrees").value).toBe("10");
+  apply();
+  expect(applied).toEqual([[{ kind: "rotate", degrees: 10 }]]);
+});
+
+it("steps the turn by 15, and by 1 with Shift", () => {
+  type(field("Turn right, in degrees"), "10");
+  press(button("Raise Turn right, in degrees"));
+  expect(field("Turn right, in degrees").value).toBe("25");
+  press(button("Lower Turn right, in degrees"), true);
+  expect(field("Turn right, in degrees").value).toBe("24");
+  key(field("Turn right, in degrees"), "ArrowDown");
+  expect(field("Turn right, in degrees").value).toBe("9");
+});
+
 function apply() {
   const submit = [...document.querySelectorAll("button")].find(
     (item) => item.textContent === "Apply",

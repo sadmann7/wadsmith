@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import type { CustomThings } from "@/lib/wad/custom-things";
+
 import { defined } from "@/lib/defined";
 
 import type { Transform } from "./fragment";
@@ -12,6 +14,7 @@ import {
   updateLine,
   updateSector,
 } from "./edit";
+import { buildMap, rect } from "./featured/build-map";
 import {
   copyParts,
   parseFragment,
@@ -816,6 +819,62 @@ describe("turning, flipping and resizing", () => {
     );
     expect(problems).toEqual([]);
     expect(warnings).toEqual([]);
+  });
+
+  it("names a custom item a resize puts out of reach", () => {
+    const look = {
+      floor: 0,
+      ceiling: 128,
+      light: 160,
+      floorTexture: "FLOOR4_8",
+      ceilingTexture: "CEIL3_5",
+      wallTexture: "STARTAN3",
+    };
+    const built = buildMap({
+      name: "Ledge",
+      rooms: [
+        { name: "Hall", points: rect(0, 0, 256, 256), ...look },
+        { name: "Ledge", points: rect(256, 0, 256, 256), ...look, floor: 32 },
+      ],
+      things: [
+        { kind: "player", at: [64, 128] },
+        { kind: "barrel", at: [160, 128] },
+      ],
+    });
+    const map: GameMap = {
+      ...built,
+      things: [
+        ...built.things,
+        { id: "plasma", kind: "custom", type: 20003, x: 224, y: 128, angle: 0 },
+      ],
+    };
+    const custom: CustomThings = new Map([
+      [
+        20003,
+        {
+          type: 20003,
+          name: "Plasma pack",
+          radius: 20,
+          height: 16,
+          category: "item",
+          health: 1000,
+          sprite: null,
+          isMbf21: false,
+        },
+      ],
+    ]);
+    const keys = partKeys(map, { sectors: [], things: ["barrel-1", "plasma"] });
+    const { map: grown, warnings } = transformKeepingDoors(
+      map,
+      keys,
+      [{ kind: "scale", factor: 3 }],
+      8,
+      { custom },
+    );
+    expect(defined(grown).things.at(-1)).toMatchObject({ x: 288, y: 128 });
+    expect(warnings).toContainEqual(
+      expect.objectContaining({ id: "unreachable-thing:plasma" }),
+    );
   });
 
   it("keeps the far room's wall straight around a door set into it", () => {
