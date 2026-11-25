@@ -154,7 +154,7 @@ export function decompileMap(
     multiplayerThings: 0,
     outsideThings: 0,
     droppedActions: { ...wad.udmf?.droppedActions },
-    nearestActions: { ...wad.udmf?.nearestActions },
+    nearestActions: {},
     droppedEffects: 0,
     replacedTextures: [],
     seeThroughWalls: 0,
@@ -559,6 +559,7 @@ export function decompileMap(
   }
 
   const settings: Record<string, LineSettings> = {};
+  const approximated = new Map<string, string>();
   const switches: MapSwitch[] = [];
   const keptFittedSides = new Set<DoomSide>();
   for (const line of [...lines, ...details]) {
@@ -621,6 +622,9 @@ export function decompileMap(
         entry.action = { ...action, tag: line.tag };
       } else if (!action && !automatic && !unreachable) {
         entry.raw = { special: line.special, tag: line.tag };
+      }
+      if (line.approximates && (entry.action || entry.raw)) {
+        approximated.set(key, line.approximates);
       }
     }
 
@@ -810,6 +814,10 @@ export function decompileMap(
     if (Object.keys(entry).length === 0) delete settings[key];
     const group = "Teleporters with nowhere to land";
     report.droppedActions[group] = (report.droppedActions[group] ?? 0) + 1;
+  }
+  for (const [key, name] of approximated) {
+    if (!settings[key]?.action && !settings[key]?.raw) continue;
+    report.nearestActions[name] = (report.nearestActions[name] ?? 0) + 1;
   }
 
   const used = new Set(sectors.flatMap(sectorVertices));

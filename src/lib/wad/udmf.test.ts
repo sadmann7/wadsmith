@@ -66,7 +66,6 @@ describe("UDMF maps", () => {
       namespace: "doom",
       droppedFields: {},
       droppedActions: {},
-      nearestActions: {},
     });
     const { map, report } = decompileMap(udmf);
     expect(map).toEqual(decompileMap({ ...classic, title: undefined }).map);
@@ -119,7 +118,6 @@ describe("UDMF maps", () => {
           namespace: "zdoom",
           droppedFields: {},
           droppedActions: {},
-          nearestActions: {},
         });
         expect(
           read.lines.map(({ special, tag }) => [special, tag]),
@@ -269,7 +267,24 @@ describe("UDMF maps", () => {
       linedef { v1 = 1; v2 = 0; sidefront = 0; special = 243; impact = true; }`,
     );
     expect(doom.lines.map(({ special }) => special)).toEqual([11, 197]);
-    expect(doom.udmf?.nearestActions).toEqual({ Exit_Normal: 1 });
+    expect(doom.lines.map(({ approximates }) => approximates)).toEqual([
+      "Exit_Normal",
+      undefined,
+    ]);
+  });
+
+  it("count an approximate action only when the import keeps it", () => {
+    const [doom] = readMaps([
+      udmfWad([
+        "MAP01",
+        room("zdoom").replace(
+          "sidefront = 0; blocking = true;",
+          "sidefront = 0; blocking = true; special = 70; arg1 = 9; arg2 = 1; playercross = true;",
+        ),
+      ]),
+    ]);
+    const { report } = decompileMap(doom);
+    expect(report.nearestActions).toEqual({});
   });
 
   it("place things on no difficulty and no game mode unless they say so", () => {
