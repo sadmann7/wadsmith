@@ -12,6 +12,14 @@ import { createWebglRenderer } from "./webgl-renderer";
 
 export type SceneRendererKind = "columns" | "webgl";
 
+export const defaultSceneRenderer: SceneRendererKind = "webgl";
+
+export function sceneRendererFrom(saved: string | null): SceneRendererKind {
+  return saved === "columns" || saved === "webgl"
+    ? saved
+    : defaultSceneRenderer;
+}
+
 export interface SceneRenderer extends Viewport {
   readonly kind: SceneRendererKind;
   // The picture's size for a canvas shown at that many CSS pixels, given the
