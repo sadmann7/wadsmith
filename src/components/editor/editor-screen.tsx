@@ -2784,10 +2784,10 @@ export function EditorScreen({
                           <button
                             type="button"
                             className="border-0 bg-transparent p-0 text-primary"
-                            aria-label={`Fix: ${title}`}
+                            aria-label={`${issue.fixLabel ?? "Fix"}: ${title}`}
                             onClick={() => commit(fixed)}
                           >
-                            Fix
+                            {issue.fixLabel ?? "Fix"}
                           </button>
                         ) : target || issue.view ? (
                           <button

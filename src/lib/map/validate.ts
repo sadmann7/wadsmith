@@ -59,6 +59,7 @@ import {
   wallKey,
   wallOwners,
 } from "./geometry";
+import { findTouches } from "./join";
 import {
   describeLine,
   getIsTeleport,
@@ -82,6 +83,8 @@ export interface MapIssue {
   message: string;
   detail?: string;
   target?: string;
+  // What the button that fixes it says, when that isn't plain "Fix".
+  fixLabel?: string;
   // Where the 3D view stands to see it, in degrees counterclockwise from east.
   view?: { x: number; y: number; angle: number };
 }
@@ -911,6 +914,23 @@ function validateReach(
 ) {
   const found = findUnreachable(map, custom);
   if (!found) return;
+  for (const group of found.islands) {
+    const touch = group.map((room) => findTouches(map, room)[0]).find(Boolean);
+    const room = touch?.room ?? group[0];
+    const others = group.length - 1;
+    warnings.push({
+      id: `unreachable-island:${room.id}`,
+      message:
+        others === 0
+          ? `${room.name} isn't joined to the rest of the map`
+          : `${room.name} and ${others} ${others === 1 ? "room" : "rooms"} beside it aren't joined to the rest of the map`,
+      detail: touch
+        ? `It touches ${touch.other.name} only at a corner, so there's no way through. Rooms join where they share a wall.`
+        : "The player can't get there from the start. Rooms join where they share a wall.",
+      target: room.id,
+      ...(touch ? { fixLabel: "Join" } : {}),
+    });
+  }
   for (const sector of found.rooms) {
     warnings.push({
       id: `unreachable:${sector.id}`,
