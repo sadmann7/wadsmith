@@ -290,6 +290,46 @@ describe("Hexen generalized specials", () => {
     });
   });
 
+  it("play a mode that GZDoom plays like Doom as the Doom action", () => {
+    const plain = (given: HexenAction, special: number) =>
+      expect(doomActionFor(given)).toEqual({ special, tag: 3, changes: [] });
+    plain(action(61, [3, 0, 0, 1], "walk"), 54);
+    plain(action(61, [3, 0, 0, 3], "walk"), 54);
+    plain(action(228, [3, 4, 0, 1], "walk"), 22);
+    plain(action(228, [3, 4, 0, 0, 5], "walk"), 22);
+    plain(action(44, [3, 1], "walk"), 57);
+    plain(action(44, [3, 0, 4], "walk"), 57);
+    expect(doomActionFor(action(100, [64, 7], "none"))).toMatchObject({
+      special: 48,
+      changes: [],
+    });
+    expect(doomActionFor(action(101, [64, 9, 0, 2], "none"))).toMatchObject({
+      special: 85,
+      changes: [],
+    });
+  });
+
+  it("leave repeat out of the changes for a line with no trigger", () => {
+    expect(doomActionFor(action(100, [64], "none", true))).toMatchObject({
+      special: 48,
+      changes: [],
+    });
+    expect(doomActionFor(action(101, [64], "none", true))).toMatchObject({
+      special: 85,
+      changes: [],
+    });
+  });
+
+  it("say what a mode GZDoom plays differently changes", () => {
+    const changes = (given: HexenAction) => doomActionFor(given)?.changes;
+    expect(changes(action(61, [3, 0, 0, 2], "walk"))).toEqual(["stopping"]);
+    expect(changes(action(228, [3, 4, 0, 2], "walk"))).toEqual(["floor lock"]);
+    expect(changes(action(44, [3, 2], "walk"))).toEqual(["stopping"]);
+    expect(changes(action(101, [64, 6], "none"))).toEqual([
+      "which parts scroll",
+    ]);
+  });
+
   it("drop what Boom has no generalized line for", () => {
     for (const given of [
       action(203, [3, 32, 24, 0, 8], "use"),

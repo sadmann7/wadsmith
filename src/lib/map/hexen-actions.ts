@@ -29,6 +29,7 @@ export const actionChanges = [
   "damage",
   "crushing",
   "stopping",
+  "floor lock",
   "texture",
   "light",
   "timing",
@@ -333,13 +334,25 @@ export const hexenTranslations: [
   [1026, "none", false, 225, [0, "tag", 2, 8]],
 ];
 
+// A mode names a change only for the values that don't play like Doom's.
+type Mode = (value: number) => ActionChange | null;
+
+const onlyMode =
+  (mode: number, change: ActionChange): Mode =>
+  (value) =>
+    value === mode ? change : null;
+
+// GZDoom scrolls every part for a value outside 1 to 6.
+const scrolledParts: Mode = (parts) =>
+  parts > 0 && parts < 7 ? "which parts scroll" : null;
+
 // The arguments listed under nearest are speeds, delays and other amounts
 // that only change how an action feels, so a map's own values pick the
 // closest Doom special instead of ruling it out. Each names what it changes,
-// or is null where GZDoom ignores it.
+// is a mode, or is null where GZDoom ignores it.
 const hexenSpecials: Record<
   number,
-  { name: string; nearest: Partial<Record<number, ActionChange | null>> }
+  { name: string; nearest: Partial<Record<number, ActionChange | Mode | null>> }
 > = {
   10: {
     name: "Door_Close",
@@ -384,12 +397,12 @@ const hexenSpecials: Record<
   },
   44: {
     name: "Ceiling_CrushStop",
-    nearest: { 1: "stopping" },
+    nearest: { 1: onlyMode(2, "stopping"), 2: null, 3: null, 4: null },
   },
   60: { name: "Plat_PerpetualRaise", nearest: {} },
   61: {
     name: "Plat_Stop",
-    nearest: { 1: null },
+    nearest: { 1: null, 2: null, 3: onlyMode(2, "stopping"), 4: null },
   },
   62: { name: "Plat_DownWaitUpStay", nearest: {} },
   70: {
@@ -406,11 +419,11 @@ const hexenSpecials: Record<
   },
   100: {
     name: "Scroll_Texture_Left",
-    nearest: { 0: "speed", 1: "which parts scroll" },
+    nearest: { 0: "speed", 1: scrolledParts, 2: null, 3: null, 4: null },
   },
   101: {
     name: "Scroll_Texture_Right",
-    nearest: { 0: "speed", 1: "which parts scroll" },
+    nearest: { 0: "speed", 1: scrolledParts, 2: null, 3: null, 4: null },
   },
   104: {
     name: "Ceiling_CrushAndRaiseSilentDist",
@@ -465,7 +478,12 @@ const hexenSpecials: Record<
   227: { name: "PointPush_SetForce", nearest: {} },
   228: {
     name: "Plat_RaiseAndStayTx0",
-    nearest: { 1: "speed", 2: null },
+    nearest: {
+      1: "speed",
+      2: null,
+      3: onlyMode(2, "floor lock"),
+      4: null,
+    },
   },
   230: {
     name: "Plat_UpByValueStayTx",
@@ -622,9 +640,11 @@ function fixedActionFor(given: HexenAction): DoomAction | null {
   ) ?? []) {
     if (trigger !== action.trigger) continue;
     let tag: number | null = null;
-    let distance = repeat === action.repeat ? 0 : 10;
+    // A line with no trigger never activates, so repeating changes nothing.
+    const repeats = repeat !== action.repeat && action.trigger !== "none";
+    let distance = repeats ? 10 : 0;
     const changes = new Set<ActionChange>(alias?.changes);
-    if (repeat !== action.repeat) changes.add("repeat");
+    if (repeats) changes.add("repeat");
     for (const [index, value] of action.args.entries()) {
       const wanted = index < args.length ? args[index] : 0;
       if (wanted === null) continue;
@@ -649,6 +669,12 @@ function fixedActionFor(given: HexenAction): DoomAction | null {
         const change = nearest[index];
         if (change === undefined) {
           distance = Infinity;
+        } else if (typeof change === "function") {
+          const changed = change(value);
+          if (changed) {
+            distance += 1;
+            changes.add(changed);
+          }
         } else {
           distance += Math.abs(Math.log((value + 1) / (wanted + 1)));
           if (change) changes.add(change);

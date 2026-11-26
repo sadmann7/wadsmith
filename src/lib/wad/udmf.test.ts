@@ -275,6 +275,25 @@ describe("UDMF maps", () => {
     ]);
   });
 
+  it("count a Hexen action as approximate when it loses a monster trigger", () => {
+    const doom = readTextmap(
+      "MAP01",
+      `namespace = "zdoom";
+      linedef { v1 = 1; v2 = 0; sidefront = 0; special = 243; playeruse = true;
+        monstercross = true; }
+      linedef { v1 = 1; v2 = 0; sidefront = 0; special = 243;
+        playercross = true; monsterpush = true; }
+      linedef { v1 = 1; v2 = 0; sidefront = 0; special = 243; impact = true;
+        monsteruse = true; }`,
+    );
+    expect(doom.lines.map(({ special }) => special)).toEqual([11, 52, 197]);
+    expect(doom.lines.map(({ approximates }) => approximates)).toEqual([
+      { name: "Exit_Normal", changes: ["monsters"] },
+      { name: "Exit_Normal", changes: ["monsters"] },
+      { name: "Exit_Normal", changes: ["monsters"] },
+    ]);
+  });
+
   it("say what each approximate action changes, across its lines", () => {
     const source = room("zdoom")
       .replace(
@@ -293,6 +312,22 @@ describe("UDMF maps", () => {
     expect(report.nearestActions).toEqual({
       Door_Raise: { count: 2, changes: ["speed", "light"] },
       Generic_Stairs: { count: 1, changes: ["stairs reset"] },
+    });
+  });
+
+  it("count a scroller that moves only some parts as approximate", () => {
+    const [doom] = readMaps([
+      udmfWad([
+        "MAP01",
+        room("zdoom").replace(
+          "sidefront = 0; blocking = true;",
+          "sidefront = 0; blocking = true; special = 100; arg0 = 64; arg1 = 2;",
+        ),
+      ]),
+    ]);
+    const { report } = decompileMap(doom);
+    expect(report.nearestActions).toEqual({
+      Scroll_Texture_Left: { count: 1, changes: ["which parts scroll"] },
     });
   });
 

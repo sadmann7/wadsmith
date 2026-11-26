@@ -1,10 +1,10 @@
 import { getIsGeneralized } from "@/lib/map/boom";
 import {
-  type ActionChange,
   doomActionFor,
   doomSectorSpecialFor,
   hexenSpecialName,
   type HexenTrigger,
+  orderedChanges,
 } from "@/lib/map/hexen-actions";
 
 import type {
@@ -352,6 +352,7 @@ const hexenLineFields = [
 ];
 
 const playerTriggers = ["playeruse", "impact", "playercross"];
+const monsterTriggers = ["monsteruse", "monstercross", "monsterpush"];
 
 interface LineAction {
   special: number;
@@ -415,16 +416,26 @@ function readLineAction(namespace: string, line: Fields): LineAction {
     };
   }
   const triggers = playerTriggers.filter((key) => line.flag(key)).length;
+  const keptMonsterTrigger =
+    trigger === "use"
+      ? "monsteruse"
+      : trigger === "shoot"
+        ? null
+        : "monstercross";
+  const losesMonsters = monsterTriggers.some(
+    (key) => key !== keptMonsterTrigger && line.flag(key),
+  );
   // GZDoom gives a Boom line that monsters can walk over anycross, which also
   // lets missiles through; only a generalized special says the same.
   const anyCross =
     line.flag("anycross") &&
     !line.flag("playercross") &&
     !getIsGeneralized(action.special);
-  const changes: ActionChange[] =
-    (triggers > 1 || anyCross) && !action.changes.includes("trigger")
-      ? ["trigger", ...action.changes]
-      : action.changes;
+  const changes = orderedChanges([
+    ...action.changes,
+    ...(triggers > 1 || anyCross ? ["trigger" as const] : []),
+    ...(losesMonsters ? ["monsters" as const] : []),
+  ]);
   return {
     special: action.special,
     tag: action.tag,
