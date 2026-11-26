@@ -349,7 +349,7 @@ const scrolledParts: Mode = (parts) =>
 // The arguments listed under nearest are speeds, delays and other amounts
 // that only change how an action feels, so a map's own values pick the
 // closest Doom special instead of ruling it out. Each names what it changes,
-// or is null where GZDoom ignores it.
+// is a mode, or is null where GZDoom ignores it.
 const hexenSpecials: Record<
   number,
   { name: string; nearest: Partial<Record<number, ActionChange | Mode | null>> }
@@ -640,9 +640,11 @@ function fixedActionFor(given: HexenAction): DoomAction | null {
   ) ?? []) {
     if (trigger !== action.trigger) continue;
     let tag: number | null = null;
-    let distance = repeat === action.repeat ? 0 : 10;
+    // A line with no trigger never activates, so repeating changes nothing.
+    const repeats = repeat !== action.repeat && action.trigger !== "none";
+    let distance = repeats ? 10 : 0;
     const changes = new Set<ActionChange>(alias?.changes);
-    if (repeat !== action.repeat) changes.add("repeat");
+    if (repeats) changes.add("repeat");
     for (const [index, value] of action.args.entries()) {
       const wanted = index < args.length ? args[index] : 0;
       if (wanted === null) continue;

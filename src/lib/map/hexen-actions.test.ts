@@ -309,6 +309,17 @@ describe("Hexen generalized specials", () => {
     });
   });
 
+  it("leave repeat out of the changes for a line with no trigger", () => {
+    expect(doomActionFor(action(100, [64], "none", true))).toMatchObject({
+      special: 48,
+      changes: [],
+    });
+    expect(doomActionFor(action(101, [64], "none", true))).toMatchObject({
+      special: 85,
+      changes: [],
+    });
+  });
+
   it("say what a mode GZDoom plays differently changes", () => {
     const changes = (given: HexenAction) => doomActionFor(given)?.changes;
     expect(changes(action(61, [3, 0, 0, 2], "walk"))).toEqual(["stopping"]);
