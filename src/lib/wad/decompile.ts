@@ -630,9 +630,9 @@ export function decompileMap(
       } else if (!action && !automatic && !unreachable) {
         entry.raw = { special: line.special, tag: line.tag };
       }
-      if (line.approximates && (entry.action || entry.raw)) {
-        approximated.set(key, line.approximates);
-      }
+    }
+    if (line.approximates && (entry.scrolls || entry.action || entry.raw)) {
+      approximated.set(key, line.approximates);
     }
     // Another line can point at this one by its tag.
     if (line.tag !== 0 && !entry.action && !entry.raw) {
@@ -830,7 +830,8 @@ export function decompileMap(
     report.droppedActions[group] = (report.droppedActions[group] ?? 0) + 1;
   }
   for (const [key, { name, changes }] of approximated) {
-    if (!settings[key]?.action && !settings[key]?.raw?.special) continue;
+    const kept = settings[key];
+    if (!kept?.scrolls && !kept?.action && !kept?.raw?.special) continue;
     const counted = report.nearestActions[name];
     report.nearestActions[name] = {
       count: (counted?.count ?? 0) + 1,

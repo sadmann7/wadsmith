@@ -315,6 +315,22 @@ describe("UDMF maps", () => {
     });
   });
 
+  it("count a scroller that moves only some parts as approximate", () => {
+    const [doom] = readMaps([
+      udmfWad([
+        "MAP01",
+        room("zdoom").replace(
+          "sidefront = 0; blocking = true;",
+          "sidefront = 0; blocking = true; special = 100; arg0 = 64; arg1 = 2;",
+        ),
+      ]),
+    ]);
+    const { report } = decompileMap(doom);
+    expect(report.nearestActions).toEqual({
+      Scroll_Texture_Left: { count: 1, changes: ["which parts scroll"] },
+    });
+  });
+
   it("count an approximate action only when the import keeps it", () => {
     const [doom] = readMaps([
       udmfWad([
