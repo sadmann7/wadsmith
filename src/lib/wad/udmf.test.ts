@@ -367,6 +367,37 @@ describe("UDMF maps", () => {
     ]);
     const { report } = decompileMap(doom);
     expect(report.nearestActions).toEqual({});
+    expect(report.droppedActions).toEqual({
+      "Walk-over actions on one-sided walls": 1,
+    });
+  });
+
+  it("report walk-over actions on one-sided walls in every namespace", () => {
+    const cases = [
+      ["doom", "special = 52;"],
+      ["zdoom", "special = 243; playercross = true;"],
+      ["zdoom", "special = 70; arg1 = 9; monstercross = true;"],
+      ["zdoom", "special = 243; anycross = true;"],
+    ] as const;
+    for (const [namespace, fields] of cases) {
+      const [doom] = readMaps([
+        udmfWad([
+          "MAP01",
+          room(namespace).replace(
+            "sidefront = 0; blocking = true;",
+            `sidefront = 0; blocking = true; ${fields}`,
+          ),
+        ]),
+      ]);
+      const { map, report } = decompileMap(doom);
+      expect(
+        Object.values(map.lines ?? {}).some((line) => line.action),
+        fields,
+      ).toBe(false);
+      expect(report.droppedActions, fields).toEqual({
+        "Walk-over actions on one-sided walls": 1,
+      });
+    }
   });
 
   it("place things on no difficulty and no game mode unless they say so", () => {

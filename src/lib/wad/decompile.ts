@@ -625,9 +625,15 @@ export function decompileMap(
           : null;
       const unreachable =
         kept.length === 1 && (trigger === "walk" || trigger === "door");
-      if (action && !automatic && !unreachable) {
+      if (unreachable && !automatic) {
+        const group =
+          trigger === "walk"
+            ? "Walk-over actions on one-sided walls"
+            : "Door actions on one-sided walls";
+        report.droppedActions[group] = (report.droppedActions[group] ?? 0) + 1;
+      } else if (action && !automatic) {
         entry.action = { ...action, tag: line.tag };
-      } else if (!action && !automatic && !unreachable) {
+      } else if (!action && !automatic) {
         entry.raw = { special: line.special, tag: line.tag };
       }
     }
