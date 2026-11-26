@@ -38,7 +38,6 @@ import type {
   ThingCategory,
   ThingKind,
 } from "@/lib/map/types";
-import type { SceneRendererKind } from "@/lib/preview/scene-renderer";
 
 import { GameView, type PlayerSpot } from "@/components/play/play-panel";
 import { type HostedGame, PlayTogether } from "@/components/play/play-together";
@@ -214,6 +213,10 @@ import {
   swapWallSides,
 } from "@/lib/map/wall-tools";
 import { SceneCamera } from "@/lib/preview/scene-camera";
+import {
+  sceneRendererFrom,
+  type SceneRendererKind,
+} from "@/lib/preview/scene-renderer";
 import { createFlatAssets, readWadAssets } from "@/lib/wad/assets";
 import { compileMap } from "@/lib/wad/compile";
 import {
@@ -3638,8 +3641,8 @@ function loadGrid(): GridSetting {
   }
 }
 
-function loadRenderer(): SceneRendererKind {
-  return savedRenderer.get() === "webgl" ? "webgl" : "columns";
+function loadRenderer() {
+  return sceneRendererFrom(savedRenderer.get());
 }
 
 // Without storage the card would come back on every visit.

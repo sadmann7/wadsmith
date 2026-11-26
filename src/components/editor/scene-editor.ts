@@ -62,6 +62,7 @@ import {
 } from "@/lib/preview/render";
 import {
   createSceneRenderer,
+  defaultSceneRenderer,
   type SceneRenderer,
   type SceneRendererKind,
 } from "@/lib/preview/scene-renderer";
@@ -1002,7 +1003,7 @@ const sceneEditor = definePrimitive({
         canvas = element as HTMLCanvasElement;
         target = createSceneRenderer(
           canvas,
-          context.options().renderer ?? "columns",
+          context.options().renderer ?? defaultSceneRenderer,
           width,
           height,
           scheduleDraw,
