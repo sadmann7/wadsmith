@@ -761,6 +761,22 @@ describe("values a saved map can't hold", () => {
     expect(report.droppedActions).toEqual({ "Specials past 32767": 1 });
   });
 
+  it("reports walk-over and door actions on one-sided walls, which nothing can cross or open", () => {
+    const build = doomMap();
+    [52, 88, 0x6000, 1, 11].forEach((special, index) =>
+      room(build, { tag: special === 88 ? 3 : 0 }, index * 512, special),
+    );
+    const { map, report } = decompileMap(build.map);
+    reloads(map);
+    expect(
+      Object.values(map.lines ?? {}).flatMap((line) => line.action ?? []),
+    ).toEqual([expect.objectContaining({ kind: "exit", trigger: "switch" })]);
+    expect(report.droppedActions).toEqual({
+      "Walk-over actions on one-sided walls": 3,
+      "Door actions on one-sided walls": 1,
+    });
+  });
+
   it("keeps what the engine applies of a sector special with its sign bit set", () => {
     const cases = [
       [0x8008, { effect: "glow" }],
