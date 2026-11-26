@@ -351,7 +351,13 @@ const hexenLineFields = [
   "anycross",
 ];
 
-const playerTriggers = ["playeruse", "impact", "playercross"];
+const nonMonsterTriggers = [
+  "playeruse",
+  "impact",
+  "playercross",
+  "playerpush",
+  "missilecross",
+];
 const monsterTriggers = ["monsteruse", "monstercross", "monsterpush"];
 
 interface LineAction {
@@ -415,7 +421,15 @@ function readLineAction(namespace: string, line: Fields): LineAction {
       dropped: hexenSpecialName(special),
     };
   }
-  const triggers = playerTriggers.filter((key) => line.flag(key)).length;
+  const keptTrigger =
+    trigger === "use"
+      ? "playeruse"
+      : trigger === "shoot"
+        ? "impact"
+        : "playercross";
+  const losesTrigger = nonMonsterTriggers.some(
+    (key) => key !== keptTrigger && line.flag(key),
+  );
   const keptMonsterTrigger =
     trigger === "use"
       ? "monsteruse"
@@ -433,7 +447,7 @@ function readLineAction(namespace: string, line: Fields): LineAction {
     !getIsGeneralized(action.special);
   const changes = orderedChanges([
     ...action.changes,
-    ...(triggers > 1 || anyCross ? ["trigger" as const] : []),
+    ...(losesTrigger || anyCross ? ["trigger" as const] : []),
     ...(losesMonsters ? ["monsters" as const] : []),
   ]);
   return {
