@@ -19,6 +19,7 @@ const allowed = ["complevel", "name"] as const;
 export const maxPatchLength = 5 * 1024 * 1024;
 
 type Collection = (typeof keyed)[number] | (typeof listed)[number];
+type Listed = (typeof listed)[number];
 type Field = (typeof allowed)[number];
 
 export interface MapPatch {
@@ -27,6 +28,8 @@ export interface MapPatch {
   // The changed fields of things that stay, with null for a field removed.
   merge?: Partial<Record<Collection, Record<string, Json>>>;
   fields?: Partial<Record<Field, unknown>>;
+  // The ids of a list in their new order, when the patch moves any of them.
+  order?: Partial<Record<Listed, string[]>>;
 }
 
 // What turns one map into the other.
@@ -35,6 +38,7 @@ export function diffMaps(from: object, to: object): MapPatch {
   const after = to as Json;
   const set: NonNullable<MapPatch["set"]> = {};
   const merge: NonNullable<MapPatch["merge"]> = {};
+  const order: NonNullable<MapPatch["order"]> = {};
   for (const name of [...keyed, ...listed]) {
     const was = entries(before, name);
     const now = entries(after, name);
@@ -63,6 +67,12 @@ export function diffMaps(from: object, to: object): MapPatch {
     }
     if (Object.keys(added).length > 0) set[name] = added;
     if (Object.keys(changed).length > 0) merge[name] = changed;
+    if ((listed as readonly string[]).includes(name)) {
+      const ids = [...now.keys()];
+      const kept = [...was.keys()].filter((key) => now.has(key));
+      const joined = ids.filter((key) => !was.has(key));
+      if (!getIsSame(ids, [...kept, ...joined])) order[name as Listed] = ids;
+    }
   }
   const fields: NonNullable<MapPatch["fields"]> = {};
   for (const name of compared) {
@@ -70,7 +80,7 @@ export function diffMaps(from: object, to: object): MapPatch {
       fields[name] = after[name] ?? null;
     }
   }
-  return tidy({ set, merge, fields });
+  return tidy({ set, merge, fields, order });
 }
 
 // The map with the patch applied. A new item joins the end of its list, and
@@ -81,6 +91,7 @@ export function applyPatch<T extends object>(source: T, patch: MapPatch): T {
   const names = new Set([
     ...Object.keys(patch.set ?? {}),
     ...Object.keys(patch.merge ?? {}),
+    ...Object.keys(patch.order ?? {}),
   ]);
   for (const name of names) {
     const added = patch.set?.[name as Collection] ?? {};
@@ -110,6 +121,15 @@ export function applyPatch<T extends object>(source: T, patch: MapPatch): T {
       for (const [key, fields] of Object.entries(changed)) {
         const at = list.findIndex((item) => item.id === key);
         if (at >= 0) list[at] = merged(list[at], fields);
+      }
+      const order = patch.order?.[name as Listed];
+      if (order) {
+        const rank = new Map(order.map((key, at) => [key, at]));
+        list.sort(
+          (a, b) =>
+            (rank.get(String(a.id)) ?? order.length) -
+            (rank.get(String(b.id)) ?? order.length),
+        );
       }
       if (name === "notes" && list.length === 0) delete next[name];
       else next[name] = list;
@@ -157,11 +177,12 @@ export function withoutKeys(patch: MapPatch, skip: ReadonlySet<string>) {
         ([name]) => !skip.has(`field:${name}`),
       ),
     ),
+    order: { ...patch.order },
   });
 }
 
 export function getIsEmptyPatch(patch: MapPatch) {
-  return !patch.set && !patch.merge && !patch.fields;
+  return !patch.set && !patch.merge && !patch.fields && !patch.order;
 }
 
 // A patch as the server takes it: only known collections and fields, things
@@ -169,9 +190,23 @@ export function getIsEmptyPatch(patch: MapPatch) {
 // that keep each item's id.
 export function parsePatch(value: unknown): MapPatch | null {
   if (!getIsRecord(value)) return null;
-  const { set = {}, merge = {}, fields = {} } = value;
-  if (!getIsRecord(set) || !getIsRecord(merge) || !getIsRecord(fields)) {
+  const { set = {}, merge = {}, fields = {}, order = {} } = value;
+  if (
+    !getIsRecord(set) ||
+    !getIsRecord(merge) ||
+    !getIsRecord(fields) ||
+    !getIsRecord(order)
+  ) {
     return null;
+  }
+  for (const [name, ids] of Object.entries(order)) {
+    if (
+      !(listed as readonly string[]).includes(name) ||
+      !Array.isArray(ids) ||
+      ids.some((id) => typeof id !== "string")
+    ) {
+      return null;
+    }
   }
   for (const [part, whole] of [
     [set, true],
@@ -201,6 +236,47 @@ export function parsePatch(value: unknown): MapPatch | null {
     if (!(allowed as readonly string[]).includes(name)) return null;
   }
   return value;
+}
+
+// Letters that end the ids one browser makes while editing online.
+export function randomSuffix() {
+  return Array.from(crypto.getRandomValues(new Uint8Array(3)), (byte) =>
+    String.fromCharCode(97 + (byte % 26)),
+  ).join("");
+}
+
+// The patch as it lands on the map, or null when it adds something under an
+// id the map already gives to something else, as when two people add at the
+// same moment. Settings for a wall that someone else just gave its first
+// settings join theirs instead of replacing them.
+export function fitPatch(source: object, patch: MapPatch): MapPatch | null {
+  const map = source as Json;
+  const set: NonNullable<MapPatch["set"]> = {};
+  const merge: NonNullable<MapPatch["merge"]> = { ...patch.merge };
+  for (const [name, added] of Object.entries(patch.set ?? {}) as [
+    Collection,
+    Record<string, unknown>,
+  ][]) {
+    const held = entries(map, name);
+    const kept: Record<string, unknown> = {};
+    const joined: Record<string, Json> = { ...merge[name] };
+    for (const [key, value] of Object.entries(added)) {
+      const old = held.get(key);
+      if (value === null || old === undefined || getIsSame(old, value)) {
+        kept[key] = value;
+      } else if (name === "lines" && getIsRecord(value)) {
+        joined[key] = { ...joined[key], ...value };
+      } else return null;
+    }
+    set[name] = kept;
+    merge[name] = joined;
+  }
+  return tidy({
+    set,
+    merge,
+    fields: { ...patch.fields },
+    order: { ...patch.order },
+  });
 }
 
 // Corners rooms name that the map doesn't have, as when one person draws a
@@ -247,7 +323,12 @@ export function combinePatches(first: MapPatch, second: MapPatch): MapPatch {
     set[name] = added;
     merge[name] = changed;
   }
-  return tidy({ set, merge, fields: { ...first.fields, ...second.fields } });
+  return tidy({
+    set,
+    merge,
+    fields: { ...first.fields, ...second.fields },
+    order: { ...first.order, ...second.order },
+  });
 }
 
 function merged(entity: Json, fields: Json) {
@@ -266,6 +347,7 @@ function tidy(patch: Required<MapPatch>): MapPatch {
     ...(Object.keys(set).length > 0 && { set }),
     ...(Object.keys(merge).length > 0 && { merge }),
     ...(Object.keys(patch.fields).length > 0 && { fields: patch.fields }),
+    ...(Object.keys(patch.order).length > 0 && { order: patch.order }),
   };
 }
 

@@ -1,6 +1,7 @@
 import {
   applyPatch,
   diffMaps,
+  fitPatch,
   getIsEmptyPatch,
   parsePatch,
   patchKeys,
@@ -95,7 +96,45 @@ describe("map patches", () => {
     ).toBe(true);
   });
 
+  it("keeps a list in the order of the map it was made from", () => {
+    const [first, ...rest] = testMap.things;
+    const reordered = { ...testMap, things: [...rest, first] };
+    const patch = diffMaps(testMap, reordered);
+    expect(patch).toEqual({
+      order: { things: reordered.things.map((t) => t.id) },
+    });
+    expect(applyPatch(testMap, patch)).toEqual(reordered);
+    const added = addThing(testMap, "medikit", { x: 96, y: 96 }).map;
+    expect(diffMaps(testMap, added).order).toBeUndefined();
+  });
+
+  it("turns away an add under an id the map holds for something else", () => {
+    const imp = testMap.things[3];
+    const same = { set: { things: { [imp.id]: imp } } };
+    expect(fitPatch(testMap, same)).toEqual(same);
+    expect(
+      fitPatch(testMap, { set: { things: { [imp.id]: { ...imp, x: 1 } } } }),
+    ).toBeNull();
+    expect(
+      fitPatch(testMap, { set: { vertices: { v1: { x: 9, y: 9 } } } }),
+    ).toBeNull();
+  });
+
+  it("joins two first settings for one wall", () => {
+    const ours = { ...testMap, lines: { "v1|v2": { secret: true } } };
+    const patch = fitPatch(ours, {
+      set: { lines: { "v1|v2": { mapped: true } } },
+    });
+    expect(patch).toEqual({ merge: { lines: { "v1|v2": { mapped: true } } } });
+    expect(applyPatch(ours, patch ?? {}).lines).toEqual({
+      "v1|v2": { secret: true, mapped: true },
+    });
+  });
+
   it("refuses a patch that isn't one", () => {
+    expect(parsePatch({ order: { things: ["a"] } })).not.toBeNull();
+    expect(parsePatch({ order: { vertices: ["a"] } })).toBeNull();
+    expect(parsePatch({ order: { things: [1] } })).toBeNull();
     expect(parsePatch({ set: { things: { a: { id: "a" } } } })).not.toBeNull();
     expect(parsePatch({ set: { things: { a: { id: "b" } } } })).toBeNull();
     expect(parsePatch({ set: { secrets: {} } })).toBeNull();
