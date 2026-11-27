@@ -271,7 +271,7 @@ import { TransformDialog } from "./transform-dialog";
 
 const modeHints: Record<EditMode, string> = {
   vertices:
-    "Drag a corner, a wall or a room to move it, or nudge the selection with the arrow keys. Drag from empty space, or Shift-drag, to select a box.",
+    "Drag a corner, a wall or a room to move it. Drag from empty space, or Shift-drag, to select a box.",
   lines:
     "Click a wall to change its textures or what it does. Drag a wall or a room to move it.",
   sectors:
