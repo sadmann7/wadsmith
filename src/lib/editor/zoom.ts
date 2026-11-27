@@ -1,6 +1,37 @@
-const zoomFactor = 1.25;
+import type { Point } from "@/lib/map/types";
 
-export const minZoom = zoomFactor ** -10;
+export interface View {
+  x: number;
+  y: number;
+  zoom: number;
+}
+
+const zoomLevels = [
+  0.01,
+  0.025,
+  0.05,
+  0.1,
+  0.25,
+  1 / 3,
+  0.5,
+  2 / 3,
+  1,
+  1.5,
+  2,
+  3,
+  4,
+];
+
+export const maxZoom = 4;
+export const minZoom = 0.005;
+
+// A step smaller than this reads as no change at all.
+const visibleStep = 1.1;
+const furthestOut = 0.25;
+const restZoom = 1.05;
+const pinchDelta = 10;
+const pinchFrame = 16;
+const pinchBudget = 0.2;
 
 const gestureGap = 250;
 const notch = 120;
@@ -11,10 +42,86 @@ export type WheelInput = Pick<
   "deltaMode" | "deltaX" | "deltaY" | "shiftKey" | "timeStamp"
 > & { wheelDeltaY?: number };
 
-export function steppedZoom(zoom: number, steps: number) {
-  const level = Math.log(zoom) / Math.log(zoomFactor);
-  const from = steps > 0 ? Math.floor(level + 1e-6) : Math.ceil(level - 1e-6);
-  return zoomFactor ** (from + steps);
+export function steppedZoom(
+  zoom: number,
+  steps: number,
+  min = minZoom,
+  max = maxZoom,
+) {
+  let next = zoom;
+  for (let step = 0; step < Math.abs(steps); step++) {
+    next =
+      steps > 0
+        ? Math.min(
+            max,
+            zoomLevels.find((level) => level >= next * visibleStep) ?? max,
+          )
+        : Math.max(
+            min,
+            zoomLevels.findLast((level) => level <= next / visibleStep) ?? min,
+          );
+  }
+  return next;
+}
+
+export function furthestZoom(fitZoom: number) {
+  return Math.min(furthestOut, Math.max(minZoom, fitZoom / 2));
+}
+
+export function restingZoom(zoom: number) {
+  return Math.abs(Math.log(zoom)) < Math.log(restZoom) ? 1 : zoom;
+}
+
+export function zoomedView(view: View, zoom: number, at: Point): View {
+  const k = zoom / view.zoom;
+  return {
+    x: at.x - (at.x - view.x) * k,
+    y: at.y - (at.y - view.y) * k,
+    zoom,
+  };
+}
+
+// Zooms around the one screen point both views share, so a step around the
+// pointer keeps that point still the whole way.
+export function viewBetween(from: View, to: View, t: number): View {
+  const zoom = from.zoom * (to.zoom / from.zoom) ** t;
+  if (Math.abs(to.zoom - from.zoom) < 1e-9) {
+    return {
+      x: from.x + (to.x - from.x) * t,
+      y: from.y + (to.y - from.y) * t,
+      zoom,
+    };
+  }
+  const span = to.zoom - from.zoom;
+  const at = {
+    x: (from.x * to.zoom - to.x * from.zoom) / span,
+    y: (from.y * to.zoom - to.y * from.zoom) / span,
+  };
+  return zoomedView(from, zoom, at);
+}
+
+export type PinchInput = Pick<WheelEvent, "deltaY" | "timeStamp">;
+
+// Each event's change is capped and so is a frame's total, so one flick of
+// a trackpad can't throw the zoom from end to end.
+export function createPinchZoom() {
+  let frameStart = Number.NEGATIVE_INFINITY;
+  let spent = 0;
+  return (event: PinchInput, unit = 1): number => {
+    if (event.timeStamp - frameStart >= pinchFrame) {
+      frameStart = event.timeStamp;
+      spent = 0;
+    }
+    const delta = Math.max(
+      -pinchDelta,
+      Math.min(pinchDelta, event.deltaY * unit),
+    );
+    const wanted = -delta * 0.01;
+    const left = pinchBudget - spent;
+    const change = Math.max(-left, Math.min(left, wanted));
+    spent += Math.abs(change);
+    return Math.exp(change);
+  };
 }
 
 // Zoom in quarter octaves, rounded up, so the canvas renders again only when

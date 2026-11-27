@@ -1,3 +1,5 @@
+import type { CustomThings } from "@/lib/wad/custom-things";
+
 import { defined } from "@/lib/defined";
 
 import type {
@@ -31,6 +33,7 @@ import {
 } from "./geometry";
 import { facingOf, getIsInLineOfFire } from "./line-of-fire";
 import { getIsTeleport, lineUsesTag } from "./lines";
+import { startBlocker } from "./stuck";
 
 export const gridSize = 8;
 export const gridSizes = [1, 2, 4, 8, 16, 32, 64] as const;
@@ -132,62 +135,38 @@ function keptType(thing: Thing): Thing {
   return named;
 }
 
-const startReach = 208;
-const startSteps = Array.from(
-  { length: (startReach / 16) * 2 + 1 },
-  (_, index) => index * 16 - startReach,
-);
+// Spots around player 1 go nearest first, a step ahead or behind weighing
+// `along` steps to the side's `across`. The tight search fits a hallway four
+// abreast: lanes a player's width apart, staggered and touching the walls.
+const startSearches = [
+  { step: 16, margin: 20, along: 3, across: 1 },
+  { step: 8, margin: 16, along: 1, across: 3 },
+];
+
+type StartSearch = (typeof startSearches)[number];
 
 // Places any missing co-op starts beside player 1's start, facing its way and
 // out of every other start's line of fire.
-export function addPlayerStarts(map: GameMap, players: number) {
+export function addPlayerStarts(
+  map: GameMap,
+  players: number,
+  custom: CustomThings = new Map(),
+) {
   const first = map.things.find((thing) => thing.kind === "player");
   const room = first ? sectorAt(map, first) : null;
   if (!first || !room) return map;
-  const facing = facingOf(first.angle);
-  // Spots around player 1, nearest first, with a step ahead or behind
-  // counting for more than a step to the side.
-  const spots = startSteps
-    .flatMap((x) => startSteps.map((y) => ({ x, y })))
-    .filter(({ x, y }) => (x || y) && Math.hypot(x, y) <= startReach)
-    .map((offset) => ({
-      offset,
-      rank: Math.hypot(
-        3 * (offset.x * facing.x + offset.y * facing.y),
-        offset.x * facing.y - offset.y * facing.x,
-      ),
-    }))
-    .sort((a, b) => a.rank - b.rank)
-    .map(({ offset }) =>
-      snapPoint({ x: first.x + offset.x, y: first.y + offset.y }),
-    );
-  const fits = (map: GameMap, point: Point) => {
-    const coop = map.things.filter((thing) => getIsPlayerStart(thing.kind));
-    return (
-      [-20, 20].every((dx) =>
-        [-20, 20].every(
-          (dy) => sectorAt(map, { x: point.x + dx, y: point.y + dy }) === room,
-        ),
-      ) &&
-      map.things.every(
-        (thing) => Math.hypot(thing.x - point.x, thing.y - point.y) >= 40,
-      ) &&
-      coop.every(
-        (start) =>
-          !getIsInLineOfFire(start, point) &&
-          !getIsInLineOfFire({ ...point, angle: first.angle }, start),
-      )
-    );
-  };
-  let next = map;
-  for (let player = 2; player <= players; player += 1) {
-    const kind = `player-${player}` as ThingKind;
-    if (next.things.some((thing) => thing.kind === kind)) continue;
-    const spot = spots.find((point) => fits(next, point));
-    if (!spot) break;
-    next = addThing(next, kind, spot, first.angle).map;
+  const missing = (map: GameMap) =>
+    Array.from(
+      { length: players - 1 },
+      (_, index) => `player-${index + 2}`,
+    ).filter((kind) => !map.things.some((thing) => thing.kind === kind)).length;
+  let best = map;
+  for (const search of startSearches) {
+    if (missing(best) === 0) break;
+    const next = placeStarts(map, first, room, players, search, custom);
+    if (missing(next) < missing(best)) best = next;
   }
-  return next;
+  return best;
 }
 
 // A player start looks down its room's longest clear view, so the game and
@@ -838,6 +817,65 @@ export function addRoom(
 }
 
 export type RoomSide = "north" | "east" | "south" | "west";
+
+const startReach = 208;
+
+function placeStarts(
+  map: GameMap,
+  first: Thing,
+  room: Sector,
+  players: number,
+  { step, margin, along, across }: StartSearch,
+  custom: CustomThings,
+) {
+  const facing = facingOf(first.angle);
+  const steps = Array.from(
+    { length: (startReach / step) * 2 + 1 },
+    (_, index) => index * step - startReach,
+  );
+  const spots = steps
+    .flatMap((x) => steps.map((y) => ({ x, y })))
+    .filter(({ x, y }) => (x || y) && Math.hypot(x, y) <= startReach)
+    .map((offset) => ({
+      offset,
+      rank: Math.hypot(
+        along * (offset.x * facing.x + offset.y * facing.y),
+        across * (offset.x * facing.y - offset.y * facing.x),
+      ),
+    }))
+    .sort((a, b) => a.rank - b.rank)
+    .map(({ offset }) =>
+      snapPoint({ x: first.x + offset.x, y: first.y + offset.y }),
+    );
+  const fits = (map: GameMap, point: Point) => {
+    const coop = map.things.filter((thing) => getIsPlayerStart(thing.kind));
+    return (
+      [-margin, margin].every((dx) =>
+        [-margin, margin].every(
+          (dy) => sectorAt(map, { x: point.x + dx, y: point.y + dy }) === room,
+        ),
+      ) &&
+      map.things.every(
+        (thing) => Math.hypot(thing.x - point.x, thing.y - point.y) >= 40,
+      ) &&
+      coop.every(
+        (start) =>
+          !getIsInLineOfFire(start, point) &&
+          !getIsInLineOfFire({ ...point, angle: first.angle }, start),
+      )
+    );
+  };
+  let next = map;
+  for (let player = 2; player <= players; player += 1) {
+    const kind = `player-${player}` as ThingKind;
+    if (next.things.some((thing) => thing.kind === kind)) continue;
+    const blocked = startBlocker(next, first, startReach + gridSize, custom);
+    const spot = spots.find((point) => fits(next, point) && !blocked(point));
+    if (!spot) break;
+    next = addThing(next, kind, spot, first.angle).map;
+  }
+  return next;
+}
 
 // A tag the walls share that no room has, and that only lines doing the same
 // thing carry, so aiming one of them at an untagged room keeps the others with

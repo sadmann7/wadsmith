@@ -298,6 +298,7 @@ const shapeHints: Record<Exclude<DrawShape, "outline">, string> = {
 };
 
 const noLinks: MapLink[] = [];
+const zoomPresets = [0.5, 1, 2];
 
 // The same ranges the inspector's fields keep a single room within.
 const roomSides: RoomSide[] = ["north", "east", "south", "west"];
@@ -1300,6 +1301,24 @@ export function EditorScreen({
     () => setFitSelectionRequest((request) => request + 1),
     shortcut("fitSelection", () => modeKeys() && visibleLayout !== "scene"),
   );
+
+  useShortcut(
+    shortcutKeys.fitMap,
+    () => setFitRequest((request) => request + 1),
+    shortcut("fitMap", () => modeKeys() && visibleLayout !== "scene"),
+  );
+
+  const runZoomAction = (action: string) => {
+    if (action === "fit") setFitRequest((request) => request + 1);
+    else if (action === "selection") {
+      setFitSelectionRequest((request) => request + 1);
+    } else {
+      setZoomRequest((request) => ({
+        id: (request?.id ?? 0) + 1,
+        zoom: Number(action),
+      }));
+    }
+  };
 
   const zoomMap = (steps: number) => {
     const pointer = mapPointer.current;
@@ -3395,7 +3414,34 @@ export function EditorScreen({
                 </MenuCheckboxItem>
               </MenuContent>
             </Menu>
-            <span ref={zoomStatus}>Zoom 100%</span>
+            <Menu onAction={runZoomAction}>
+              <MenuTrigger
+                className={buttonVariants({
+                  variant: "text",
+                  className: "min-h-5 px-1 font-mono text-[11px]",
+                })}
+                title="Zoom"
+              >
+                <span ref={zoomStatus}>Zoom 100%</span>
+              </MenuTrigger>
+              <MenuContent align="end">
+                <MenuItem value="fit" shortcut={shortcutKeys.fitMap}>
+                  Fit map
+                </MenuItem>
+                <MenuItem
+                  value="selection"
+                  shortcut={shortcutKeys.fitSelection}
+                >
+                  Fit selection
+                </MenuItem>
+                <MenuSeparator />
+                {zoomPresets.map((zoom) => (
+                  <MenuItem key={zoom} value={String(zoom)}>
+                    {zoom * 100}%
+                  </MenuItem>
+                ))}
+              </MenuContent>
+            </Menu>
             <span role="status">{saveLabels[saveStatus]}</span>
           </div>
         </footer>
@@ -3636,7 +3682,9 @@ export function EditorScreen({
           music={music}
           sky={sky}
           intertext={intertext}
-          onAddStarts={(players) => commit(addPlayerStarts(map, players))}
+          onAddStarts={(players) =>
+            commit(addPlayerStarts(map, players, customThings))
+          }
           onStart={(hosted) => {
             setCoopLobby(false);
             setGame({ map, coop: hosted });
