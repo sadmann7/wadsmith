@@ -368,6 +368,8 @@ interface AppProps {
   watchRemote?: (listener: (patch: MapPatch) => void) => () => void;
   // Everyone else editing the map, with where their pointers are.
   peers?: LivePeer[];
+  // What happened with the map's online copy that the person should know.
+  onlineNotice?: string | null;
   onPointer?: (at: Point | null) => void;
   onOpenEpisodes: () => void;
   navigation: React.ReactNode;
@@ -420,6 +422,7 @@ export function EditorScreen({
   watchExternal,
   watchRemote,
   peers,
+  onlineNotice,
   onPointer,
   onOpenEpisodes,
   navigation,
@@ -1769,6 +1772,7 @@ export function EditorScreen({
   // and is saved like any edit, which sends nothing back.
   const takeRemote = React.useEffectEvent((patch: MapPatch) => {
     const next = applyPatch(mapRef.current, patch);
+    camera.keep(next);
     mapRef.current = next;
     setMap(next);
     onSave(next);
@@ -2859,6 +2863,11 @@ export function EditorScreen({
                 </Menu>
               ) : null}
             </header>
+            {onlineNotice ? (
+              <p className="agent-log" role="status">
+                {onlineNotice}
+              </p>
+            ) : null}
             {notice ? (
               <p className="agent-log" role="status">
                 {notice}
