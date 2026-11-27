@@ -24,7 +24,6 @@ import { validateMap } from "@/lib/map/validate";
 
 import { type LivePeer, liveUrl, openLiveMap } from "./live";
 
-const settle = () => new Promise((done) => setTimeout(done, 0));
 const strip = ({ name: _, ...map }: GameMap) => map;
 
 describe("live editing in the browser", () => {
@@ -222,17 +221,15 @@ describe("live editing in the browser", () => {
   });
 
   it("passes pointers on to the others", async () => {
-    vi.useRealTimers();
     const server = fakeServer(testMap);
     const ana = server.join("Ana");
     const bo = server.join("Bo");
     await ready(server);
     expect(ana.seen.peers).toEqual([{ peer: 2, name: "Bo", at: null }]);
     ana.live.cursor({ x: 3, y: 4 });
-    await new Promise((done) => setTimeout(done, 150));
+    await vi.advanceTimersByTimeAsync(100);
     server.run();
     expect(bo.seen.peers[0].at).toEqual({ x: 3, y: 4 });
-    await settle();
   });
 
   it("keeps every room, corner, thing, switch and note two editors add at once", async () => {

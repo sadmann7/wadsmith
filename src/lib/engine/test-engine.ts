@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { vi } from "vitest";
 
 import type { GameMap } from "@/lib/map/types";
 
@@ -27,6 +28,7 @@ const running: DoomGame[] = [];
 
 export function stopGames() {
   for (const game of running.splice(0)) game.stop();
+  vi.useRealTimers();
 }
 
 export const engineWarnings: string[] = [];
@@ -37,6 +39,13 @@ export async function launch(
   events?: GameEvents,
   screen?: Screen,
 ) {
+  // The engine and its frame pacer read performance.now, so faking it makes game
+  // time move only when play advances it, however busy the machine is.
+  if (!vi.isFakeTimers()) {
+    vi.useFakeTimers({
+      toFake: ["setTimeout", "clearTimeout", "performance", "Date"],
+    });
+  }
   const url = pathToFileURL(resolve(engineDirectory, "woof.js")).href;
   const { default: createDoom } = (await import(/* @vite-ignore */ url)) as {
     default: CreateDoom;
@@ -60,11 +69,12 @@ export async function launch(
   return game;
 }
 
+const playStepMs = 5;
+
 export async function play(_game: DoomGame, ms: number, until?: () => boolean) {
-  const end = performance.now() + ms;
-  while (performance.now() < end) {
+  for (let waited = 0; waited < ms; waited += playStepMs) {
     if (until?.()) return;
-    await new Promise((done) => setTimeout(done, 5));
+    await vi.advanceTimersByTimeAsync(Math.min(playStepMs, ms - waited));
   }
 }
 

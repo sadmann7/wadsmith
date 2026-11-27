@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { maxPacket, NetInbox } from "./net-inbox";
 
@@ -35,9 +35,10 @@ describe("network inbox", () => {
   it("returns from a wait once a packet is waiting", () => {
     const inbox = NetInbox.create(64);
     inbox.push(1, bytes(4, 1));
-    const start = performance.now();
+    const wait = vi.spyOn(Atomics, "wait");
     inbox.wait(1000);
-    expect(performance.now() - start).toBeLessThan(100);
+    expect(wait).not.toHaveBeenCalled();
+    wait.mockRestore();
   });
 
   it("rejects a ring that isn't a power of two", () => {

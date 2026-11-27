@@ -106,9 +106,11 @@ describe("stuck things", () => {
       rooms: [{ name: "Hall", points: rect(0, 0, 512, 512), ...look }],
       things: things.map(([kind, x, y]) => ({ kind, at: [x, y] })),
     });
-    const started = performance.now();
+    // CPU time, unlike wall time, doesn't grow when other work shares the CPU.
+    const started = process.threadCpuUsage();
     expect(findStuckThings(map, new Map()).overlaps.length).toBeGreaterThan(0);
-    expect(performance.now() - started).toBeLessThan(1000);
+    const { user, system } = process.threadCpuUsage(started);
+    expect((user + system) / 1000).toBeLessThan(1000);
   });
 });
 
