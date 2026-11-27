@@ -414,19 +414,25 @@ describe("map editor parts", () => {
     expect(shotgun).toMatchObject({ x: 448, y: 168 });
   });
 
-  it("nudge the active room in sector mode", () => {
-    let result = null as GameMap | null;
-    const instance = mapEditor({
-      id,
-      map: testMap,
-      editMode: "sectors",
-      activeSector: "sector-2",
-      onMapChange: (next) => {
-        result = next;
-      },
-    });
-    instance.api.keydown(press("ArrowDown"));
-    expect(defined(result).vertices.v13).toEqual({ x: 496, y: 104 });
+  it("nudge the active room in sector and corner mode, 8 steps with Shift", () => {
+    for (const editMode of ["sectors", "vertices"] as const) {
+      const changes: GameMap[] = [];
+      const options = {
+        id,
+        map: testMap,
+        editMode,
+        activeSector: "sector-2",
+        onMapChange: (next: GameMap) => {
+          changes.push(next);
+        },
+      };
+      const instance = mapEditor(options);
+      instance.api.keydown(press("ArrowDown"));
+      expect(defined(changes[0]).vertices.v13).toEqual({ x: 496, y: 104 });
+      instance.setOptions({ ...options, map: changes[0] });
+      instance.api.keydown(press("ArrowLeft", { shiftKey: true }));
+      expect(defined(changes[1]).vertices.v13).toEqual({ x: 432, y: 104 });
+    }
   });
 
   it("raise floors, ceilings and light with Page Up, Home and Alt", () => {

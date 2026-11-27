@@ -1017,11 +1017,11 @@ export const mapEditor = definePrimitive({
       if (!direction || event.altKey || event.ctrlKey || event.metaKey) {
         return false;
       }
-      const { map, selection, positions, editMode } = store.get();
-      // A room picked whole, or the active room in sector mode, moves with
-      // its corners and what stands in it.
+      const { map, selection, positions } = store.get();
+      // A room picked whole, or the active room, moves with its corners and
+      // what stands in it.
       const rooms = selection.filter((key) => key.startsWith(roomKeyPrefix));
-      const active = editMode === "sectors" ? pickedRoom() : null;
+      const active = pickedRoom();
       const keys = [
         ...new Set([
           ...movableKeys(selection, positions),
