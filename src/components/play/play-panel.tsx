@@ -237,6 +237,7 @@ const advanceTapMs = 250;
 // Doom's netcode holds the level while it waits for a player's moves. A short
 // hold is normal; one this long is worth naming.
 const stallMs = 1000;
+const guestCatchUpMs = 3000;
 
 const gameExits: Record<
   GameExit,
@@ -417,6 +418,7 @@ function GameSession({
     let lastInLevel: GameStatus | null = null;
     let ticsChangedAt = performance.now();
     let stalled: number[] = [];
+    let endTimer: ReturnType<typeof setTimeout> | undefined;
     // Only one map's playtest is recorded: an episode or a loaded WAD plays
     // maps the editor isn't showing.
     const recorder = map && !episode && !files ? new RunRecorder() : null;
@@ -515,8 +517,14 @@ function GameSession({
             }
             if (reachedLevel && !next.inLevel && !files) {
               if (reached >= total && !lastText) {
-                client?.stop();
                 setFinished(true);
+                // The host's engine serves the guests, who run a few tics
+                // behind, so it keeps going until they reach the end too.
+                if (coop?.role !== "host") client?.stop();
+                else if (endTimer === undefined) {
+                  client?.setSound({ ...soundRef.current, muted: true });
+                  endTimer = setTimeout(() => client?.stop(), guestCatchUpMs);
+                }
                 return;
               }
               // The engine clears the level's time once its tally starts. The
@@ -593,6 +601,7 @@ function GameSession({
 
     return () => {
       stopped = true;
+      clearTimeout(endTimer);
       client?.stop();
       gameRef.current = null;
       const run = recorder?.run();
@@ -628,6 +637,7 @@ function GameSession({
   };
 
   const pressKey = (source: string, key: number) => {
+    if (finished) return;
     if (heldKeys.current.press(source, key)) gameRef.current?.key(true, key);
   };
 
