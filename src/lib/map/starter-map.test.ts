@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 
+import { defined } from "@/lib/defined";
+import { compileLumps } from "@/lib/wad/compile";
+
 import { mapBalance } from "./balance";
 import { checkMap } from "./checks";
 import { sectorAt } from "./geometry";
@@ -41,6 +44,18 @@ describe("starter map", () => {
       const thing = starterMap.things.find((item) => item.kind === kind);
       expect(thing && sectorAt(starterMap, thing)?.id).toBe(start.id);
     }
+  });
+
+  it("marks the locked door's frame in its key's colour", () => {
+    const sides = defined(
+      compileLumps(starterMap).find((lump) => lump.name === "SIDEDEFS"),
+    ).data;
+    const names = new Set<string>();
+    for (let at = 0; at < sides.length; at += 30) {
+      const name = sides.subarray(at + 20, at + 28);
+      names.add(new TextDecoder().decode(name).replace(/\0+$/, ""));
+    }
+    expect(names).toContain("DOORBLU");
   });
 
   it("opens every door from the door itself, with no remote switch", () => {

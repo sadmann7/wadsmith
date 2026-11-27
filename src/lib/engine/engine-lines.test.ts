@@ -279,12 +279,14 @@ describe.skipIf(!ready)("starter map in the engine", () => {
   it("rides the lift up to the ledge", async () => {
     const game = await launch(playerAt(quiet, 1148, 64, 0));
     await waitForPlay(game);
+    const lift = room("Lift");
+    const raised = game.sectorFloor(lift);
     await pressUse(game);
     await play(game, 1200);
+    expect(game.sectorFloor(lift)).toBeLessThan(raised);
     await walk(game, "KeyW", () => game.status().x > 1212);
     await play(game, 4500);
     await walk(game, "KeyA", () => game.status().y > 0);
-    expect(game.sectorFloor(room("Ledge"))).toBe(64);
     expect(game.status().y).toBeGreaterThan(0);
   }, 40_000);
 

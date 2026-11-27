@@ -56,13 +56,36 @@ const rooms: RoomSpec[] = [
   },
   {
     name: "Key room",
-    points: rect(656, -96, 320, 448),
+    points: [
+      [656, -96],
+      [976, -96],
+      [976, 48],
+      [976, 208],
+      [976, 352],
+      [656, 352],
+    ],
     floor: -48,
     ceiling: 208,
     light: 160,
     floorTexture: "FLOOR5_1",
     ceilingTexture: "CEIL5_1",
     wallTexture: "BROWN1",
+    walls: [
+      {
+        wall: [
+          [976, 48],
+          [976, 64],
+        ],
+        texture: "DOORBLU",
+      },
+      {
+        wall: [
+          [976, 192],
+          [976, 208],
+        ],
+        texture: "DOORBLU",
+      },
+    ],
   },
   {
     name: "Key pedestal",
@@ -82,7 +105,7 @@ const rooms: RoomSpec[] = [
     light: 160,
     floorTexture: "FLAT20",
     ceilingTexture: "CEIL5_1",
-    wallTexture: "DOORBLU",
+    wallTexture: "BROWN1",
     door: { opensBy: "use", key: "blue", closes: false, texture: "BIGDOOR2" },
   },
   {
@@ -189,10 +212,6 @@ const lift: LineSettings = {
   action: { kind: "lift", trigger: "switch", repeat: true, tag: 1 },
 };
 
-const blueTrim: LineSettings = {
-  sides: { [roomId("Blue door")]: { middle: "DOORBLU" } },
-};
-
 // A level that teaches one idea per room: a door opened by walking up to it,
 // a key that opens the matching door, a lift, a secret behind an odd wall and
 // an exit switch. Monsters thin out on easier skills.
@@ -214,7 +233,7 @@ export const starterMap: GameMap = buildMap({
       angle: 0,
       skills: ["medium", "hard"],
     },
-    { kind: "zombieman", at: [512, 128], angle: 180, skills: ["hard"] },
+    { kind: "zombieman", at: [496, 128], angle: 180, skills: ["hard"] },
     { kind: "stimpack", at: [448, 176] },
     { kind: "shells", at: [384, 176] },
     { kind: "shells", at: [704, 224] },
@@ -243,7 +262,7 @@ export const starterMap: GameMap = buildMap({
     { kind: "box-of-shells", at: [1112, -144] },
     { kind: "shotgun-guy", at: [1384, 24], angle: 180 },
     { kind: "imp", at: [1304, 24], angle: 180, skills: ["medium", "hard"] },
-    { kind: "demon", at: [1344, -24], angle: 180, skills: ["hard"] },
+    { kind: "demon", at: [1344, -32], angle: 180, skills: ["hard"] },
   ],
   switches: [
     {
@@ -304,20 +323,6 @@ export const starterMap: GameMap = buildMap({
         [768, 80],
       ],
       settings: step("Key room"),
-    },
-    {
-      wall: [
-        [976, 64],
-        [992, 64],
-      ],
-      settings: blueTrim,
-    },
-    {
-      wall: [
-        [976, 192],
-        [992, 192],
-      ],
-      settings: blueTrim,
     },
     {
       wall: [

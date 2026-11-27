@@ -23,6 +23,7 @@ export interface RoomSpec {
   effect?: SectorEffect;
   tag?: number;
   door?: DoorSettings;
+  walls?: { wall: [Corner, Corner]; texture: string }[];
 }
 
 interface ThingSpec {
@@ -109,9 +110,14 @@ export function buildMap(unscaled: MapSpec): GameMap {
     vertices: Object.fromEntries(
       corners.map((corner) => [id(corner), { x: corner[0], y: corner[1] }]),
     ),
-    sectors: spec.rooms.map(({ points, ...room }) => ({
+    sectors: spec.rooms.map(({ points, walls, ...room }) => ({
       id: roomId(room.name),
       ...room,
+      ...(walls && {
+        wallOverrides: Object.fromEntries(
+          walls.map((item) => [wall(item.wall), item.texture]),
+        ),
+      }),
       vertices: points.flatMap((corner, index) => [
         id(corner),
         ...cornersOnWall(
@@ -156,6 +162,7 @@ function scaled(spec: MapSpec): MapSpec {
     rooms: spec.rooms.map((room) => ({
       ...room,
       points: room.points.map(corner),
+      walls: room.walls?.map((item) => ({ ...item, wall: wall(item.wall) })),
     })),
     things: spec.things.map((thing) => ({ ...thing, at: corner(thing.at) })),
     switches: spec.switches?.map((item) => ({
