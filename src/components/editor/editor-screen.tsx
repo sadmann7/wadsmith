@@ -373,6 +373,8 @@ interface AppProps {
   navigation: React.ReactNode;
   onNewMap: () => void;
   onMapSettings: () => void;
+  // An agent named the map, which then goes through its settings.
+  onRename?: (name: string) => void;
   onShare?: () => void;
   onPublish?: () => void;
   onParChange: (par: number) => void;
@@ -425,6 +427,7 @@ export function EditorScreen({
   navigation,
   onNewMap,
   onMapSettings,
+  onRename,
   onShare,
   onPublish,
   onParChange,
@@ -2559,6 +2562,7 @@ export function EditorScreen({
                         );
                       }}
                       onAgentAction={logAgentAction}
+                      onRename={onRename}
                       checkContext={context}
                       onToolChange={setTool}
                       onActiveSectorChange={setActiveSector}
