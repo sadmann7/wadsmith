@@ -27,6 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useIwad } from "@/hooks/use-iwad";
+import { balancedColumns } from "@/lib/balanced-columns";
 import { engineSlot, type GameInfo, slotCount } from "@/lib/engine/game";
 import { texturesOf } from "@/lib/engine/iwad";
 import {
@@ -312,7 +313,12 @@ export function MapDialog({
                     ))}
                   </div>
                 ) : (
-                  <div className="grid grid-cols-3 gap-2.5">
+                  <div
+                    className="grid gap-2.5"
+                    style={{
+                      gridTemplateColumns: `repeat(${balancedColumns(featuredMaps.length, 4)}, minmax(0, 1fr))`,
+                    }}
+                  >
                     {featuredMaps.map((item) => (
                       <button
                         key={item.id}
