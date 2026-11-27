@@ -95,6 +95,11 @@ export const editorShortcuts = {
     description: "Zoom to the selection, or to the whole map",
     area: "map",
   },
+  fitMap: {
+    keys: "shift+z",
+    description: "Zoom to the whole map",
+    area: "map",
+  },
   zoomIn: {
     keys: "=",
     description: "Zoom in at the pointer, as + does too",
