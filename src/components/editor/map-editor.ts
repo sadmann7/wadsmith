@@ -582,6 +582,7 @@ export const mapEditor = definePrimitive({
       const surface = root();
       const camera = store.get().cameraPosition;
       if (!surface || !camera) return;
+      stopZooming();
       const { zoom } = store.get().viewport;
       viewport.setViewport({
         x: surface.clientWidth / 2 - camera.x * zoom,
@@ -616,9 +617,11 @@ export const mapEditor = definePrimitive({
       fitSelection();
     });
     let zooming: { frame: number; to: View } | null = null;
+    let pinchEnd: ReturnType<typeof setTimeout> | undefined;
     const stopZooming = () => {
       if (zooming) cancelAnimationFrame(zooming.frame);
       zooming = null;
+      clearTimeout(pinchEnd);
     };
     context.onDestroy(stopZooming);
     const animateTo = (to: View, details: ZoomDetails) => {
@@ -659,22 +662,23 @@ export const mapEditor = definePrimitive({
         y: (at?.y ?? box.top + box.height / 2) - box.top,
       };
     };
+    // A map that shrank, or a pane that grew, can leave the view further out
+    // than the furthest zoom, and zooming out from there stays put.
+    const nearestZoom = (from: View) => Math.min(furthestMapZoom(), from.zoom);
     const animateZoom = (zoom: number, at?: Point, details = zoomKey) => {
       const from = zooming?.to ?? viewport.get();
-      const next = Math.min(maxZoom, Math.max(furthestMapZoom(), zoom));
+      const next = Math.min(maxZoom, Math.max(nearestZoom(from), zoom));
       if (next === from.zoom) return;
       animateTo(zoomedView(from, next, surfacePoint(at)), details);
     };
-    const stepZoom = (steps: number, at?: Point, details = zoomKey) =>
+    const stepZoom = (steps: number, at?: Point, details = zoomKey) => {
+      const from = zooming?.to ?? viewport.get();
       animateZoom(
-        steppedZoom(
-          (zooming?.to ?? viewport.get()).zoom,
-          steps,
-          furthestMapZoom(),
-        ),
+        steppedZoom(from.zoom, steps, nearestZoom(from)),
         at,
         details,
       );
+    };
     // The zoom shortcuts step around the pointer, so the viewport keeps only
     // its reset key, which this animates too.
     const resetZoomKey = (event: KeyboardEvent) => {
@@ -685,9 +689,7 @@ export const mapEditor = definePrimitive({
       animateZoom(1, undefined, { reason: "zoom-key", event });
       announce("Zoom 100%");
     };
-    let pinchEnd: ReturnType<typeof setTimeout> | undefined;
     let lastNotch = Number.NEGATIVE_INFINITY;
-    context.onDestroy(() => clearTimeout(pinchEnd));
     const settlePinch = (at: Point) => {
       const { zoom } = viewport.get();
       const rest = restingZoom(zoom);
@@ -742,6 +744,7 @@ export const mapEditor = definePrimitive({
     const centerOn = (point: Point) => {
       const surface = root();
       if (!surface) return;
+      stopZooming();
       const { zoom } = store.get().viewport;
       viewport.setViewport({
         x: surface.clientWidth / 2 - point.x * zoom,
@@ -1939,6 +1942,7 @@ export const mapEditor = definePrimitive({
         const at = { x: event.clientX, y: event.clientY };
         if (steps === null) {
           if (!event.ctrlKey && !event.metaKey) {
+            stopZooming();
             viewport.wheel(event);
             return;
           }
