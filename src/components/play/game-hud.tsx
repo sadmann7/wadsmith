@@ -16,14 +16,24 @@ import {
 import * as React from "react";
 
 import type { MouseMode } from "@/lib/engine/mouse-capture";
-import type { GameMap } from "@/lib/map/types";
+import type { GameMap, KeyColor } from "@/lib/map/types";
 
-import { MapOutline } from "@/components/map-outline";
 import { MapPlan } from "@/components/map-plan";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import { skillNames } from "@/lib/engine/coop";
+import {
+  fromEngine,
+  heldKeys,
+  isInView,
+  type MinimapLineKind,
+  minimapKeys,
+  minimapLines,
+  minimapSpan,
+  minimapView,
+  showsCrosshair,
+} from "@/lib/engine/minimap";
 import {
   type Cheats,
   fragLimit,
@@ -68,14 +78,12 @@ export interface ScoreRow {
 
 const ticsPerSecond = 35;
 const ammoNames = ["Bullets", "Shells", "Cells", "Rockets"];
-const keyStyles = [
-  { label: "Blue key", icon: KeyRound, color: "var(--color-key-blue)" },
-  { label: "Yellow key", icon: KeyRound, color: "var(--color-key-yellow)" },
-  { label: "Red key", icon: KeyRound, color: "var(--color-key-red)" },
-  { label: "Blue skull key", icon: Skull, color: "var(--color-key-blue)" },
-  { label: "Yellow skull key", icon: Skull, color: "var(--color-key-yellow)" },
-  { label: "Red skull key", icon: Skull, color: "var(--color-key-red)" },
-];
+const keyNames: Record<KeyColor, string> = {
+  blue: "Blue",
+  yellow: "Yellow",
+  red: "Red",
+};
+const lowHealth = 25;
 
 const panelClass = "pointer-events-auto rounded-[3px] bg-card/90";
 const buttonClass = `${panelClass} flex items-center gap-2 border-0 px-3 py-2 text-foreground hover:bg-muted`;
@@ -101,6 +109,8 @@ interface GameTopBarProps {
   exit: { to: string | null };
   screen: Screen;
   cheats: Cheats | null;
+  crosshair: boolean;
+  onCrosshairChange: (crosshair: boolean) => void;
   onSoundChange: (sound: SoundSettings) => void;
   onScreenChange: (screen: Screen) => void;
   onCheatsChange: (cheats: Cheats) => void;
@@ -124,6 +134,8 @@ export function GameTopBar({
   exit,
   screen,
   cheats,
+  crosshair,
+  onCrosshairChange,
   onSoundChange,
   onScreenChange,
   onCheatsChange,
@@ -285,6 +297,19 @@ export function GameTopBar({
         )}
         <button
           type="button"
+          className={`${iconButtonClass} aria-pressed:text-primary`}
+          aria-label="Crosshair"
+          aria-pressed={crosshair}
+          title={crosshair ? "Crosshair on" : "Crosshair off"}
+          onClick={(event) => {
+            onCrosshairChange(!crosshair);
+            if (event.detail > 0) onControlUsed();
+          }}
+        >
+          <Crosshair size={15} aria-hidden="true" />
+        </button>
+        <button
+          type="button"
           className={iconButtonClass}
           aria-label={fullscreen ? "Exit fullscreen" : "Fullscreen"}
           title={fullscreen ? "Exit fullscreen" : "Fullscreen"}
@@ -305,6 +330,7 @@ interface GameHudProps {
   status: GameStatus | null;
   fullscreen: boolean;
   showHelp: boolean;
+  crosshair: boolean;
   coop: "host" | "guest" | null;
   deathmatch: boolean;
   scores: ScoreRow[] | null;
@@ -335,6 +361,7 @@ export function GameHud({
   status,
   fullscreen,
   showHelp,
+  crosshair,
   coop,
   deathmatch,
   scores,
@@ -358,23 +385,37 @@ export function GameHud({
 }: GameHudProps) {
   const inLevel = status?.inLevel ?? false;
   const ammoName = status ? ammoNames[status.ammoType] : undefined;
+  const scoresOpen = scores !== null && inLevel && !finished;
+  const showsDot =
+    status !== null &&
+    showsCrosshair({
+      enabled: crosshair,
+      mouseMode,
+      inLevel,
+      health: status.health,
+      automap: status.automap,
+      covered: finished || noteOpen || between !== null || scoresOpen,
+    });
   const tabHelp = coop ? "Tab scores" : "Tab automap";
+  const help =
+    mouseMode === "locked"
+      ? `WASD move · E use · Shift run · ${tabHelp} · Esc release mouse`
+      : `${mouseMode === "denied" ? "" : "Click to aim with the mouse · "}WASD move · ←→ turn · Space fire · E use · ${tabHelp}`;
   return (
     <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden text-foreground">
-      <div className="absolute inset-x-0 bottom-0 h-56 bg-linear-to-t from-void/70 to-transparent" />
-      {inLevel && !finished ? (
-        <Crosshair
-          size={20}
-          className="absolute top-1/2 left-1/2 -translate-1/2 text-foreground/70"
+      <div className="absolute inset-x-0 bottom-0 h-40 bg-linear-to-t from-void/60 to-transparent" />
+      {showsDot ? (
+        <span
           aria-hidden="true"
+          data-crosshair=""
+          className="absolute top-1/2 left-1/2 size-1 -translate-1/2 rounded-full bg-foreground/90 shadow-[0_0_0_1px_var(--color-void)]"
         />
       ) : null}
       <aside
         aria-label="Run"
-        className="pointer-events-auto absolute top-0 right-5 w-[260px] overflow-hidden rounded-b-[3px] border border-t-0 border-border bg-card @max-xl:w-44"
+        className="absolute top-5 right-5 grid max-w-[calc(100%-40px)] justify-items-end gap-1.5 text-right"
       >
-        {map ? <Minimap map={map} status={status} others={others} /> : null}
-        <dl className="m-0 grid gap-1.5 p-3">
+        <dl className="m-0 flex flex-wrap justify-end gap-x-3 gap-y-1 rounded-[3px] bg-void/50 px-2.5 py-1.5 font-mono text-xs">
           {deathmatch ? (
             <Stat
               label="Frags"
@@ -402,7 +443,7 @@ export function GameHud({
           )}
         </dl>
         {cheats && (cheats.god || cheats.noclip) ? (
-          <p role="status" className="px-3 pb-2 text-sm text-primary">
+          <p role="status" className="m-0 text-xs text-primary">
             Cheats on:{" "}
             {[cheats.god && "god mode", cheats.noclip && "no clipping"]
               .filter(Boolean)
@@ -410,12 +451,12 @@ export function GameHud({
           </p>
         ) : null}
         {audioUnavailable ? (
-          <p className="px-3 pb-2 text-sm text-muted-foreground">
+          <p className="m-0 text-xs text-muted-foreground">
             Sound needs HTTPS or localhost.
           </p>
         ) : null}
         {mouseMode === "denied" ? (
-          <p className="px-3 pb-2 text-sm text-muted-foreground">
+          <p className="m-0 text-xs text-muted-foreground">
             This browser won't capture the mouse. Clicking fires.
           </p>
         ) : null}
@@ -466,7 +507,7 @@ export function GameHud({
       {stall && !finished ? (
         <StallBanner names={stall.names} since={stall.since} />
       ) : null}
-      {scores && inLevel && !finished ? (
+      {scoresOpen ? (
         <Scoreboard
           title={title}
           par={par}
@@ -489,79 +530,65 @@ export function GameHud({
           </p>
         </section>
       ) : null}
-      {showHelp && !finished && mouseMode !== "released" ? (
-        <p className="absolute inset-x-4 bottom-24 m-0 text-center text-sm text-foreground">
-          {mouseMode === "locked"
-            ? `Mouse turn · Left click fire · WASD move · E use · Shift run · ${tabHelp} · Esc release mouse`
-            : `${mouseMode === "denied" ? "" : "Click to use the mouse · "}WASD move · ←→ turn · Space fire · E use · Shift run · ${tabHelp}`}
-        </p>
-      ) : null}
-      {noteSaved ? (
-        <p
-          role="status"
-          className="absolute inset-x-4 bottom-24 m-0 text-center text-foreground"
-        >
-          Note saved to this spot.
-        </p>
-      ) : null}
       {noteOpen ? <NoteForm onSave={onSaveNote} /> : null}
       <div className="absolute inset-x-5 bottom-5 flex items-end justify-between gap-4">
-        {inLevel && status ? (
-          <div className="flex items-end gap-9 @max-2xl:gap-4">
-            <Vital label="Health" value={status.health} />
-            <Vital label="Armor" value={status.armor} />
-            <Vital
-              label={ammoName ?? "Ammo"}
-              value={ammoName ? status.ammo : "-"}
-            />
-            {/* Deathmatch hands every player every key. */}
-            <div className={deathmatch ? "hidden" : "pb-1.5"}>
-              <div className="mb-1.5 font-mono text-xs text-foreground">
-                KEYS
-              </div>
-              <div className="flex h-[22px] gap-1">
-                {keyStyles.map(({ label, icon: Icon, color }, index) =>
-                  status.keys & (1 << index) ? (
-                    <Icon
-                      key={label}
-                      size={22}
-                      role="img"
-                      aria-label={label}
-                      style={{ color }}
-                    />
-                  ) : null,
-                )}
-              </div>
+        <div className="grid min-w-0 gap-3">
+          {noteSaved ? (
+            <p role="status" className="m-0 text-sm text-foreground">
+              Note saved to this spot.
+            </p>
+          ) : showHelp && !finished && mouseMode !== "released" ? (
+            <p className="m-0 max-w-[360px] font-mono text-xs text-muted-foreground @max-xl:hidden">
+              {help}
+            </p>
+          ) : null}
+          {inLevel && status ? (
+            <div className="flex items-end gap-6 @max-2xl:gap-4">
+              <Vital
+                label="Health"
+                value={status.health}
+                unit="%"
+                isLow={status.health <= lowHealth}
+              />
+              <Vital label="Armor" value={status.armor} unit="%" />
+              <Vital
+                label={ammoName ?? "Ammo"}
+                value={ammoName ? status.ammo : "-"}
+              />
+              {/* Deathmatch hands every player every key. */}
+              {deathmatch ? null : <HeldKeys bits={status.keys} />}
             </div>
+          ) : null}
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-2">
+          <div className={canEdit ? "flex gap-2" : "hidden"}>
+            <button
+              type="button"
+              className={buttonClass}
+              disabled={!inLevel}
+              onClick={onOpenNote}
+            >
+              Leave a note
+              <kbd className="font-mono text-xs text-muted-foreground">N</kbd>
+            </button>
+            <button
+              type="button"
+              className={buttonClass}
+              disabled={!inLevel}
+              onClick={onEditSpot}
+            >
+              Edit this spot
+              <kbd className="font-mono text-xs text-muted-foreground">F2</kbd>
+            </button>
           </div>
-        ) : (
-          <span />
-        )}
-        <div className={canEdit ? "flex gap-2" : "hidden"}>
-          <button
-            type="button"
-            className={buttonClass}
-            disabled={!inLevel}
-            onClick={onOpenNote}
-          >
-            Leave a note
-            <kbd className="font-mono text-xs text-muted-foreground">N</kbd>
-          </button>
-          <button
-            type="button"
-            className={buttonClass}
-            disabled={!inLevel}
-            onClick={onEditSpot}
-          >
-            Edit this spot
-            <kbd className="font-mono text-xs text-muted-foreground">F2</kbd>
-          </button>
+          {map && status && inLevel && !status.automap ? (
+            <Minimap map={map} status={status} others={others} />
+          ) : null}
         </div>
       </div>
     </div>
   );
 }
-
 interface EndGameConfirmProps {
   names: string[];
   onKeepPlaying: () => void;
@@ -616,48 +643,135 @@ export function EndGameConfirm({
 
 interface MinimapProps {
   map: GameMap;
-  status: GameStatus | null;
+  status: GameStatus;
   others: OtherPlayer[];
 }
 
+const minimapPixels = 192;
+const unit = minimapSpan / minimapPixels;
+const lineStyles: Record<MinimapLineKind, { stroke: string; width: number }> = {
+  wall: { stroke: "var(--color-map-wall)", width: 1.5 },
+  step: { stroke: "var(--color-map-portal)", width: 1 },
+  door: { stroke: "var(--color-map-door)", width: 2 },
+  exit: { stroke: "var(--color-success)", width: 2.5 },
+};
+const keyFills: Record<KeyColor, string> = {
+  blue: "var(--color-key-blue)",
+  yellow: "var(--color-key-yellow)",
+  red: "var(--color-key-red)",
+};
+// Doom's own player colors: green, indigo, brown and red.
+const playerFills = [
+  "var(--color-success)",
+  "var(--color-info)",
+  "var(--color-warning)",
+  "var(--color-destructive)",
+];
+const arrowPath = "M1 0L-0.7 0.6L-0.35 0L-0.7-0.6Z";
+const monsterPath = "M1 0L-0.8 0.75L-0.8-0.75Z";
+
 function Minimap({ map, status, others }: MinimapProps) {
-  const radians = ((status?.angle ?? 0) * Math.PI) / 180;
+  const lines = React.useMemo(() => minimapLines(map), [map]);
+  const lineLayer = React.useMemo(
+    () =>
+      lines.map(({ key, from, to, kind, lock }) => (
+        <line
+          key={key}
+          data-kind={kind}
+          data-lock={lock}
+          x1={from.x}
+          y1={from.y}
+          x2={to.x}
+          y2={to.y}
+          stroke={lock ? keyFills[lock] : lineStyles[kind].stroke}
+          strokeWidth={lineStyles[kind].width}
+          strokeLinecap="round"
+          vectorEffect="non-scaling-stroke"
+        />
+      )),
+    [lines],
+  );
+  const player = fromEngine(status);
+  const view = minimapView(player);
+  const margin = 4 * unit;
+  const keys = minimapKeys(map, status.keys).filter((key) =>
+    isInView(key, view, margin),
+  );
+  const monsters = status.monsters
+    .map((monster) => ({ ...fromEngine(monster), angle: monster.angle }))
+    .filter((monster) => isInView(monster, view, margin));
+  const half = minimapSpan / 2;
   return (
-    <MapOutline
-      map={map}
-      label="Minimap"
-      className="block h-[162px] w-full bg-map-bg @max-2xl:hidden"
-    >
-      {(extent) =>
-        status ? (
-          <>
-            {others.map((other) => (
+    <div className="overflow-hidden rounded-[3px] bg-map-bg/75 ring-1 ring-border/60 backdrop-blur-[2px] @max-xl:hidden">
+      <svg
+        role="img"
+        aria-label="Minimap"
+        className="block size-48 @max-2xl:size-32"
+        viewBox={`${-half} ${-half} ${minimapSpan} ${minimapSpan}`}
+      >
+        <g
+          className="transition-transform duration-100 ease-linear motion-reduce:transition-none"
+          style={{ transform: `translate(${-player.x}px, ${-player.y}px)` }}
+        >
+          {lineLayer}
+          {keys.map((key) =>
+            key.skull ? (
               <circle
-                key={other.peer}
-                data-peer={other.peer}
-                cx={other.x}
-                cy={0 - other.y}
-                r={extent * 0.02}
-                fill="var(--color-foreground)"
-                stroke="var(--color-map-bg)"
-                strokeWidth={1.5}
-                vectorEffect="non-scaling-stroke"
+                key={key.id}
+                data-key={key.color}
+                cx={key.x}
+                cy={key.y}
+                r={3 * unit}
+                fill={keyFills[key.color]}
               />
-            ))}
-            <g transform={`translate(${status.x} ${0 - status.y})`}>
-              <line
-                x2={Math.cos(radians) * extent * 0.055}
-                y2={-Math.sin(radians) * extent * 0.055}
-                stroke="var(--color-thing-start)"
-                strokeWidth={1.5}
-                vectorEffect="non-scaling-stroke"
+            ) : (
+              <rect
+                key={key.id}
+                data-key={key.color}
+                x={key.x - 3 * unit}
+                y={key.y - 2 * unit}
+                width={6 * unit}
+                height={4 * unit}
+                rx={unit}
+                fill={keyFills[key.color]}
               />
-              <circle r={extent * 0.025} fill="var(--color-thing-start)" />
-            </g>
-          </>
-        ) : null
-      }
-    </MapOutline>
+            ),
+          )}
+          {monsters.map((monster, index) => (
+            <path
+              // The engine gives monsters no lasting id; order is stable
+              // within a level.
+              key={index}
+              data-monster=""
+              d={monsterPath}
+              fill="var(--color-destructive)"
+              transform={`translate(${monster.x} ${monster.y}) rotate(${-monster.angle}) scale(${4 * unit})`}
+            />
+          ))}
+          {others.map((other) => (
+            <circle
+              key={other.peer}
+              data-peer={other.peer}
+              cx={other.x}
+              cy={0 - other.y}
+              r={3.5 * unit}
+              fill={playerFills[other.peer - 1] ?? playerFills[0]}
+              stroke="var(--color-map-bg)"
+              strokeWidth={1.5}
+              vectorEffect="non-scaling-stroke"
+            />
+          ))}
+        </g>
+        <path
+          d={arrowPath}
+          fill="var(--color-foreground)"
+          stroke="var(--color-map-bg)"
+          strokeWidth={1}
+          vectorEffect="non-scaling-stroke"
+          transform={`rotate(${-status.angle}) scale(${6 * unit})`}
+        />
+      </svg>
+    </div>
   );
 }
 
@@ -668,13 +782,42 @@ interface StatProps {
 
 function Stat({ label, value }: StatProps) {
   return (
-    <div className="flex justify-between gap-3">
+    <div className="flex gap-1.5">
       <dt className="text-muted-foreground">{label}</dt>
-      <dd className="m-0 font-mono text-xs">{value}</dd>
+      <dd className="m-0 text-foreground tabular-nums">{value}</dd>
     </div>
   );
 }
 
+interface HeldKeysProps {
+  bits: number;
+}
+
+function HeldKeys({ bits }: HeldKeysProps) {
+  const keys = heldKeys(bits);
+  if (keys.length === 0) return null;
+  return (
+    <ul aria-label="Keys" className="m-0 flex list-none gap-1 p-0 pb-1">
+      {keys.map(({ color, skull }) => {
+        const Icon = skull ? Skull : KeyRound;
+        const label = `${keyNames[color]} ${skull ? "skull key" : "key"}`;
+        return (
+          <li
+            key={label}
+            className="grid size-7 place-items-center rounded-[3px] bg-void/50"
+          >
+            <Icon
+              size={18}
+              role="img"
+              aria-label={label}
+              style={{ color: keyFills[color] }}
+            />
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
 interface BetweenLevelsProps {
   slot: string;
   title: string;
@@ -939,14 +1082,25 @@ function NoteForm({ onSave }: NoteFormProps) {
 interface VitalProps {
   label: string;
   value: React.ReactNode;
+  unit?: string;
+  isLow?: boolean;
 }
 
-function Vital({ label, value }: VitalProps) {
+function Vital({ label, value, unit, isLow = false }: VitalProps) {
   return (
-    <div>
-      <div className="font-mono text-xs text-foreground uppercase">{label}</div>
-      <div className="text-[44px] leading-none font-bold @max-2xl:text-2xl">
+    <div className="grid gap-1">
+      <div className="font-mono text-xs tracking-wide text-muted-foreground uppercase">
+        {label}
+      </div>
+      <div
+        className={`text-4xl leading-none font-bold tabular-nums @max-2xl:text-2xl ${isLow ? "text-destructive" : ""}`}
+      >
         {value}
+        {unit ? (
+          <span className="text-xl font-semibold text-muted-foreground @max-2xl:text-base">
+            {unit}
+          </span>
+        ) : null}
       </div>
     </div>
   );

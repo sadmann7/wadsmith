@@ -57,6 +57,7 @@ interface SoundSettings {
 const savedSound = createLocalStorage("wadsmith:sound");
 const savedResolution = createLocalStorage("wadsmith:resolution");
 const savedWidescreen = createLocalStorage("wadsmith:widescreen");
+const savedCrosshair = createLocalStorage("wadsmith:crosshair");
 
 export type PlayerSpot = Point & { angle: number };
 
@@ -137,6 +138,9 @@ export function GameView({
   const [sound, setSound] = React.useState(loadSound);
   const [screen, setScreen] = React.useState(loadScreen);
   const [cheats, setCheats] = React.useState(noCheats);
+  const [crosshair, setCrosshair] = React.useState(
+    () => savedCrosshair.get() !== "off",
+  );
 
   React.useEffect(() => {
     const update = () => setFullscreen(Boolean(document.fullscreenElement));
@@ -181,6 +185,11 @@ export function GameView({
         }}
         cheats={cheats}
         onCheatsChange={setCheats}
+        crosshair={crosshair}
+        onCrosshairChange={(next) => {
+          setCrosshair(next);
+          savedCrosshair.set(next ? "on" : "off");
+        }}
         fullscreen={fullscreen}
         onRestart={() => setRun((value) => value + 1)}
         onToggleFullscreen={toggleFullscreen}
@@ -269,6 +278,8 @@ type GameSessionProps = Omit<Level, "map"> & {
   onScreenChange: (screen: Screen) => void;
   cheats: Cheats;
   onCheatsChange: (cheats: Cheats) => void;
+  crosshair: boolean;
+  onCrosshairChange: (crosshair: boolean) => void;
   fullscreen: boolean;
   onRestart: () => void;
   onToggleFullscreen: () => void;
@@ -299,6 +310,8 @@ function GameSession({
   onScreenChange,
   cheats: chosenCheats,
   onCheatsChange,
+  crosshair,
+  onCrosshairChange,
   fullscreen,
   onRestart,
   onToggleFullscreen,
@@ -821,6 +834,8 @@ function GameSession({
         exit={gameExit}
         screen={screen}
         cheats={canEdit ? cheats : null}
+        crosshair={crosshair}
+        onCrosshairChange={onCrosshairChange}
         onSoundChange={onSoundChange}
         onScreenChange={onScreenChange}
         onCheatsChange={onCheatsChange}
@@ -870,6 +885,7 @@ function GameSession({
             status={status}
             fullscreen={fullscreen}
             showHelp={showHelp && !noteSpot && !noteSaved}
+            crosshair={crosshair}
             coop={coop?.role ?? null}
             deathmatch={coop?.mode === "deathmatch"}
             scores={

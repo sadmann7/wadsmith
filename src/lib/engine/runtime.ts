@@ -2,6 +2,7 @@ import type { NetInbox } from "./net-inbox";
 
 import { FramePacer } from "./frame-pacer";
 import { type GameInfo, warpArgs } from "./game";
+import { monsterRange } from "./minimap";
 import { trailFields } from "./trail";
 
 interface DoomModule {
@@ -47,6 +48,9 @@ interface DoomModule {
   _wadsmith_secrets(): number;
   _wadsmith_total_secrets(): number;
   _wadsmith_level_tics(): number;
+  _wadsmith_automap(): number;
+  _wadsmith_monsters(): number;
+  _wadsmith_monsters_near(range: number): number;
   _wadsmith_sector_ceiling(index: number): number;
   _wadsmith_sector_floor(index: number): number;
   _wadsmith_trail(): number;
@@ -146,7 +150,17 @@ export interface GameStatus {
   secrets: number;
   totalSecrets: number;
   tics: number;
+  automap: boolean;
+  monsters: Monster[];
 }
+
+export interface Monster {
+  x: number;
+  y: number;
+  angle: number;
+}
+
+const monsterFields = 3;
 
 export type Resolution = "classic" | "high";
 
@@ -517,7 +531,23 @@ export class DoomGame {
       secrets: module._wadsmith_secrets(),
       totalSecrets: module._wadsmith_total_secrets(),
       tics: module._wadsmith_level_tics(),
+      automap: module._wadsmith_automap() !== 0,
+      monsters: this.monstersNear(),
     };
+  }
+
+  private monstersNear(): Monster[] {
+    const count = this.module._wadsmith_monsters_near(monsterRange);
+    const data = new Int32Array(
+      this.module.HEAPU8.buffer,
+      this.module._wadsmith_monsters(),
+      count * monsterFields,
+    );
+    return Array.from({ length: count }, (_, index) => ({
+      x: data[index * monsterFields],
+      y: data[index * monsterFields + 1],
+      angle: data[index * monsterFields + 2],
+    }));
   }
 }
 
