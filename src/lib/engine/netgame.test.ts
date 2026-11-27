@@ -27,6 +27,7 @@ interface Snapshot {
   consolePlayer: number;
   inLevel: boolean;
   frags: number;
+  kills: number;
   gameTic: number;
   players: { x: number; y: number }[];
   scores: { slot: number; peer: number; frags: number; kills: number }[];
@@ -101,6 +102,25 @@ describe.skipIf(!ready)("network game through shared memory", () => {
       ([a, b]) =>
         a.players[1].x === b.players[1].x && a.players[1].y === b.players[1].y,
     );
+  }, 60_000);
+
+  it("counts the host's kills in the guest's status", async () => {
+    const map = addThing(coopMap, "zombieman", { x: 224, y: 160 }).map;
+    const room = createRoom(map);
+    const host = room.join(hostPeer, "host");
+    const guest = room.join(guestPeer, "guest");
+    await waitFor(host.query, (state) => state.waitingPlayers === 2);
+    expect(await host.launch()).toBe(true);
+    await waitFor(guest.query, (state) => state.inLevel);
+
+    host.key(true, doomKeys.fire);
+    await waitFor(host.query, (state) => state.kills > 0);
+    host.key(false, doomKeys.fire);
+
+    const seen = await waitFor(guest.query, (state) =>
+      state.scores.some((score) => score.slot === 0 && score.kills > 0),
+    );
+    expect(seen.kills).toBe(1);
   }, 60_000);
 
   it.each(deathmatchCases)(

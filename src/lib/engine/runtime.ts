@@ -32,7 +32,6 @@ interface DoomModule {
   _wadsmith_game_map(): number;
   _wadsmith_game_episode(): number;
   _wadsmith_health(): number;
-  _wadsmith_kills(): number;
   _wadsmith_frags(): number;
   _wadsmith_total_kills(): number;
   _wadsmith_player_x(): number;
@@ -42,9 +41,7 @@ interface DoomModule {
   _wadsmith_ammo(): number;
   _wadsmith_ammo_type(): number;
   _wadsmith_keys(): number;
-  _wadsmith_items(): number;
   _wadsmith_total_items(): number;
-  _wadsmith_secrets(): number;
   _wadsmith_total_secrets(): number;
   _wadsmith_level_tics(): number;
   _wadsmith_automap(): number;
@@ -189,6 +186,11 @@ export const maxVolume = 15;
 const widescreen16by9 = 3;
 const classicScreen: Screen = { resolution: "classic", widescreen: false };
 const netSlots = [0, 1, 2, 3];
+// Co-op players share one level, so its tallies count the whole team.
+function teamCount(count: (player: number) => number) {
+  return netSlots.reduce((total, slot) => total + count(slot), 0);
+}
+
 const levelState = 0;
 const finaleState = 2;
 
@@ -520,7 +522,7 @@ export class DoomGame {
       episode: module._wadsmith_game_episode(),
       map: module._wadsmith_game_map(),
       health: module._wadsmith_health(),
-      kills: module._wadsmith_kills(),
+      kills: teamCount(module._wadsmith_net_player_kills),
       frags: module._wadsmith_frags(),
       totalKills: module._wadsmith_total_kills(),
       x: module._wadsmith_player_x(),
@@ -530,9 +532,9 @@ export class DoomGame {
       ammo: module._wadsmith_ammo(),
       ammoType: module._wadsmith_ammo_type(),
       keys: module._wadsmith_keys(),
-      items: module._wadsmith_items(),
+      items: teamCount(module._wadsmith_net_player_items),
       totalItems: module._wadsmith_total_items(),
-      secrets: module._wadsmith_secrets(),
+      secrets: teamCount(module._wadsmith_net_player_secrets),
       totalSecrets: module._wadsmith_total_secrets(),
       tics: module._wadsmith_level_tics(),
       automap: module._wadsmith_automap() !== 0,
