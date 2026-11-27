@@ -29,6 +29,7 @@ import {
   wallOwners,
   wallStart,
 } from "./geometry";
+import { facingOf, getIsInLineOfFire } from "./line-of-fire";
 import { getIsTeleport, lineUsesTag } from "./lines";
 
 export const gridSize = 8;
@@ -131,41 +132,58 @@ function keptType(thing: Thing): Thing {
   return named;
 }
 
-// Rings of spots around player 1, nearest first, for the starts that join it.
-const startOffsets = [48, 96, 144].flatMap((distance) =>
-  [
-    [1, 0],
-    [0, 1],
-    [-1, 0],
-    [0, -1],
-    [1, 1],
-    [-1, 1],
-    [1, -1],
-    [-1, -1],
-  ].map(([x, y]) => ({ x: x * distance, y: y * distance })),
+const startReach = 208;
+const startSteps = Array.from(
+  { length: (startReach / 16) * 2 + 1 },
+  (_, index) => index * 16 - startReach,
 );
 
-// Places any missing co-op starts beside player 1's start, facing its way.
+// Places any missing co-op starts beside player 1's start, facing its way and
+// out of every other start's line of fire.
 export function addPlayerStarts(map: GameMap, players: number) {
   const first = map.things.find((thing) => thing.kind === "player");
   const room = first ? sectorAt(map, first) : null;
   if (!first || !room) return map;
-  const fits = (map: GameMap, point: Point) =>
-    [-20, 20].every((dx) =>
-      [-20, 20].every(
-        (dy) => sectorAt(map, { x: point.x + dx, y: point.y + dy }) === room,
+  const facing = facingOf(first.angle);
+  // Spots around player 1, nearest first, with a step ahead or behind
+  // counting for more than a step to the side.
+  const spots = startSteps
+    .flatMap((x) => startSteps.map((y) => ({ x, y })))
+    .filter(({ x, y }) => (x || y) && Math.hypot(x, y) <= startReach)
+    .map((offset) => ({
+      offset,
+      rank: Math.hypot(
+        3 * (offset.x * facing.x + offset.y * facing.y),
+        offset.x * facing.y - offset.y * facing.x,
       ),
-    ) &&
-    map.things.every(
-      (thing) => Math.hypot(thing.x - point.x, thing.y - point.y) >= 40,
+    }))
+    .sort((a, b) => a.rank - b.rank)
+    .map(({ offset }) =>
+      snapPoint({ x: first.x + offset.x, y: first.y + offset.y }),
     );
+  const fits = (map: GameMap, point: Point) => {
+    const coop = map.things.filter((thing) => getIsPlayerStart(thing.kind));
+    return (
+      [-20, 20].every((dx) =>
+        [-20, 20].every(
+          (dy) => sectorAt(map, { x: point.x + dx, y: point.y + dy }) === room,
+        ),
+      ) &&
+      map.things.every(
+        (thing) => Math.hypot(thing.x - point.x, thing.y - point.y) >= 40,
+      ) &&
+      coop.every(
+        (start) =>
+          !getIsInLineOfFire(start, point) &&
+          !getIsInLineOfFire({ ...point, angle: first.angle }, start),
+      )
+    );
+  };
   let next = map;
   for (let player = 2; player <= players; player += 1) {
     const kind = `player-${player}` as ThingKind;
     if (next.things.some((thing) => thing.kind === kind)) continue;
-    const spot = startOffsets
-      .map((offset) => ({ x: first.x + offset.x, y: first.y + offset.y }))
-      .find((point) => fits(next, point));
+    const spot = spots.find((point) => fits(next, point));
     if (!spot) break;
     next = addThing(next, kind, spot, first.angle).map;
   }

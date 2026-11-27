@@ -2243,6 +2243,65 @@ describe("thing settings", () => {
     expect(addPlayerStarts(map, 4)).toBe(map);
   });
 
+  it("adds co-op starts out of each other's line of fire", () => {
+    for (const angle of [0, 45, 90, 180, 270]) {
+      const turned = updateThing(testMap, "player-1", { angle });
+      const map = addPlayerStarts(turned, 4);
+      expect(
+        map.things.filter((thing) => thing.kind.startsWith("player")),
+      ).toHaveLength(4);
+      expect(
+        checkMap(map).filter((issue) => issue.id.startsWith("start-in-fire")),
+      ).toEqual([]);
+    }
+  });
+
+  it("fits co-op starts along a hallway the player faces across", () => {
+    const narrow: GameMap = {
+      ...testMap,
+      vertices: {
+        a: { x: 0, y: 0 },
+        b: { x: 64, y: 0 },
+        c: { x: 64, y: 192 },
+        d: { x: 0, y: 192 },
+      },
+      sectors: [{ ...testMap.sectors[0], vertices: ["a", "b", "c", "d"] }],
+      things: [{ id: "player-1", kind: "player", x: 24, y: 24, angle: 0 }],
+      switches: [],
+      lines: {},
+    };
+    const map = addPlayerStarts(narrow, 4);
+    expect(
+      map.things.filter((thing) => thing.kind.startsWith("player")),
+    ).toHaveLength(4);
+    expect(
+      checkMap(map).filter((issue) => issue.id.startsWith("start-in-fire")),
+    ).toEqual([]);
+  });
+
+  it("fits co-op starts beside a player facing down a hallway", () => {
+    const hallway: GameMap = {
+      ...testMap,
+      vertices: {
+        a: { x: 0, y: 0 },
+        b: { x: 1024, y: 0 },
+        c: { x: 1024, y: 128 },
+        d: { x: 0, y: 128 },
+      },
+      sectors: [{ ...testMap.sectors[0], vertices: ["a", "b", "c", "d"] }],
+      things: [{ id: "player-1", kind: "player", x: 512, y: 64, angle: 0 }],
+      switches: [],
+      lines: {},
+    };
+    const map = addPlayerStarts(hallway, 4);
+    expect(
+      map.things.filter((thing) => thing.kind.startsWith("player")).length,
+    ).toBeGreaterThanOrEqual(3);
+    expect(
+      checkMap(map).filter((issue) => issue.id.startsWith("start-in-fire")),
+    ).toEqual([]);
+  });
+
   it("writes difficulty and ambush flags", () => {
     const map = updateThing(
       updateThing(testMap, "imp-1", {
