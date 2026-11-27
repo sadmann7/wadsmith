@@ -14,6 +14,7 @@ import {
   wallTarget,
 } from "@/lib/editor/map-target";
 import { games } from "@/lib/engine/game";
+import { arenaMap } from "@/lib/map/arena-map";
 import { mapBalance } from "@/lib/map/balance";
 import {
   fieldValue,
@@ -92,7 +93,7 @@ import {
   triggerChoices,
   triggersFor,
 } from "@/lib/map/lines";
-import { blankMap, starterMap } from "@/lib/map/starter-map";
+import { blankMap } from "@/lib/map/starter-map";
 import { parseMapFile, serializeMap } from "@/lib/map/storage";
 import { describeSurface, paintSurface, surfaceKey } from "@/lib/map/surfaces";
 import { islandMap, testMap } from "@/lib/map/test-map";
@@ -1275,13 +1276,10 @@ describe("validateMap", () => {
   });
 
   it("warns about doors stretched deeper than a door is built", () => {
-    const keys = partKeys(
-      starterMap,
-      selectedParts(starterMap, [], "sector-3"),
-    );
+    const keys = partKeys(arenaMap, selectedParts(arenaMap, [], "sector-3"));
     const shrunk = defined(
       transformParts(
-        starterMap,
+        arenaMap,
         keys,
         { kind: "scale", factor: 0.5 },
         32,
@@ -1309,13 +1307,10 @@ describe("validateMap", () => {
   });
 
   it("keeps a room's doors as deep as they were when it's halved", () => {
-    const keys = partKeys(
-      starterMap,
-      selectedParts(starterMap, [], "sector-3"),
-    );
+    const keys = partKeys(arenaMap, selectedParts(arenaMap, [], "sector-3"));
     const shrunk = defined(
       transformKeepingDoors(
-        starterMap,
+        arenaMap,
         keys,
         [{ kind: "scale", factor: 0.5 }],
         32,
@@ -1381,7 +1376,7 @@ describe("validateMap", () => {
   });
 
   it("finds no deep doors in the starter and featured maps", () => {
-    for (const map of [starterMap, ...featuredMaps.map((item) => item.map)]) {
+    for (const map of [arenaMap, ...featuredMaps.map((item) => item.map)]) {
       const ids = inspectMap(map).warnings.map((issue) => issue.id);
       expect(ids.filter((id) => id.startsWith("door-deep"))).toEqual([]);
     }

@@ -332,6 +332,9 @@ describe("episode maps", () => {
     expect(hub.sectors).toHaveLength(5);
     expect(validateMap(hub)).toEqual([]);
     expect(mapFromTemplate("blank", "Empty").sectors).toEqual([]);
+    const level = mapFromTemplate("level", "Level");
+    expect(level).toMatchObject({ ...starterMap, name: "Level" });
+    expect(level.things).not.toBe(starterMap.things);
     room.things.pop();
     expect(mapFromTemplate("room", "Again").things).toHaveLength(1);
   });

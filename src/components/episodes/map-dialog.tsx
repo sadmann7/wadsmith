@@ -293,7 +293,7 @@ export function MapDialog({
                   </div>
                 </div>
                 {source === "template" ? (
-                  <div className="grid grid-cols-3 gap-2.5">
+                  <div className="grid grid-cols-4 gap-2.5">
                     {templates.map((item) => (
                       <button
                         key={item.value}

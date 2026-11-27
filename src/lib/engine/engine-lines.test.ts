@@ -10,7 +10,6 @@ import {
   setRoomDoor,
   updateLine,
   updateSector,
-  updateThing,
 } from "@/lib/map/edit";
 import { starterMap } from "@/lib/map/starter-map";
 import { testMap } from "@/lib/map/test-map";
@@ -234,9 +233,8 @@ describe.skipIf(!ready)("starter map in the engine", () => {
       (thing) => thingCatalog[thing.kind].category !== "enemy",
     ),
   };
-  const blueDoor = starterMap.sectors.findIndex(
-    (sector) => sector.name === "Blue door",
-  );
+  const room = (name: string) =>
+    starterMap.sectors.findIndex((sector) => sector.name === name);
   const blueKey = 1;
 
   async function walk(game: DoomGame, code: string, done: () => boolean) {
@@ -246,49 +244,74 @@ describe.skipIf(!ready)("starter map in the engine", () => {
     game.key(false, key);
   }
 
-  it("rides the lift up to the blue key", async () => {
-    const game = await launch(playerAt(quiet, 736, 80, 90));
+  it("opens the first door by walking up to it and pressing use", async () => {
+    const game = await launch(quiet);
     await waitForPlay(game);
+    const door = room("First door");
+    const closed = game.sectorCeiling(door);
+    await walk(game, "KeyW", () => game.status().x > 220);
     await pressUse(game);
-    await play(game, 1200);
-    await walk(game, "KeyW", () => game.status().y > 16);
-    await play(game, 4500);
-    await walk(game, "KeyD", () => (game.status().keys & blueKey) !== 0);
-    expect(game.status().keys & blueKey).toBe(blueKey);
+    await play(game, 2000, () => game.sectorCeiling(door) > closed + 64);
+    await walk(game, "KeyW", () => game.status().x > 320);
+    expect(game.status().x).toBeGreaterThan(320);
   }, 40_000);
 
-  it("lowers the alcove into the secret room", async () => {
-    const game = await launch(playerAt(quiet, 48, 176, 180));
+  it("opens the blue door only with the key from the pedestal", async () => {
+    const door = room("Blue door");
+    const shut = await launch(playerAt(quiet, 936, 128, 0));
+    await waitForPlay(shut);
+    const closed = shut.sectorCeiling(door);
+    await pressUse(shut);
+    await play(shut, 1500);
+    expect(shut.sectorCeiling(door)).toBe(closed);
+    shut.stop();
+
+    const game = await launch(playerAt(quiet, 720, 152, 0));
+    await waitForPlay(game);
+    await walk(game, "KeyW", () => game.status().x > 936);
+    expect(game.status().keys & blueKey).toBe(blueKey);
+    await pressUse(game);
+    await play(game, 2000, () => game.sectorCeiling(door) > closed + 64);
+    await walk(game, "KeyW", () => game.status().x > 1024);
+    expect(game.status().x).toBeGreaterThan(1024);
+  }, 40_000);
+
+  it("rides the lift up to the ledge", async () => {
+    const game = await launch(playerAt(quiet, 1148, 64, 0));
+    await waitForPlay(game);
+    const lift = room("Lift");
+    const raised = game.sectorFloor(lift);
+    await pressUse(game);
+    await play(game, 1200);
+    expect(game.sectorFloor(lift)).toBeLessThan(raised);
+    await walk(game, "KeyW", () => game.status().x > 1212);
+    await play(game, 4500);
+    await walk(game, "KeyA", () => game.status().y > 0);
+    expect(game.status().y).toBeGreaterThan(0);
+  }, 40_000);
+
+  it("opens the odd wall on the ledge into the secret", async () => {
+    const game = await launch(playerAt(quiet, 1088, -64, 90));
     await waitForPlay(game);
     await pressUse(game);
-    await play(game, 3500);
-    await walk(game, "KeyW", () => game.status().armor > 0);
+    await play(game, 1500);
+    await walk(
+      game,
+      "KeyW",
+      () => game.status().armor > 0 && game.status().secrets > 0,
+    );
     expect(game.status().armor).toBeGreaterThan(0);
     expect(game.status().secrets).toBe(1);
   }, 40_000);
 
-  it("opens the blue door only with the key, and ends at the exit", async () => {
-    const shut = await launch(playerAt(quiet, 920, 160, 0));
-    await waitForPlay(shut);
-    const closed = shut.sectorCeiling(blueDoor);
-    await pressUse(shut);
-    await play(shut, 1500);
-    expect(shut.sectorCeiling(blueDoor)).toBe(closed);
-    shut.stop();
-
-    const game = await launch(
-      updateThing(playerAt(quiet, 872, 160, 0), "blue-key-1", {
-        x: 904,
-        y: 160,
-      }),
-    );
+  it("opens the exit door and ends at the exit switch", async () => {
+    const game = await launch(playerAt(quiet, 1208, -32, 0));
     await waitForPlay(game);
-    await walk(game, "KeyW", () => (game.status().keys & blueKey) !== 0);
-    expect(game.status().keys & blueKey).toBe(blueKey);
-    await walk(game, "KeyW", () => game.status().x > 920);
+    const door = room("Exit door");
+    const closed = game.sectorCeiling(door);
     await pressUse(game);
-    await play(game, 2000, () => game.sectorCeiling(blueDoor) > closed + 64);
-    await walk(game, "KeyW", () => game.status().x > 1136);
+    await play(game, 2000, () => game.sectorCeiling(door) > closed + 56);
+    await walk(game, "KeyW", () => game.status().x > 1384);
     await pressUse(game);
     await play(game, 3000, () => !game.status().inLevel);
     expect(game.status().inLevel).toBe(false);

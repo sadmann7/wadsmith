@@ -45,7 +45,7 @@ export type LevelDetails = Partial<
   Pick<EpisodeMap, "description" | "par" | "music" | "sky" | "intertext">
 >;
 
-export type MapTemplate = "blank" | "room" | "hub";
+export type MapTemplate = "blank" | "room" | "hub" | "level";
 
 export type EpisodeStart = "empty" | "one" | "featured" | "freedoom";
 
@@ -105,8 +105,9 @@ export const templates: { value: MapTemplate; label: string; map: GameMap }[] =
       label: "Blank",
       map: { vertices: {}, sectors: [], things: [], switches: [] },
     },
-    { value: "room", label: "Starter room", map: blankMap },
+    { value: "room", label: "One room", map: blankMap },
     { value: "hub", label: "Hub and spokes", map: hubMap() },
+    { value: "level", label: "Starter level", map: starterMap },
   ];
 
 // Each game has only as many slots as its maps or episodes hold.
