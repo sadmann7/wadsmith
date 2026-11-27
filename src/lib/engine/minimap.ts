@@ -4,8 +4,8 @@ import type { GameMap, KeyColor, Point, Thing } from "@/lib/map/types";
 
 import { minimapSpan } from "@/lib/engine/runtime";
 import { keyThings } from "@/lib/map/catalog";
-import { wallOwners } from "@/lib/map/geometry";
-import { actionForSpecial, endsLevel } from "@/lib/map/lines";
+import { sectorAt, wallOwners } from "@/lib/map/geometry";
+import { actionForSpecial, endsLevel, getIsTeleport } from "@/lib/map/lines";
 
 export type MinimapLineKind = "wall" | "step" | "door" | "exit";
 
@@ -42,13 +42,17 @@ export function heldKeys(bits: number): HeldKey[] {
 
 // Lines the way Doom's automap draws them: solid walls, changes in floor or
 // ceiling height, doors in their key's color and the exit. Lines between
-// rooms of the same height, and lines marked hidden, are left out, and a
-// secret line reads as a plain wall.
-export function minimapLines(map: GameMap): MinimapLine[] {
+// rooms of the same height, lines marked hidden and the walls of rooms in
+// `hidden` are left out, and a secret line reads as a plain wall.
+export function minimapLines(
+  map: GameMap,
+  hidden: ReadonlySet<string> = new Set(),
+): MinimapLine[] {
   const lines: MinimapLine[] = [];
   for (const [key, owners] of wallOwners(map)) {
     const settings = map.lines?.[key];
     if (settings?.hidden) continue;
+    if (owners.every((owner) => hidden.has(owner.id))) continue;
     const [from, to] = key.split("|").map((id) => map.vertices[id]);
     if (!from || !to) continue;
     const action =
@@ -83,6 +87,79 @@ export function minimapLines(map: GameMap): MinimapLine[] {
     );
   }
   return lines;
+}
+
+// Secret rooms, by their effect or because player 1 can only reach them
+// through a line marked secret, in groups that open onto each other. The
+// minimap keeps each group hidden until the player stands in it.
+export function secretAreas(map: GameMap): string[][] {
+  const start = map.things.find((thing) => thing.kind === "player");
+  const first = start ? sectorAt(map, start) : undefined;
+  if (!first) return [];
+  const links = new Map<string, string[]>();
+  const link = (from: string, to: string) =>
+    links.set(from, [...(links.get(from) ?? []), to]);
+  const behindSecret = new Set<string>();
+  for (const [key, owners] of wallOwners(map)) {
+    const settings = map.lines?.[key];
+    const action =
+      settings?.action ??
+      (settings?.raw?.special
+        ? actionForSpecial(settings.raw.special, settings.raw.tag)
+        : undefined);
+    if (
+      action &&
+      getIsTeleport(action.kind) &&
+      action.kind !== "teleport-monsters" &&
+      action.tag > 0
+    ) {
+      for (const sector of map.sectors) {
+        if (sector.tag !== action.tag) continue;
+        for (const owner of owners) link(owner.id, sector.id);
+      }
+    }
+    const [a, b] = owners;
+    if (!a || !b || a.id === b.id) continue;
+    if (settings?.secret) {
+      behindSecret.add(a.id).add(b.id);
+    } else {
+      link(a.id, b.id);
+      link(b.id, a.id);
+    }
+  }
+  const spread = (from: string, seen: Set<string>, within?: Set<string>) => {
+    const queue = [from];
+    seen.add(from);
+    for (const id of queue) {
+      for (const next of links.get(id) ?? []) {
+        if (seen.has(next) || (within && !within.has(next))) continue;
+        seen.add(next);
+        queue.push(next);
+      }
+    }
+    return queue;
+  };
+  const reached = spread(first.id, new Set());
+  const secret = new Set(
+    map.sectors
+      .filter((sector) => sector.effect === "secret")
+      .map((sector) => sector.id),
+  );
+  const visited = new Set(reached);
+  for (const id of behindSecret) {
+    if (!visited.has(id))
+      for (const each of spread(id, visited)) secret.add(each);
+  }
+  const backLinks = [...links].flatMap(([from, targets]) =>
+    targets
+      .filter((to) => secret.has(from) && secret.has(to))
+      .map((to) => [to, from]),
+  );
+  for (const [to, from] of backLinks) link(to, from);
+  const grouped = new Set<string>();
+  return [...secret].flatMap((id) =>
+    grouped.has(id) ? [] : [spread(id, grouped, secret)],
+  );
 }
 
 interface KeyGame {

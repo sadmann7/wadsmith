@@ -15,6 +15,7 @@ import { GameHud, type ScoreRow } from "./game-hud";
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 let root: Root | null = null;
+let redraw: (current: GameStatus) => void = () => {};
 
 afterEach(() => {
   React.act(() => root?.unmount());
@@ -195,6 +196,41 @@ it("hands the bottom of the view to Doom's status bar on the automap", () => {
   expect(container.querySelector("[aria-label=Minimap]")).toBeNull();
 });
 
+it("keeps a secret room off the minimap until the player has stood in it", () => {
+  const secretWalls = (container: HTMLElement) =>
+    [...container.querySelectorAll("[aria-label=Minimap] line")].filter(
+      (line) =>
+        Math.min(
+          Number(line.getAttribute("x1")),
+          Number(line.getAttribute("x2")),
+        ) >= 1536,
+    ).length;
+  const container = renderHud({ ...status, x: 1480, y: -224 }, false, null, {
+    map: starterMap,
+  });
+  expect(secretWalls(container)).toBe(0);
+  redraw({ ...status, x: 1584, y: -224 });
+  expect(secretWalls(container)).toBeGreaterThan(0);
+  redraw({ ...status, x: 1480, y: -224, automap: true });
+  redraw({ ...status, x: 1480, y: -224 });
+  expect(secretWalls(container)).toBeGreaterThan(0);
+});
+
+it("leaves monsters and partners in a hidden secret room off the minimap", () => {
+  const container = renderHud(
+    { ...status, x: 1480, y: -224, monsters: [{ x: 1584, y: -224, angle: 0 }] },
+    false,
+    null,
+    {
+      map: starterMap,
+      others: [{ peer: 2, slot: 1, x: 1584, y: -200 }],
+    },
+  );
+  const minimap = defined(container.querySelector("[aria-label=Minimap]"));
+  expect(minimap.querySelectorAll("[data-monster]")).toHaveLength(0);
+  expect(minimap.querySelectorAll("[data-peer]")).toHaveLength(0);
+});
+
 function renderHud(
   current: GameStatus,
   isBetween = false,
@@ -210,48 +246,48 @@ function renderHud(
   document.body.append(container);
   root = createRoot(container);
   const noop = () => {};
-  React.act(() =>
-    root?.render(
-      <GameHud
-        map={map}
-        title="Starter map"
-        slot="MAP01"
-        par={null}
-        status={current}
-        fullscreen={false}
-        showHelp={false}
-        crosshair={crosshair}
-        skill="medium"
-        coop={scores ? "host" : null}
-        deathmatch={false}
-        scores={scores}
-        others={others}
-        stall={null}
-        episode={isBetween}
-        between={
-          isBetween
-            ? {
-                tally: current,
-                next: { map: blankMap, title: "Next", slot: "MAP02" },
-                onNext: noop,
-              }
-            : null
-        }
-        exit={{ label: "Back to editor", hint: "" }}
-        canEdit
-        cheats={null}
-        noteOpen={false}
-        mouseMode={mouseMode}
-        noteSaved={false}
-        finished={false}
-        audioUnavailable={false}
-        onRestart={noop}
-        onExit={noop}
-        onOpenNote={noop}
-        onSaveNote={noop}
-        onEditSpot={noop}
-      />,
-    ),
+  redraw = (current: GameStatus) => React.act(() => root?.render(hud(current)));
+  const hud = (current: GameStatus) => (
+    <GameHud
+      map={map}
+      title="Starter map"
+      slot="MAP01"
+      par={null}
+      status={current}
+      fullscreen={false}
+      showHelp={false}
+      crosshair={crosshair}
+      skill="medium"
+      coop={scores ? "host" : null}
+      deathmatch={false}
+      scores={scores}
+      others={others}
+      stall={null}
+      episode={isBetween}
+      between={
+        isBetween
+          ? {
+              tally: current,
+              next: { map: blankMap, title: "Next", slot: "MAP02" },
+              onNext: noop,
+            }
+          : null
+      }
+      exit={{ label: "Back to editor", hint: "" }}
+      canEdit
+      cheats={null}
+      noteOpen={false}
+      mouseMode={mouseMode}
+      noteSaved={false}
+      finished={false}
+      audioUnavailable={false}
+      onRestart={noop}
+      onExit={noop}
+      onOpenNote={noop}
+      onSaveNote={noop}
+      onEditSpot={noop}
+    />
   );
+  redraw(current);
   return container;
 }
