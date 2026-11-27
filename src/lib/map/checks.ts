@@ -1,11 +1,17 @@
-import { type CustomThings, thingCategory } from "@/lib/wad/custom-things";
+import {
+  type CustomThings,
+  thingCategory,
+  thingLabel,
+} from "@/lib/wad/custom-things";
 
-import type { GameMap, KeyColor } from "./types";
+import type { GameMap, KeyColor, Thing } from "./types";
 
 import { mapBalance } from "./balance";
 import { deathmatchStarts, thingCatalog } from "./catalog";
 import { removeSwitch, removeThings, updateLine, updateSector } from "./edit";
+import { findTouches, joinTouch } from "./join";
 import { endsLevel, fitLineAction, triggersFor } from "./lines";
+import { findStuckThings } from "./stuck";
 import {
   activeLineActions,
   type CheckContext,
@@ -60,6 +66,35 @@ export function mapWarnings(
         target: spot.id,
       });
     }
+  }
+  const stuck = findStuckThings(map, custom);
+  const named = (thing: Thing) => thingLabel(thing, custom);
+  for (const [first, second] of stuck.overlaps) {
+    const reach = Math.max(
+      Math.abs(first.x - second.x),
+      Math.abs(first.y - second.y),
+    );
+    warnings.push({
+      id: `thing-overlap:${first.id}`,
+      severity: "warning",
+      message:
+        named(first) === named(second)
+          ? `${named(first)} overlaps another ${named(second).toLowerCase()}`
+          : `${named(first)} overlaps the ${named(second).toLowerCase()}`,
+      detail: `They're ${Math.round(reach)} apart and get stuck in each other in Doom. Move them apart.`,
+      target: first.id,
+    });
+  }
+  for (const { thing } of stuck.walls) {
+    warnings.push({
+      id: `thing-stuck:${thing.id}`,
+      severity: "warning",
+      message: `${named(thing)} sticks into a wall`,
+      detail: starts.has(thing.kind)
+        ? "The player can't move from there in Doom. Move the start away from the wall."
+        : "It can't move from there in Doom. Move it away from the wall.",
+      target: thing.id,
+    });
   }
   const balance = mapBalance(map, "medium", custom);
   if (balance.healthShort > 0) {
@@ -129,6 +164,8 @@ function coopGaps(map: GameMap) {
   );
 }
 
+const starts = new Set(["player", "player-2", "player-3", "player-4"]);
+
 function listPlayers(players: number[]) {
   const names = players.map(String);
   return `Player${players.length > 1 ? "s" : ""} ${
@@ -176,6 +213,11 @@ const buildGroups: {
     passed: "1 found",
     ids: /^(no-player|many-players|outside|in-door|coop-starts|deathmatch-starts)(:|$)/,
     needsValidRooms: true,
+  },
+  {
+    name: "Stuck things",
+    passed: "Nothing stuck in a wall or another thing",
+    ids: /^thing-(overlap|stuck)(:|$)/,
   },
   {
     name: "Reachable",
@@ -290,6 +332,15 @@ export function fixIssue(
   }
   if (kind === "switch-wall" || kind === "switch-open") {
     return removeSwitch(map, target);
+  }
+  if (kind === "unreachable-island") {
+    const room = map.sectors.find((sector) => sector.id === target);
+    if (!room) return null;
+    const other = id.split(":")[2];
+    const touch = findTouches(map, room).find(
+      (item) => item.other.id === other,
+    );
+    return touch ? joinTouch(map, touch) : null;
   }
   if (kind === "line-door" || kind === "line-walk") {
     const action = map.lines?.[target]?.action;
