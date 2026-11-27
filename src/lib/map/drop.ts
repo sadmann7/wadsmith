@@ -103,6 +103,15 @@ export function planRoomDrop(
     );
   };
 
+  // A room may sit anywhere inside the room it was drawn in.
+  const covers = (
+    room: Point[],
+    { id, polygon, holes }: { id: string; polygon: Point[]; holes: Point[][] },
+  ) =>
+    (holders.has(id)
+      ? !getIsWithin(room, polygon) && getDoOverlap(room, polygon)
+      : getDoOverlap(room, polygon)) ||
+    holes.some((hole) => getDoOverlap(room, hole));
   const judge = (shift: Point) => {
     const placed = mine.map((outline) => moveOutline(outline, shift));
     const around = near(shift);
@@ -115,19 +124,6 @@ export function planRoomDrop(
         .filter((hole) => !hole.every((id) => moved.has(id)))
         .map((hole) => loopPolygon(map, hole)),
     }));
-    // A room may sit anywhere inside the room it was drawn in.
-    const covers = (
-      room: Point[],
-      {
-        id,
-        polygon,
-        holes,
-      }: { id: string; polygon: Point[]; holes: Point[][] },
-    ) =>
-      (holders.has(id)
-        ? !getIsWithin(room, polygon) && getDoOverlap(room, polygon)
-        : getDoOverlap(room, polygon)) ||
-      holes.some((hole) => getDoOverlap(room, hole));
     const isBlocked =
       stretched.some(({ polygon }) => getIsTwisted(polygon)) ||
       placed.some(
