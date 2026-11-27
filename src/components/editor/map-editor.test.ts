@@ -869,7 +869,39 @@ describe("map editor drags from inside a room", () => {
       },
     });
     instance.api.pointermove(pointer(440, 140, { buttons: 0 }));
-    expect(grabs).toEqual([{ kind: "selection", key: "room:sector-2" }]);
+    instance.setOptions({
+      id,
+      map: testMap,
+      editMode: "lines",
+      selection: ["room:sector-1", "room:sector-2"],
+      onGrabChange: (grab) => {
+        grabs.push(grab);
+      },
+    });
+    instance.api.pointermove(pointer(440, 141, { buttons: 0 }));
+    expect(grabs).toEqual([
+      { kind: "selection", key: "room:sector-2" },
+      { kind: "room", key: "room:sector-2" },
+    ]);
+  });
+
+  it("name nothing to move while Shift turns a press into a box", () => {
+    const grabs: (MapGrab | null)[] = [];
+    const instance = mapEditor({
+      id,
+      map: testMap,
+      onGrabChange: (grab) => {
+        grabs.push(grab);
+      },
+    });
+    instance.api.pointermove(pointer(440, 140, { buttons: 0 }));
+    instance.api.keydown(press("Shift", { shiftKey: true }));
+    instance.api.keyup(press("Shift"));
+    expect(grabs).toEqual([
+      { kind: "room", key: "room:sector-2" },
+      null,
+      { kind: "room", key: "room:sector-2" },
+    ]);
   });
 });
 

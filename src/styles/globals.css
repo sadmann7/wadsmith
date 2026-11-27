@@ -802,7 +802,7 @@
   }
 
   .map-sector[data-hover],
-  .map-sector[data-grab] {
+  .map[data-tool="select"] .map-sector[data-grab] {
     fill: color-mix(in oklab, var(--color-primary) 9%, var(--color-map-sector));
   }
 

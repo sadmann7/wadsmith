@@ -229,6 +229,7 @@ const arrowSteps: Record<string, Point> = {
   ArrowRight: { x: 1, y: 0 },
 };
 const wallReach = 14;
+const holdKeys = new Set(["Shift", "Control", "Meta", " "]);
 const lightStep = 16;
 const heightKeys: Record<string, 1 | -1> = {
   PageUp: 1,
@@ -1019,37 +1020,43 @@ export const mapEditor = definePrimitive({
         key,
       };
     };
-    let reported: {
-      key: string | null;
-      selection: string[];
-      active: string | null;
-    } = { key: null, selection: [], active: null };
+    // What a drag moves depends on these as well as on the key under the
+    // pointer, so the status is described again when any of them changes.
+    let reported: unknown[] = [null];
     const reportGrab = (key: string | null) => {
-      const { selection, activeSector } = store.get();
+      const { map, selection, activeSector, editMode, highlightedWall } =
+        store.get();
+      const next = key
+        ? [key, map, selection, activeSector, editMode, highlightedWall]
+        : [null];
       if (
-        reported.key === key &&
-        (key === null ||
-          (reported.selection === selection &&
-            reported.active === activeSector))
+        next.length === reported.length &&
+        next.every((value, index) => value === reported[index])
       ) {
         return;
       }
-      reported = { key, selection, active: activeSector };
+      reported = next;
       context.options().onGrabChange?.(key ? describeGrab(key) : null);
     };
+    context.onDestroy(() => reportGrab(null));
 
     // What a press would pick or drag, drawn highlighted: the wall in line
     // mode, with the rooms its action works on, and the room or wall a drag
     // would move.
-    const hover = (at: Point | null, key?: string) => {
+    // Shift, Ctrl, Cmd or Space held turns a press into a box or a pan, which
+    // moves nothing.
+    let hoverKey: string | undefined;
+    const hover = (at: Point | null, key?: string, boxing = false) => {
+      hoverKey = key;
       const { map, editMode, tool, marquee, positions } = store.get();
       let wall: string | null = null;
       let rooms: string[] = [];
       let grab: string | null = null;
       if (at && tool === "select" && !marquee) {
-        grab = grabKeyAt(at, key);
-        if (grab?.startsWith(wallKeyPrefix)) {
-          wall = grab.slice(wallKeyPrefix.length);
+        const under = grabKeyAt(at, key);
+        grab = boxing || spaceHeld ? null : under;
+        if (under?.startsWith(wallKeyPrefix)) {
+          wall = under.slice(wallKeyPrefix.length);
         }
         const tag = editMode === "lines" && wall ? taggedBy(map, wall) : 0;
         rooms = tag
@@ -1069,6 +1076,15 @@ export const mapEditor = definePrimitive({
       ) {
         store.set({ hoverWall: wall, hoverRooms: rooms, grab: shown });
       }
+    };
+
+    const holdKey = (event: KeyboardEvent) => {
+      if (!pointer || !holdKeys.has(event.key) || store.get().moving) return;
+      hover(
+        pointer,
+        hoverKey,
+        event.shiftKey || event.ctrlKey || event.metaKey,
+      );
     };
 
     const selectedWalls = () =>
@@ -1652,6 +1668,7 @@ export const mapEditor = definePrimitive({
         // held down, pans instead.
         const fine = event.pointerType !== "touch" && event.button === 0;
         if (event.button !== 0 || spaceHeld) {
+          hover(null);
           viewport.pointerdown(event);
           return;
         }
@@ -1693,6 +1710,7 @@ export const mapEditor = definePrimitive({
           event.preventDefault();
           return;
         }
+        hover(null);
         // A finger or a pen has no Shift or middle button, so it pans.
         if (event.pointerType !== "mouse") {
           viewport.pointerdown(event);
@@ -1733,6 +1751,7 @@ export const mapEditor = definePrimitive({
           hover(
             pointer,
             target?.closest?.<HTMLElement>("[data-map-key]")?.dataset.mapKey,
+            event.shiftKey || event.ctrlKey || event.metaKey,
           );
         }
         reportPointer?.(pointFromEvent(event));
@@ -1823,10 +1842,12 @@ export const mapEditor = definePrimitive({
       },
       keydown(event: KeyboardEvent) {
         if (event.defaultPrevented || openMenuFromKey(event)) return;
+        holdKey(event);
         // Space held over the map pans with the pointer, though a focused
         // button inside it still presses.
         if (event.key === " " && event.target === root()) {
           spaceHeld = true;
+          holdKey(event);
           event.preventDefault();
           return;
         }
@@ -1909,6 +1930,7 @@ export const mapEditor = definePrimitive({
       },
       keyup(event: KeyboardEvent) {
         if (event.key === " ") spaceHeld = false;
+        holdKey(event);
       },
       pressPort(event: PointerEvent, key: string, el: HTMLElement) {
         if (event.button !== 0 || getIsSecondaryPress(event)) return;
