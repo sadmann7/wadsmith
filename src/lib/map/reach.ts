@@ -39,14 +39,7 @@ export function findUnreachable(
   const first = start && sectorAt(map, start);
   if (!first) return null;
   const walls = roomWalls(map);
-  const fits = new Map<Sector, boolean>();
-  const hasRoom = (sector: Sector) => {
-    const known = fits.get(sector);
-    if (known !== undefined) return known;
-    const found = getHasRoom(map, sector, walls.get(sector) ?? []);
-    fits.set(sector, found);
-    return found;
-  };
+  const hasRoom = roomChecker(map, walls);
   const reached = reachableRooms(map, first, walls, hasRoom);
   const things = map.things.flatMap((thing) => {
     const category = thingCategory(thing, custom);
@@ -90,53 +83,34 @@ const islandMarkers = new Set<Thing["kind"]>([
 ]);
 
 // Groups of rooms that share no wall with the rest of the map, the way a room
-// drawn beside another without touching its wall ends up. A group something
-// acts on, by a tag or a line action, is a teleport landing or a control room
-// on purpose, and so is one holding a spawner's spots.
+// drawn beside another without touching its wall ends up.
 function findIslands(
   map: GameMap,
   reached: Set<Sector>,
   hasRoom: (sector: Sector) => boolean,
 ) {
-  const parent = new Map<Sector, Sector>();
-  const root = (sector: Sector): Sector => {
-    const up = parent.get(sector);
-    if (!up || up === sector) return sector;
-    const top = root(up);
-    parent.set(sector, top);
-    return top;
-  };
-  const acted = new Set<Sector>();
-  for (const [wall, owners] of wallOwners(map)) {
-    const line = map.lines?.[wall];
-    if (line?.action || (line?.raw && line.raw.special > 0)) {
-      for (const owner of owners) acted.add(owner);
-    }
-    const [first, ...rest] = owners;
-    for (const other of rest) parent.set(root(other), root(first));
-  }
-  for (const thing of map.things) {
-    if (!islandMarkers.has(thing.kind)) continue;
-    const room = sectorAt(map, thing);
-    if (room) acted.add(room);
-  }
-  const groups = new Map<Sector, Sector[]>();
-  for (const sector of map.sectors) {
-    const top = root(sector);
-    groups.set(top, [...(groups.get(top) ?? []), sector]);
-  }
-  return [...groups.values()].filter(
+  const apart = getIsApart(map);
+  return joinedGroups(map).filter(
     (group) =>
-      !group.some(
-        (sector) => reached.has(sector) || sector.tag || acted.has(sector),
-      ) &&
-      group.some(
-        (sector) =>
-          !sector.door &&
-          sector.ceiling - sector.floor >= playerHeight &&
-          hasRoom(sector),
-      ),
+      !group.some((sector) => reached.has(sector)) &&
+      !apart(group) &&
+      group.some((sector) => getIsStandable(sector, hasRoom)),
   );
+}
+
+function getIsStandable(sector: Sector, hasRoom: (sector: Sector) => boolean) {
+  return (
+    !sector.door &&
+    sector.ceiling - sector.floor >= playerHeight &&
+    hasRoom(sector)
+  );
+}
+
+// Whether a player could stand somewhere in a group of rooms.
+export function getIsRoomy(map: GameMap) {
+  const hasRoom = roomChecker(map);
+  return (group: Sector[]) =>
+    group.some((sector) => getIsStandable(sector, hasRoom));
 }
 
 function roomWalls(map: GameMap) {
@@ -239,6 +213,17 @@ function getIsWalkable(rooms: Sector[]) {
   const top = Math.max(...rooms.map((room) => room.floor));
   const low = Math.min(...rooms.map((room) => room.ceiling));
   return low - top >= playerHeight;
+}
+
+function roomChecker(map: GameMap, walls = roomWalls(map)) {
+  const fits = new Map<Sector, boolean>();
+  return (sector: Sector) => {
+    const known = fits.get(sector);
+    if (known !== undefined) return known;
+    const found = getHasRoom(map, sector, walls.get(sector) ?? []);
+    fits.set(sector, found);
+    return found;
+  };
 }
 
 const playerRadius = 16;
@@ -438,4 +423,45 @@ function movingRooms(map: GameMap) {
     }
   }
   return moving;
+}
+
+// Whether a group is a teleport landing, a control room or a spawner's spots,
+// set apart from the map on purpose.
+export function getIsApart(map: GameMap) {
+  const acted = new Set<Sector>();
+  for (const [wall, owners] of wallOwners(map)) {
+    const line = map.lines?.[wall];
+    if (line?.action || (line?.raw && line.raw.special > 0)) {
+      for (const owner of owners) acted.add(owner);
+    }
+  }
+  for (const thing of map.things) {
+    if (!islandMarkers.has(thing.kind)) continue;
+    const room = sectorAt(map, thing);
+    if (room) acted.add(room);
+  }
+  return (group: Sector[]) =>
+    group.some((sector) => sector.tag || acted.has(sector));
+}
+
+// Rooms grouped by the walls they share, each group in drawing order.
+export function joinedGroups(map: GameMap) {
+  const parent = new Map<Sector, Sector>();
+  const root = (sector: Sector): Sector => {
+    const up = parent.get(sector);
+    if (!up || up === sector) return sector;
+    const top = root(up);
+    parent.set(sector, top);
+    return top;
+  };
+  for (const owners of wallOwners(map).values()) {
+    const [first, ...rest] = owners;
+    for (const other of rest) parent.set(root(other), root(first));
+  }
+  const groups = new Map<Sector, Sector[]>();
+  for (const sector of map.sectors) {
+    const top = root(sector);
+    groups.set(top, [...(groups.get(top) ?? []), sector]);
+  }
+  return [...groups.values()];
 }
