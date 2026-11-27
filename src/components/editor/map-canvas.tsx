@@ -22,6 +22,7 @@ import {
 } from "@/lib/editor/map-labels";
 import { thingIcons } from "@/lib/editor/thing-icons";
 import { zoomStep } from "@/lib/editor/zoom";
+import { playerColor } from "@/lib/engine/player-colors";
 import { generalizedTrigger, getIsGeneralized } from "@/lib/map/boom";
 import { doorKeyPrefix, switchKeyPrefix, thingKeyPrefix } from "@/lib/map/edit";
 import {
@@ -171,47 +172,48 @@ export function MapCanvas({
       // oxlint-disable-next-line react/no-array-index-key -- A run's paths never change order.
       key={index}
       className="map-trail-path"
-      data-player={path.player % trailColors}
+      style={{ stroke: playerColor(path.player).fill }}
       points={path.points.join(" ")}
     />
   ));
 
   const detailed = props.editMode === "sectors";
+  const fadesThings = detailed || props.editMode === "lines";
   const rooms = map.sectors
     .filter((sector) => !sector.door)
-    .map((sector, index) => {
-      const number = String(index + 1).padStart(2, "0");
+    .map((sector, index) => ({ sector, index, box: boxOf(map, sector) }))
+    .filter(
+      ({ box }) =>
+        (box.right - box.left) * labelStep >= labelWidth &&
+        (!area ||
+          (box.right >= area.left &&
+            box.left <= area.right &&
+            box.bottom >= area.top &&
+            box.top <= area.bottom)),
+    )
+    .map(({ sector, index, box }) => {
+      const spot = labelPoint(
+        [sector.vertices, ...(sector.holes ?? [])].map((loop) =>
+          loopPolygon(map, loop),
+        ),
+        step,
+        estimateLabelWidth(sector.name),
+        map.things,
+      );
       return {
         sector,
         name: sector.name,
-        detail: `S${number} ${sector.floor}/${sector.ceiling}`,
-        box: boxOf(map, sector),
-        at:
-          labelPoint(
-            [sector.vertices, ...(sector.holes ?? [])].map((loop) =>
-              loopPolygon(map, loop),
-            ),
-            step,
-            estimateLabelWidth(sector.name),
-            map.things,
-          ) ?? roomPoint(map, sector),
+        detail: detailed
+          ? `S${String(index + 1).padStart(2, "0")} ${sector.floor}/${sector.ceiling}`
+          : undefined,
+        box,
+        at: spot ?? roomPoint(map, sector),
+        isCovered: spot?.isCovered ?? false,
       };
-    });
+    })
+    .filter((room) => fadesThings || !room.isCovered);
 
-  const labels = clearLabels(
-    rooms
-      .filter(
-        ({ box }) =>
-          (box.right - box.left) * labelStep >= labelWidth &&
-          (!area ||
-            (box.right >= area.left &&
-              box.left <= area.right &&
-              box.bottom >= area.top &&
-              box.top <= area.bottom)),
-      )
-      .map((room) => (detailed ? room : { ...room, detail: undefined })),
-    step,
-  ).map(({ sector, detail, box }) => (
+  const labels = clearLabels(rooms, step).map(({ sector, detail, box }) => (
     <MapCaption
       key={sector.id}
       value={sector.id}
@@ -544,8 +546,6 @@ function thingLook(kind: ThingKind) {
   return look;
 }
 
-// Doom gives its four players a color each, and a path wears its player's.
-const trailColors = 4;
 const peerColors = 4;
 
 // A hit's mark grows with the damage, up to this many times its size.

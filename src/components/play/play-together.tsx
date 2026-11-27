@@ -386,7 +386,7 @@ function Lobby({ code, players, max, links, lost, onRemove }: LobbyProps) {
               key={player.peer}
               className="flex h-[44px] items-center gap-3 border-b border-border"
             >
-              <PlayerBadge peer={player.peer} />
+              <PlayerBadge peer={player.peer} slot={player.peer - 1} />
               <span className="min-w-0 flex-1 truncate text-sm font-semibold">
                 {player.name}
                 {player.peer === hostPeer ? (
@@ -435,7 +435,7 @@ function Lobby({ code, players, max, links, lost, onRemove }: LobbyProps) {
               key={peer}
               className="flex h-[44px] items-center gap-3 border-b border-border text-sm text-muted-foreground"
             >
-              <PlayerBadge peer={peer} open />
+              <PlayerBadge peer={peer} slot={peer - 1} open />
               Open slot
             </li>
           ))}

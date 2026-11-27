@@ -35,6 +35,7 @@ import {
   secretAreas,
   showsCrosshair,
 } from "@/lib/engine/minimap";
+import { playerColor } from "@/lib/engine/player-colors";
 import {
   type Cheats,
   fragLimit,
@@ -69,6 +70,7 @@ interface NextLevel {
 
 export interface ScoreRow {
   peer: number;
+  slot: number;
   name: string;
   host: boolean;
   you: boolean;
@@ -688,13 +690,6 @@ const keyFills: Record<KeyColor, string> = {
   yellow: "var(--color-key-yellow)",
   red: "var(--color-key-red)",
 };
-// Doom's own player colors: green, indigo, brown and red.
-const playerFills = [
-  "var(--color-success)",
-  "var(--color-info)",
-  "var(--color-warning)",
-  "var(--color-destructive)",
-];
 const arrowPath = "M1 0L-0.7 0.6L-0.35 0L-0.7-0.6Z";
 const monsterPath = "M1 0L-0.8 0.75L-0.8-0.75Z";
 
@@ -801,7 +796,7 @@ function Minimap({ map, status, others, skill, mode, hidden }: MinimapProps) {
               cx={other.x}
               cy={0 - other.y}
               r={3.5 * unit}
-              fill={playerFills[other.slot] ?? playerFills[0]}
+              fill={playerColor(other.slot).fill}
               stroke="var(--color-map-bg)"
               strokeWidth={1.5}
               vectorEffect="non-scaling-stroke"
@@ -1063,7 +1058,7 @@ function Scoreboard({ title, par, status, rows, deathmatch }: ScoreboardProps) {
               className={`border-t border-border ${row.you ? "bg-primary/10" : ""}`}
             >
               <td className="w-6 py-2.5 pl-5">
-                <PlayerBadge peer={row.peer} />
+                <PlayerBadge peer={row.peer} slot={row.slot} />
               </td>
               <td className="py-2.5 pl-3">
                 <span className="text-base font-semibold">{row.name}</span>
