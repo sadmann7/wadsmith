@@ -54,9 +54,9 @@ describe("SceneCamera", () => {
     const before = camera.position;
     const theirs = { ...hall, things: [playerAt(32, 256)] };
     camera.keep(theirs);
-    camera.sync(theirs);
-    expect(camera.position).toEqual(before);
     camera.sync({ ...theirs, sectors: [...theirs.sectors] }, true);
+    expect(camera.position).toEqual(before);
+    camera.sync(theirs);
     camera.sync({ ...theirs, sectors: [...theirs.sectors] });
     expect(camera.position).toEqual(before);
   });
