@@ -389,12 +389,12 @@ function Waiting({ info, players, peer, onLeave }: WaitingProps) {
           Players
         </SectionLabel>
         <ul className="m-0 list-none p-0">
-          {players.map((player) => (
+          {players.map((player, slot) => (
             <li
               key={player.peer}
               className="flex h-[44px] items-center gap-3 border-b border-border"
             >
-              <PlayerBadge peer={player.peer} slot={player.peer - 1} />
+              <PlayerBadge slot={slot} />
               <span className="min-w-0 flex-1 truncate text-sm font-semibold">
                 {player.name}
                 {player.peer === peer || player.peer === hostPeer ? (

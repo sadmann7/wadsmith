@@ -9,12 +9,11 @@ import { playerColor } from "@/lib/engine/player-colors";
 import { formatRoomCode } from "@/lib/engine/room";
 
 interface PlayerBadgeProps {
-  peer: number;
   slot: number;
   open?: boolean;
 }
 
-export function PlayerBadge({ peer, slot, open = false }: PlayerBadgeProps) {
+export function PlayerBadge({ slot, open = false }: PlayerBadgeProps) {
   return (
     <span
       aria-hidden="true"
@@ -24,7 +23,7 @@ export function PlayerBadge({ peer, slot, open = false }: PlayerBadgeProps) {
           : playerColor(slot).badge
       }`}
     >
-      {peer}
+      {slot + 1}
     </span>
   );
 }
