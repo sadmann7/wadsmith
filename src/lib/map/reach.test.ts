@@ -355,7 +355,7 @@ describe("rooms not joined to the map", () => {
       issue.id.startsWith("unreachable-island"),
     );
     expect(island).toMatchObject({
-      id: "unreachable-island:sector-3",
+      id: "unreachable-island:sector-3:sector-2",
       message: "Octagon isn't joined to the rest of the map",
       detail:
         "It touches Corridor only at a corner. Rooms join where they share a wall.",
@@ -398,6 +398,32 @@ describe("rooms not joined to the map", () => {
       "The player can't get there from the start. Rooms join where they share a wall.",
     );
     expect(issue.fixLabel).toBeUndefined();
+  });
+
+  it("offers no join between two rooms of the same loose group", () => {
+    const map = buildMap({
+      name: "Pits",
+      rooms: [
+        room("Hall", 0, 0, 128),
+        { ...room("Cave", 512, 0, 128), points: rect(512, 0, 512, 512) },
+        { ...room("Pit", 512, -32, 128), points: rect(600, 100, 100, 100) },
+        {
+          ...room("Ledge", 512, 32, 128),
+          points: [
+            [700, 150],
+            [760, 100],
+            [820, 150],
+            [760, 200],
+          ],
+        },
+      ],
+      things: [{ kind: "player", at: [64, 64] }],
+    });
+    const issue = defined(
+      checkMap(map).find((item) => item.id.startsWith("unreachable-island")),
+    );
+    expect(issue.fixLabel).toBeUndefined();
+    expect(fixIssue(map, issue)).toBeNull();
   });
 
   it("names a loose group of rooms once", () => {

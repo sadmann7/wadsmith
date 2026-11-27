@@ -336,11 +336,11 @@ export function fixIssue(
   if (kind === "unreachable-island") {
     const room = map.sectors.find((sector) => sector.id === target);
     if (!room) return null;
-    for (const touch of findTouches(map, room)) {
-      const joined = joinTouch(map, touch);
-      if (joined) return joined;
-    }
-    return null;
+    const other = id.split(":")[2];
+    const touch = findTouches(map, room).find(
+      (item) => item.other.id === other,
+    );
+    return touch ? joinTouch(map, touch) : null;
   }
   if (kind === "line-door" || kind === "line-walk") {
     const action = map.lines?.[target]?.action;

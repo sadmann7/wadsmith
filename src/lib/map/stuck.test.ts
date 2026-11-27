@@ -4,6 +4,7 @@ import type { ThingKind, ThingSkill } from "./types";
 
 import { checkMap } from "./checks";
 import { buildMap, rect } from "./featured/build-map";
+import { findStuckThings } from "./stuck";
 
 describe("stuck things", () => {
   it("warns about a barrel 8 from a shotgun guy", () => {
@@ -100,8 +101,13 @@ describe("stuck things", () => {
         things.push(["imp", 8 + x * 7.5, 8 + y * 7.5]);
       }
     }
+    const map = buildMap({
+      name: "Crowd",
+      rooms: [{ name: "Hall", points: rect(0, 0, 512, 512), ...look }],
+      things: things.map(([kind, x, y]) => ({ kind, at: [x, y] })),
+    });
     const started = performance.now();
-    expect(stuck(things).length).toBeGreaterThan(0);
+    expect(findStuckThings(map, new Map()).overlaps.length).toBeGreaterThan(0);
     expect(performance.now() - started).toBeLessThan(1000);
   });
 });

@@ -255,13 +255,6 @@ function openCorner(
 }
 
 function getShareWall(map: GameMap, first: string, second: string) {
-  const containers = sectorContainers(map);
-  if (
-    containers.get(first)?.id === second ||
-    containers.get(second)?.id === first
-  ) {
-    return true;
-  }
   const walls = (id: string) => {
     const sector = map.sectors.find((item) => item.id === id);
     return sector

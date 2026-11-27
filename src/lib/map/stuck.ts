@@ -7,7 +7,7 @@ import { getBlocksPlayer } from "./complevel";
 import { vanillaThings } from "./doom-info";
 import { wallOwners } from "./geometry";
 
-const cellSize = 256;
+const cellSize = 64;
 
 const cellOf = (value: number) => Math.floor(value / cellSize);
 
@@ -25,27 +25,39 @@ interface Body {
 export function findStuckThings(map: GameMap, custom: CustomThings) {
   const bodies = map.things.flatMap((thing) => bodyOf(thing, custom) ?? []);
   const cells = new Map<string, Body[]>();
+  let widest = 0;
   for (const body of bodies) {
     const key = `${cellOf(body.thing.x)},${cellOf(body.thing.y)}`;
-    cells.set(key, [...(cells.get(key) ?? []), body]);
+    const cell = cells.get(key);
+    if (cell) cell.push(body);
+    else cells.set(key, [body]);
+    widest = Math.max(widest, body.radius);
   }
   const overlaps: [Thing, Thing][] = [];
   const paired = new Set<Thing>();
-  for (const body of bodies) {
-    if (!body.moves || paired.has(body.thing)) continue;
+  const findOther = (body: Body) => {
+    const reach = Math.ceil((body.radius + widest) / cellSize);
     const cx = cellOf(body.thing.x);
     const cy = cellOf(body.thing.y);
-    const other = [-1, 0, 1]
-      .flatMap((dx) =>
-        [-1, 0, 1].flatMap((dy) => cells.get(`${cx + dx},${cy + dy}`) ?? []),
-      )
-      .find(
-        (near) =>
-          near !== body &&
-          !paired.has(near.thing) &&
-          getOverlap(body, near) &&
-          getShareSkill(body.thing, near.thing),
-      );
+    for (let x = cx - reach; x <= cx + reach; x += 1) {
+      for (let y = cy - reach; y <= cy + reach; y += 1) {
+        for (const near of cells.get(`${x},${y}`) ?? []) {
+          if (
+            near !== body &&
+            !paired.has(near.thing) &&
+            getOverlap(body, near) &&
+            getShareSkill(body.thing, near.thing)
+          ) {
+            return near;
+          }
+        }
+      }
+    }
+    return null;
+  };
+  for (const body of bodies) {
+    if (!body.moves || paired.has(body.thing)) continue;
+    const other = findOther(body);
     if (!other) continue;
     paired.add(body.thing);
     paired.add(other.thing);
@@ -62,13 +74,13 @@ export function findStuckThings(map: GameMap, custom: CustomThings) {
     const [a, b] = wall.split("|").map((id) => map.vertices[id]);
     if (!a || !b) continue;
     for (
-      let x = cellOf(Math.min(a.x, b.x)) - 1;
-      x <= cellOf(Math.max(a.x, b.x)) + 1;
+      let x = cellOf(Math.min(a.x, b.x) - widest);
+      x <= cellOf(Math.max(a.x, b.x) + widest);
       x += 1
     ) {
       for (
-        let y = cellOf(Math.min(a.y, b.y)) - 1;
-        y <= cellOf(Math.max(a.y, b.y)) + 1;
+        let y = cellOf(Math.min(a.y, b.y) - widest);
+        y <= cellOf(Math.max(a.y, b.y) + widest);
         y += 1
       ) {
         for (const body of cells.get(`${x},${y}`) ?? []) {

@@ -915,15 +915,16 @@ function validateReach(
   const found = findUnreachable(map, custom);
   if (!found) return;
   for (const group of found.islands) {
+    const members = new Set(group);
     let touch: Touch | undefined;
     for (const item of group) {
-      touch = findTouches(map, item)[0];
+      touch = findTouches(map, item).find(({ other }) => !members.has(other));
       if (touch) break;
     }
     const room = touch?.room ?? group[0];
     const others = group.length - 1;
     warnings.push({
-      id: `unreachable-island:${room.id}`,
+      id: `unreachable-island:${room.id}${touch ? `:${touch.other.id}` : ""}`,
       message:
         others === 0
           ? `${room.name} isn't joined to the rest of the map`
