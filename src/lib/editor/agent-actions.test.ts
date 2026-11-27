@@ -9,9 +9,9 @@ import {
   stopGames,
   waitForPlay,
 } from "@/lib/engine/test-engine";
+import { arenaMap } from "@/lib/map/arena-map";
 import { checkMap } from "@/lib/map/checks";
 import { wallKey } from "@/lib/map/geometry";
-import { starterMap } from "@/lib/map/starter-map";
 import { parseMapFile, serializeMap } from "@/lib/map/storage";
 import { testMap } from "@/lib/map/test-map";
 import { freedoomNames } from "@/lib/map/textures";
@@ -209,20 +209,20 @@ describe("agent actions", () => {
       [1168, 384],
       [976, 384],
     ];
-    const drawn = runAgentAction(starterMap, "addRoom", [corners]);
+    const drawn = runAgentAction(arenaMap, "addRoom", [corners]);
     expect(drawn.map.sectors.at(-1)).toMatchObject({
       floor: -32,
       ceiling: 96,
       wallTexture: "TEKWALL4",
     });
-    const raised = runAgentAction(starterMap, "addRoom", [
+    const raised = runAgentAction(arenaMap, "addRoom", [
       { corners, ceiling: 128 },
     ]);
     expect(raised.map.sectors.at(-1)).toMatchObject({
       floor: -32,
       ceiling: 128,
     });
-    const stepped = runAgentAction(starterMap, "addRoom", [
+    const stepped = runAgentAction(arenaMap, "addRoom", [
       { corners, floor: 112 },
     ]);
     expect(stepped.map.sectors.at(-1)).toMatchObject({
@@ -489,7 +489,7 @@ describe("agent actions", () => {
       'can\'t be set off by "door" on this wall: a press-to-open door needs a sector behind the line. It takes: switch.',
     );
     expect(() =>
-      runAgentAction(starterMap, "setLineAction", {
+      runAgentAction(arenaMap, "setLineAction", {
         wall: "v25|v26",
         kind: "door-raise",
         trigger: "door",
@@ -507,7 +507,7 @@ describe("agent actions", () => {
       'can\'t be set off by "walk" on this wall: nothing can walk over a solid wall. It takes nothing else, so no trigger works on this wall.',
     );
     expect(() =>
-      runAgentAction(starterMap, "setLineAction", {
+      runAgentAction(arenaMap, "setLineAction", {
         wall: "v25|v26",
         kind: "exit",
         trigger: "door",

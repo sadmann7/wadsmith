@@ -5,6 +5,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import type { GameMap } from "@/lib/map/types";
 
 import { defined } from "@/lib/defined";
+import { arenaMap } from "@/lib/map/arena-map";
 import { thingCatalog } from "@/lib/map/catalog";
 import { sectorAt, wallKey } from "@/lib/map/geometry";
 import { starterMap } from "@/lib/map/starter-map";
@@ -23,7 +24,7 @@ const freedoom = resolve(
 
 describe("decompileMap", () => {
   it("brings back the maps Wadsmith builds", () => {
-    for (const source of [starterMap, testMap]) {
+    for (const source of [starterMap, arenaMap, testMap]) {
       const [doom] = readMaps([{ name: "map.wad", data: compileMap(source) }]);
       const { map, report } = decompileMap(doom);
       expect(validateMap(map)).toEqual([]);
@@ -41,8 +42,8 @@ describe("decompileMap", () => {
 
   it("keeps fast doors fast", () => {
     const fast: GameMap = {
-      ...starterMap,
-      sectors: starterMap.sectors.map((sector) =>
+      ...arenaMap,
+      sectors: arenaMap.sectors.map((sector) =>
         sector.door
           ? { ...sector, door: { ...sector.door, fast: true } }
           : sector,
@@ -58,14 +59,14 @@ describe("decompileMap", () => {
 
   it("keeps a locked door's key on the door", () => {
     const lines = Object.fromEntries(
-      Object.entries(starterMap.lines ?? {}).filter(
+      Object.entries(arenaMap.lines ?? {}).filter(
         ([wall]) => wall !== wallKey("v17", "v18"),
       ),
     );
     const locked: GameMap = {
-      ...starterMap,
+      ...arenaMap,
       lines,
-      sectors: starterMap.sectors.map((sector) =>
+      sectors: arenaMap.sectors.map((sector) =>
         sector.door?.opensBy === "use"
           ? { ...sector, door: { ...sector.door, key: "red" } }
           : sector,
@@ -86,15 +87,15 @@ describe("decompileMap", () => {
 
   it("keeps a fast locked door in a Boom map", () => {
     const lines = Object.fromEntries(
-      Object.entries(starterMap.lines ?? {}).filter(
+      Object.entries(arenaMap.lines ?? {}).filter(
         ([wall]) => wall !== wallKey("v17", "v18"),
       ),
     );
     const locked: GameMap = {
-      ...starterMap,
+      ...arenaMap,
       complevel: "boom",
       lines,
-      sectors: starterMap.sectors.map((sector) =>
+      sectors: arenaMap.sectors.map((sector) =>
         sector.door?.opensBy === "use"
           ? { ...sector, door: { ...sector.door, key: "red", fast: true } }
           : sector,
@@ -1065,8 +1066,8 @@ function doomMap() {
 describe("readMaps", () => {
   it("lets a later WAD replace a map in the same slot", () => {
     const episode = compileEpisode([
-      { slot: "MAP01", map: starterMap },
-      { slot: "MAP02", map: starterMap },
+      { slot: "MAP01", map: arenaMap },
+      { slot: "MAP02", map: arenaMap },
     ]);
     const patch = compileMap(testMap, "MAP02");
     const maps = readMaps([
@@ -1119,7 +1120,7 @@ describe("readMaps", () => {
     expect(decompileMap(maps[0]).map.name).toBe("Hydroelectric Plant");
     expect(decompileMap(maps[2]).map.name).toBe("Starter map");
     const doomOne = readMaps([
-      { name: "d.wad", data: compileMap(starterMap, "E1M1") },
+      { name: "d.wad", data: compileMap(arenaMap, "E1M1") },
       lump("UMAPINFO", 'map E1M1\n{\n  levelname = "Hangar"\n}\n'),
     ]);
     expect(doomOne[0].title).toBe("Hangar");

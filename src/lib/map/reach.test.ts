@@ -6,6 +6,7 @@ import { packWad } from "@/lib/wad/pack";
 
 import type { GameMap, LineSettings } from "./types";
 
+import { arenaMap } from "./arena-map";
 import { checkMap, fixIssue } from "./checks";
 import { buildMap, rect, type RoomSpec } from "./featured/build-map";
 import { wallOwners } from "./geometry";
@@ -310,16 +311,16 @@ describe("reachable rooms", () => {
   });
 
   it("warns about a room drawn against the Exit with its floor 32 higher", () => {
-    const exit = starterMap.sectors.find((sector) => sector.name === "Exit");
+    const exit = arenaMap.sectors.find((sector) => sector.name === "Exit");
     const map: GameMap = {
-      ...starterMap,
+      ...arenaMap,
       vertices: {
-        ...starterMap.vertices,
+        ...arenaMap.vertices,
         r1: { x: 1168, y: 384 },
         r2: { x: 976, y: 384 },
       },
       sectors: [
-        ...starterMap.sectors,
+        ...arenaMap.sectors,
         {
           ...look,
           id: "sector-new",
@@ -330,7 +331,7 @@ describe("reachable rooms", () => {
         },
       ],
       things: [
-        ...starterMap.things,
+        ...arenaMap.things,
         { id: "stimpack-9", kind: "stimpack", x: 1072, y: 320, angle: 0 },
       ],
     };
