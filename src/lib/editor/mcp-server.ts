@@ -163,10 +163,10 @@ export function createMcpServer({
       (name === "newMap" || name === "openMap") &&
       (given || autosave) &&
       args.replace !== true &&
-      read().sectors.length > 0
+      getHasWork(read())
     ) {
       throw new Error(
-        `Others share this map, so ${name} would erase their work. Call it with "replace": true to do it anyway, or use importMap to add a file.`,
+        `This map is kept in a file or online that other agents or people may share, so ${name} would erase their work too. Call it with "replace": true to do it anyway, or use importMap to add a file.`,
       );
     }
     if (name === "newMap") {
@@ -372,6 +372,10 @@ const tools = [
     annotations: { readOnlyHint: false },
   })),
 ];
+
+function getHasWork(map: GameMap) {
+  return map.sectors.length > 0 || map.things.length > 0;
+}
 
 function withNotices(text: string, notices: string[]) {
   return notices.length > 0 ? [text, ...notices].join("\n\n") : text;

@@ -238,7 +238,7 @@ describe("the wadsmith MCP server", () => {
   it("asks before newMap or openMap erase a map others share", () => {
     const { call, server } = start(testMap, "shared.json");
     call("saveMap", { path: "copy.json" });
-    expect(call("newMap").text).toMatch(/would erase their work/);
+    expect(call("newMap").text).toMatch(/would erase their work too/);
     expect(call("openMap", { path: "copy.json" }).failed).toBe(true);
     expect(server.map().sectors).toHaveLength(4);
     expect(call("newMap", { replace: true }).failed).toBe(false);
