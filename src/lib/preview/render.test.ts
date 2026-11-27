@@ -59,7 +59,7 @@ describe("startCamera", () => {
     });
   });
 
-  it("stands in the middle of the first room facing down its length", () => {
+  it("stands back at one end of the first room, facing down its length", () => {
     const map: GameMap = {
       ...testMap,
       vertices: {
@@ -73,7 +73,27 @@ describe("startCamera", () => {
       lines: {},
       switches: [],
     };
-    expect(startCamera(map)).toEqual({ x: 256, y: 128, angle: 0 });
+    expect(startCamera(map)).toEqual({ x: 48, y: 128, angle: 0 });
+  });
+
+  it("stands back in a corner of a square room, looking across it", () => {
+    const map: GameMap = {
+      ...testMap,
+      vertices: {
+        a: { x: 0, y: 0 },
+        b: { x: 256, y: 0 },
+        c: { x: 256, y: 256 },
+        d: { x: 0, y: 256 },
+      },
+      sectors: [{ ...testMap.sectors[0], vertices: ["a", "b", "c", "d"] }],
+      things: [],
+      lines: {},
+      switches: [],
+    };
+    const camera = startCamera(map);
+    expect(camera.angle).toBe(45);
+    expect(camera.x).toBeCloseTo(128 - (181.02 - 48) / Math.SQRT2, 0);
+    expect(camera.y).toBeCloseTo(128 + (181.02 - 48) / Math.SQRT2, 0);
   });
 
   it.each([
@@ -108,8 +128,9 @@ describe("startCamera", () => {
       };
       const camera = startCamera(map);
       expect(sectorAt(map, camera)?.id).toBe("sector-1");
-      const isSideWalk = camera.x < gap || camera.x > far;
-      expect(camera.angle % 180).toBe(isSideWalk ? 90 : 0);
+      const across = camera.angle % 180 === 0 ? camera.y : camera.x;
+      expect(camera.angle % 90).toBe(0);
+      expect(across < gap || across > far).toBe(true);
     },
   );
 });

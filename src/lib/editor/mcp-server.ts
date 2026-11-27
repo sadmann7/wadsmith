@@ -10,6 +10,7 @@ import {
   agentActions,
   agentInputSchema,
   type AgentParam,
+  importMapPart,
   runAgentAction,
 } from "./agent-actions";
 
@@ -17,6 +18,17 @@ import {
 export interface McpFiles {
   read: (path: string) => string;
   write: (path: string, data: string | Uint8Array) => void;
+  // Runs a read, edit and write of a file while no other server touches it.
+  lock?: <T>(path: string, run: () => T) => T;
+}
+
+// Where the map lives between tool calls. Each call runs on the latest map
+// and keeps what it returns, so servers sharing a file or an online map build
+// on each other's edits.
+export interface McpMapStore {
+  update: <T>(step: (map: GameMap) => { map: GameMap; value: T }) => T;
+  // What to pass on with the next answer, like an edit someone turned away.
+  notices?: () => string[];
 }
 
 export interface McpServerOptions {
@@ -27,8 +39,11 @@ export interface McpServerOptions {
   // The game's IWAD and the mods whose numbered things the map can place. A
   // built WAD carries the patches, sprites and sounds of the ones it uses.
   textures?: TextureSource;
-  // A file the map is written to after every edit.
+  // A file the map is written to after every edit, and read again before
+  // each call when another server changed it.
   autosave?: string;
+  // Keeps the map somewhere else, like an online map's live link.
+  store?: McpMapStore;
 }
 
 interface Request {
@@ -58,30 +73,60 @@ const path: AgentParam = {
   description: "A file path, from the folder the server runs in.",
 };
 
-const fileTools = [
-  {
-    name: "newMap",
-    description: "Starts over with an empty map.",
-    params: [],
-  },
-  {
-    name: "openMap",
-    description: "Loads a map file saved by Wadsmith in place of this one.",
-    params: [path],
-  },
-  {
-    name: "saveMap",
-    description:
-      "Saves the map as a file the Wadsmith editor opens with File, Open.",
-    params: [path],
-  },
-  {
-    name: "exportWad",
-    description:
-      "Builds the map into a WAD for any Doom engine. The map can't have errors.",
-    params: [path],
-  },
-];
+const replace: AgentParam = {
+  name: "replace",
+  type: "boolean",
+  description:
+    "Needed when other agents or people share this map, as with a shared --map file or --live, since their work goes too. Prefer importMap to add a file.",
+  optional: true,
+};
+
+const fileTools: { name: string; description: string; params: AgentParam[] }[] =
+  [
+    {
+      name: "newMap",
+      description: "Starts over with an empty map.",
+      params: [replace],
+    },
+    {
+      name: "openMap",
+      description: "Loads a map file saved by Wadsmith in place of this one.",
+      params: [path, replace],
+    },
+    {
+      name: "importMap",
+      description:
+        "Adds the rooms, things and switches of another Wadsmith map file to this one, where they stand, as when several agents each built a part. Corners that meet join, and its player starts are left out when this map has its own.",
+      params: [
+        path,
+        {
+          name: "x",
+          type: "number",
+          description:
+            "How far to move the imported part across. 0 when left out.",
+          optional: true,
+        },
+        {
+          name: "y",
+          type: "number",
+          description: "How far to move it down. 0 when left out.",
+          optional: true,
+        },
+      ],
+    },
+    {
+      name: "saveMap",
+      description:
+        "Saves the map as a file the Wadsmith editor opens with File, Open.",
+      params: [path],
+    },
+    {
+      name: "exportWad",
+      description:
+        "Builds the map into a WAD for any Doom engine. The map can't have errors.",
+      params: [path],
+    },
+  ];
 
 const blankMap: GameMap = {
   vertices: {},
@@ -97,23 +142,35 @@ export function createMcpServer({
   files,
   map,
   autosave,
-  context: given = {},
+  store: given,
+  context: checks = {},
   textures,
 }: McpServerOptions) {
   const context: CheckContext = {
-    ...given,
-    custom: given.custom ?? customThingsOf(textures?.resources ?? []),
+    ...checks,
+    custom: checks.custom ?? customThingsOf(textures?.resources ?? []),
   };
-  let current = map ?? blankMap;
-
-  const change = (next: GameMap) => {
-    current = next;
-    if (autosave) files.write(autosave, serializeMap(next));
-  };
+  const store =
+    given ??
+    (autosave
+      ? fileStore(files, autosave, map ?? blankMap)
+      : memoryStore(map ?? blankMap));
+  const read = () =>
+    store.update((current) => ({ map: current, value: current }));
 
   const fileTool = (name: string, args: Record<string, unknown>) => {
+    if (
+      (name === "newMap" || name === "openMap") &&
+      (given || autosave) &&
+      args.replace !== true &&
+      getHasWork(read())
+    ) {
+      throw new Error(
+        `This map is kept in a file or online that other agents or people may share, so ${name} would erase their work too. Call it with "replace": true to do it anyway, or use importMap to add a file.`,
+      );
+    }
     if (name === "newMap") {
-      change(blankMap);
+      store.update(() => ({ map: blankMap, value: null }));
       return "Started an empty map.";
     }
     const target = args.path;
@@ -121,9 +178,27 @@ export function createMcpServer({
       throw new Error(`${name} needs "path": ${path.description}`);
     }
     if (name === "openMap") {
-      change(parseMapFile(files.read(target)));
-      return `Opened ${target}: ${current.sectors.length} rooms and ${current.things.length} things.`;
+      const opened = parseMapFile(files.read(target));
+      store.update(() => ({ map: opened, value: null }));
+      return `Opened ${target}: ${opened.sectors.length} rooms and ${opened.things.length} things.`;
     }
+    if (name === "importMap") {
+      const part = parseMapFile(files.read(target));
+      const offset = {
+        x: typeof args.x === "number" ? args.x : 0,
+        y: typeof args.y === "number" ? args.y : 0,
+      };
+      return store.update((current) => {
+        const { map: next, ...outcome } = importMapPart(
+          current,
+          part,
+          offset,
+          context,
+        );
+        return { map: next, value: outcome };
+      });
+    }
+    const current = read();
     if (name === "saveMap") {
       files.write(target, serializeMap(current));
       return `Saved the map to ${target}.`;
@@ -143,17 +218,20 @@ export function createMcpServer({
     if (fileTools.some((tool) => tool.name === name)) {
       return fileTool(name, args);
     }
-    const before = current;
-    const { map: next, ...outcome } = runAgentAction(
-      before,
-      name,
-      args,
-      context,
-    );
-    if (next === before) return outcome.result;
-    change(next);
-    return outcome;
+    return store.update<unknown>((current) => {
+      const { map: next, ...outcome } = runAgentAction(
+        current,
+        name,
+        args,
+        context,
+      );
+      return next === current
+        ? { map: current, value: outcome.result }
+        : { map: next, value: outcome };
+    });
   };
+
+  const notices = () => store.notices?.() ?? [];
 
   const answer = (method: string, params: unknown) => {
     if (method === "initialize") {
@@ -175,11 +253,19 @@ export function createMcpServer({
       throw new RpcError(invalidParams, "A tool call needs a name.");
     }
     try {
-      return { content: [{ type: "text", text: textOf(call(name, args)) }] };
+      const text = textOf(call(name, args));
+      return {
+        content: [{ type: "text", text: withNotices(text, notices()) }],
+      };
     } catch (error) {
       // A refused edit is the tool's answer, not a failure of the protocol.
       return {
-        content: [{ type: "text", text: (error as Error).message }],
+        content: [
+          {
+            type: "text",
+            text: withNotices((error as Error).message, notices()),
+          },
+        ],
         isError: true,
       };
     }
@@ -214,7 +300,53 @@ export function createMcpServer({
     }
   };
 
-  return { handle, map: () => current };
+  return { handle, map: read };
+}
+
+export function memoryStore(start: GameMap): McpMapStore {
+  let current = start;
+  return {
+    update(step) {
+      const { map, value } = step(current);
+      current = map;
+      return value;
+    },
+  };
+}
+
+// A map file several servers can share. Each call reads the file again when
+// another server wrote it since, and holds the file's lock until its edit is
+// written, so no server's edit lands on a stale copy.
+export function fileStore(
+  files: McpFiles,
+  file: string,
+  start: GameMap,
+): McpMapStore {
+  let current = start;
+  let known: string | null = null;
+  const locked = files.lock ?? ((_: string, run) => run());
+  return {
+    update: (step) =>
+      locked(file, () => {
+        let text: string | null = null;
+        try {
+          text = files.read(file);
+        } catch {
+          text = null;
+        }
+        if (text !== null && text !== known) {
+          current = parseMapFile(text);
+          known = text;
+        }
+        const { map, value } = step(current);
+        if (map !== current) {
+          known = serializeMap(map);
+          files.write(file, known);
+          current = map;
+        }
+        return value;
+      }),
+  };
 }
 
 class RpcError extends Error {
@@ -240,6 +372,14 @@ const tools = [
     annotations: { readOnlyHint: false },
   })),
 ];
+
+function getHasWork(map: GameMap) {
+  return map.sectors.length > 0 || map.things.length > 0;
+}
+
+function withNotices(text: string, notices: string[]) {
+  return notices.length > 0 ? [text, ...notices].join("\n\n") : text;
+}
 
 function textOf(value: unknown) {
   return typeof value === "string"

@@ -93,6 +93,7 @@ import {
   setRoomWalls,
   snapCorners,
   splitWall,
+  startFacing,
   switchKeyPrefix,
   thingKeyPrefix,
   updateLine,
@@ -893,7 +894,14 @@ function PlaceItem({
       disabled={!getCanStand(map, point)}
       onSelect={() => {
         if (!point) return;
-        const placed = addThing(map, thingKind, point, 0, 1, thingType);
+        const placed = addThing(
+          map,
+          thingKind,
+          point,
+          startFacing(map, thingKind, point),
+          1,
+          thingType,
+        );
         onCommit(placed.map, {
           keys: [`${thingKeyPrefix}${placed.id}`],
           sector: null,

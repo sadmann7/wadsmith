@@ -172,6 +172,13 @@ export function addPlayerStarts(map: GameMap, players: number) {
   return next;
 }
 
+// A player start looks down its room's longest clear view, so the game and
+// the 3D view don't open facing a wall.
+export function startFacing(map: GameMap, kind: ThingKind, at: Point) {
+  const room = getIsPlayerStart(kind) ? sectorAt(map, at) : undefined;
+  return room ? clearView(map, room, at) : 0;
+}
+
 export function addThing(
   map: GameMap,
   kind: ThingKind,
@@ -1420,14 +1427,29 @@ export function pruneUnused(map: GameMap): GameMap {
   });
 }
 
+let idSuffix = "";
+
+// Ids made from now on end with these letters. Each browser editing an
+// online map has its own, so two of them adding at once never pick one id.
+export function setIdSuffix(suffix: string) {
+  idSuffix = suffix;
+}
+
 export function nextId(prefix: string, used: Iterable<string>) {
+  return nextIds(prefix, used, 1)[0];
+}
+
+export function nextIds(prefix: string, used: Iterable<string>, count: number) {
   let highest = 0;
   for (const id of used) {
-    if (id.startsWith(prefix)) {
-      highest = Math.max(highest, Number(id.slice(prefix.length)) || 0);
-    }
+    if (!id.startsWith(prefix)) continue;
+    const number = /^(\d+)[a-z]*$/.exec(id.slice(prefix.length))?.[1];
+    if (number) highest = Math.max(highest, Number(number));
   }
-  return `${prefix}${highest + 1}`;
+  return Array.from(
+    { length: count },
+    (_, index) => `${prefix}${highest + 1 + index}${idSuffix}`,
+  );
 }
 
 function looksOf(sector: Sector) {
