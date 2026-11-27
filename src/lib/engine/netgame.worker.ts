@@ -79,7 +79,6 @@ port.on("message", (command: Command) => {
         inLevel: game.status().inLevel,
         frags: game.status().frags,
         kills: game.status().kills,
-        gameTic: game.gameTic(),
         players: [0, 1].map((player) => game.playerPosition(player)),
         trail: [...(game.takeTrail() ?? [])],
       },

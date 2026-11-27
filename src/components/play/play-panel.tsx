@@ -362,7 +362,7 @@ function GameSession({
     par,
   };
   const [network, setNetwork] = React.useState<NetworkState | null>(null);
-  const [coopBegan, setCoopBegan] = React.useState(false);
+  const [coopStarted, setCoopStarted] = React.useState(false);
   const [scoresOpen, setScoresOpen] = React.useState(false);
   const [confirmingExit, setConfirmingExit] = React.useState(false);
   const [stall, setStall] = React.useState<{ peers: number[]; since: number }>({
@@ -382,7 +382,6 @@ function GameSession({
   const gameHeld = noteSpot !== null || holdsGame(capture);
   const gameHeldRef = React.useRef(gameHeld);
   const { width, height } = screenSize(screen);
-  const coopStarted = coopBegan && status?.inLevel;
 
   React.useEffect(() => {
     captureRef.current = capture;
@@ -414,9 +413,9 @@ function GameSession({
     let launched = false;
     // Woof can show the level for a moment before its network game starts.
     let netStarted = !coop;
-    let lastTics = -1;
     let lastInLevel: GameStatus | null = null;
-    let ticsChangedAt = performance.now();
+    let lastGameTic = -1;
+    let gameTicChangedAt = performance.now();
     let stalled: number[] = [];
     let ending = false;
     // Only one map's playtest is recorded: an episode or a loaded WAD plays
@@ -496,10 +495,6 @@ function GameSession({
           // so leaving either would load an unrelated level. A loaded WAD runs
           // its own levels.
           onStatus: (next) => {
-            if (next.tics !== lastTics) {
-              lastTics = next.tics;
-              ticsChangedAt = performance.now();
-            }
             const reached = statusIndex(iwad.game, next.episode, next.map);
             const total = episode?.length ?? 1;
             // Text after the last map shows in the engine's finale, so the
@@ -517,6 +512,7 @@ function GameSession({
                 return;
               }
               reachedLevel = true;
+              setCoopStarted(true);
               lastInLevel = next;
               if (episode) {
                 clearInterval(advanceTimer.current);
@@ -566,16 +562,17 @@ function GameSession({
                 send: coop.send,
                 onState: (state) => {
                   setNetwork(state);
-                  if (state.playersInGame > 1) {
-                    netStarted = true;
-                    setCoopBegan(true);
-                  }
+                  if (state.playersInGame > 1) netStarted = true;
                   if (coop.role !== "host") return;
                   if (ending && state.playersInGame <= 1) {
                     client?.stop();
                     return;
                   }
-                  const frozen = performance.now() - ticsChangedAt > stallMs;
+                  if (state.gameTic !== lastGameTic) {
+                    lastGameTic = state.gameTic;
+                    gameTicChangedAt = performance.now();
+                  }
+                  const frozen = performance.now() - gameTicChangedAt > stallMs;
                   const lagging = frozen
                     ? state.scores
                         .filter((score) => state.lagging & (1 << score.slot))
