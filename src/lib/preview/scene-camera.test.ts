@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { GameMap } from "@/lib/map/types";
+import type { GameMap, Thing } from "@/lib/map/types";
 
 import { testMap } from "@/lib/map/test-map";
 
@@ -42,4 +42,34 @@ describe("SceneCamera", () => {
     camera.lookAt(hall, { x: 32, y: 256 }, { x: 32, y: 480 });
     expect(camera.position.angle).toBe(-90);
   });
+
+  it("follows the player start when an edit here moves it", () => {
+    const camera = new SceneCamera({ ...hall, things: [playerAt(128, 128)] });
+    camera.sync({ ...hall, things: [playerAt(32, 256)] });
+    expect(camera.position).toMatchObject({ x: 32, y: 256 });
+  });
+
+  it("stays put when someone else adds or moves the player start", () => {
+    const camera = new SceneCamera(hall);
+    const before = camera.position;
+    const theirs = { ...hall, things: [playerAt(32, 256)] };
+    camera.keep(theirs);
+    camera.sync(theirs);
+    expect(camera.position).toEqual(before);
+    camera.sync({ ...theirs, sectors: [...theirs.sectors] });
+    expect(camera.position).toEqual(before);
+  });
+
+  it("leaves a room someone else removed for the player start", () => {
+    const camera = new SceneCamera(hall);
+    camera.moveTo(hall, { x: 32, y: 256 });
+    const theirs = { ...hall, sectors: [], things: [playerAt(600, 600)] };
+    camera.keep(theirs);
+    camera.sync(theirs);
+    expect(camera.position).toMatchObject({ x: 600, y: 600 });
+  });
 });
+
+function playerAt(x: number, y: number): Thing {
+  return { id: "start", kind: "player", x, y, angle: 0 };
+}

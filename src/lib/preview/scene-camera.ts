@@ -7,10 +7,13 @@ import { type Camera, startCamera } from "./render";
 export class SceneCamera {
   walked = false;
   private current: Camera;
+  private start: Camera;
+  private readonly others = new WeakSet<GameMap>();
   private readonly listeners = new Set<() => void>();
 
   constructor(map: GameMap) {
     this.current = startCamera(map);
+    this.start = this.current;
   }
 
   get position() {
@@ -39,19 +42,30 @@ export class SceneCamera {
     };
   }
 
-  // Until someone walks, the camera stands on the player start. A drag in
-  // progress can leave it outside a room for a moment, so it only resets on
-  // committed maps.
+  // Until someone walks, the camera stands on the player start and follows
+  // it when an edit here moves it. A drag in progress can leave it outside a
+  // room for a moment, so it only resets on committed maps.
   sync(map: GameMap, isDraft = false) {
-    if (!this.walked || (!isDraft && !sectorAt(map, this.current))) {
+    const inRoom = isDraft || sectorAt(map, this.current) !== undefined;
+    if (this.walked && inRoom) return;
+    const start = startCamera(map);
+    const moved = !sameSpot(start, this.start);
+    this.start = start;
+    if (this.walked || !inRoom || (moved && !this.others.has(map))) {
       this.walked = false;
-      this.position = startCamera(map);
+      this.position = start;
     }
+  }
+
+  // Marks a map as someone else's edit, which leaves the camera where it is.
+  keep(map: GameMap) {
+    this.others.add(map);
   }
 
   reset(map: GameMap) {
     this.walked = false;
-    this.position = startCamera(map);
+    this.start = startCamera(map);
+    this.position = this.start;
   }
 
   moveTo(map: GameMap, point: Point) {
@@ -80,4 +94,8 @@ export class SceneCamera {
     this.position = { ...this.current, ...from, angle };
     return true;
   }
+}
+
+function sameSpot(a: Camera, b: Camera) {
+  return a.x === b.x && a.y === b.y && a.angle === b.angle;
 }
