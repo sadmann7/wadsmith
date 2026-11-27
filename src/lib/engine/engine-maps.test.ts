@@ -126,9 +126,9 @@ describe.skipIf(!ready)("floor and ceiling actions in the engine", () => {
 describe.skipIf(!ready)("a secret exit in the engine", () => {
   it("ends the level", async () => {
     const secret: GameMap = {
-      ...theBasics,
+      ...starterMap,
       lines: Object.fromEntries(
-        Object.entries(theBasics.lines ?? {}).map(([wall, line]) => [
+        Object.entries(starterMap.lines ?? {}).map(([wall, line]) => [
           wall,
           line.action?.kind === "exit"
             ? { ...line, action: { ...line.action, kind: "exit-secret" } }
