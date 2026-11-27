@@ -47,6 +47,18 @@ describe("starter map", () => {
     }
   });
 
+  it("lines the co-op starts up side by side, facing the first door", () => {
+    const starts = starterMap.things.filter((thing) =>
+      thing.kind.startsWith("player"),
+    );
+    expect(new Set(starts.map((thing) => thing.x)).size).toBe(1);
+    expect(starts.every((thing) => thing.angle === 0)).toBe(true);
+    const rows = starts.map((thing) => thing.y).sort((a, b) => a - b);
+    for (let index = 1; index < rows.length; index += 1) {
+      expect(rows[index] - rows[index - 1]).toBeGreaterThanOrEqual(48);
+    }
+  });
+
   it("marks the locked door's frame in its key's colour", () => {
     const sides = defined(
       compileLumps(starterMap).find((lump) => lump.name === "SIDEDEFS"),
