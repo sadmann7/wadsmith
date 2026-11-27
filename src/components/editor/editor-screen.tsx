@@ -373,6 +373,8 @@ interface AppProps {
   navigation: React.ReactNode;
   onNewMap: () => void;
   onMapSettings: () => void;
+  // An agent named the map, which then goes through its settings.
+  onRename?: (name: string) => void;
   onShare?: () => void;
   onPublish?: () => void;
   onParChange: (par: number) => void;
@@ -426,6 +428,7 @@ export function EditorScreen({
   navigation,
   onNewMap,
   onMapSettings,
+  onRename,
   onShare,
   onPublish,
   onParChange,
@@ -1762,15 +1765,16 @@ export function EditorScreen({
     [history, syncUndoable, watchExternal],
   );
 
-  // Someone else's edit lands on the map as it stands, without an undo step,
-  // and is saved like any edit, which sends nothing back.
-  const takeRemote = React.useEffectEvent((patch: MapPatch) => {
+  // Someone else's edit, or a new name, lands on the map as it stands,
+  // without an undo step, and is saved like any edit, which sends nothing back.
+  const showPatch = (patch: MapPatch) => {
     const next = applyPatch(mapRef.current, patch);
     camera.keep(next);
     mapRef.current = next;
     setMap(next);
     onSave(next);
-  });
+  };
+  const takeRemote = React.useEffectEvent(showPatch);
   React.useEffect(
     () => watchRemote?.((patch) => takeRemote(patch)),
     [watchRemote],
@@ -2565,6 +2569,13 @@ export function EditorScreen({
                         );
                       }}
                       onAgentAction={logAgentAction}
+                      onRename={
+                        onRename &&
+                        ((name) => {
+                          showPatch({ fields: { name } });
+                          onRename(name);
+                        })
+                      }
                       checkContext={context}
                       onToolChange={setTool}
                       onActiveSectorChange={setActiveSector}

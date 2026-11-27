@@ -205,6 +205,7 @@ export function pasteParts(
   at: Point | null,
   grid: number,
   own = false,
+  moveAside = true,
 ): Pasted | null {
   const points = [...Object.values(fragment.vertices), ...fragment.things];
   if (points.length === 0) return null;
@@ -223,12 +224,13 @@ export function pasteParts(
   const lands = (point: Point) =>
     taken.has(`${point.x + shift.x},${point.y + shift.y}`);
   const aside = Math.max(grid * 2, 32);
+  const tries = moveAside ? mostSteps : 0;
   for (
-    let tries = 0;
-    tries < mostSteps &&
+    let tried = 0;
+    tried < tries &&
     corners.length > 0 &&
     (at ? corners.every(lands) : corners.some(lands));
-    tries += 1
+    tried += 1
   ) {
     shift.x += aside;
     shift.y += aside;
