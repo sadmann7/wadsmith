@@ -26,6 +26,8 @@ const droppedReasons: Record<string, string> = {
   "too-big": "That edit was too big to send, so it was taken back.",
   taken:
     "Someone added something with the same id at the same moment, so that edit was taken back. Redo it.",
+  reshaped:
+    "Someone changed the same wall of that room at the same moment, so that edit was taken back. Look at the room again and redo it.",
 };
 
 // Joins an online map's live link, so the server's edits land on the map
