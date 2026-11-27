@@ -354,7 +354,11 @@ export function EpisodeScreen() {
       }
       if (opened()) setCloudProblem(null);
       if (outcome.kind === "same") {
-        cloudSteps.current.goLive(active, entry);
+        // Sharing may have stopped while the copy was read.
+        const latest = await active.getMap(mapId);
+        if (latest?.cloud?.id === entry.cloud.id) {
+          cloudSteps.current.goLive(active, entry);
+        }
         return;
       }
       if (outcome.kind === "conflict") {
@@ -1680,6 +1684,7 @@ export function EpisodeScreen() {
                   cloud: undefined,
                 }));
                 setCloudProblem(null);
+                setCloudNote(null);
                 setClash(null);
                 await refresh(store, session.episodeId);
               })
@@ -1697,7 +1702,8 @@ export function EpisodeScreen() {
               <AlertDialogDescription>
                 It was edited there and here since this browser last saw the
                 online copy. Pick the version to keep editing. The other is
-                saved as a new map in this episode, so no work is lost.
+                saved as a new map in this episode, or downloaded when the
+                episode is full, so no work is lost.
               </AlertDialogDescription>
               <div className="flex flex-wrap justify-end gap-2">
                 <Button
@@ -1729,6 +1735,7 @@ export function EpisodeScreen() {
                       for (const listener of externalListeners.current) {
                         listener(saved.map);
                       }
+                      cloudSteps.current.goLive(store, saved);
                     });
                   }}
                 >
