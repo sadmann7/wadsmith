@@ -42,7 +42,9 @@ export function PlaytestPanel({
       ? [
           ["Kills", share(result.kills, result.totalKills)],
           ["Secrets", share(result.secrets, result.totalSecrets)],
-          ["Items", share(result.items, result.totalItems)],
+          ...(result.totalItems
+            ? [["Items", share(result.items, result.totalItems)]]
+            : []),
         ]
       : []),
     ["Deaths", String(deaths)],
