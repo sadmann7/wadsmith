@@ -27,6 +27,7 @@ interface Snapshot {
   consolePlayer: number;
   inLevel: boolean;
   frags: number;
+  kills: number;
   gameTic: number;
   players: { x: number; y: number }[];
   scores: { slot: number; peer: number; frags: number; kills: number }[];
@@ -103,6 +104,25 @@ describe.skipIf(!ready)("network game through shared memory", () => {
     );
   }, 60_000);
 
+  it("counts the host's kills in the guest's status", async () => {
+    const map = addThing(coopMap, "zombieman", { x: 224, y: 160 }).map;
+    const room = createRoom(map);
+    const host = room.join(hostPeer, "host");
+    const guest = room.join(guestPeer, "guest");
+    await waitFor(host.query, (state) => state.waitingPlayers === 2);
+    expect(await host.launch()).toBe(true);
+    await waitFor(guest.query, (state) => state.inLevel);
+
+    host.key(true, doomKeys.fire);
+    await waitFor(host.query, (state) => state.kills > 0);
+    host.key(false, doomKeys.fire);
+
+    const seen = await waitFor(guest.query, (state) =>
+      state.scores.some((score) => score.slot === 0 && score.kills > 0),
+    );
+    expect(seen.kills).toBe(1);
+  }, 60_000);
+
   it.each(deathmatchCases)(
     "starts a deathmatch on %s",
     async (_name, map) => {
@@ -130,9 +150,9 @@ describe.skipIf(!ready)("network game through shared memory", () => {
   );
 });
 
-const relayDelayMs = 20;
-
 const coopMap = addThing(testMap, "player-2", { x: 96, y: 256 }).map;
+
+const relayDelayMs = 20;
 
 // Stands in for the room: it forwards each packet to its peer after a delay.
 function createRoom(map = coopMap, mode: "coop" | "deathmatch" = "coop") {
