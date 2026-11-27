@@ -193,6 +193,7 @@ export function MapCanvas({
             ),
             step,
             estimateLabelWidth(sector.name),
+            map.things,
           ) ?? roomPoint(map, sector),
       };
     });

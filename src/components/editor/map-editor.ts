@@ -31,7 +31,11 @@ import {
 } from "@/lib/editor/agent-actions";
 import { boundsOf, fitView } from "@/lib/editor/fit-view";
 import { currentKeys } from "@/lib/editor/keymap";
-import { estimateLabelWidth, labelPoint } from "@/lib/editor/map-labels";
+import {
+  estimateLabelWidth,
+  getIsLabelCovered,
+  labelPoint,
+} from "@/lib/editor/map-labels";
 import {
   getIsDragging,
   getIsKeyboardMenu,
@@ -2025,6 +2029,11 @@ export const mapEditor = definePrimitive({
       props: { value: "string", corners: "list", holes: "value" },
       selects: selects<MapEditorState, unknown, CaptionProps>({
         ...readsNothing,
+        map: {
+          values: () => none,
+          moved: (before: GameMap, after: GameMap) =>
+            before.things !== after.things,
+        },
         positions: ({ props }) => sectorCorners(props),
         moving: whole,
         viewport: whole,
@@ -2032,6 +2041,9 @@ export const mapEditor = definePrimitive({
       attrs: (state, { props }) => {
         const at = captionPoint(state, props);
         return {
+          "data-covered": getIsCaptionCovered(state, props, at)
+            ? ""
+            : undefined,
           style: css({
             position: "absolute",
             left: `${at.x}px`,
@@ -2041,7 +2053,12 @@ export const mapEditor = definePrimitive({
       },
       live: live<MapEditorState, unknown, CaptionProps>((state, { props }) => {
         const at = captionPoint(state, props);
-        return { style: `left:${at.x}px;top:${at.y}px` };
+        return {
+          "data-covered": getIsCaptionCovered(state, props, at)
+            ? ""
+            : undefined,
+          style: `left:${at.x}px;top:${at.y}px`,
+        };
       }),
     }),
     marker: slot<{ value: string; x: number; y: number }>({
@@ -2383,6 +2400,7 @@ function captionPoint(state: MapEditorState, props: CaptionProps): Point {
     loops,
     zoomStep(state.viewport.zoom),
     estimateLabelWidth(sector.name),
+    state.map.things,
   );
   if (at) return at;
   const spot = roomPoint(state.map, sector);
@@ -2396,6 +2414,23 @@ function captionPoint(state: MapEditorState, props: CaptionProps): Point {
     return { x: spot.x + moving.dx, y: spot.y + moving.dy };
   }
   return roomPoint(draftMap(state, moving), sector);
+}
+
+function getIsCaptionCovered(
+  state: MapEditorState,
+  props: CaptionProps,
+  at: Point,
+) {
+  const sector = sectorById(state.map, props.value);
+  return (
+    sector !== undefined &&
+    getIsLabelCovered(
+      at,
+      estimateLabelWidth(sector.name),
+      zoomStep(state.viewport.zoom),
+      state.map.things,
+    )
+  );
 }
 
 // A drag keeps one key list, and each frame is a new draft, so the names
