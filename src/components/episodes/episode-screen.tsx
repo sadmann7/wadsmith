@@ -499,7 +499,9 @@ export function EpisodeScreen() {
                   ? "That edit was taken back: someone removed corners it uses at the same moment."
                   : reason === "taken"
                     ? "That edit was taken back: someone added something with the same id at the same moment."
-                    : "The online copy turned an edit away, so it was taken back.",
+                    : reason === "reshaped"
+                      ? "That edit was taken back: someone changed the same wall at the same moment."
+                      : "The online copy turned an edit away, so it was taken back.",
             ),
           onPeers: setPeers,
           onIdle: () => {

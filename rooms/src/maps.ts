@@ -12,6 +12,7 @@ import {
   missingCorners,
   parsePatch,
   randomSuffix,
+  suffixPattern,
 } from "./map-patch";
 
 export interface MapsEnv {
@@ -43,7 +44,6 @@ interface Editor {
 }
 
 const clientPattern = /^[0-9a-f]{24}$/;
-const suffixPattern = /^[a-z]{1,8}$/;
 // How long the last edit each browser sent is remembered, to skip it when
 // sent again after a drop.
 const seenMs = 24 * 60 * 60 * 1000;
@@ -234,11 +234,12 @@ class MapCopy extends DurableObject<MapsEnv> {
       );
       return;
     }
-    const fitted = fitPatch(current.map, patch);
-    if (!fitted) {
-      socket.send(JSON.stringify({ type: "refused", id, error: "taken" }));
+    const fit = fitPatch(current.map, patch);
+    if ("error" in fit) {
+      socket.send(JSON.stringify({ type: "refused", id, error: fit.error }));
       return;
     }
+    const fitted = fit.patch;
     const map = applyPatch(current.map, fitted);
     // An edit that would leave a room on corners that are gone is turned
     // away, and its sender's copy takes it back.

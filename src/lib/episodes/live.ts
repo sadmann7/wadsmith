@@ -1,11 +1,13 @@
 import {
   applyPatch,
   diffMaps,
+  fitPatch,
   getIsEmptyPatch,
   type MapPatch,
   maxPatchLength,
   parsePatch,
   randomSuffix,
+  suffixPattern,
 } from "@rooms/map-patch";
 
 import type { GameMap, Point } from "@/lib/map/types";
@@ -104,7 +106,12 @@ export function openLiveMap({
   const replay = () => {
     if (!confirmed) return;
     let next = confirmed;
-    for (const { patch } of pending) next = applyPatch(next, patch);
+    // Each waiting edit lands as the server will land it, and one it will
+    // turn away is left off.
+    for (const { patch } of pending) {
+      const fit = fitPatch(next, patch);
+      if ("patch" in fit) next = applyPatch(next, fit.patch);
+    }
     const change = diffMaps(shown, next);
     const renamed = next.name !== shown.name ? (next.name ?? null) : undefined;
     shown = next;
@@ -164,7 +171,7 @@ export function openLiveMap({
         me = Number(data.peer);
         if (
           typeof data.suffix === "string" &&
-          /^[a-z]{1,8}$/.test(data.suffix)
+          suffixPattern.test(data.suffix)
         ) {
           ownSuffix = data.suffix;
           suffix = data.suffix;

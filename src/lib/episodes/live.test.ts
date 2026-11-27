@@ -11,8 +11,10 @@ import type { GameMap } from "@/lib/map/types";
 import {
   addNote,
   addRoom,
+  addSwitch,
   addSwitchInRoom,
   addThing,
+  freeWallAt,
   setIdSuffix,
   updateSector,
   updateThing,
@@ -264,6 +266,27 @@ describe("live editing in the browser", () => {
     expect(validateMap(map)).toEqual(validateMap(testMap));
   });
 
+  it("keeps switches two editors put on one room's walls at once", async () => {
+    const server = fakeServer(testMap);
+    const ana = server.join("Ana");
+    const bo = server.join("Bo");
+    await ready(server);
+    const onWall =
+      (wall: string, point: { x: number; y: number }) => (map: GameMap) => {
+        const free = freeWallAt(map, wall);
+        return (free && addSwitch(map, free, point, "sector-4")?.map) ?? map;
+      };
+    ana.edit(onWall("v5|v6", { x: 192, y: 320 }));
+    bo.edit(onWall("v1|v6", { x: 0, y: 160 }));
+    server.run();
+    for (const editor of [ana, bo]) {
+      expect(strip(editor.map)).toEqual(strip(server.map));
+      expect(editor.seen.dropped).toEqual([]);
+    }
+    expect(server.map.switches).toHaveLength(testMap.switches.length + 2);
+    expect(validateMap(server.map)).toEqual(validateMap(testMap));
+  });
+
   it("takes back an add whose id someone else took first", async () => {
     const server = fakeServer(testMap);
     const ana = server.join("Ana");
@@ -364,11 +387,12 @@ function fakeServer(start: GameMap) {
           from.hear({ type: "ack", id, revision });
           continue;
         }
-        const fitted = fitPatch(map, data.patch as MapPatch);
-        if (!fitted) {
-          from.hear({ type: "refused", id, error: "taken" });
+        const fit = fitPatch(map, data.patch as MapPatch);
+        if ("error" in fit) {
+          from.hear({ type: "refused", id, error: fit.error });
           continue;
         }
+        const fitted = fit.patch;
         seen.set(from.client, id);
         patches.push(fitted);
         map = applyPatch(map, fitted);
