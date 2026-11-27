@@ -1361,9 +1361,7 @@ export const agentActions: AgentAction[] = [
     run: (map, args) => ({
       map: {
         ...map,
-        ...(args.name !== undefined && {
-          name: text(args, "name").trim().slice(0, maxNameLength),
-        }),
+        ...(args.name !== undefined && { name: mapNameOf(args) }),
         ...(args.complevel !== undefined && {
           complevel: choice(args, "complevel", complevels),
         }),
@@ -1371,6 +1369,12 @@ export const agentActions: AgentAction[] = [
     }),
   },
 ];
+
+function mapNameOf(args: Args) {
+  const name = text(args, "name").trim().slice(0, maxNameLength);
+  if (!name) throw new Error("A map's name can't be empty.");
+  return name;
+}
 
 // A wall holds one special, so a new one takes the place of whatever the
 // wall did before.
@@ -1408,6 +1412,15 @@ export function runAgentAction(
   }
   const settled = settle(map, next, context);
   return { ...settled, result: result ?? null };
+}
+
+// The answer to a bridge step whose args aren't a list, which the bridge
+// would otherwise fail to spread.
+export function argsListError(action: string, args: unknown) {
+  const given = JSON.stringify(args) ?? String(args);
+  const example =
+    getIsRecord(args) && given.length <= 120 ? given : '{ "name": value }';
+  return `A step's args are a list. Put the arguments of ${action} in one, in order or as one object by name, like "args": [${example}].`;
 }
 
 // Adds another map's rooms, things and switches where they stand, moved by
