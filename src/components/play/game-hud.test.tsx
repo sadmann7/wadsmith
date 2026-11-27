@@ -82,6 +82,7 @@ it("keeps items in the tally between levels when there were some", () => {
 it("shows the items column on the co-op scoreboard only when there are some", () => {
   const row: ScoreRow = {
     peer: 1,
+    slot: 0,
     name: "Host",
     host: true,
     you: true,
@@ -109,6 +110,7 @@ interface HudOptions {
   others?: { peer: number; slot: number; x: number; y: number }[];
   crosshair?: boolean;
   mouseMode?: MouseMode;
+  deathmatch?: boolean;
 }
 
 it("shows the crosshair dot only while the mouse aims a living player", () => {
@@ -187,6 +189,29 @@ it("colors another player's minimap marker by their game slot", () => {
   expect(marker.getAttribute("fill")).toBe("var(--color-info)");
 });
 
+it("colors a scoreboard player like their minimap marker, by game slot", () => {
+  const rows = [scoreRow(1, 0), scoreRow(3, 1)];
+  const others = [{ peer: 3, slot: 1, x: 64, y: -128 }];
+  for (const deathmatch of [false, true]) {
+    const container = renderHud(status, false, rows, {
+      map: starterMap,
+      others,
+      deathmatch,
+    });
+    const marker = defined(container.querySelector("[data-peer='3']"));
+    const row = defined(
+      [...container.querySelectorAll("[aria-label=Scoreboard] tbody tr")].find(
+        (entry) => entry.textContent?.includes("Player 3"),
+      ),
+    );
+    const badge = defined(row.querySelector("td span"));
+    expect(marker.getAttribute("fill")).toBe("var(--color-info)");
+    expect(badge.className).toContain("text-info");
+    expect(badge.className).not.toContain("text-warning");
+    React.act(() => root?.unmount());
+  }
+});
+
 it("hands the bottom of the view to Doom's status bar on the automap", () => {
   const container = renderHud({ ...status, automap: true }, false, null, {
     map: starterMap,
@@ -194,6 +219,22 @@ it("hands the bottom of the view to Doom's status bar on the automap", () => {
   expect(container.textContent).not.toContain("Health");
   expect(container.querySelector("[aria-label=Minimap]")).toBeNull();
 });
+
+function scoreRow(peer: number, slot: number): ScoreRow {
+  return {
+    peer,
+    slot,
+    name: `Player ${peer}`,
+    host: peer === 1,
+    you: peer === 1,
+    frags: 0,
+    deaths: 0,
+    kills: 0,
+    items: 0,
+    secrets: 0,
+    ping: null,
+  };
+}
 
 function renderHud(
   current: GameStatus,
@@ -204,6 +245,7 @@ function renderHud(
     others = [],
     crosshair = true,
     mouseMode = "locked",
+    deathmatch = false,
   }: HudOptions = {},
 ) {
   const container = document.createElement("div");
@@ -223,7 +265,7 @@ function renderHud(
         crosshair={crosshair}
         skill="medium"
         coop={scores ? "host" : null}
-        deathmatch={false}
+        deathmatch={deathmatch}
         scores={scores}
         others={others}
         stall={null}
