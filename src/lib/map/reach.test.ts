@@ -7,7 +7,7 @@ import { packWad } from "@/lib/wad/pack";
 import type { GameMap, LineSettings } from "./types";
 
 import { arenaMap } from "./arena-map";
-import { checkMap } from "./checks";
+import { checkMap, fixIssue } from "./checks";
 import { buildMap, rect, type RoomSpec } from "./featured/build-map";
 import { wallOwners } from "./geometry";
 import { starterMap } from "./starter-map";
@@ -348,27 +348,168 @@ describe("reachable rooms", () => {
   });
 });
 
-function room(
-  name: string,
-  x: number,
-  floor: number,
-  ceiling: number,
-  extra: Partial<RoomSpec> = {},
-): RoomSpec {
-  return {
-    name,
-    points: rect(x, 0, 128, 128),
-    floor,
-    ceiling,
-    ...look,
-    ...extra,
-  };
-}
+describe("rooms not joined to the map", () => {
+  it("warns about a room touching another only at a corner and joins them", () => {
+    const map = cornerMap();
+    const checks = checkMap(map);
+    const island = checks.find((issue) =>
+      issue.id.startsWith("unreachable-island"),
+    );
+    expect(island).toMatchObject({
+      id: "unreachable-island:sector-3:sector-2",
+      message: "Octagon isn't joined to the rest of the map",
+      detail:
+        "It touches Corridor only at a corner. Rooms join where they share a wall.",
+      fixLabel: "Join",
+      target: "sector-3",
+    });
+    const joined = defined(fixIssue(map, defined(island)));
+    expect(inspectMap(joined).errors).toEqual([]);
+    expect(reachWarnings(joined)).toEqual([]);
+    const shared = [...wallOwners(joined)].filter(
+      ([, owners]) =>
+        owners.some((owner) => owner.id === "sector-2") &&
+        owners.some((owner) => owner.id === "sector-3"),
+    );
+    expect(shared).toHaveLength(2);
+  });
 
-function reachWarnings(map: GameMap, custom?: CustomThings) {
-  return inspectMap(map, { custom })
-    .warnings.filter((issue) => issue.id.startsWith("unreachable"))
-    .map((issue) => issue.message);
+  it("offers no join to a room drawn inside the loose room", () => {
+    const map = buildMap({
+      name: "Pit",
+      rooms: [
+        room("Hall", 0, 0, 128),
+        { ...room("Cave", 512, 0, 128), points: rect(512, 0, 512, 512) },
+        {
+          ...room("Pit", 512, -32, 128),
+          points: [
+            [768, 0],
+            [896, 128],
+            [768, 256],
+            [640, 128],
+          ],
+        },
+      ],
+      things: [{ kind: "player", at: [64, 64] }],
+    });
+    const issue = defined(
+      checkMap(map).find((item) => item.id.startsWith("unreachable-island")),
+    );
+    expect(issue.detail).toBe(
+      "The player can't get there from the start. Rooms join where they share a wall.",
+    );
+    expect(issue.fixLabel).toBeUndefined();
+  });
+
+  it("offers no join between two rooms of the same loose group", () => {
+    const map = buildMap({
+      name: "Pits",
+      rooms: [
+        room("Hall", 0, 0, 128),
+        { ...room("Cave", 512, 0, 128), points: rect(512, 0, 512, 512) },
+        { ...room("Pit", 512, -32, 128), points: rect(600, 100, 100, 100) },
+        {
+          ...room("Ledge", 512, 32, 128),
+          points: [
+            [700, 150],
+            [760, 100],
+            [820, 150],
+            [760, 200],
+          ],
+        },
+      ],
+      things: [{ kind: "player", at: [64, 64] }],
+    });
+    const issue = defined(
+      checkMap(map).find((item) => item.id.startsWith("unreachable-island")),
+    );
+    expect(issue.fixLabel).toBeUndefined();
+    expect(fixIssue(map, issue)).toBeNull();
+  });
+
+  it("names a loose group of rooms once", () => {
+    const map = buildMap({
+      name: "Apart",
+      rooms: [
+        room("Hall", 0, 0, 128),
+        room("Far", 512, 0, 128),
+        room("Farther", 640, 0, 128),
+      ],
+      things: [{ kind: "player", at: [64, 64] }],
+    });
+    expect(reachWarnings(map)).toEqual([
+      "Far and 1 room beside it aren't joined to the rest of the map",
+    ]);
+  });
+
+  it("leaves out loose rooms that something acts on or that are too small", () => {
+    const tagged = buildMap({
+      name: "Tagged",
+      rooms: [
+        room("Hall", 0, 0, 128),
+        room("Landing", 512, 0, 128, { tag: 2 }),
+      ],
+      things: [{ kind: "player", at: [64, 64] }],
+    });
+    expect(reachWarnings(tagged)).toEqual([]);
+    const spots = buildMap({
+      name: "Spots",
+      rooms: [room("Hall", 0, 0, 128), room("Spots", 512, 0, 128)],
+      things: [
+        { kind: "player", at: [64, 64] },
+        { kind: "spawn-spot", at: [576, 64] },
+      ],
+    });
+    expect(reachWarnings(spots)).toEqual([]);
+    const tiny = buildMap({
+      name: "Tiny",
+      rooms: [
+        room("Hall", 0, 0, 128),
+        { ...room("Tiny", 512, 0, 128), points: rect(512, 0, 24, 24) },
+      ],
+      things: [{ kind: "player", at: [64, 64] }],
+    });
+    expect(reachWarnings(tiny)).toEqual([]);
+  });
+
+  it("names the items in a loose room but not the room twice", () => {
+    const map = buildMap({
+      name: "Loose items",
+      rooms: [room("Hall", 0, 0, 128), room("Store", 512, 0, 128)],
+      things: [
+        { kind: "player", at: [64, 64] },
+        { kind: "stimpack", at: [576, 64] },
+      ],
+    });
+    expect(reachWarnings(map)).toEqual([
+      "Store isn't joined to the rest of the map",
+      "Store: the player can't reach the stimpack here.",
+    ]);
+  });
+});
+
+function cornerMap(): GameMap {
+  return buildMap({
+    name: "Corner",
+    rooms: [
+      room("Hall", 0, 0, 128),
+      { ...room("Corridor", 128, 0, 128), points: rect(128, 32, 128, 64) },
+      {
+        ...room("Octagon", 0, 0, 128),
+        points: [
+          [256, 64],
+          [296, 8],
+          [368, -16],
+          [440, 8],
+          [480, 64],
+          [440, 120],
+          [368, 144],
+          [296, 120],
+        ],
+      },
+    ],
+    things: [{ kind: "player", at: [64, 64] }],
+  });
 }
 
 function twoRooms(
@@ -398,4 +539,27 @@ function twoRooms(
         ]
       : [],
   });
+}
+
+function room(
+  name: string,
+  x: number,
+  floor: number,
+  ceiling: number,
+  extra: Partial<RoomSpec> = {},
+): RoomSpec {
+  return {
+    name,
+    points: rect(x, 0, 128, 128),
+    floor,
+    ceiling,
+    ...look,
+    ...extra,
+  };
+}
+
+function reachWarnings(map: GameMap, custom?: CustomThings) {
+  return inspectMap(map, { custom })
+    .warnings.filter((issue) => issue.id.startsWith("unreachable"))
+    .map((issue) => issue.message);
 }

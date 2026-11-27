@@ -1,13 +1,18 @@
 import {
   applyPatch,
   diffMaps,
+  fitPatch,
   getIsEmptyPatch,
   type MapPatch,
   maxPatchLength,
   parsePatch,
+  randomSuffix,
+  suffixPattern,
 } from "@rooms/map-patch";
 
 import type { GameMap, Point } from "@/lib/map/types";
+
+import { setIdSuffix } from "@/lib/map/edit";
 
 export interface LivePeer {
   peer: number;
@@ -44,6 +49,16 @@ const reconnectMs = [1000, 2000, 5000, 10_000, 30_000];
 // The close code the server uses for a link whose secret it refused.
 export const refusedCode = 4003;
 
+// The letters that end ids this page makes for an online map. The server
+// may hand out others on joining, unlike every other editor's.
+let ownSuffix = randomSuffix();
+
+// Whether ids made from now on are for an online map, which others may add
+// to at the same moment.
+export function setOnlineIds(isOnline: boolean) {
+  setIdSuffix(isOnline ? ownSuffix : "");
+}
+
 // One browser's live link to a map's online copy. The server orders every
 // edit, and this browser shows the map as the server confirmed it with its
 // own unconfirmed edits played on top. Others' edits, a reconnect and the map
@@ -65,6 +80,7 @@ export function openLiveMap({
   let confirmed: GameMap | null = null;
   let shown = map;
   let revision = 0;
+  let suffix = ownSuffix;
   let sent = 0;
   const pending: { id: number; patch: MapPatch }[] = [];
   const peers = new Map<number, LivePeer>();
@@ -90,7 +106,12 @@ export function openLiveMap({
   const replay = () => {
     if (!confirmed) return;
     let next = confirmed;
-    for (const { patch } of pending) next = applyPatch(next, patch);
+    // Each waiting edit lands as the server will land it, and one it will
+    // turn away is left off.
+    for (const { patch } of pending) {
+      const fit = fitPatch(next, patch);
+      if ("patch" in fit) next = applyPatch(next, fit.patch);
+    }
     const change = diffMaps(shown, next);
     const renamed = next.name !== shown.name ? (next.name ?? null) : undefined;
     shown = next;
@@ -110,7 +131,15 @@ export function openLiveMap({
     socket = opened;
     welcomed = false;
     opened.addEventListener("open", () =>
-      opened.send(JSON.stringify({ type: "hello", secret, name, client })),
+      opened.send(
+        JSON.stringify({
+          type: "hello",
+          secret,
+          name,
+          client,
+          suffix,
+        }),
+      ),
     );
     opened.addEventListener("close", (event) => {
       if (socket !== opened) return;
@@ -140,6 +169,14 @@ export function openLiveMap({
       if (data.type === "welcome") {
         attempts = 0;
         me = Number(data.peer);
+        if (
+          typeof data.suffix === "string" &&
+          suffixPattern.test(data.suffix)
+        ) {
+          ownSuffix = data.suffix;
+          suffix = data.suffix;
+        }
+        setIdSuffix(suffix);
         revision = Number(data.revision);
         confirmed = data.map as GameMap;
         peers.clear();
@@ -218,6 +255,7 @@ export function openLiveMap({
     post({ type: "patch", id: sent, patch });
   };
 
+  setIdSuffix(suffix);
   open();
 
   return {
@@ -245,6 +283,10 @@ export function openLiveMap({
     },
     get revision() {
       return revision;
+    },
+    // The letters that end the ids this browser makes.
+    get suffix() {
+      return suffix;
     },
     // Where this browser's pointer is on the map, at most ten times a second.
     cursor(at: Point | null) {

@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import type { Point } from "@/lib/map/types";
 
-import { clearLabels, labelPoint } from "./map-labels";
+import { defined } from "@/lib/defined";
+
+import { clearLabels, getIsLabelCovered, labelPoint } from "./map-labels";
 
 describe("labelPoint", () => {
   const hall = box(0, 0, 512, 512);
@@ -41,9 +43,66 @@ describe("labelPoint", () => {
     expect(labelPoint([box(0, 0, 32, 256)], 1, 40)).toEqual({ x: 16, y: 24 });
   });
 
+  it("slides along the band past a thing under the middle", () => {
+    const at = labelPoint([hall], 1, 40, [{ x: 256, y: 32 }]);
+    expect(at?.y).toBe(24);
+    expect(at && Math.abs(at.x - 256)).toBeGreaterThanOrEqual(14 + 20);
+  });
+
+  it("drops below things that leave no room for the name on the top band", () => {
+    const closet = box(0, 0, 96, 256);
+    const things = [
+      { x: 24, y: 24 },
+      { x: 72, y: 24 },
+    ];
+    const at = labelPoint([closet], 1, 40, things);
+    expect(at?.x).toBe(48);
+    expect(defined(at).y - 24).toBeGreaterThanOrEqual(14 + 16);
+  });
+
+  it("sees a thing in a room across the map's origin", () => {
+    const at = labelPoint([box(-256, -256, 256, 256)], 1, 40, [
+      { x: 0, y: -224 },
+    ]);
+    expect(at?.y).toBe(-232);
+    expect(at && Math.abs(at.x)).toBeGreaterThanOrEqual(14 + 20);
+  });
+
+  it("ignores things outside the room", () => {
+    expect(labelPoint([hall], 1, 40, [{ x: 256, y: -200 }])).toEqual({
+      x: 256,
+      y: 24,
+    });
+  });
+
+  it("keeps the name at the top of a room with no clear spot", () => {
+    const ledge = box(0, 0, 120, 40);
+    expect(labelPoint([ledge], 1, 64, [{ x: 70, y: 24 }])).toEqual({
+      x: 60,
+      y: 24,
+    });
+  });
+
+  it("stays at the top when things crowd every band", () => {
+    const closet = box(0, 0, 32, 64);
+    expect(labelPoint([closet], 1, 40, [{ x: 16, y: 32 }])).toEqual({
+      x: 16,
+      y: 24,
+    });
+  });
+
   it("gives up when a pillar covers the whole band", () => {
     const pillar = box(0, 8, 512, 256);
     expect(labelPoint([hall, pillar], 1, 40)).toBeNull();
+  });
+});
+
+describe("getIsLabelCovered", () => {
+  it("tells a label an icon sits on from one beside it", () => {
+    const at = { x: 100, y: 100 };
+    expect(getIsLabelCovered(at, 40, 1, [{ x: 125, y: 100 }])).toBe(true);
+    expect(getIsLabelCovered(at, 40, 1, [{ x: 150, y: 100 }])).toBe(false);
+    expect(getIsLabelCovered(at, 40, 1, [{ x: 100, y: 140 }])).toBe(false);
   });
 });
 

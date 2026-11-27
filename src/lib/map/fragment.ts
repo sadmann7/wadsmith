@@ -5,6 +5,7 @@ import {
   applyPositions,
   mergeCorners,
   nextId,
+  nextIds,
   positionsOf,
   removeSector,
   removeThing,
@@ -205,6 +206,7 @@ export function pasteParts(
   at: Point | null,
   grid: number,
   own = false,
+  moveAside = true,
 ): Pasted | null {
   const points = [...Object.values(fragment.vertices), ...fragment.things];
   if (points.length === 0) return null;
@@ -223,12 +225,13 @@ export function pasteParts(
   const lands = (point: Point) =>
     taken.has(`${point.x + shift.x},${point.y + shift.y}`);
   const aside = Math.max(grid * 2, 32);
+  const tries = moveAside ? mostSteps : 0;
   for (
-    let tries = 0;
-    tries < mostSteps &&
+    let tried = 0;
+    tried < tries &&
     corners.length > 0 &&
     (at ? corners.every(lands) : corners.some(lands));
-    tries += 1
+    tried += 1
   ) {
     shift.x += aside;
     shift.y += aside;
@@ -236,11 +239,11 @@ export function pasteParts(
 
   const vertices = { ...map.vertices };
   const vertexIds = new Map<string, string>();
-  const first = Number(nextId("v", Object.keys(vertices)).slice(1));
-  Object.entries(fragment.vertices).forEach(([id, point], index) => {
-    const next = `v${first + index}`;
-    vertices[next] = { x: point.x + shift.x, y: point.y + shift.y };
-    vertexIds.set(id, next);
+  const copied = Object.entries(fragment.vertices);
+  const fresh = nextIds("v", Object.keys(vertices), copied.length);
+  copied.forEach(([id, point], index) => {
+    vertices[fresh[index]] = { x: point.x + shift.x, y: point.y + shift.y };
+    vertexIds.set(id, fresh[index]);
   });
   // A piece names only its own corners and rooms. Anything else in it is left
   // out, so text from the clipboard can't reach what the map already holds.

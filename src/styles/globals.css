@@ -1008,6 +1008,11 @@
     z-index: auto;
   }
 
+  /* A name no spot in its room keeps clear of an icon reads over it. */
+  .map:not([data-mode="things"]) .map-label[data-covered] {
+    z-index: 4;
+  }
+
   .map-label strong {
     color: var(--color-foreground);
     font-size: 13px;

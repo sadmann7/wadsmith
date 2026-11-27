@@ -31,7 +31,11 @@ import {
 } from "@/lib/editor/agent-actions";
 import { boundsOf, fitView } from "@/lib/editor/fit-view";
 import { currentKeys } from "@/lib/editor/keymap";
-import { estimateLabelWidth, labelPoint } from "@/lib/editor/map-labels";
+import {
+  estimateLabelWidth,
+  getIsLabelCovered,
+  labelPoint,
+} from "@/lib/editor/map-labels";
 import {
   getIsDragging,
   getIsKeyboardMenu,
@@ -63,6 +67,7 @@ import {
   shiftRooms,
   snapPoint,
   splitWall,
+  startFacing,
   switchKeyPrefix,
   thingKeyPrefix,
   updateSwitch,
@@ -163,6 +168,8 @@ interface MapEditorOptions {
   // An agent's edit landed: which action, what was fixed on the way and what
   // the map still needs.
   onAgentAction?: (action: string, outcome: AgentReport) => void;
+  // An agent named the map.
+  onRename?: (name: string) => void;
   // The game's texture names, so an agent's edit can't use one it lacks.
   checkContext?: CheckContext;
   onDrawingChange?: (corners: Point[]) => void;
@@ -313,6 +320,7 @@ export const mapEditor = definePrimitive({
     lookAtRequest: "value",
     onContextTarget: "callback",
     onAgentAction: "callback",
+    onRename: "callback",
     checkContext: "value",
     onDrawingChange: "callback",
     contextMenuOpen: "boolean",
@@ -640,9 +648,23 @@ export const mapEditor = definePrimitive({
       if (fitted) centerOn(request.point);
       else focusAfterFit = request.point;
     });
+    // A half-drawn outline belongs to the tool it was drawn with.
+    let shownTool = context.options().tool;
+    context.onOptions(({ tool }) => {
+      if (!tool || tool === shownTool) return;
+      const left = shownTool;
+      shownTool = tool;
+      if (
+        (left === "draw" || left === "line") &&
+        store.get().drawing.length > 0
+      ) {
+        store.set({ drawing: [], cursor: null });
+      }
+    });
     context.onOptions(({ drawRequest: request }) => {
       if (!request || request.id === drawRequest) return;
       drawRequest = request.id;
+      shownTool = "draw";
       store.set({ drawing: [snapPoint(request.point, grid())], cursor: null });
       change("tool", "draw", { reason: "draw" });
     });
@@ -707,7 +729,6 @@ export const mapEditor = definePrimitive({
       store.set({ drawing: [], cursor: null });
       change("map", room.map, { reason: "draw" });
       select([], room.id);
-      change("tool", "select", { reason: "draw" });
     };
 
     // A grid of rooms is drawn a cell at a time, each sharing the walls of
@@ -723,7 +744,6 @@ export const mapEditor = definePrimitive({
       store.set({ drawing: [], cursor: null });
       change("map", next, { reason: "draw" });
       select(ids.map((id) => `${roomKeyPrefix}${id}`));
-      change("tool", "select", { reason: "draw" });
     };
 
     const finishRoom = () => {
@@ -739,7 +759,6 @@ export const mapEditor = definePrimitive({
       store.set({ drawing: [], cursor: null });
       change("map", added.map, { reason: "draw" });
       select([], added.rooms[0] ?? null);
-      change("tool", "select", { reason: "draw" });
     };
 
     const clickLine = (point: Point) => {
@@ -904,11 +923,12 @@ export const mapEditor = definePrimitive({
     const insertThing = (point: Point) => {
       const { map, editMode, tool, thingKind } = store.get();
       if (editMode !== "things" && tool !== "thing") return false;
+      const at = snapPoint(point, grid());
       const placed = addThing(
         map,
         thingKind,
-        snapPoint(point, grid()),
-        0,
+        at,
+        startFacing(map, thingKind, at),
         1,
         context.options().thingType,
       );
@@ -1318,6 +1338,12 @@ export const mapEditor = definePrimitive({
         : { kind: "empty", point };
     };
 
+    // A rename reaches the map option a render or more later, so the steps
+    // until then see it here.
+    let renaming: { name: string; from: GameMap | undefined } | null = null;
+    context.onOptions((options) => {
+      if (renaming && options.map !== renaming.from) renaming = null;
+    });
     // Every agent action is a method here, so a bridge step reaches it by
     // name. A read returns what it found, and an edit lands as one change
     // that already passed the map's checks.
@@ -1325,20 +1351,31 @@ export const mapEditor = definePrimitive({
       agentActionNames.map((name) => [
         name,
         (...args: unknown[]) => {
-          const { map } = store.get();
-          // The editor names the map from its settings, which would undo a
-          // name set here.
-          if (name === "setMapDetails" && args.some(getHasName)) {
+          const shown = store.get().map;
+          const map = renaming ? { ...shown, name: renaming.name } : shown;
+          const { onRename } = context.options();
+          if (name === "setMapDetails" && !onRename && args.some(getHasName)) {
             throw new Error("Rename the map from Map settings in the editor.");
           }
-          const { map: next, ...outcome } = runAgentAction(
+          const { map: edited, ...outcome } = runAgentAction(
             map,
             name,
             args,
             context.options().checkContext,
           );
-          if (next === map) return outcome.result;
-          change("map", next, { reason: "agent" });
+          // A name goes through the map's settings, so the episode and
+          // everyone editing the map see it.
+          const renamed = edited.name !== map.name ? edited.name : undefined;
+          if (renamed !== undefined) {
+            renaming = { name: renamed ?? "", from: context.options().map };
+            onRename?.(renamed ?? "");
+          }
+          const next =
+            renamed !== undefined && edited.complevel === map.complevel
+              ? map
+              : edited;
+          if (next !== map) change("map", next, { reason: "agent" });
+          if (next === map && renamed === undefined) return outcome.result;
           const made = next.sectors.find(
             (sector) =>
               sector.id === outcome.result &&
@@ -1632,7 +1669,7 @@ export const mapEditor = definePrimitive({
             map,
             thingKind,
             point,
-            0,
+            startFacing(map, thingKind, point),
             1,
             context.options().thingType,
           );
@@ -1700,9 +1737,17 @@ export const mapEditor = definePrimitive({
             if (tool === "draw") finishRoom();
             else finishLine();
           } else if (event.key === "Escape") {
-            store.set({ drawing: [], cursor: null });
-          } else if (event.key === "Backspace") {
+            if (drawing.length > 0) store.set({ drawing: [], cursor: null });
+            else change("tool", "select", { reason: "draw" });
+          } else if (event.key === "Backspace" && drawing.length > 0) {
             store.set({ drawing: drawing.slice(0, -1) });
+          } else if (
+            event.key === "Delete" &&
+            drawing.length === 0 &&
+            deleteSelection()
+          ) {
+            event.preventDefault();
+            return;
           } else {
             resetZoomKey(event);
             return;
@@ -2025,6 +2070,11 @@ export const mapEditor = definePrimitive({
       props: { value: "string", corners: "list", holes: "value" },
       selects: selects<MapEditorState, unknown, CaptionProps>({
         ...readsNothing,
+        map: {
+          values: () => none,
+          moved: (before: GameMap, after: GameMap) =>
+            before.things !== after.things,
+        },
         positions: ({ props }) => sectorCorners(props),
         moving: whole,
         viewport: whole,
@@ -2032,6 +2082,9 @@ export const mapEditor = definePrimitive({
       attrs: (state, { props }) => {
         const at = captionPoint(state, props);
         return {
+          "data-covered": getIsCaptionCovered(state, props, at)
+            ? ""
+            : undefined,
           style: css({
             position: "absolute",
             left: `${at.x}px`,
@@ -2041,7 +2094,12 @@ export const mapEditor = definePrimitive({
       },
       live: live<MapEditorState, unknown, CaptionProps>((state, { props }) => {
         const at = captionPoint(state, props);
-        return { style: `left:${at.x}px;top:${at.y}px` };
+        return {
+          "data-covered": getIsCaptionCovered(state, props, at)
+            ? ""
+            : undefined,
+          style: `left:${at.x}px;top:${at.y}px`,
+        };
       }),
     }),
     marker: slot<{ value: string; x: number; y: number }>({
@@ -2383,6 +2441,7 @@ function captionPoint(state: MapEditorState, props: CaptionProps): Point {
     loops,
     zoomStep(state.viewport.zoom),
     estimateLabelWidth(sector.name),
+    state.map.things,
   );
   if (at) return at;
   const spot = roomPoint(state.map, sector);
@@ -2396,6 +2455,23 @@ function captionPoint(state: MapEditorState, props: CaptionProps): Point {
     return { x: spot.x + moving.dx, y: spot.y + moving.dy };
   }
   return roomPoint(draftMap(state, moving), sector);
+}
+
+function getIsCaptionCovered(
+  state: MapEditorState,
+  props: CaptionProps,
+  at: Point,
+) {
+  const sector = sectorById(state.map, props.value);
+  return (
+    sector !== undefined &&
+    getIsLabelCovered(
+      at,
+      estimateLabelWidth(sector.name),
+      zoomStep(state.viewport.zoom),
+      state.map.things,
+    )
+  );
 }
 
 // A drag keeps one key list, and each frame is a new draft, so the names

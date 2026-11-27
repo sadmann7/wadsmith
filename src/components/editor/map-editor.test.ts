@@ -11,7 +11,7 @@ import { drawRoom, removeCorner } from "@/lib/map/reshape";
 import { testMap } from "@/lib/map/test-map";
 import { SceneCamera } from "@/lib/preview/scene-camera";
 
-import { mapEditor } from "./map-editor";
+import { mapEditor, type MapTool } from "./map-editor";
 
 type Instance = ReturnType<typeof mapEditor>;
 
@@ -607,6 +607,16 @@ describe("map editor parts", () => {
     instance.setOptions({ id, map: { ...testMap } });
     expect(parts.heard()).toEqual(["port door:sector-4", "port door:sector-4"]);
   });
+
+  it("wake the room names when a thing moves, so they can step out of its way", () => {
+    const instance = mapEditor({ id, map: testMap });
+    const parts = listen(instance);
+    instance.setOptions({
+      id,
+      map: { ...testMap, things: testMap.things.map((t) => ({ ...t })) },
+    });
+    expect(parts.heard()).toContain("caption sector-2");
+  });
 });
 
 describe("map editor drags during a co-op edit", () => {
@@ -805,6 +815,130 @@ describe("map editor drawing", () => {
     instance.api.pointerdown(pointer(2256, 2128));
     instance.api.click(pointer(2256, 2128));
     expect(defined(result).sectors).toHaveLength(testMap.sectors.length + 1);
+  });
+
+  it("keep the draw tool after a room, so the next one starts on the next click", () => {
+    const tools: string[] = [];
+    let result = testMap;
+    const options = {
+      id,
+      map: testMap,
+      tool: "draw" as const,
+      drawShape: "rectangle" as const,
+      onToolChange: (tool: string) => tools.push(tool),
+      onMapChange: (next: GameMap) => {
+        result = next;
+        instance.setOptions({ ...options, map: next });
+      },
+    };
+    const instance = mapEditor(options);
+    for (const y of [2000, 2400]) {
+      instance.api.pointerdown(pointer(2000, y));
+      instance.api.pointermove(pointer(2256, y + 128));
+      release(2256, y + 128);
+    }
+    expect(result.sectors).toHaveLength(testMap.sectors.length + 2);
+    expect(tools).toEqual([]);
+  });
+
+  it("drop a half-drawn room when another tool is picked", () => {
+    const instance = mapEditor({ id, map: testMap, tool: "draw" });
+    const { store } = instance.part("handle", { value: "v1" });
+    store.set({ drawing: [{ x: 2000, y: 2000 }] });
+    instance.setOptions({ id, map: testMap, tool: "select" });
+    instance.setOptions({ id, map: testMap, tool: "draw" });
+    expect(store.get().drawing).toEqual([]);
+  });
+
+  it.each(["select", "line"] as const)(
+    "keep the corner a draw request starts from in the %s tool as the draw tool comes on",
+    (from) => {
+      let tool: MapTool = from;
+      const options = {
+        id,
+        map: testMap,
+        onToolChange: (next: MapTool) => {
+          tool = next;
+        },
+      };
+      const instance = mapEditor({ ...options, tool });
+      const { store } = instance.part("handle", { value: "v1" });
+      const drawRequest = { id: 1, point: { x: 2000, y: 2000 } };
+      instance.setOptions({ ...options, tool, drawRequest });
+      instance.setOptions({ ...options, tool, drawRequest });
+      expect(tool).toBe("draw");
+      expect(store.get().drawing).toEqual([{ x: 2000, y: 2000 }]);
+    },
+  );
+
+  it("delete the room just drawn with Delete while still drawing", () => {
+    let result = testMap;
+    const options = {
+      id,
+      map: testMap,
+      tool: "draw" as const,
+      drawShape: "rectangle" as const,
+      onMapChange: (next: GameMap) => {
+        result = next;
+        instance.setOptions({ ...options, map: next });
+      },
+      onActiveSectorChange: (sector: string | null) =>
+        instance.setOptions({ ...options, map: result, activeSector: sector }),
+    };
+    const instance = mapEditor(options);
+    instance.api.pointerdown(pointer(2000, 2000));
+    instance.api.pointermove(pointer(2256, 2128));
+    release(2256, 2128);
+    expect(result.sectors).toHaveLength(testMap.sectors.length + 1);
+    instance.api.keydown(press("Delete"));
+    expect(result.sectors).toHaveLength(testMap.sectors.length);
+  });
+
+  it("drop the room being drawn on Esc, and leave the draw tool on the next", () => {
+    const tools: string[] = [];
+    const instance = mapEditor({
+      id,
+      map: testMap,
+      tool: "draw",
+      onToolChange: (tool) => tools.push(tool),
+    });
+    const { store } = instance.part("handle", { value: "v1" });
+    store.set({ drawing: [{ x: 2000, y: 2000 }] });
+    instance.api.keydown(press("Escape"));
+    expect(store.get().drawing).toEqual([]);
+    expect(tools).toEqual([]);
+    instance.api.keydown(press("Escape"));
+    expect(tools).toEqual(["select"]);
+  });
+
+  it("turn a placed player start down its room, away from the wall beside it", () => {
+    const hall: GameMap = {
+      ...testMap,
+      vertices: {
+        a: { x: 0, y: 0 },
+        b: { x: 512, y: 0 },
+        c: { x: 512, y: 64 },
+        d: { x: 0, y: 64 },
+      },
+      sectors: [{ ...testMap.sectors[0], vertices: ["a", "b", "c", "d"] }],
+      things: [],
+      lines: {},
+      switches: [],
+    };
+    let result = hall;
+    const instance = mapEditor({
+      id,
+      map: hall,
+      tool: "thing",
+      thingKind: "player",
+      onMapChange: (next) => {
+        result = next;
+      },
+    });
+    instance.api.click(pointer(480, 32));
+    expect(result.things).toEqual([
+      expect.objectContaining({ kind: "player", angle: 180 }),
+    ]);
   });
 });
 
