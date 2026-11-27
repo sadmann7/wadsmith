@@ -607,6 +607,16 @@ describe("map editor parts", () => {
     instance.setOptions({ id, map: { ...testMap } });
     expect(parts.heard()).toEqual(["port door:sector-4", "port door:sector-4"]);
   });
+
+  it("wake the room names when a thing moves, so they can step out of its way", () => {
+    const instance = mapEditor({ id, map: testMap });
+    const parts = listen(instance);
+    instance.setOptions({
+      id,
+      map: { ...testMap, things: testMap.things.map((t) => ({ ...t })) },
+    });
+    expect(parts.heard()).toContain("caption sector-2");
+  });
 });
 
 describe("map editor drags during a co-op edit", () => {
