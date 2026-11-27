@@ -668,7 +668,6 @@ const keyFills: Record<KeyColor, string> = {
   yellow: "var(--color-key-yellow)",
   red: "var(--color-key-red)",
 };
-// Doom's own player colors: green, indigo, brown and red.
 const arrowPath = "M1 0L-0.7 0.6L-0.35 0L-0.7-0.6Z";
 const monsterPath = "M1 0L-0.8 0.75L-0.8-0.75Z";
 
