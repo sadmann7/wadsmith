@@ -620,6 +620,7 @@ export const mapEditor = definePrimitive({
         const { draft, patch } = snapDraft(moving);
         snappedDrafts.add(draft);
         if (draft !== moving || patch) {
+          lastDraft = null;
           store.set({ ...patch, moving: draft });
           return;
         }

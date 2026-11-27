@@ -108,6 +108,28 @@ describe("dropping a room among others", () => {
     ).toBe(false);
   });
 
+  it("moves a room joined to the inside wall of the room around it", () => {
+    const hall = addRoom(empty, box(0, 0, 512, 512), {}, 1);
+    const inner = addRoom(hall.map, box(8, 128, 72, 192), {}, 1);
+    const keys = roomKeys(inner.map, inner.id);
+    const drop = defined(planRoomDrop(inner.map, keys, { x: -6, y: 0 }, 14));
+    expect(drop.offset).toEqual({ x: -8, y: 0 });
+    const joined = land(inner.map, keys, drop.offset).map;
+    const again = roomKeys(joined, inner.id);
+    for (const offset of [
+      { x: 0, y: 32 },
+      { x: 64, y: 0 },
+      { x: 64, y: 64 },
+    ]) {
+      expect(defined(planRoomDrop(joined, again, offset, 14)).isBlocked).toBe(
+        false,
+      );
+    }
+    expect(
+      defined(planRoomDrop(joined, again, { x: 520, y: 0 }, 14)).isBlocked,
+    ).toBe(true);
+  });
+
   it("blocks a room moved over a pillar in the room around it", () => {
     const hall = addRoom(empty, box(0, 0, 512, 512), {}, 1);
     const post = addRoom(hall.map, box(256, 256, 320, 320), {}, 1);

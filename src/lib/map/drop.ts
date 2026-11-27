@@ -102,23 +102,35 @@ export function planRoomDrop(
   const judge = (shift: Point) => {
     const placed = mine.map((outline) => moveOutline(outline, shift));
     const around = near(shift);
-    const stretched = bent.map((sector) =>
-      sector.vertices.map((id) =>
+    const stretched = bent.map((sector) => ({
+      id: sector.id,
+      polygon: sector.vertices.map((id) =>
         moved.has(id) ? add(map.vertices[id], shift) : map.vertices[id],
       ),
-    );
+      holes: (sector.holes ?? [])
+        .filter((hole) => !hole.every((id) => moved.has(id)))
+        .map((hole) => loopPolygon(map, hole)),
+    }));
+    // A room may sit anywhere inside the room it was drawn in.
+    const covers = (
+      room: Point[],
+      {
+        id,
+        polygon,
+        holes,
+      }: { id: string; polygon: Point[]; holes: Point[][] },
+    ) =>
+      (holders.has(id)
+        ? !getIsWithin(room, polygon) && getDoOverlap(room, polygon)
+        : getDoOverlap(room, polygon)) ||
+      holes.some((hole) => getDoOverlap(room, hole));
     const isBlocked =
-      stretched.some(getIsTwisted) ||
+      stretched.some(({ polygon }) => getIsTwisted(polygon)) ||
       placed.some(
         (room) =>
-          stretched.some((polygon) => getDoOverlap(room.polygon, polygon)) ||
-          around.some(
-            (other) =>
-              (holders.has(other.sector.id)
-                ? !getIsWithin(room.polygon, other.polygon) &&
-                  getDoOverlap(room.polygon, other.polygon)
-                : getDoOverlap(room.polygon, other.polygon)) ||
-              other.holes.some((hole) => getDoOverlap(room.polygon, hole)),
+          stretched.some((other) => covers(room.polygon, other)) ||
+          around.some((other) =>
+            covers(room.polygon, { ...other, id: other.sector.id }),
           ),
       );
     const walls = new Set<string>();
