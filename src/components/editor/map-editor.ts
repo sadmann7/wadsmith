@@ -63,6 +63,7 @@ import {
   shiftRooms,
   snapPoint,
   splitWall,
+  startFacing,
   switchKeyPrefix,
   thingKeyPrefix,
   updateSwitch,
@@ -78,7 +79,6 @@ import {
 import {
   type Box,
   boxOf,
-  clearView,
   holeAt,
   loopsPath,
   roomPoint,
@@ -913,7 +913,7 @@ export const mapEditor = definePrimitive({
         map,
         thingKind,
         at,
-        facingFor(map, thingKind, at),
+        startFacing(map, thingKind, at),
         1,
         context.options().thingType,
       );
@@ -1654,7 +1654,7 @@ export const mapEditor = definePrimitive({
             map,
             thingKind,
             point,
-            facingFor(map, thingKind, point),
+            startFacing(map, thingKind, point),
             1,
             context.options().thingType,
           );
@@ -2382,13 +2382,6 @@ function sectorById(map: GameMap, id: string) {
     sectorIndexes.set(map, index);
   }
   return index.get(id);
-}
-
-// A player start looks down its room's longest clear view, so the game and
-// the 3D view don't open facing a wall.
-function facingFor(map: GameMap, kind: ThingKind, at: Point) {
-  const room = getIsPlayerStart(kind) ? sectorAt(map, at) : undefined;
-  return room ? clearView(map, room, at) : 0;
 }
 
 function lineAttrs(a: Point, b: Point) {

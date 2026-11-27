@@ -259,8 +259,6 @@ export function roomPoint(map: GameMap, sector: Sector): Point {
 
 // The facing, in degrees snapped to 45, with the furthest view from a spot
 // to the room's walls, its pillars and the rooms drawn inside it.
-const overlookGap = 48;
-
 export function clearView(map: GameMap, sector: Sector, at: Point) {
   const walls = loopWalls(roomLoops(map, sector));
   let best = 0;
@@ -278,6 +276,8 @@ export function clearView(map: GameMap, sector: Sector, at: Point) {
   }
   return best;
 }
+
+const overlookGap = 48;
 
 // Where to stand to see the most of a room: backed up from its middle,
 // against the side opposite its longest clear view, and looking across it.

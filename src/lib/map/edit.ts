@@ -172,6 +172,13 @@ export function addPlayerStarts(map: GameMap, players: number) {
   return next;
 }
 
+// A player start looks down its room's longest clear view, so the game and
+// the 3D view don't open facing a wall.
+export function startFacing(map: GameMap, kind: ThingKind, at: Point) {
+  const room = getIsPlayerStart(kind) ? sectorAt(map, at) : undefined;
+  return room ? clearView(map, room, at) : 0;
+}
+
 export function addThing(
   map: GameMap,
   kind: ThingKind,
