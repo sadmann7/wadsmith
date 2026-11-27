@@ -26,6 +26,9 @@ export interface CoopGame {
   title: string;
   slot: string;
   par: number | null;
+  // Each page decides from this text whether its game ends at the tally or
+  // after the text, so guests need it as well as the host.
+  intertext?: string;
   // Every player's engine needs the same IWAD under the map.
   game?: GameId;
 }

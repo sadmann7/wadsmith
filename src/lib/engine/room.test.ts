@@ -26,6 +26,7 @@ const game: CoopGame = {
   title: "Test map",
   slot: "MAP01",
   par: 90,
+  intertext: "The base is quiet now.",
 };
 
 afterEach(() => {
@@ -70,6 +71,17 @@ describe("co-op room", () => {
       expect.objectContaining({ peer: 3, name: "jules", ready: true }),
     ]);
     expect(events.onRoster).toHaveBeenCalled();
+    host.close();
+  });
+
+  it("gives guests the map's ending text, so their game ends where the host's does", async () => {
+    const { host, guest } = openRoom();
+    const ana = guest();
+    ana.room.join("Ana");
+    await settle();
+    await settle();
+    const received = ana.events.onGame.mock.calls[0][0] as CoopGame;
+    expect(received.intertext).toBe("The base is quiet now.");
     host.close();
   });
 

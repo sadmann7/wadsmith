@@ -186,6 +186,7 @@ export function PlayTogether({
       title,
       slot,
       par,
+      intertext,
       game: iwad?.game.id ?? defaultGame.id,
     };
     setPlayers([

@@ -6,6 +6,7 @@ import type { PlaytestRun } from "@/lib/map/playtest";
 import type { GameMap, NoteMoment, Point } from "@/lib/map/types";
 
 import { Alert } from "@/components/ui/alert";
+import { disconnectPacket } from "@/lib/engine/coop";
 import {
   defaultGame,
   endsGame,
@@ -237,7 +238,6 @@ const advanceTapMs = 250;
 // Doom's netcode holds the level while it waits for a player's moves. A short
 // hold is normal; one this long is worth naming.
 const stallMs = 1000;
-const guestCatchUpMs = 3000;
 
 const gameExits: Record<
   GameExit,
@@ -418,7 +418,7 @@ function GameSession({
     let lastInLevel: GameStatus | null = null;
     let ticsChangedAt = performance.now();
     let stalled: number[] = [];
-    let endTimer: ReturnType<typeof setTimeout> | undefined;
+    let ending = false;
     // Only one map's playtest is recorded: an episode or a loaded WAD plays
     // maps the editor isn't showing.
     const recorder = map && !episode && !files ? new RunRecorder() : null;
@@ -426,6 +426,20 @@ function GameSession({
     if (cheatsRef.current.god || cheatsRef.current.noclip) {
       recorder?.markCheated();
     }
+    // The host's engine serves the guests, who can run seconds behind, so it
+    // keeps going until each one reaches the end and drops out of it.
+    const finish = () => {
+      setFinished(true);
+      if (coop?.role === "host") {
+        if (!ending) client?.setSound({ ...soundRef.current, muted: true });
+        ending = true;
+        gameRef.current = null;
+        return;
+      }
+      if (coop && !ending) coop.send(hostPeer, disconnectPacket);
+      ending = true;
+      client?.stop();
+    };
     const showStall = (peers: number[]) =>
       setStall((current) =>
         current.peers.join() === peers.join()
@@ -472,8 +486,12 @@ function GameSession({
           sound: soundRef.current,
           screen,
           skill: coop?.skill ?? skill,
-          onFrame: (pixels) =>
-            context.putImageData(new ImageData(pixels, width, height), 0, 0),
+          // A host serving guests at the end would otherwise show the map
+          // after the one played.
+          onFrame: (pixels) => {
+            if (ending) return;
+            context.putImageData(new ImageData(pixels, width, height), 0, 0);
+          },
           // A playtest's WAD holds one map, and an episode's ends with its last,
           // so leaving either would load an unrelated level. A loaded WAD runs
           // its own levels.
@@ -495,8 +513,7 @@ function GameSession({
             if (next.inLevel && netStarted) {
               const limit = files ? lastLevel : total;
               if (limit !== undefined && reached > limit) {
-                client?.stop();
-                setFinished(true);
+                finish();
                 return;
               }
               reachedLevel = true;
@@ -517,14 +534,7 @@ function GameSession({
             }
             if (reachedLevel && !next.inLevel && !files) {
               if (reached >= total && !lastText) {
-                setFinished(true);
-                // The host's engine serves the guests, who run a few tics
-                // behind, so it keeps going until they reach the end too.
-                if (coop?.role !== "host") client?.stop();
-                else if (endTimer === undefined) {
-                  client?.setSound({ ...soundRef.current, muted: true });
-                  endTimer = setTimeout(() => client?.stop(), guestCatchUpMs);
-                }
+                finish();
                 return;
               }
               // The engine clears the level's time once its tally starts. The
@@ -561,6 +571,10 @@ function GameSession({
                     setCoopBegan(true);
                   }
                   if (coop.role !== "host") return;
+                  if (ending && state.playersInGame <= 1) {
+                    client?.stop();
+                    return;
+                  }
                   const frozen = performance.now() - ticsChangedAt > stallMs;
                   const lagging = frozen
                     ? state.scores
@@ -601,7 +615,6 @@ function GameSession({
 
     return () => {
       stopped = true;
-      clearTimeout(endTimer);
       client?.stop();
       gameRef.current = null;
       const run = recorder?.run();
@@ -773,13 +786,19 @@ function GameSession({
     }
   };
 
+  // Once the host is done, guests who haven't reached the end yet are still in
+  // the host's engine.
   const stillPlaying =
-    coop?.role === "host" && !finished
-      ? coop
-          .roster()
-          .filter((player) => player.peer !== coop.peer)
-          .map((player) => player.name)
-      : [];
+    coop?.role !== "host"
+      ? []
+      : !finished
+        ? coop
+            .roster()
+            .filter((player) => player.peer !== coop.peer)
+            .map((player) => player.name)
+        : (network?.scores ?? [])
+            .filter((score) => score.peer !== coop.peer)
+            .map((score) => nameOf(coop, score.peer));
 
   const showExitConfirm = confirmingExit && stillPlaying.length > 0;
 
