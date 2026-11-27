@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { defined } from "@/lib/defined";
 import { compileLumps } from "@/lib/wad/compile";
+import { checkViews } from "@/lib/wad/view-check";
 
 import { mapBalance } from "./balance";
 import { checkMap } from "./checks";
@@ -18,6 +19,10 @@ describe("starter map", () => {
       exits: [],
       islands: [],
     });
+  });
+
+  it("stays within vanilla Doom's view limits", () => {
+    expect(checkViews(starterMap, compileLumps(starterMap))).toEqual([]);
   });
 
   it.each(["easy", "medium", "hard"] as const)(

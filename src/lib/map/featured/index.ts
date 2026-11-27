@@ -6,6 +6,7 @@ import { furnaceRing } from "./furnace-ring";
 import { longHall } from "./long-hall";
 import { pumpStation } from "./pump-station";
 import { slagChannel } from "./slag-channel";
+import { theBasics } from "./the-basics";
 
 export type FeaturedMode = "single" | "coop" | "deathmatch";
 
@@ -100,5 +101,18 @@ export const featuredMaps: FeaturedMap[] = [
       "A one-on-one duel down a pillared hall. Alcoves give cover, and lifts at both ends lead up to the armor.",
     tags: ["Pillars", "Lifts", "Armor up top"],
     map: longHall,
+  },
+  {
+    id: "the-basics",
+    title: "The Basics",
+    slot: "MAP07",
+    mode: "single",
+    players: { min: 1, max: 1 },
+    skill: "Easy",
+    par: 120,
+    blurb:
+      "One idea per room: a door, steps, a key and its door, a lift, a secret and an exit switch. Open a copy to see how each one is built.",
+    tags: ["Doors", "Blue key", "Lift", "Secret"],
+    map: theBasics,
   },
 ];
