@@ -1,10 +1,26 @@
-import { applyPatch, type MapPatch } from "@rooms/map-patch";
+import {
+  applyPatch,
+  fitPatch,
+  type MapPatch,
+  randomSuffix,
+} from "@rooms/map-patch";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { GameMap } from "@/lib/map/types";
 
-import { updateSector, updateThing } from "@/lib/map/edit";
+import {
+  addNote,
+  addRoom,
+  addSwitch,
+  addSwitchInRoom,
+  addThing,
+  freeWallAt,
+  setIdSuffix,
+  updateSector,
+  updateThing,
+} from "@/lib/map/edit";
 import { testMap } from "@/lib/map/test-map";
+import { validateMap } from "@/lib/map/validate";
 
 import { type LivePeer, liveUrl, openLiveMap } from "./live";
 
@@ -219,6 +235,97 @@ describe("live editing in the browser", () => {
     await settle();
   });
 
+  it("keeps every room, corner, thing, switch and note two editors add at once", async () => {
+    const server = fakeServer(testMap);
+    const ana = server.join("Ana");
+    const bo = server.join("Bo");
+    await ready(server);
+    expect(ana.live.suffix).not.toBe(bo.live.suffix);
+    const square = (x: number, y: number) => [
+      { x, y },
+      { x: x + 128, y },
+      { x: x + 128, y: y + 128 },
+      { x, y: y + 128 },
+    ];
+    ana.edit((map) => addRoom(map, square(1024, 0), { name: "Ana's" }).map);
+    bo.edit((map) => addRoom(map, square(1024, 512), { name: "Bo's" }).map);
+    ana.edit((map) => addThing(map, "imp", { x: 1088, y: 64 }).map);
+    bo.edit((map) => addThing(map, "imp", { x: 1088, y: 576 }).map);
+    ana.edit((map) => addNote(map, { x: 1040, y: 16 }, "Ana"));
+    bo.edit((map) => addNote(map, { x: 1040, y: 528 }, "Bo"));
+    ana.edit((map) => {
+      const room = map.sectors.find((sector) => sector.name === "Ana's");
+      return addSwitchInRoom(map, room?.id ?? "", "sector-4")?.map ?? map;
+    });
+    bo.edit((map) => {
+      const room = map.sectors.find((sector) => sector.name === "Bo's");
+      return addSwitchInRoom(map, room?.id ?? "", "sector-4")?.map ?? map;
+    });
+    server.run();
+    for (const editor of [ana, bo]) {
+      expect(strip(editor.map)).toEqual(strip(server.map));
+      expect(editor.seen.dropped).toEqual([]);
+    }
+    const { map } = server;
+    expect(map.sectors.map((sector) => sector.name)).toEqual(
+      expect.arrayContaining(["Ana's", "Bo's"]),
+    );
+    expect(map.sectors).toHaveLength(testMap.sectors.length + 2);
+    expect(map.things).toHaveLength(testMap.things.length + 2);
+    expect(map.notes).toHaveLength(2);
+    expect(map.switches).toHaveLength(testMap.switches.length + 2);
+    expect(Object.keys(map.vertices)).toHaveLength(
+      Object.keys(testMap.vertices).length + 12,
+    );
+    const ids = [
+      map.sectors,
+      map.things,
+      map.switches,
+      map.notes ?? [],
+    ].flatMap((items) => items.map((item) => item.id));
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(validateMap(map)).toEqual(validateMap(testMap));
+  });
+
+  it("keeps switches two editors put on one room's walls at once", async () => {
+    const server = fakeServer(testMap);
+    const ana = server.join("Ana");
+    const bo = server.join("Bo");
+    await ready(server);
+    const onWall =
+      (wall: string, point: { x: number; y: number }) => (map: GameMap) => {
+        const free = freeWallAt(map, wall);
+        return (free && addSwitch(map, free, point, "sector-4")?.map) ?? map;
+      };
+    ana.edit(onWall("v5|v6", { x: 192, y: 320 }));
+    bo.edit(onWall("v1|v6", { x: 0, y: 160 }));
+    server.run();
+    for (const editor of [ana, bo]) {
+      expect(strip(editor.map)).toEqual(strip(server.map));
+      expect(editor.seen.dropped).toEqual([]);
+    }
+    expect(server.map.switches).toHaveLength(testMap.switches.length + 2);
+    expect(validateMap(server.map)).toEqual(validateMap(testMap));
+  });
+
+  it("takes back an add whose id someone else took first", async () => {
+    const server = fakeServer(testMap);
+    const ana = server.join("Ana");
+    const bo = server.join("Bo");
+    await ready(server);
+    setIdSuffix("");
+    const imp = { id: "imp-9", kind: "imp", x: 0, y: 0, angle: 0 } as const;
+    ana.live.send({ ...ana.map, things: [...ana.map.things, imp] });
+    bo.live.send({
+      ...bo.map,
+      things: [...bo.map.things, { ...imp, x: 64 }],
+    });
+    server.run();
+    expect(server.map.things.find((thing) => thing.id === "imp-9")?.x).toBe(0);
+    expect(bo.seen.dropped).toEqual(["taken"]);
+    expect(strip(bo.live.confirmed as GameMap)).toEqual(strip(server.map));
+  });
+
   it("reaches a map's live address", () => {
     expect(liveUrl("https://rooms.example.com", "abc")).toBe(
       "wss://rooms.example.com/maps/abc/live",
@@ -242,6 +349,7 @@ function fakeServer(start: GameMap) {
     readyState: number = WebSocket.CONNECTING;
     peer = 0;
     client = "";
+    suffix = "";
     send(text: string) {
       if (this.readyState !== WebSocket.OPEN) throw new Error("Not open.");
       queue.push([this, JSON.parse(text) as Record<string, unknown>]);
@@ -277,8 +385,19 @@ function fakeServer(start: GameMap) {
         for (const socket of sockets) {
           socket.hear({ type: "join", peer: from.peer, name: data.name });
         }
+        const taken = new Set(sockets.map((socket) => socket.suffix));
+        let suffix = typeof data.suffix === "string" ? data.suffix : "";
+        while (!suffix || taken.has(suffix)) suffix = randomSuffix();
+        from.suffix = suffix;
         sockets.push(from);
-        from.hear({ type: "welcome", peer: from.peer, revision, map, peers });
+        from.hear({
+          type: "welcome",
+          peer: from.peer,
+          suffix,
+          revision,
+          map,
+          peers,
+        });
       } else if (data.type === "patch") {
         const id = Number(data.id);
         if (refuse) {
@@ -289,13 +408,20 @@ function fakeServer(start: GameMap) {
           from.hear({ type: "ack", id, revision });
           continue;
         }
+        const fit = fitPatch(map, data.patch as MapPatch);
+        if ("error" in fit) {
+          from.hear({ type: "refused", id, error: fit.error });
+          continue;
+        }
+        const fitted = fit.patch;
         seen.set(from.client, id);
-        patches.push(data.patch as MapPatch);
-        map = applyPatch(map, data.patch as MapPatch);
+        patches.push(fitted);
+        map = applyPatch(map, fitted);
         revision += 1;
         for (const socket of sockets) {
           socket.hear({
             ...data,
+            patch: fitted,
             revision,
             peer: from.peer,
             client: from.client,
@@ -353,6 +479,8 @@ function fakeServer(start: GameMap) {
       live,
       seen: seenBy,
       edit(change: (map: GameMap) => GameMap) {
+        // Each browser has its own page, so its own id suffix.
+        setIdSuffix(live.suffix);
         local = change(local);
         live.send(local);
       },

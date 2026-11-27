@@ -1,7 +1,19 @@
-import type { GameMap, Point } from "./types";
+import type { GameMap, Point, Sector } from "./types";
 
-import { splitWall } from "./edit";
-import { cross, sectorEdges, wallKey } from "./geometry";
+import { findVertexAt, splitWall } from "./edit";
+import {
+  boxOf,
+  cross,
+  loopEdges,
+  loopPolygon,
+  onSegment,
+  sectorContainers,
+  sectorEdges,
+  segmentsIntersect,
+  signedArea,
+  wallKey,
+  wallOwners,
+} from "./geometry";
 
 interface Wall {
   key: string;
@@ -73,6 +85,188 @@ export function crossing(a: Point, b: Point, c: Point, d: Point): Point | null {
       (end) => Math.abs(end.x - at.x) <= 1 && Math.abs(end.y - at.y) <= 1,
     ) ?? at
   );
+}
+
+export interface Touch {
+  room: Sector;
+  other: Sector;
+  at: Point;
+}
+
+// Rooms that meet this one only at a point, where a corner of one sits on the
+// other's wall or corner, so the two look joined but share no wall.
+export function findTouches(map: GameMap, room: Sector): Touch[] {
+  if (room.door) return [];
+  const owners = wallOwners(map);
+  const containers = sectorContainers(map);
+  const neighbours = new Set(
+    sectorEdges(room).flatMap(
+      ({ from, to }) => owners.get(wallKey(from, to)) ?? [],
+    ),
+  );
+  for (const sector of map.sectors) {
+    if (
+      containers.get(sector.id) === room ||
+      containers.get(room.id) === sector
+    ) {
+      neighbours.add(sector);
+    }
+  }
+  const box = boxOf(loopPolygon(map, room.vertices));
+  const outline = (sector: Sector) =>
+    loopEdges(sector.vertices).map(({ from, to }) => ({
+      a: map.vertices[from],
+      b: map.vertices[to],
+    }));
+  const mine = outline(room);
+  const touches: Touch[] = [];
+  for (const other of map.sectors) {
+    if (other === room || other.door || neighbours.has(other)) continue;
+    const theirs = outline(other);
+    const near = theirs.some(
+      ({ a, b }) =>
+        Math.max(a.x, b.x) >= box.left &&
+        Math.min(a.x, b.x) <= box.right &&
+        Math.max(a.y, b.y) >= box.top &&
+        Math.min(a.y, b.y) <= box.bottom,
+    );
+    if (!near) continue;
+    const at =
+      mine.find(({ a }) => theirs.some((edge) => onSegment(edge.a, edge.b, a)))
+        ?.a ??
+      theirs.find(({ a }) => mine.some((edge) => onSegment(edge.a, edge.b, a)))
+        ?.a;
+    if (at) touches.push({ room, other, at });
+  }
+  return touches;
+}
+
+// Joins two rooms that touch at a point: the pointed room's corner opens out
+// along the other room's straight wall, so the two share a wall there.
+export function joinTouch(map: GameMap, { room, other, at }: Touch) {
+  const split = joinWalls(map, [room.id, other.id]);
+  if (getShareWall(split, room.id, other.id)) return split;
+  const point = findVertexAt(split, at);
+  if (!point) return null;
+  for (const [pointed, flat] of [
+    [room.id, other.id],
+    [other.id, room.id],
+  ]) {
+    const opened = openCorner(split, point, pointed, flat);
+    if (opened && getShareWall(opened, room.id, other.id)) return opened;
+  }
+  return null;
+}
+
+// Half the width of the opening a corner join makes, either side of the point.
+const openingHalf = 64;
+const narrowestOpening = 40;
+
+function openCorner(
+  map: GameMap,
+  point: string,
+  pointed: string,
+  flat: string,
+) {
+  const pointedRoom = map.sectors.find((sector) => sector.id === pointed);
+  const flatRoom = map.sectors.find((sector) => sector.id === flat);
+  if (!pointedRoom || !flatRoom) return null;
+  const at = pointedRoom.vertices.indexOf(point);
+  const along = flatRoom.vertices.indexOf(point);
+  if (at < 0 || along < 0) return null;
+  const p = map.vertices[point];
+  const sides = [
+    ring(flatRoom.vertices, along - 1),
+    ring(flatRoom.vertices, along + 1),
+  ];
+  const [u, w] = sides.map((id) => map.vertices[id]);
+  const dot = (u.x - p.x) * (w.x - p.x) + (u.y - p.y) * (w.y - p.y);
+  if (cross(u, p, w) !== 0 || dot >= 0) return null;
+  let next = map;
+  const ends: string[] = [];
+  for (const side of sides) {
+    const end = next.vertices[side];
+    const length = Math.hypot(end.x - p.x, end.y - p.y);
+    if (length <= openingHalf) {
+      ends.push(side);
+      continue;
+    }
+    const scale = openingHalf / length;
+    const cut = splitWall(
+      next,
+      wallKey(point, side),
+      { x: p.x + (end.x - p.x) * scale, y: p.y + (end.y - p.y) * scale },
+      1,
+      true,
+    );
+    if (!cut) return null;
+    next = cut.map;
+    ends.push(cut.id);
+  }
+  const [first, second] = ends.map((id) => next.vertices[id]);
+  if (Math.hypot(first.x - second.x, first.y - second.y) < narrowestOpening) {
+    return null;
+  }
+  const loop = pointedRoom.vertices;
+  const before = ring(loop, at - 1);
+  const after = ring(loop, at + 1);
+  const span = (a: string, b: string) =>
+    Math.hypot(
+      next.vertices[a].x - next.vertices[b].x,
+      next.vertices[a].y - next.vertices[b].y,
+    );
+  const order =
+    span(before, ends[0]) + span(ends[1], after) <=
+    span(before, ends[1]) + span(ends[0], after)
+      ? ends
+      : [ends[1], ends[0]];
+  if (order.includes(before) || order.includes(after)) return null;
+  const vertices = [...loop.slice(0, at), ...order, ...loop.slice(at + 1)];
+  const area = (ids: string[]) =>
+    signedArea(ids.map((id) => next.vertices[id]));
+  if (Math.sign(area(vertices)) !== Math.sign(area(loop))) return null;
+  const fresh = [
+    [before, order[0]],
+    [order[1], after],
+  ];
+  const crosses = next.sectors.some((sector) =>
+    sectorEdges(sector).some(({ from, to }) =>
+      fresh.some(
+        ([a, b]) =>
+          ![a, b].includes(from) &&
+          ![a, b].includes(to) &&
+          segmentsIntersect(
+            next.vertices[a],
+            next.vertices[b],
+            next.vertices[from],
+            next.vertices[to],
+          ),
+      ),
+    ),
+  );
+  if (crosses) return null;
+  const opened = {
+    ...next,
+    sectors: next.sectors.map((sector) =>
+      sector.id === pointed ? { ...sector, vertices } : sector,
+    ),
+  };
+  return joinWalls(opened, [pointed]);
+}
+
+function getShareWall(map: GameMap, first: string, second: string) {
+  const walls = (id: string) => {
+    const sector = map.sectors.find((item) => item.id === id);
+    return sector
+      ? sectorEdges(sector).map(({ from, to }) => wallKey(from, to))
+      : [];
+  };
+  const mine = new Set(walls(first));
+  return walls(second).some((wall) => mine.has(wall));
+}
+
+function ring(loop: string[], index: number) {
+  return loop[(index + loop.length) % loop.length];
 }
 
 // Only the walls near the rooms are looked at, so a room drawn in one corner

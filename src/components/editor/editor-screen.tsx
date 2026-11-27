@@ -375,6 +375,8 @@ interface AppProps {
   navigation: React.ReactNode;
   onNewMap: () => void;
   onMapSettings: () => void;
+  // An agent named the map, which then goes through its settings.
+  onRename?: (name: string) => void;
   onShare?: () => void;
   onPublish?: () => void;
   onParChange: (par: number) => void;
@@ -428,6 +430,7 @@ export function EditorScreen({
   navigation,
   onNewMap,
   onMapSettings,
+  onRename,
   onShare,
   onPublish,
   onParChange,
@@ -646,6 +649,14 @@ export function EditorScreen({
       ...limitIssues,
     ],
     [context, customThings, limitIssues, map],
+  );
+  // A join fix reshapes rooms, too slow to redo on every render of a big map.
+  const shownChecks = React.useMemo(
+    () =>
+      checks
+        .slice(0, 8)
+        .map((issue) => ({ issue, fixed: fixIssue(map, issue) })),
+    [checks, map],
   );
   const issues = checks.filter((issue) => issue.severity === "error");
   const canPlay = issues.length === 0;
@@ -1760,14 +1771,16 @@ export function EditorScreen({
     [history, syncUndoable, watchExternal],
   );
 
-  // Someone else's edit lands on the map as it stands, without an undo step,
-  // and is saved like any edit, which sends nothing back.
-  const takeRemote = React.useEffectEvent((patch: MapPatch) => {
+  // Someone else's edit, or a new name, lands on the map as it stands,
+  // without an undo step, and is saved like any edit, which sends nothing back.
+  const showPatch = (patch: MapPatch) => {
     const next = applyPatch(mapRef.current, patch);
+    camera.keep(next);
     mapRef.current = next;
     setMap(next);
     onSave(next);
-  });
+  };
+  const takeRemote = React.useEffectEvent(showPatch);
   React.useEffect(
     () => watchRemote?.((patch) => takeRemote(patch)),
     [watchRemote],
@@ -2562,6 +2575,13 @@ export function EditorScreen({
                         );
                       }}
                       onAgentAction={logAgentAction}
+                      onRename={
+                        onRename &&
+                        ((name) => {
+                          showPatch({ fields: { name } });
+                          onRename(name);
+                        })
+                      }
                       checkContext={context}
                       onToolChange={setTool}
                       onActiveSectorChange={setActiveSector}
@@ -2753,9 +2773,8 @@ export function EditorScreen({
                   <span>{checkSummary}</span>
                 </h2>
                 <ul>
-                  {checks.slice(0, 8).map((issue) => {
+                  {shownChecks.map(({ issue, fixed }) => {
                     const { title, detail } = issueText(issue);
-                    const fixed = fixIssue(map, issue);
                     const target = issue.target
                       ? targetForIssue(map, issue.target)
                       : null;
@@ -2787,10 +2806,10 @@ export function EditorScreen({
                           <button
                             type="button"
                             className="border-0 bg-transparent p-0 text-primary"
-                            aria-label={`Fix: ${title}`}
+                            aria-label={`${issue.fixLabel ?? "Fix"}: ${title}`}
                             onClick={() => commit(fixed)}
                           >
-                            Fix
+                            {issue.fixLabel ?? "Fix"}
                           </button>
                         ) : target || issue.view ? (
                           <button

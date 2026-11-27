@@ -94,6 +94,7 @@ import {
   type LivePeer,
   liveUrl,
   openLiveMap,
+  setOnlineIds,
 } from "@/lib/episodes/live";
 import { publish, publishBase } from "@/lib/episodes/published";
 import {
@@ -499,7 +500,11 @@ export function EpisodeScreen() {
               ? "That edit would make the map too big to keep online, so it was taken back."
               : reason === "missing-corners"
                 ? "That edit was taken back: someone removed corners it uses at the same moment."
-                : "The online copy turned an edit away, so it was taken back.",
+                : reason === "taken"
+                  ? "That edit was taken back: someone added something with the same id at the same moment."
+                  : reason === "reshaped"
+                    ? "That edit was taken back: someone changed the same wall at the same moment."
+                    : "The online copy turned an edit away, so it was taken back.",
           ),
         onPeers: setPeers,
         onIdle: () => {
@@ -568,6 +573,7 @@ export function EpisodeScreen() {
       live.current?.link.close();
       live.current = null;
       setPeers([]);
+      setOnlineIds(Boolean(entry.cloud));
       selectEpisode(entry.episodeId);
       // A map in step with its online copy goes live at once, so edits made
       // while it joins are sent on the link.
@@ -1180,28 +1186,47 @@ export function EpisodeScreen() {
         };
       });
       if (!saved) return "This map no longer exists.";
-      announce(id);
-      if (sessionRef.current?.id === id) {
-        // The open editor takes the new settings like any other change, so
-        // its next edit doesn't put the old ones back.
-        const settings: MapPatch = {
-          fields: {
-            name: saved.map.name ?? null,
-            complevel: saved.map.complevel ?? null,
-          },
-        };
-        for (const listener of remoteListeners.current) listener(settings);
-        if (live.current?.mapId === id) {
-          live.current.link.rename(saved.map.name ?? "");
-        }
-      }
-      if (saved.cloud && live.current?.mapId !== id) void syncCloud(store, id);
-      if (sessionRef.current?.id === id) setDetails(detailsOf(saved));
-      else await refresh(store, saved.episodeId);
+      await settled(saved, {
+        name: saved.map.name ?? null,
+        complevel: saved.map.complevel ?? null,
+      });
       return null;
     } catch (error) {
       return problemOf(error, form.slot);
     }
+  };
+
+  // Tells the open editor, the live link and the online copy about new
+  // settings, so the editor's next edit doesn't put the old ones back.
+  const settled = async (saved: EpisodeMap, fields?: MapPatch["fields"]) => {
+    const { id } = saved;
+    announce(id);
+    if (sessionRef.current?.id === id) {
+      if (fields) {
+        for (const listener of remoteListeners.current) listener({ fields });
+      }
+      if (live.current?.mapId === id) {
+        live.current.link.rename(saved.map.name ?? "");
+      }
+    }
+    if (saved.cloud && live.current?.mapId !== id) void syncCloud(store, id);
+    if (sessionRef.current?.id === id) setDetails(detailsOf(saved));
+    else await refresh(store, saved.episodeId);
+  };
+
+  // An agent in the editor named the map, as Map settings would.
+  const renameMap = async (id: string, name: string) => {
+    const saved = await store
+      .updateMap(id, (entry) => ({
+        ...entry,
+        map: { ...entry.map, name },
+        editedAt: Date.now(),
+        ...(entry.cloud && { cloud: { ...entry.cloud, pending: true } }),
+      }))
+      .catch(() => null);
+    // The editor shows the name already, and a later rename may follow.
+    if (saved) await settled(saved);
+    else setMessage(saveFailure);
   };
 
   const setPar = async (id: string, par: number) => {
@@ -1594,6 +1619,7 @@ export function EpisodeScreen() {
           navigation={<SidebarDrawer {...sidebar} />}
           onNewMap={() => openDialog("new")}
           onMapSettings={() => openDialog("settings")}
+          onRename={(name) => void renameMap(session.id, name)}
           onShare={cloudApi ? () => setSharing(true) : undefined}
           onPublish={
             publishBase ? () => setPublishing({ kind: "map" }) : undefined
