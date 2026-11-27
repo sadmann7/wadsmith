@@ -1762,12 +1762,13 @@ export function EditorScreen({
 
   // Someone else's edit lands on the map as it stands, without an undo step,
   // and is saved like any edit, which sends nothing back.
-  const takeRemote = React.useEffectEvent((patch: MapPatch) => {
+  const showPatch = (patch: MapPatch) => {
     const next = applyPatch(mapRef.current, patch);
     mapRef.current = next;
     setMap(next);
     onSave(next);
-  });
+  };
+  const takeRemote = React.useEffectEvent(showPatch);
   React.useEffect(
     () => watchRemote?.((patch) => takeRemote(patch)),
     [watchRemote],
@@ -2562,7 +2563,13 @@ export function EditorScreen({
                         );
                       }}
                       onAgentAction={logAgentAction}
-                      onRename={onRename}
+                      onRename={
+                        onRename &&
+                        ((name) => {
+                          showPatch({ fields: { name } });
+                          onRename(name);
+                        })
+                      }
                       checkContext={context}
                       onToolChange={setTool}
                       onActiveSectorChange={setActiveSector}

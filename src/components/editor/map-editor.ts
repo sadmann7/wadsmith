@@ -1321,6 +1321,12 @@ export const mapEditor = definePrimitive({
         : { kind: "empty", point };
     };
 
+    // A rename reaches the map option a render or more later, so the steps
+    // until then see it here.
+    let renaming: { name: string; from: GameMap | undefined } | null = null;
+    context.onOptions((options) => {
+      if (renaming && options.map !== renaming.from) renaming = null;
+    });
     // Every agent action is a method here, so a bridge step reaches it by
     // name. A read returns what it found, and an edit lands as one change
     // that already passed the map's checks.
@@ -1328,7 +1334,8 @@ export const mapEditor = definePrimitive({
       agentActionNames.map((name) => [
         name,
         (...args: unknown[]) => {
-          const { map } = store.get();
+          const shown = store.get().map;
+          const map = renaming ? { ...shown, name: renaming.name } : shown;
           const { onRename } = context.options();
           if (name === "setMapDetails" && !onRename && args.some(getHasName)) {
             throw new Error("Rename the map from Map settings in the editor.");
@@ -1342,17 +1349,16 @@ export const mapEditor = definePrimitive({
           // A name goes through the map's settings, so the episode and
           // everyone editing the map see it.
           const renamed = edited.name !== map.name ? edited.name : undefined;
-          const next =
-            renamed === undefined
-              ? edited
-              : edited.complevel === map.complevel
-                ? map
-                : { ...edited, name: map.name };
-          if (renamed !== undefined) onRename?.(renamed ?? "");
-          if (next === map) {
-            return renamed === undefined ? outcome.result : outcome;
+          if (renamed !== undefined) {
+            renaming = { name: renamed ?? "", from: context.options().map };
+            onRename?.(renamed ?? "");
           }
-          change("map", next, { reason: "agent" });
+          const next =
+            renamed !== undefined && edited.complevel === map.complevel
+              ? map
+              : edited;
+          if (next !== map) change("map", next, { reason: "agent" });
+          if (next === map && renamed === undefined) return outcome.result;
           const made = next.sectors.find(
             (sector) =>
               sector.id === outcome.result &&

@@ -1146,11 +1146,13 @@ export function EpisodeScreen() {
 
   // Tells the open editor, the live link and the online copy about new
   // settings, so the editor's next edit doesn't put the old ones back.
-  const settled = async (saved: EpisodeMap, fields: MapPatch["fields"]) => {
+  const settled = async (saved: EpisodeMap, fields?: MapPatch["fields"]) => {
     const { id } = saved;
     announce(id);
     if (sessionRef.current?.id === id) {
-      for (const listener of remoteListeners.current) listener({ fields });
+      if (fields) {
+        for (const listener of remoteListeners.current) listener({ fields });
+      }
       if (live.current?.mapId === id) {
         live.current.link.rename(saved.map.name ?? "");
       }
@@ -1170,7 +1172,9 @@ export function EpisodeScreen() {
         ...(entry.cloud && { cloud: { ...entry.cloud, pending: true } }),
       }))
       .catch(() => null);
-    if (saved) await settled(saved, { name });
+    // The editor shows the name already, and a later rename may follow.
+    if (saved) await settled(saved);
+    else setMessage(saveFailure);
   };
 
   const setPar = async (id: string, par: number) => {

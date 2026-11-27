@@ -26,14 +26,17 @@ const bridge = createAgent({
 export const agent: typeof bridge = {
   ...bridge,
   act: (input, options) => {
-    const step = input.steps.findIndex(
-      (item) => item.args !== undefined && !Array.isArray(item.args),
+    const step = (input?.steps ?? []).findIndex(
+      (item) => item?.args != null && !Array.isArray(item.args),
     );
     if (step < 0) return bridge.act(input, options);
     const { action, args } = input.steps[step];
     return Promise.resolve({
       ok: false,
-      error: { step, message: argsListError(action, args) },
+      error: {
+        step,
+        message: `${argsListError(action, args)} No step ran.`,
+      },
       steps: [],
       appeared: [],
       values: {},
