@@ -250,9 +250,9 @@ export const starterMap: GameMap = buildMap({
   rooms,
   things: [
     { kind: "player", at: [96, 160] },
-    { kind: "player-2", at: [48, 96] },
-    { kind: "player-3", at: [48, 224] },
-    { kind: "player-4", at: [48, 160] },
+    { kind: "player-2", at: [96, 112] },
+    { kind: "player-3", at: [96, 208] },
+    { kind: "player-4", at: [96, 64] },
     { kind: "short-tech-lamp", at: [32, 32] },
     { kind: "short-tech-lamp", at: [352, 32] },
     { kind: "short-tech-lamp", at: [32, 288] },

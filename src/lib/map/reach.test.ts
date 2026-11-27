@@ -374,6 +374,102 @@ describe("rooms not joined to the map", () => {
     expect(shared).toHaveLength(2);
   });
 
+  it("warns about a corner touch before the map has a player start", () => {
+    const map = { ...cornerMap(), things: [] };
+    const checks = checkMap(map);
+    expect(checks.find((issue) => issue.id === "no-player")).toBeDefined();
+    const island = defined(
+      checks.find((issue) => issue.id.startsWith("unreachable-island")),
+    );
+    expect(island).toMatchObject({
+      id: "unreachable-island:sector-3:sector-2",
+      severity: "warning",
+      message: "Octagon isn't joined to the rest of the map",
+      fixLabel: "Join",
+      target: "sector-3",
+    });
+    const joined = defined(fixIssue(map, island));
+    expect(
+      checkMap(joined).filter((issue) =>
+        issue.id.startsWith("unreachable-island"),
+      ),
+    ).toEqual([]);
+  });
+
+  it("names the room drawn last when two lone rooms meet at a corner", () => {
+    const map = buildMap({
+      name: "Diamond",
+      rooms: [
+        room("Hall", 0, 0, 128),
+        {
+          ...room("Diamond", 0, 0, 128),
+          points: [
+            [128, 64],
+            [192, 0],
+            [256, 64],
+            [192, 128],
+          ],
+        },
+      ],
+      things: [],
+    });
+    expect(reachWarnings(map)).toEqual([
+      "Diamond isn't joined to the rest of the map",
+    ]);
+  });
+
+  it("names each loose room in a chain of corner touches", () => {
+    const chained = buildMap({
+      name: "Chain",
+      rooms: [
+        ...cornerRooms(),
+        {
+          ...room("Tip", 0, 0, 128),
+          points: [
+            [480, 64],
+            [528, 16],
+            [576, 64],
+            [528, 112],
+          ],
+        },
+      ],
+      things: [],
+    });
+    expect(reachWarnings(chained)).toEqual([
+      "Octagon isn't joined to the rest of the map",
+      "Tip isn't joined to the rest of the map",
+    ]);
+  });
+
+  it("leaves a tagged landing at a corner alone before a player start", () => {
+    const rooms = cornerRooms();
+    const map = buildMap({
+      name: "Landing",
+      rooms: [...rooms.slice(0, 2), { ...rooms[2], tag: 5 }],
+      things: [],
+    });
+    expect(reachWarnings(map)).toEqual([]);
+  });
+
+  it("leaves a block too low to stand in alone before a player start", () => {
+    const rooms = cornerRooms();
+    const map = buildMap({
+      name: "Block",
+      rooms: [...rooms.slice(0, 2), { ...rooms[2], ceiling: 16 }],
+      things: [],
+    });
+    expect(reachWarnings(map)).toEqual([]);
+  });
+
+  it("leaves rooms apart from the rest alone before a player start", () => {
+    const map = buildMap({
+      name: "Apart",
+      rooms: [room("Hall", 0, 0, 128), room("Far", 512, 0, 128)],
+      things: [],
+    });
+    expect(reachWarnings(map)).toEqual([]);
+  });
+
   it("offers no join to a room drawn inside the loose room", () => {
     const map = buildMap({
       name: "Pit",
@@ -491,25 +587,29 @@ describe("rooms not joined to the map", () => {
 function cornerMap(): GameMap {
   return buildMap({
     name: "Corner",
-    rooms: [
-      room("Hall", 0, 0, 128),
-      { ...room("Corridor", 128, 0, 128), points: rect(128, 32, 128, 64) },
-      {
-        ...room("Octagon", 0, 0, 128),
-        points: [
-          [256, 64],
-          [296, 8],
-          [368, -16],
-          [440, 8],
-          [480, 64],
-          [440, 120],
-          [368, 144],
-          [296, 120],
-        ],
-      },
-    ],
+    rooms: cornerRooms(),
     things: [{ kind: "player", at: [64, 64] }],
   });
+}
+
+function cornerRooms(): RoomSpec[] {
+  return [
+    room("Hall", 0, 0, 128),
+    { ...room("Corridor", 128, 0, 128), points: rect(128, 32, 128, 64) },
+    {
+      ...room("Octagon", 0, 0, 128),
+      points: [
+        [256, 64],
+        [296, 8],
+        [368, -16],
+        [440, 8],
+        [480, 64],
+        [440, 120],
+        [368, 144],
+        [296, 120],
+      ],
+    },
+  ];
 }
 
 function twoRooms(

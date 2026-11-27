@@ -3,10 +3,12 @@ import * as React from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, it } from "vitest";
 
+import type { MouseMode } from "@/lib/engine/mouse-capture";
 import type { GameStatus } from "@/lib/engine/runtime";
+import type { GameMap } from "@/lib/map/types";
 
 import { defined } from "@/lib/defined";
-import { blankMap } from "@/lib/map/starter-map";
+import { blankMap, starterMap } from "@/lib/map/starter-map";
 
 import { GameHud, type ScoreRow } from "./game-hud";
 
@@ -41,6 +43,8 @@ const status: GameStatus = {
   secrets: 0,
   totalSecrets: 1,
   tics: 350,
+  automap: false,
+  monsters: [],
 };
 
 it("leaves out items on a map with nothing Doom counts as one", () => {
@@ -100,10 +104,102 @@ it("shows the items column on the co-op scoreboard only when there are some", ()
   expect(heads()).toEqual(["Player", "kills", "items", "secrets", "Ping"]);
 });
 
+interface HudOptions {
+  map?: GameMap | null;
+  others?: { peer: number; slot: number; x: number; y: number }[];
+  crosshair?: boolean;
+  mouseMode?: MouseMode;
+}
+
+it("shows the crosshair dot only while the mouse aims a living player", () => {
+  const dot = () => document.querySelector("[data-crosshair]");
+  renderHud(status);
+  expect(dot()).not.toBeNull();
+  for (const options of [
+    { mouseMode: "released" as const },
+    { crosshair: false },
+  ]) {
+    React.act(() => root?.unmount());
+    renderHud(status, false, null, options);
+    expect(dot()).toBeNull();
+  }
+  React.act(() => root?.unmount());
+  renderHud({ ...status, health: 0 });
+  expect(dot()).toBeNull();
+  React.act(() => root?.unmount());
+  renderHud({ ...status, automap: true });
+  expect(dot()).toBeNull();
+});
+
+it("shows held keys as colored key icons and nothing without keys", () => {
+  const empty = renderHud(status);
+  expect(empty.querySelector("[aria-label=Keys]")).toBeNull();
+  expect(empty.textContent).not.toContain("Keys");
+  React.act(() => root?.unmount());
+  const held = renderHud({ ...status, keys: 0b100001 });
+  const labels = [...held.querySelectorAll("[aria-label=Keys] [role=img]")].map(
+    (icon) => icon.getAttribute("aria-label"),
+  );
+  expect(labels).toEqual(["Blue key", "Red skull key"]);
+});
+
+it("draws doors, the exit, keys and nearby monsters on the minimap", () => {
+  const start = { ...status, x: 96, y: -128 };
+  const container = renderHud(
+    {
+      ...start,
+      monsters: [
+        { x: 400, y: -128, angle: 180 },
+        { x: 4000, y: -128, angle: 0 },
+      ],
+    },
+    false,
+    null,
+    { map: starterMap },
+  );
+  const minimap = defined(container.querySelector("[aria-label=Minimap]"));
+  expect(minimap.querySelectorAll("[data-monster]")).toHaveLength(1);
+  expect(minimap.querySelector("[data-kind=exit]")).not.toBeNull();
+  expect(minimap.querySelector("[data-lock=blue]")).not.toBeNull();
+  React.act(() => root?.unmount());
+  const nearKey = renderHud({ ...start, x: 700 }, false, null, {
+    map: starterMap,
+  });
+  expect(nearKey.querySelector("[data-key=blue]")).not.toBeNull();
+  React.act(() => root?.unmount());
+  const holding = renderHud({ ...start, x: 700, keys: 1 }, false, null, {
+    map: starterMap,
+  });
+  expect(holding.querySelector("[data-key=blue]")).toBeNull();
+});
+
+it("colors another player's minimap marker by their game slot", () => {
+  const container = renderHud(status, false, null, {
+    map: starterMap,
+    others: [{ peer: 3, slot: 1, x: 64, y: -128 }],
+  });
+  const marker = defined(container.querySelector("[data-peer='3']"));
+  expect(marker.getAttribute("fill")).toBe("var(--color-info)");
+});
+
+it("hands the bottom of the view to Doom's status bar on the automap", () => {
+  const container = renderHud({ ...status, automap: true }, false, null, {
+    map: starterMap,
+  });
+  expect(container.textContent).not.toContain("Health");
+  expect(container.querySelector("[aria-label=Minimap]")).toBeNull();
+});
+
 function renderHud(
   current: GameStatus,
   isBetween = false,
   scores: ScoreRow[] | null = null,
+  {
+    map = null,
+    others = [],
+    crosshair = true,
+    mouseMode = "locked",
+  }: HudOptions = {},
 ) {
   const container = document.createElement("div");
   document.body.append(container);
@@ -112,17 +208,19 @@ function renderHud(
   React.act(() =>
     root?.render(
       <GameHud
-        map={null}
+        map={map}
         title="Starter map"
         slot="MAP01"
         par={null}
         status={current}
         fullscreen={false}
         showHelp={false}
+        crosshair={crosshair}
+        skill="medium"
         coop={scores ? "host" : null}
         deathmatch={false}
         scores={scores}
-        others={[]}
+        others={others}
         stall={null}
         episode={isBetween}
         between={
@@ -138,7 +236,7 @@ function renderHud(
         canEdit
         cheats={null}
         noteOpen={false}
-        mouseMode="locked"
+        mouseMode={mouseMode}
         noteSaved={false}
         finished={false}
         audioUnavailable={false}

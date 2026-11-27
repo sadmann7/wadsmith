@@ -559,10 +559,10 @@ index a16ecd1..e79fe25 100644
  
 diff --git a/src/wadsmith.c b/src/wadsmith.c
 new file mode 100644
-index 0000000..abfd7fc
+index 0000000..8a5734c
 --- /dev/null
 +++ b/src/wadsmith.c
-@@ -0,0 +1,440 @@
+@@ -0,0 +1,488 @@
 +// The interface between Woof and Wadsmith's game worker.
 +
 +#include <emscripten.h>
@@ -579,6 +579,7 @@ index 0000000..abfd7fc
 +#include "m_config.h"
 +#include "m_fixed.h"
 +#include "p_mobj.h"
++#include "p_tick.h"
 +#include "r_defs.h"
 +#include "r_state.h"
 +#include "v_video.h"
@@ -1002,6 +1003,53 @@ index 0000000..abfd7fc
 +    return index >= 0 && index < numsectors
 +               ? sectors[index].floorheight >> FRACBITS
 +               : 0;
++}
++
++#define MONSTER_FIELDS 3
++#define MAX_MONSTERS 256
++static int monsters[MAX_MONSTERS * MONSTER_FIELDS];
++
++EXPORT int wadsmith_automap(void)
++{
++    return automap_on;
++}
++
++EXPORT const int *wadsmith_monsters(void)
++{
++    return monsters;
++}
++
++// Fills wadsmith_monsters with the live monsters within range of the player,
++// as x, y and angle in degrees, and returns how many there are.
++EXPORT int wadsmith_monsters_near(int range)
++{
++    const mobj_t *player = Player()->mo;
++    if (gamestate != GS_LEVEL || player == NULL)
++    {
++        return 0;
++    }
++    const thinker_t *cap = &thinkerclasscap[th_enemies];
++    int count = 0;
++    for (const thinker_t *th = cap->cnext; th != cap && count < MAX_MONSTERS;
++         th = th->cnext)
++    {
++        const mobj_t *mo = (const mobj_t *)th;
++        const int x = mo->x >> FRACBITS;
++        const int y = mo->y >> FRACBITS;
++        const int dx = x - (player->x >> FRACBITS);
++        const int dy = y - (player->y >> FRACBITS);
++        if (mo->health <= 0 || dx < -range || dx > range || dy < -range
++            || dy > range)
++        {
++            continue;
++        }
++        int *at = monsters + count * MONSTER_FIELDS;
++        at[0] = x;
++        at[1] = y;
++        at[2] = (int)(((unsigned long long)mo->angle * 360) >> 32);
++        count++;
++    }
++    return count;
 +}
 diff --git a/src/wadsmith.h b/src/wadsmith.h
 new file mode 100644
