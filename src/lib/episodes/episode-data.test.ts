@@ -234,6 +234,7 @@ describe("episode order", () => {
       "MAP04",
       "MAP05",
       "MAP06",
+      "MAP07",
     ]);
     expect(
       featured.every(

@@ -5,6 +5,7 @@ import type { GameMap, LineActionKind } from "@/lib/map/types";
 import { defined } from "@/lib/defined";
 import { thingCatalog } from "@/lib/map/catalog";
 import { featuredMaps } from "@/lib/map/featured";
+import { theBasics } from "@/lib/map/featured/the-basics";
 import { pointInPolygon, wallKey, wallOwners } from "@/lib/map/geometry";
 import { starterMap } from "@/lib/map/starter-map";
 import { compileEpisode } from "@/lib/wad/compile";
@@ -95,9 +96,9 @@ describe.skipIf(!ready)("fast actions in the engine", () => {
 
 describe.skipIf(!ready)("floor and ceiling actions in the engine", () => {
   const withLift = (kind: LineActionKind): GameMap => ({
-    ...starterMap,
+    ...theBasics,
     lines: Object.fromEntries(
-      Object.entries(starterMap.lines ?? {}).map(([wall, line]) => [
+      Object.entries(theBasics.lines ?? {}).map(([wall, line]) => [
         wall,
         line.action?.kind === "lift"
           ? { ...line, action: { ...line.action, kind, repeat: false } }

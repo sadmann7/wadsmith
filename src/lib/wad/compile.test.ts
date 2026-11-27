@@ -2279,27 +2279,106 @@ describe("thing settings", () => {
     ).toEqual([]);
   });
 
-  it("fits co-op starts beside a player facing down a hallway", () => {
+  it("fits four co-op starts in a hallway 128 wide the player faces down", () => {
+    for (const [x, y, angle] of [
+      [512, 64, 0],
+      [24, 64, 0],
+      [1000, 64, 180],
+      [512, 24, 0],
+      [512, 104, 180],
+    ]) {
+      const hallway: GameMap = {
+        ...testMap,
+        vertices: {
+          a: { x: 0, y: 0 },
+          b: { x: 1024, y: 0 },
+          c: { x: 1024, y: 128 },
+          d: { x: 0, y: 128 },
+        },
+        sectors: [{ ...testMap.sectors[0], vertices: ["a", "b", "c", "d"] }],
+        things: [{ id: "player-1", kind: "player", x, y, angle }],
+        switches: [],
+        lines: {},
+      };
+      const map = addPlayerStarts(hallway, 4);
+      const starts = map.things.filter((thing) =>
+        thing.kind.startsWith("player"),
+      );
+      expect(starts).toHaveLength(4);
+      for (const start of starts) {
+        expect(start.y).toBeGreaterThanOrEqual(16);
+        expect(start.y).toBeLessThanOrEqual(112);
+      }
+      expect(validateMap(map)).toEqual([]);
+      expect(
+        checkMap(map).filter((issue) => issue.id.startsWith("start-in-fire")),
+      ).toEqual([]);
+    }
+  });
+
+  it("keeps added co-op starts clear of a jutting wall and a big monster", () => {
     const hallway: GameMap = {
       ...testMap,
       vertices: {
         a: { x: 0, y: 0 },
+        p1: { x: 504, y: 0 },
+        p2: { x: 504, y: 8 },
+        p3: { x: 520, y: 8 },
+        p4: { x: 520, y: 0 },
         b: { x: 1024, y: 0 },
         c: { x: 1024, y: 128 },
         d: { x: 0, y: 128 },
       },
-      sectors: [{ ...testMap.sectors[0], vertices: ["a", "b", "c", "d"] }],
-      things: [{ id: "player-1", kind: "player", x: 512, y: 64, angle: 0 }],
+      sectors: [
+        {
+          ...testMap.sectors[0],
+          vertices: ["a", "p1", "p2", "p3", "p4", "b", "c", "d"],
+        },
+      ],
+      things: [
+        { id: "player-1", kind: "player", x: 512, y: 64, angle: 0 },
+        { id: "cyberdemon-1", kind: "cyberdemon", x: 416, y: 64, angle: 0 },
+      ],
       switches: [],
       lines: {},
     };
     const map = addPlayerStarts(hallway, 4);
     expect(
-      map.things.filter((thing) => thing.kind.startsWith("player")).length,
-    ).toBeGreaterThanOrEqual(3);
-    expect(
-      checkMap(map).filter((issue) => issue.id.startsWith("start-in-fire")),
+      checkMap(map).filter(
+        (issue) =>
+          issue.id.startsWith("thing-") || issue.id.startsWith("start-in-fire"),
+      ),
     ).toEqual([]);
+  });
+
+  it("keeps an added co-op start off a monster that already overlaps another", () => {
+    const room: GameMap = {
+      ...testMap,
+      vertices: {
+        a: { x: 0, y: 0 },
+        b: { x: 1024, y: 0 },
+        c: { x: 1024, y: 512 },
+        d: { x: 0, y: 512 },
+      },
+      sectors: [{ ...testMap.sectors[0], vertices: ["a", "b", "c", "d"] }],
+      things: [
+        { id: "player-1", kind: "player", x: 512, y: 256, angle: 0 },
+        { id: "imp-1", kind: "imp", x: 536, y: 240, angle: 0 },
+        { id: "imp-2", kind: "imp", x: 560, y: 264, angle: 0 },
+      ],
+      switches: [],
+      lines: {},
+    };
+    const start = defined(
+      addPlayerStarts(room, 2).things.find(
+        (thing) => thing.kind === "player-2",
+      ),
+    );
+    for (const imp of room.things.filter((thing) => thing.kind === "imp")) {
+      expect(
+        Math.max(Math.abs(imp.x - start.x), Math.abs(imp.y - start.y)),
+      ).toBeGreaterThanOrEqual(36);
+    }
   });
 
   it("writes difficulty and ambush flags", () => {

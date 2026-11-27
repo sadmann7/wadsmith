@@ -96,6 +96,50 @@ export function findStuckThings(map: GameMap, custom: CustomThings) {
   return { overlaps, walls };
 }
 
+// Whether a player start at a spot within `reach` of `center` would sit in a
+// wall or inside another body.
+export function startBlocker(
+  map: GameMap,
+  center: Point,
+  reach: number,
+  custom: CustomThings,
+) {
+  const near = (point: Point, slack: number) =>
+    Math.abs(point.x - center.x) <= reach + slack &&
+    Math.abs(point.y - center.y) <= reach + slack;
+  const walls = [...wallOwners(map)].flatMap(([wall, owners]) => {
+    const line = map.lines?.[wall];
+    if (owners.length > 1 && !getBlocksPlayer(map, line)) return [];
+    const [a, b] = wall.split("|").map((id) => map.vertices[id]);
+    if (!a || !b) return [];
+    const box = {
+      x: Math.max(Math.min(a.x, b.x), Math.min(center.x, Math.max(a.x, b.x))),
+      y: Math.max(Math.min(a.y, b.y), Math.min(center.y, Math.max(a.y, b.y))),
+    };
+    return near(box, playerRadius) ? [[a, b] as const] : [];
+  });
+  const bodies = map.things.flatMap((thing) => {
+    const body = bodyOf(thing, custom);
+    return body && near(thing, body.radius + playerRadius) ? [body] : [];
+  });
+  return (point: Point) =>
+    walls.some(([a, b]) => getCrossesBox(a, b, point, playerRadius)) ||
+    bodies.some(
+      ({ thing, radius }) =>
+        Math.abs(thing.x - point.x) < radius + playerRadius &&
+        Math.abs(thing.y - point.y) < radius + playerRadius,
+    );
+}
+
+const playerRadius = 16;
+
+const starts = new Set<ThingKind>([
+  "player",
+  "player-2",
+  "player-3",
+  "player-4",
+]);
+
 const radii = new Map(
   vanillaThings
     .filter(([type]) => type > 0)
@@ -113,15 +157,6 @@ const solidScenery = new Set([
 // Commander Keen hangs from the ceiling and the boss brain sits in its wall,
 // so neither ever moves.
 const stillEnemies = new Set([72, 88]);
-
-const playerRadius = 16;
-
-const starts = new Set<ThingKind>([
-  "player",
-  "player-2",
-  "player-3",
-  "player-4",
-]);
 
 function bodyOf(thing: Thing, custom: CustomThings): Body | null {
   const isPlayer = starts.has(thing.kind);
