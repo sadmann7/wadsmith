@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { minimapSpan } from "@/lib/engine/runtime";
 import { starterMap } from "@/lib/map/starter-map";
 
 import {
@@ -8,7 +9,6 @@ import {
   isInView,
   minimapKeys,
   minimapLines,
-  minimapSpan,
   minimapView,
   showsCrosshair,
 } from "./minimap";

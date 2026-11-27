@@ -2,7 +2,6 @@ import type { NetInbox } from "./net-inbox";
 
 import { FramePacer } from "./frame-pacer";
 import { type GameInfo, warpArgs } from "./game";
-import { monsterRange } from "./minimap";
 import { trailFields } from "./trail";
 
 interface DoomModule {
@@ -161,6 +160,10 @@ export interface Monster {
 }
 
 const monsterFields = 3;
+// The minimap shows a square this many map units across, centered on the
+// player, and the engine reports monsters out to its corners.
+export const minimapSpan = 640;
+const monsterRange = Math.ceil((minimapSpan / 2) * Math.SQRT2);
 
 export type Resolution = "classic" | "high";
 

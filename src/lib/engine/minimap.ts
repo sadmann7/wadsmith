@@ -1,14 +1,10 @@
 import type { MouseMode } from "@/lib/engine/mouse-capture";
 import type { GameMap, KeyColor, Point } from "@/lib/map/types";
 
+import { minimapSpan } from "@/lib/engine/runtime";
 import { keyThings } from "@/lib/map/catalog";
 import { wallOwners } from "@/lib/map/geometry";
 import { actionForSpecial, endsLevel } from "@/lib/map/lines";
-
-// The minimap shows a square this many map units across, centered on the
-// player, and the engine reports monsters out to its corners.
-export const minimapSpan = 1024;
-export const monsterRange = Math.ceil((minimapSpan / 2) * Math.SQRT2);
 
 export type MinimapLineKind = "wall" | "step" | "door" | "exit";
 
@@ -34,12 +30,6 @@ export interface HeldKey {
 }
 
 const keyColors: KeyColor[] = ["blue", "yellow", "red"];
-
-// Bits as the engine reports them: the three keycards, then the three skull
-// keys, each in Doom's blue, yellow, red order.
-function keyBit({ color, skull }: HeldKey) {
-  return 1 << (keyColors.indexOf(color) + (skull ? keyColors.length : 0));
-}
 
 export function heldKeys(bits: number): HeldKey[] {
   return [false, true].flatMap((skull) =>
@@ -162,4 +152,10 @@ export function showsCrosshair({
     !automap &&
     !covered
   );
+}
+
+// Bits as the engine reports them: the three keycards, then the three skull
+// keys, each in Doom's blue, yellow, red order.
+function keyBit({ color, skull }: HeldKey) {
+  return 1 << (keyColors.indexOf(color) + (skull ? keyColors.length : 0));
 }

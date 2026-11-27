@@ -27,10 +27,9 @@ import {
   fromEngine,
   heldKeys,
   isInView,
-  type MinimapLineKind,
   minimapKeys,
+  type MinimapLineKind,
   minimapLines,
-  minimapSpan,
   minimapView,
   showsCrosshair,
 } from "@/lib/engine/minimap";
@@ -39,6 +38,7 @@ import {
   fragLimit,
   type GameStatus,
   maxVolume,
+  minimapSpan,
   type Screen,
   screenSize,
   type Skill,
@@ -78,15 +78,11 @@ export interface ScoreRow {
 
 const ticsPerSecond = 35;
 const ammoNames = ["Bullets", "Shells", "Cells", "Rockets"];
-const keyNames: Record<KeyColor, string> = {
-  blue: "Blue",
-  yellow: "Yellow",
-  red: "Red",
-};
 const lowHealth = 25;
 
 const panelClass = "pointer-events-auto rounded-[3px] bg-card/90";
 const buttonClass = `${panelClass} flex items-center gap-2 border-0 px-3 py-2 text-foreground hover:bg-muted`;
+const noticeClass = "m-0 rounded-[3px] bg-void/50 px-2.5 py-1 text-xs";
 const iconButtonClass =
   "flex size-[30px] items-center justify-center rounded-[3px] border-0 bg-transparent p-0 text-muted-foreground hover:bg-muted hover:text-foreground";
 
@@ -443,7 +439,7 @@ export function GameHud({
           )}
         </dl>
         {cheats && (cheats.god || cheats.noclip) ? (
-          <p role="status" className="m-0 text-xs text-primary">
+          <p role="status" className={`${noticeClass} text-primary`}>
             Cheats on:{" "}
             {[cheats.god && "god mode", cheats.noclip && "no clipping"]
               .filter(Boolean)
@@ -451,12 +447,12 @@ export function GameHud({
           </p>
         ) : null}
         {audioUnavailable ? (
-          <p className="m-0 text-xs text-muted-foreground">
+          <p className={`${noticeClass} text-muted-foreground`}>
             Sound needs HTTPS or localhost.
           </p>
         ) : null}
         {mouseMode === "denied" ? (
-          <p className="m-0 text-xs text-muted-foreground">
+          <p className={`${noticeClass} text-muted-foreground`}>
             This browser won't capture the mouse. Clicking fires.
           </p>
         ) : null}
@@ -538,7 +534,7 @@ export function GameHud({
               Note saved to this spot.
             </p>
           ) : showHelp && !finished && mouseMode !== "released" ? (
-            <p className="m-0 max-w-[360px] font-mono text-xs text-muted-foreground @max-xl:hidden">
+            <p className="m-0 max-w-[520px] font-mono text-xs text-muted-foreground @max-xl:hidden">
               {help}
             </p>
           ) : null}
@@ -568,8 +564,11 @@ export function GameHud({
               disabled={!inLevel}
               onClick={onOpenNote}
             >
-              Leave a note
-              <kbd className="font-mono text-xs text-muted-foreground">N</kbd>
+              <span className="@max-xl:hidden">Leave a note</span>
+              <span className="hidden @max-xl:inline">Note</span>
+              <kbd className="font-mono text-xs text-muted-foreground @max-xl:hidden">
+                N
+              </kbd>
             </button>
             <button
               type="button"
@@ -577,8 +576,11 @@ export function GameHud({
               disabled={!inLevel}
               onClick={onEditSpot}
             >
-              Edit this spot
-              <kbd className="font-mono text-xs text-muted-foreground">F2</kbd>
+              <span className="@max-xl:hidden">Edit this spot</span>
+              <span className="hidden @max-xl:inline">Edit</span>
+              <kbd className="font-mono text-xs text-muted-foreground @max-xl:hidden">
+                F2
+              </kbd>
             </button>
           </div>
           {map && status && inLevel && !status.automap ? (
@@ -641,20 +643,9 @@ export function EndGameConfirm({
   );
 }
 
-interface MinimapProps {
-  map: GameMap;
-  status: GameStatus;
-  others: OtherPlayer[];
-}
-
 const minimapPixels = 192;
 const unit = minimapSpan / minimapPixels;
-const lineStyles: Record<MinimapLineKind, { stroke: string; width: number }> = {
-  wall: { stroke: "var(--color-map-wall)", width: 1.5 },
-  step: { stroke: "var(--color-map-portal)", width: 1 },
-  door: { stroke: "var(--color-map-door)", width: 2 },
-  exit: { stroke: "var(--color-success)", width: 2.5 },
-};
+
 const keyFills: Record<KeyColor, string> = {
   blue: "var(--color-key-blue)",
   yellow: "var(--color-key-yellow)",
@@ -669,6 +660,19 @@ const playerFills = [
 ];
 const arrowPath = "M1 0L-0.7 0.6L-0.35 0L-0.7-0.6Z";
 const monsterPath = "M1 0L-0.8 0.75L-0.8-0.75Z";
+
+const lineStyles: Record<MinimapLineKind, { stroke: string; width: number }> = {
+  wall: { stroke: "var(--color-map-wall)", width: 1.5 },
+  step: { stroke: "var(--color-map-portal)", width: 1 },
+  door: { stroke: "var(--color-map-door)", width: 2 },
+  exit: { stroke: "var(--color-success)", width: 2.5 },
+};
+
+interface MinimapProps {
+  map: GameMap;
+  status: GameStatus;
+  others: OtherPlayer[];
+}
 
 function Minimap({ map, status, others }: MinimapProps) {
   const lines = React.useMemo(() => minimapLines(map), [map]);
@@ -745,7 +749,7 @@ function Minimap({ map, status, others }: MinimapProps) {
               data-monster=""
               d={monsterPath}
               fill="var(--color-destructive)"
-              transform={`translate(${monster.x} ${monster.y}) rotate(${-monster.angle}) scale(${4 * unit})`}
+              transform={`translate(${monster.x} ${monster.y}) rotate(${-monster.angle}) scale(${4.5 * unit})`}
             />
           ))}
           {others.map((other) => (
@@ -768,7 +772,7 @@ function Minimap({ map, status, others }: MinimapProps) {
           stroke="var(--color-map-bg)"
           strokeWidth={1}
           vectorEffect="non-scaling-stroke"
-          transform={`rotate(${-status.angle}) scale(${6 * unit})`}
+          transform={`rotate(${-status.angle}) scale(${7 * unit})`}
         />
       </svg>
     </div>
@@ -792,6 +796,12 @@ function Stat({ label, value }: StatProps) {
 interface HeldKeysProps {
   bits: number;
 }
+
+const keyNames: Record<KeyColor, string> = {
+  blue: "Blue",
+  yellow: "Yellow",
+  red: "Red",
+};
 
 function HeldKeys({ bits }: HeldKeysProps) {
   const keys = heldKeys(bits);
