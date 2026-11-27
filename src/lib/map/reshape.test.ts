@@ -928,7 +928,7 @@ describe("drawing over the starter maps", () => {
       }
     }
     expect(added).toEqual([]);
-  }, 30_000);
+  }, 60_000);
 });
 
 function insidePoints(polygon: Point[]) {

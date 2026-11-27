@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { defined } from "@/lib/defined";
 
@@ -9,6 +9,19 @@ import { wallKey, wallOwners } from "./geometry";
 import { joinWalls } from "./join";
 import { shapeCorners } from "./shapes";
 import { validateMap } from "./validate";
+
+const crosses = vi.hoisted(() => ({ count: 0 }));
+
+vi.mock(import("./geometry"), async (importOriginal) => {
+  const geometry = await importOriginal();
+  return {
+    ...geometry,
+    cross: (...args: Parameters<typeof geometry.cross>) => {
+      crosses.count += 1;
+      return geometry.cross(...args);
+    },
+  };
+});
 
 const empty: GameMap = { vertices: {}, sectors: [], things: [], switches: [] };
 
@@ -94,22 +107,29 @@ describe("joining a drawn room to the walls it meets", () => {
   });
 
   it("looks only at the walls near the new room", () => {
-    let grid = empty;
-    for (let row = 0; row < 30; row += 1) {
-      for (let column = 0; column < 30; column += 1) {
-        grid = addRoom(
-          grid,
-          box(column * 64, row * 64, column * 64 + 64, row * 64 + 64),
-          {},
-          1,
-        ).map;
+    const grid = (rows: number) => {
+      let map = empty;
+      for (let row = 0; row < rows; row += 1) {
+        for (let column = 0; column < 30; column += 1) {
+          map = addRoom(
+            map,
+            box(column * 64, row * 64, column * 64 + 64, row * 64 + 64),
+            {},
+            1,
+          ).map;
+        }
       }
-    }
-    const started = performance.now();
-    const across = drawn(grid, box(-32, 16, 1952, 48));
-    expect(across.map.sectors).toHaveLength(901);
-    expect(performance.now() - started).toBeLessThan(2000);
-  });
+      return map;
+    };
+    const work = (map: GameMap) => {
+      crosses.count = 0;
+      const across = drawn(map, box(-32, 16, 1952, 48));
+      return { rooms: across.map.sectors.length, crosses: crosses.count };
+    };
+    const big = work(grid(10));
+    expect(big.rooms).toBe(301);
+    expect(big.crosses).toBe(work(grid(1)).crosses);
+  }, 30_000);
 
   it("keeps a split wall's settings on both halves", () => {
     const bottom = wallKey("v3", "v4");

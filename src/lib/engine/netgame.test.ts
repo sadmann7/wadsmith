@@ -64,12 +64,7 @@ describe.skipIf(!ready)("network game through shared memory", () => {
     const host = room.join(hostPeer, "host");
     const guest = room.join(guestPeer, "guest");
 
-    const waiting = await waitFor(
-      host.query,
-      (state) => state.waitingPlayers === 2,
-      15_000,
-    );
-    expect(waiting?.waitingPlayers).toBe(2);
+    await waitFor(host.query, (state) => state.waitingPlayers === 2);
     expect(await guest.launch()).toBe(false);
     expect(await host.launch()).toBe(true);
 
@@ -77,11 +72,7 @@ describe.skipIf(!ready)("network game through shared memory", () => {
       const [a, b] = await Promise.all([host.query(), guest.query()]);
       return a && b ? [a, b] : null;
     };
-    const started = await waitFor(
-      bothIn,
-      ([a, b]) => a.inLevel && b.inLevel,
-      15_000,
-    );
+    const started = await waitFor(bothIn, ([a, b]) => a.inLevel && b.inLevel);
     expect(started?.[0]).toMatchObject({ playersInGame: 2, consolePlayer: 0 });
     expect(started?.[1]).toMatchObject({ playersInGame: 2, consolePlayer: 1 });
     for (const snapshot of defined(started)) {
@@ -93,13 +84,8 @@ describe.skipIf(!ready)("network game through shared memory", () => {
 
     const startX = defined(started)[0].players[1].x;
     guest.key(true, doomKeys.up);
-    const moved = await waitFor(
-      host.query,
-      (state) => state.players[1].x > startX + 64,
-      10_000,
-    );
+    await waitFor(host.query, (state) => state.players[1].x > startX + 64);
     guest.key(false, doomKeys.up);
-    expect(moved?.players[1].x).toBeGreaterThan(startX + 64);
 
     // The host's engine runs both players, so its trail holds the guest's
     // path too.
@@ -110,13 +96,11 @@ describe.skipIf(!ready)("network game through shared memory", () => {
     const walked = run?.paths.findLast((path) => path.player === 1);
     expect(walked?.points.at(-2)).toBeGreaterThan(startX + 32);
 
-    const agreed = await waitFor(
+    await waitFor(
       bothIn,
       ([a, b]) =>
         a.players[1].x === b.players[1].x && a.players[1].y === b.players[1].y,
-      5_000,
     );
-    expect(agreed).not.toBeNull();
   }, 60_000);
 
   it.each(deathmatchCases)(
@@ -128,18 +112,14 @@ describe.skipIf(!ready)("network game through shared memory", () => {
       const room = createRoom(map, "deathmatch");
       const host = room.join(hostPeer, "host");
       const guest = room.join(guestPeer, "guest");
-      await waitFor(host.query, (state) => state.waitingPlayers === 2, 15_000);
+      await waitFor(host.query, (state) => state.waitingPlayers === 2);
       expect(await host.launch()).toBe(true);
 
       const bothIn = async () => {
         const [a, b] = await Promise.all([host.query(), guest.query()]);
         return a && b ? [a, b] : null;
       };
-      const started = await waitFor(
-        bothIn,
-        ([a, b]) => a.inLevel && b.inLevel,
-        15_000,
-      );
+      const started = await waitFor(bothIn, ([a, b]) => a.inLevel && b.inLevel);
       expect(started?.[0]).toMatchObject({ playersInGame: 2, frags: 0 });
       const onSpot = ({ x, y }: { x: number; y: number }) =>
         spots.some((spot) => spot.x === x && spot.y === -y);
@@ -176,6 +156,12 @@ function createRoom(map = coopMap, mode: "coop" | "deathmatch" = "coop") {
     });
     workers.push(worker);
     const replies = new Map<number, (value: unknown) => void>();
+    let exited = false;
+    worker.on("exit", () => {
+      exited = true;
+      for (const reply of replies.values()) reply(new Error("Worker exited."));
+      replies.clear();
+    });
     worker.on("message", (message) => {
       if (message.type === "send") {
         setTimeout(
@@ -187,12 +173,14 @@ function createRoom(map = coopMap, mode: "coop" | "deathmatch" = "coop") {
         replies.delete(message.id);
       }
     });
-    const ask = <T>(type: "query" | "launch", ms = 1000) =>
-      new Promise<T | null>((done) => {
+    const ask = <T>(type: "query" | "launch") =>
+      new Promise<T>((done, fail) => {
+        if (exited) return fail(new Error("Worker exited."));
         const id = (nextId += 1);
-        replies.set(id, (value) => done(value as T));
+        replies.set(id, (value) =>
+          value instanceof Error ? fail(value) : done(value as T),
+        );
         worker.postMessage({ type, id });
-        setTimeout(() => done(null), ms);
       });
     const trail: number[] = [];
     return {
@@ -214,14 +202,10 @@ function createRoom(map = coopMap, mode: "coop" | "deathmatch" = "coop") {
 async function waitFor<T>(
   read: () => Promise<T | null>,
   done: (value: T) => boolean,
-  ms: number,
 ) {
-  const end = performance.now() + ms;
-  let last: T | null = null;
-  while (performance.now() < end) {
-    last = await read();
-    if (last !== null && done(last)) return last;
+  for (;;) {
+    const value = await read();
+    if (value !== null && done(value)) return value;
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
-  return last;
 }

@@ -1,8 +1,12 @@
 import { resolve } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { unstable_dev, type Unstable_DevWorker } from "wrangler";
 
 import { allowedOrigin } from "./origin";
+
+// Every test waits on the local Workers runtime, a separate process that
+// slows down as much as the machine does.
+vi.setConfig({ testTimeout: 30_000 });
 
 let worker: Unstable_DevWorker;
 let base: string;
@@ -32,9 +36,8 @@ interface Client {
   socket: WebSocket;
   received: (string | ArrayBuffer)[];
   next: () => Promise<string | ArrayBuffer>;
+  ended: Promise<null>;
 }
-
-const settle = () => new Promise((done) => setTimeout(done, 200));
 
 describe("room server", () => {
   it("relays messages to everyone else in the room", async () => {
@@ -50,18 +53,19 @@ describe("room server", () => {
     expect(new Uint8Array((await c.next()) as ArrayBuffer)).toEqual(
       new Uint8Array([2, 1, 9]),
     );
-    await settle();
-    expect(a.received).toEqual([]);
+    expect(await heardBefore(a, b)).toEqual([]);
   });
 
   it("keeps rooms apart", async () => {
-    const [a, other] = await Promise.all([
+    const [a, b, other, beside] = await Promise.all([
       connect("apart01"),
+      connect("apart01"),
+      connect("apart02"),
       connect("apart02"),
     ]);
     a.socket.send('{"type":"hello"}');
-    await settle();
-    expect(other.received).toEqual([]);
+    expect(await b.next()).toBe('{"type":"hello"}');
+    expect(await heardBefore(other, beside)).toEqual([]);
   });
 
   it("announces a player whose connection drops", async () => {
@@ -72,8 +76,8 @@ describe("room server", () => {
     ]);
     host.socket.send('{"type":"identify","peer":1}');
     guest.socket.send('{"type":"identify","peer":2}');
-    await settle();
-    expect(watcher.received).toEqual([]);
+    expect(await heardBefore(watcher, host)).toEqual([]);
+    expect(await heardBefore(watcher, guest)).toEqual([]);
     guest.socket.close();
     expect(await watcher.next()).toBe('{"type":"leave","peer":2}');
     host.socket.close();
@@ -99,12 +103,15 @@ describe("room limits", () => {
     );
 
   it("closes a connection that sends an oversized message", async () => {
-    const [a, b] = await Promise.all([connect("limit01"), connect("limit01")]);
+    const [a, b, c] = await Promise.all([
+      connect("limit01"),
+      connect("limit01"),
+      connect("limit01"),
+    ]);
     const done = closed(a);
     a.socket.send(new Uint8Array(32 * 1024));
     expect((await done).code).toBe(1008);
-    await settle();
-    expect(b.received).toEqual([]);
+    expect(await heardBefore(b, c)).toEqual([]);
   });
 
   it("closes a connection that floods the room", async () => {
@@ -114,15 +121,16 @@ describe("room limits", () => {
       a.socket.send(new Uint8Array([2, 1, index % 256]));
     }
     expect((await done).code).toBe(1008);
-    await settle();
-    expect(b.received.length).toBeLessThan(800);
+    expect(
+      (await heardBefore(b, await connect("limit02"))).length,
+    ).toBeLessThan(800);
   });
 
   it("closes a room that goes quiet", async () => {
     const a = await connect("limit03");
     a.socket.send('{"type":"hello"}');
     expect((await closed(a)).reason).toBe("This room was idle.");
-  }, 10_000);
+  });
 
   it("closes a busy room once its lifetime is up", async () => {
     const a = await connect("limit04");
@@ -130,8 +138,25 @@ describe("room limits", () => {
     const result = await closed(a);
     clearInterval(timer);
     expect(result.reason).toBe("This room has expired.");
-  }, 15_000);
+  });
 });
+
+let probes = 0;
+
+// What the room sent `client` before a probe that `from` sends now, since the
+// room relays each sender's messages in order. A room that closes `client`
+// first, such as at the end of its short lifetime here, has sent it all.
+async function heardBefore(client: Client, from: Client) {
+  probes += 1;
+  const probe = `{"type":"probe","id":${probes}}`;
+  from.socket.send(probe);
+  const heard: (string | ArrayBuffer)[] = [];
+  for (;;) {
+    const message = await Promise.race([client.next(), client.ended]);
+    if (message === null || message === probe) return heard;
+    heard.push(message);
+  }
+}
 
 const origin = "http://localhost:3000";
 
@@ -143,6 +168,9 @@ function connect(room: string, from = origin) {
     socket.binaryType = "arraybuffer";
     const received: (string | ArrayBuffer)[] = [];
     const waiting: ((message: string | ArrayBuffer) => void)[] = [];
+    const ended = new Promise<null>((end) =>
+      socket.addEventListener("close", () => end(null)),
+    );
     socket.addEventListener("message", (event) => {
       const take = waiting.shift();
       if (take) take(event.data);
@@ -158,6 +186,7 @@ function connect(room: string, from = origin) {
             if (message !== undefined) take(message);
             else waiting.push(take);
           }),
+        ended,
       }),
     );
     socket.addEventListener("error", () => fail(new Error("Refused.")));
