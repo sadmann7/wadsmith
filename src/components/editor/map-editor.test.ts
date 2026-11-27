@@ -900,6 +900,36 @@ describe("map editor drawing", () => {
     instance.api.keydown(press("Escape"));
     expect(tools).toEqual(["select"]);
   });
+
+  it("turn a placed player start down its room, away from the wall beside it", () => {
+    const hall: GameMap = {
+      ...testMap,
+      vertices: {
+        a: { x: 0, y: 0 },
+        b: { x: 512, y: 0 },
+        c: { x: 512, y: 64 },
+        d: { x: 0, y: 64 },
+      },
+      sectors: [{ ...testMap.sectors[0], vertices: ["a", "b", "c", "d"] }],
+      things: [],
+      lines: {},
+      switches: [],
+    };
+    let result = hall;
+    const instance = mapEditor({
+      id,
+      map: hall,
+      tool: "thing",
+      thingKind: "player",
+      onMapChange: (next) => {
+        result = next;
+      },
+    });
+    instance.api.click(pointer(480, 32));
+    expect(result.things).toEqual([
+      expect.objectContaining({ kind: "player", angle: 180 }),
+    ]);
+  });
 });
 
 // Wires parts the way a renderer does, so a change reaches a part only when

@@ -63,6 +63,7 @@ import {
   shiftRooms,
   snapPoint,
   splitWall,
+  startFacing,
   switchKeyPrefix,
   thingKeyPrefix,
   updateSwitch,
@@ -918,11 +919,12 @@ export const mapEditor = definePrimitive({
     const insertThing = (point: Point) => {
       const { map, editMode, tool, thingKind } = store.get();
       if (editMode !== "things" && tool !== "thing") return false;
+      const at = snapPoint(point, grid());
       const placed = addThing(
         map,
         thingKind,
-        snapPoint(point, grid()),
-        0,
+        at,
+        startFacing(map, thingKind, at),
         1,
         context.options().thingType,
       );
@@ -1663,7 +1665,7 @@ export const mapEditor = definePrimitive({
             map,
             thingKind,
             point,
-            0,
+            startFacing(map, thingKind, point),
             1,
             context.options().thingType,
           );
