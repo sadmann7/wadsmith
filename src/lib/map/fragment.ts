@@ -5,6 +5,7 @@ import {
   applyPositions,
   mergeCorners,
   nextId,
+  nextIds,
   positionsOf,
   removeSector,
   removeThing,
@@ -238,11 +239,11 @@ export function pasteParts(
 
   const vertices = { ...map.vertices };
   const vertexIds = new Map<string, string>();
-  const first = Number(nextId("v", Object.keys(vertices)).slice(1));
-  Object.entries(fragment.vertices).forEach(([id, point], index) => {
-    const next = `v${first + index}`;
-    vertices[next] = { x: point.x + shift.x, y: point.y + shift.y };
-    vertexIds.set(id, next);
+  const copied = Object.entries(fragment.vertices);
+  const fresh = nextIds("v", Object.keys(vertices), copied.length);
+  copied.forEach(([id, point], index) => {
+    vertices[fresh[index]] = { x: point.x + shift.x, y: point.y + shift.y };
+    vertexIds.set(id, fresh[index]);
   });
   // A piece names only its own corners and rooms. Anything else in it is left
   // out, so text from the clipboard can't reach what the map already holds.

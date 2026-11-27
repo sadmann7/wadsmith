@@ -94,6 +94,7 @@ import {
   type LivePeer,
   liveUrl,
   openLiveMap,
+  setOnlineIds,
 } from "@/lib/episodes/live";
 import { publish, publishBase } from "@/lib/episodes/published";
 import {
@@ -499,7 +500,11 @@ export function EpisodeScreen() {
               ? "That edit would make the map too big to keep online, so it was taken back."
               : reason === "missing-corners"
                 ? "That edit was taken back: someone removed corners it uses at the same moment."
-                : "The online copy turned an edit away, so it was taken back.",
+                : reason === "taken"
+                  ? "That edit was taken back: someone added something with the same id at the same moment."
+                  : reason === "reshaped"
+                    ? "That edit was taken back: someone changed the same wall at the same moment."
+                    : "The online copy turned an edit away, so it was taken back.",
           ),
         onPeers: setPeers,
         onIdle: () => {
@@ -568,6 +573,7 @@ export function EpisodeScreen() {
       live.current?.link.close();
       live.current = null;
       setPeers([]);
+      setOnlineIds(Boolean(entry.cloud));
       selectEpisode(entry.episodeId);
       // A map in step with its online copy goes live at once, so edits made
       // while it joins are sent on the link.
