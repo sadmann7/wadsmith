@@ -163,6 +163,8 @@ interface MapEditorOptions {
   // An agent's edit landed: which action, what was fixed on the way and what
   // the map still needs.
   onAgentAction?: (action: string, outcome: AgentReport) => void;
+  // An agent named the map.
+  onRename?: (name: string) => void;
   // The game's texture names, so an agent's edit can't use one it lacks.
   checkContext?: CheckContext;
   onDrawingChange?: (corners: Point[]) => void;
@@ -313,6 +315,7 @@ export const mapEditor = definePrimitive({
     lookAtRequest: "value",
     onContextTarget: "callback",
     onAgentAction: "callback",
+    onRename: "callback",
     checkContext: "value",
     onDrawingChange: "callback",
     contextMenuOpen: "boolean",
@@ -1318,6 +1321,12 @@ export const mapEditor = definePrimitive({
         : { kind: "empty", point };
     };
 
+    // A rename reaches the map option a render or more later, so the steps
+    // until then see it here.
+    let renaming: { name: string; from: GameMap | undefined } | null = null;
+    context.onOptions((options) => {
+      if (renaming && options.map !== renaming.from) renaming = null;
+    });
     // Every agent action is a method here, so a bridge step reaches it by
     // name. A read returns what it found, and an edit lands as one change
     // that already passed the map's checks.
@@ -1325,20 +1334,31 @@ export const mapEditor = definePrimitive({
       agentActionNames.map((name) => [
         name,
         (...args: unknown[]) => {
-          const { map } = store.get();
-          // The editor names the map from its settings, which would undo a
-          // name set here.
-          if (name === "setMapDetails" && args.some(getHasName)) {
+          const shown = store.get().map;
+          const map = renaming ? { ...shown, name: renaming.name } : shown;
+          const { onRename } = context.options();
+          if (name === "setMapDetails" && !onRename && args.some(getHasName)) {
             throw new Error("Rename the map from Map settings in the editor.");
           }
-          const { map: next, ...outcome } = runAgentAction(
+          const { map: edited, ...outcome } = runAgentAction(
             map,
             name,
             args,
             context.options().checkContext,
           );
-          if (next === map) return outcome.result;
-          change("map", next, { reason: "agent" });
+          // A name goes through the map's settings, so the episode and
+          // everyone editing the map see it.
+          const renamed = edited.name !== map.name ? edited.name : undefined;
+          if (renamed !== undefined) {
+            renaming = { name: renamed ?? "", from: context.options().map };
+            onRename?.(renamed ?? "");
+          }
+          const next =
+            renamed !== undefined && edited.complevel === map.complevel
+              ? map
+              : edited;
+          if (next !== map) change("map", next, { reason: "agent" });
+          if (next === map && renamed === undefined) return outcome.result;
           const made = next.sectors.find(
             (sector) =>
               sector.id === outcome.result &&

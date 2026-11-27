@@ -1186,28 +1186,47 @@ export function EpisodeScreen() {
         };
       });
       if (!saved) return "This map no longer exists.";
-      announce(id);
-      if (sessionRef.current?.id === id) {
-        // The open editor takes the new settings like any other change, so
-        // its next edit doesn't put the old ones back.
-        const settings: MapPatch = {
-          fields: {
-            name: saved.map.name ?? null,
-            complevel: saved.map.complevel ?? null,
-          },
-        };
-        for (const listener of remoteListeners.current) listener(settings);
-        if (live.current?.mapId === id) {
-          live.current.link.rename(saved.map.name ?? "");
-        }
-      }
-      if (saved.cloud && live.current?.mapId !== id) void syncCloud(store, id);
-      if (sessionRef.current?.id === id) setDetails(detailsOf(saved));
-      else await refresh(store, saved.episodeId);
+      await settled(saved, {
+        name: saved.map.name ?? null,
+        complevel: saved.map.complevel ?? null,
+      });
       return null;
     } catch (error) {
       return problemOf(error, form.slot);
     }
+  };
+
+  // Tells the open editor, the live link and the online copy about new
+  // settings, so the editor's next edit doesn't put the old ones back.
+  const settled = async (saved: EpisodeMap, fields?: MapPatch["fields"]) => {
+    const { id } = saved;
+    announce(id);
+    if (sessionRef.current?.id === id) {
+      if (fields) {
+        for (const listener of remoteListeners.current) listener({ fields });
+      }
+      if (live.current?.mapId === id) {
+        live.current.link.rename(saved.map.name ?? "");
+      }
+    }
+    if (saved.cloud && live.current?.mapId !== id) void syncCloud(store, id);
+    if (sessionRef.current?.id === id) setDetails(detailsOf(saved));
+    else await refresh(store, saved.episodeId);
+  };
+
+  // An agent in the editor named the map, as Map settings would.
+  const renameMap = async (id: string, name: string) => {
+    const saved = await store
+      .updateMap(id, (entry) => ({
+        ...entry,
+        map: { ...entry.map, name },
+        editedAt: Date.now(),
+        ...(entry.cloud && { cloud: { ...entry.cloud, pending: true } }),
+      }))
+      .catch(() => null);
+    // The editor shows the name already, and a later rename may follow.
+    if (saved) await settled(saved);
+    else setMessage(saveFailure);
   };
 
   const setPar = async (id: string, par: number) => {
@@ -1600,6 +1619,7 @@ export function EpisodeScreen() {
           navigation={<SidebarDrawer {...sidebar} />}
           onNewMap={() => openDialog("new")}
           onMapSettings={() => openDialog("settings")}
+          onRename={(name) => void renameMap(session.id, name)}
           onShare={cloudApi ? () => setSharing(true) : undefined}
           onPublish={
             publishBase ? () => setPublishing({ kind: "map" }) : undefined
