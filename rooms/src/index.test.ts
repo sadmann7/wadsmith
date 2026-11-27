@@ -32,6 +32,7 @@ interface Client {
   socket: WebSocket;
   received: (string | ArrayBuffer)[];
   next: () => Promise<string | ArrayBuffer>;
+  ended: Promise<null>;
 }
 
 describe("room server", () => {
@@ -119,7 +120,7 @@ describe("room limits", () => {
     expect(
       (await heardBefore(b, await connect("limit02"))).length,
     ).toBeLessThan(800);
-  }, 15_000);
+  });
 
   it("closes a room that goes quiet", async () => {
     const a = await connect("limit03");
@@ -139,15 +140,16 @@ describe("room limits", () => {
 let probes = 0;
 
 // What the room sent `client` before a probe that `from` sends now, since the
-// room relays each sender's messages in order.
+// room relays each sender's messages in order. A room that closes `client`
+// first, such as at the end of its short lifetime here, has sent it all.
 async function heardBefore(client: Client, from: Client) {
   probes += 1;
   const probe = `{"type":"probe","id":${probes}}`;
   from.socket.send(probe);
   const heard: (string | ArrayBuffer)[] = [];
   for (;;) {
-    const message = await client.next();
-    if (message === probe) return heard;
+    const message = await Promise.race([client.next(), client.ended]);
+    if (message === null || message === probe) return heard;
     heard.push(message);
   }
 }
@@ -162,6 +164,9 @@ function connect(room: string, from = origin) {
     socket.binaryType = "arraybuffer";
     const received: (string | ArrayBuffer)[] = [];
     const waiting: ((message: string | ArrayBuffer) => void)[] = [];
+    const ended = new Promise<null>((end) =>
+      socket.addEventListener("close", () => end(null)),
+    );
     socket.addEventListener("message", (event) => {
       const take = waiting.shift();
       if (take) take(event.data);
@@ -177,6 +182,7 @@ function connect(room: string, from = origin) {
             if (message !== undefined) take(message);
             else waiting.push(take);
           }),
+        ended,
       }),
     );
     socket.addEventListener("error", () => fail(new Error("Refused.")));
