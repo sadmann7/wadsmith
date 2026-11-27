@@ -95,6 +95,27 @@ describe("live editing in the browser", () => {
     }
   });
 
+  it("sends edits made while joining once, on top of others' edits", async () => {
+    const server = fakeServer(testMap);
+    const ana = server.join("Ana");
+    await ready(server);
+    ana.edit((map) => updateSector(map, "sector-1", { light: 20 }));
+    server.run();
+    const bo = server.join("Bo", testMap);
+    bo.edit((map) => updateThing(map, "imp-1", { angle: 45 }));
+    bo.edit((map) => updateSector(map, "sector-2", { light: 70 }));
+    expect(bo.live.idle).toBe(false);
+    await ready(server);
+    server.run();
+    expect(server.patches).toHaveLength(3);
+    for (const map of [server.map, ana.map, bo.map]) {
+      expect(map.sectors[0].light).toBe(20);
+      expect(map.sectors[1].light).toBe(70);
+      expect(map.things[3].angle).toBe(45);
+    }
+    expect(bo.live.idle).toBe(true);
+  });
+
   it("sends again after a drop what the server never got", async () => {
     const server = fakeServer(testMap);
     const ana = server.join("Ana");
