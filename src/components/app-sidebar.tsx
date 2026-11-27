@@ -446,7 +446,7 @@ function StartPreview({ start, game }: StartPreviewProps) {
     );
   }
   return (
-    <div className="grid h-[92px] grid-cols-3 gap-1 bg-background p-2">
+    <div className="grid h-[92px] grid-cols-4 gap-1 bg-background p-2">
       {featuredMaps.map((item) => (
         <MapPlan key={item.id} map={item.map} className="size-full" />
       ))}

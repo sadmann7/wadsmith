@@ -11,7 +11,7 @@ import {
   updateLine,
   updateSector,
 } from "@/lib/map/edit";
-import { starterMap } from "@/lib/map/starter-map";
+import { theBasics } from "@/lib/map/featured/the-basics";
 import { testMap } from "@/lib/map/test-map";
 
 import { type DoomGame, doomKeys, keysByCode } from "./runtime";
@@ -226,15 +226,15 @@ function withDoorAction(wall: string, trigger: LineAction["trigger"]) {
   );
 }
 
-describe.skipIf(!ready)("starter map in the engine", () => {
+describe.skipIf(!ready)("The Basics in the engine", () => {
   const quiet: GameMap = {
-    ...starterMap,
-    things: starterMap.things.filter(
+    ...theBasics,
+    things: theBasics.things.filter(
       (thing) => thingCatalog[thing.kind].category !== "enemy",
     ),
   };
   const room = (name: string) =>
-    starterMap.sectors.findIndex((sector) => sector.name === name);
+    theBasics.sectors.findIndex((sector) => sector.name === name);
   const blueKey = 1;
 
   async function walk(game: DoomGame, code: string, done: () => boolean) {

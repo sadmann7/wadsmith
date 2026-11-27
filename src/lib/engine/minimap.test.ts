@@ -57,9 +57,9 @@ describe("minimapLines", () => {
   it("draws a secret door as a plain wall", () => {
     const secret = lines.find(
       (line) =>
-        line.from.y === -96 &&
-        line.to.y === -96 &&
-        Math.min(line.from.x, line.to.x) === 1056,
+        line.from.x === 1520 &&
+        line.to.x === 1520 &&
+        Math.min(Math.abs(line.from.y), Math.abs(line.to.y)) === 192,
     );
     expect(secret?.kind).toBe("wall");
   });
