@@ -8,6 +8,7 @@ import {
   loopPolygon,
   onSegment,
   sectorEdges,
+  sectorContainers,
   segmentsIntersect,
   signedArea,
   wallKey,
@@ -97,11 +98,20 @@ export interface Touch {
 export function findTouches(map: GameMap, room: Sector): Touch[] {
   if (room.door) return [];
   const owners = wallOwners(map);
+  const containers = sectorContainers(map);
   const neighbours = new Set(
     sectorEdges(room).flatMap(
       ({ from, to }) => owners.get(wallKey(from, to)) ?? [],
     ),
   );
+  for (const sector of map.sectors) {
+    if (
+      containers.get(sector.id) === room ||
+      containers.get(room.id) === sector
+    ) {
+      neighbours.add(sector);
+    }
+  }
   const box = boxOf(loopPolygon(map, room.vertices));
   const outline = (sector: Sector) =>
     loopEdges(sector.vertices).map(({ from, to }) => ({
@@ -245,6 +255,13 @@ function openCorner(
 }
 
 function getShareWall(map: GameMap, first: string, second: string) {
+  const containers = sectorContainers(map);
+  if (
+    containers.get(first)?.id === second ||
+    containers.get(second)?.id === first
+  ) {
+    return true;
+  }
   const walls = (id: string) => {
     const sector = map.sectors.find((item) => item.id === id);
     return sector

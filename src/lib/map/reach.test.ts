@@ -373,6 +373,33 @@ describe("rooms not joined to the map", () => {
     expect(shared).toHaveLength(2);
   });
 
+  it("offers no join to a room drawn inside the loose room", () => {
+    const map = buildMap({
+      name: "Pit",
+      rooms: [
+        room("Hall", 0, 0, 128),
+        { ...room("Cave", 512, 0, 128), points: rect(512, 0, 512, 512) },
+        {
+          ...room("Pit", 512, -32, 128),
+          points: [
+            [768, 0],
+            [896, 128],
+            [768, 256],
+            [640, 128],
+          ],
+        },
+      ],
+      things: [{ kind: "player", at: [64, 64] }],
+    });
+    const issue = defined(
+      checkMap(map).find((item) => item.id.startsWith("unreachable-island")),
+    );
+    expect(issue.detail).toBe(
+      "The player can't get there from the start. Rooms join where they share a wall.",
+    );
+    expect(issue.fixLabel).toBeUndefined();
+  });
+
   it("names a loose group of rooms once", () => {
     const map = buildMap({
       name: "Apart",
