@@ -89,8 +89,6 @@ export interface MapIssue {
   view?: { x: number; y: number; angle: number };
 }
 
-const coordinateLimit = 32000;
-
 interface Wall {
   from: string;
   to: string;
@@ -121,8 +119,55 @@ export function lockedKeys(map: GameMap) {
   ]);
 }
 
+interface Inspection {
+  errors: MapIssue[];
+  warnings: MapIssue[];
+  layers: { rooms: string[] | null; things: string[] | null };
+}
+
+const noContext: CheckContext = {};
+const inspections = new WeakMap<GameMap, WeakMap<CheckContext, Inspection>>();
+
 // Warnings are legal in Doom but likely mistakes, so they don't block a build.
-export function inspectMap(map: GameMap, context: CheckContext = {}) {
+// Maps and contexts are never changed in place, so a map is inspected once per
+// context, and callers only read what comes back.
+export function inspectMap(map: GameMap, context: CheckContext = noContext) {
+  let byContext = inspections.get(map);
+  const known = byContext?.get(context);
+  if (known) return known;
+  const found = inspectAnew(map, context);
+  if (!byContext) {
+    byContext = new WeakMap();
+    inspections.set(map, byContext);
+  }
+  byContext.set(context, found);
+  return found;
+}
+
+export function validateMap(map: GameMap, context?: CheckContext): MapIssue[] {
+  return inspectMap(map, context).errors;
+}
+
+// Problems are counted by kind, since an edit can rename walls and rooms.
+// An old problem that keeps its id uses up its count first.
+export function newProblems(before: GameMap, after: GameMap): MapIssue[] {
+  return freshIssues(validateMap(before), validateMap(after));
+}
+
+export function issuesSince(before: GameMap, context: CheckContext = {}) {
+  const old = inspectStanding(before, context);
+  return (after: GameMap) => {
+    const found = inspectStanding(after, context);
+    return {
+      errors: freshIssues(old.errors, found.errors),
+      warnings: freshIssues(old.warnings, found.warnings),
+    };
+  };
+}
+
+const coordinateLimit = 32000;
+
+function inspectAnew(map: GameMap, context: CheckContext): Inspection {
   const issues: MapIssue[] = [];
   const warnings: MapIssue[] = [];
   if (map.sectors.length === 0) {
@@ -196,27 +241,6 @@ export function inspectMap(map: GameMap, context: CheckContext = {}) {
     layers.things = issues.map((issue) => issue.id);
   }
   return { errors: issues, warnings, layers };
-}
-
-export function validateMap(map: GameMap, context?: CheckContext): MapIssue[] {
-  return inspectMap(map, context).errors;
-}
-
-// Problems are counted by kind, since an edit can rename walls and rooms.
-// An old problem that keeps its id uses up its count first.
-export function newProblems(before: GameMap, after: GameMap): MapIssue[] {
-  return freshIssues(validateMap(before), validateMap(after));
-}
-
-export function issuesSince(before: GameMap, context: CheckContext = {}) {
-  const old = inspectStanding(before, context);
-  return (after: GameMap) => {
-    const found = inspectStanding(after, context);
-    return {
-      errors: freshIssues(old.errors, found.errors),
-      warnings: freshIssues(old.warnings, found.warnings),
-    };
-  };
 }
 
 function validateStanding(
