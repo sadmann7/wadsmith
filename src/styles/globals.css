@@ -219,6 +219,10 @@
     cursor: crosshair;
   }
 
+  .map[data-tool="select"][data-grab] {
+    cursor: move;
+  }
+
   .map-world {
     width: 0;
     height: 0;
@@ -797,7 +801,8 @@
     );
   }
 
-  .map-sector[data-hover] {
+  .map-sector[data-hover],
+  .map-sector[data-grab] {
     fill: color-mix(in oklab, var(--color-primary) 9%, var(--color-map-sector));
   }
 

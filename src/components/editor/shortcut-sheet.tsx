@@ -315,7 +315,11 @@ function groups(keymap: Keymap): { title: string; items: Shortcut[] }[] {
         },
         {
           keys: [key("Drag")],
-          does: "Select what a box holds, with Shift to add and Ctrl or ⌘ to take away",
+          does: "Move what's under the pointer: a thing, a corner, a wall, or a room with what stands in it. Esc puts it back",
+        },
+        {
+          keys: [key("Drag"), key("Shift-drag")],
+          does: "From empty space, or anywhere with Shift, select what a box holds, with Shift to add and Ctrl or ⌘ to take away",
         },
         {
           keys: [key("Space-drag"), key("Middle-drag")],
