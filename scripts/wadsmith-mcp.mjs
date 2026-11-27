@@ -9,10 +9,9 @@
 // NEXT_PUBLIC_ROOMS_URL does. Each --mod adds a WAD or DEHACKED patch whose
 // numbered things the map can place, and a built WAD carries the ones it uses.
 import {
-  closeSync,
   existsSync,
+  linkSync,
   mkdirSync,
-  openSync,
   readFileSync,
   renameSync,
   statSync,
@@ -98,21 +97,18 @@ const textures =
   iwad && mods.length > 0 ? { iwad, resources: mods } : undefined;
 if (autosave && editLink) fail("Use --map or --live, not both.");
 
-// A lock a crashed server left behind is taken over after this long.
-const staleLockMs = 10_000;
 const pause = new Int32Array(new SharedArrayBuffer(4));
 const lock = (path, run) => {
   const held = `${resolve(path)}.lock`;
+  const token = `${process.pid} ${Math.random()}`;
   mkdirSync(dirname(held), { recursive: true });
   for (let tries = 0; ; tries += 1) {
     try {
-      closeSync(openSync(held, "wx"));
+      writeFileSync(held, token, { flag: "wx" });
       break;
     } catch (error) {
       if (error.code !== "EEXIST") throw error;
-      try {
-        if (Date.now() - statSync(held).mtimeMs > staleLockMs) unlinkSync(held);
-      } catch {}
+      takeOverStale(held);
       if (tries > 2000) {
         throw new Error(`${path} stayed locked.`, { cause: error });
       }
@@ -122,9 +118,33 @@ const lock = (path, run) => {
   try {
     return run();
   } finally {
-    unlinkSync(held);
+    // A server that ran past the stale limit may have lost the lock, and
+    // leaves the new owner's in place.
+    try {
+      if (readFileSync(held, "utf8") === token) unlinkSync(held);
+    } catch {}
   }
 };
+
+// A lock a crashed server left behind is taken over after this long.
+const staleLockMs = 10_000;
+
+// Moves a stale lock aside before removing it, so two servers that both saw
+// it stale can't remove a fresh lock one of them just took. A fresh one moved
+// aside by mistake goes back, unless someone took the lock meanwhile.
+function takeOverStale(held) {
+  try {
+    if (Date.now() - statSync(held).mtimeMs <= staleLockMs) return;
+    const aside = `${held}.${process.pid}.stale`;
+    renameSync(held, aside);
+    if (Date.now() - statSync(aside).mtimeMs <= staleLockMs) {
+      try {
+        linkSync(aside, held);
+      } catch {}
+    }
+    unlinkSync(aside);
+  } catch {}
+}
 
 const files = {
   read: (path) => readFileSync(resolve(path), "utf8"),
@@ -148,7 +168,12 @@ if (editLink) {
   }
   // The rooms server lets in only the app's own pages, so the link says it
   // comes from the page the edit link opens.
-  const origin = new URL(editLink).origin;
+  let origin;
+  try {
+    origin = new URL(editLink).origin;
+  } catch {
+    fail(`--live: ${editLink} isn't a link.`);
+  }
   try {
     live = await joinLiveMap({
       editLink,

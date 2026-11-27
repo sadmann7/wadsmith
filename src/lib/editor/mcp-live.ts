@@ -9,7 +9,7 @@ import { boxOf } from "@/lib/map/geometry";
 import type { McpMapStore } from "./mcp-server";
 
 export interface LiveStoreOptions {
-  // The map's edit link, as Share in the editor gives it.
+  // The map's edit link, from File, Keep online in the editor.
   editLink: string;
   // The rooms server the map's online copy lives on.
   roomsUrl: string;
@@ -46,7 +46,7 @@ export async function joinLiveMap({
   const target = sharedTarget(address.pathname, address.hash);
   if (!target?.secret) {
     throw new Error(
-      "That isn't an edit link. Copy the edit link from Share in the editor.",
+      "That isn't an edit link. Copy the edit link from File, Keep online in the editor.",
     );
   }
   let current: GameMap = {
@@ -113,10 +113,13 @@ export async function joinLiveMap({
       if (refused) throw new Error("The edit link no longer edits this map.");
       const { map, value } = step(current);
       if (map !== current) {
-        const at = changedAt(current, map);
-        link.send(map);
-        if (map.name !== current.name) link.rename(map.name ?? "");
+        const before = current;
+        // A send that can't go takes the edit back through onChange, so the
+        // edit is kept first.
         current = map;
+        link.send(map);
+        if (map.name !== before.name) link.rename(map.name ?? "");
+        const at = changedAt(before, map);
         if (at) link.cursor(at);
       }
       return value;

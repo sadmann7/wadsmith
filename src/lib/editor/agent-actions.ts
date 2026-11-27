@@ -1426,7 +1426,7 @@ export function importMapPart(
     x: (box.left + box.right) / 2 + offset.x,
     y: (box.top + box.bottom) / 2 + offset.y,
   };
-  const pasted = pasteParts(map, part, at, 1);
+  const pasted = pasteParts(map, part, at, 1, false, false);
   if (!pasted) throw new Error("That map is empty.");
   const starts = map.things.some((thing) => getIsPlayerStart(thing.kind))
     ? []

@@ -73,17 +73,25 @@ const path: AgentParam = {
   description: "A file path, from the folder the server runs in.",
 };
 
+const replace: AgentParam = {
+  name: "replace",
+  type: "boolean",
+  description:
+    "Needed when other agents or people share this map, as with a shared --map file or --live, since their work goes too. Prefer importMap to add a file.",
+  optional: true,
+};
+
 const fileTools: { name: string; description: string; params: AgentParam[] }[] =
   [
     {
       name: "newMap",
       description: "Starts over with an empty map.",
-      params: [],
+      params: [replace],
     },
     {
       name: "openMap",
       description: "Loads a map file saved by Wadsmith in place of this one.",
-      params: [path],
+      params: [path, replace],
     },
     {
       name: "importMap",
@@ -151,6 +159,16 @@ export function createMcpServer({
     store.update((current) => ({ map: current, value: current }));
 
   const fileTool = (name: string, args: Record<string, unknown>) => {
+    if (
+      (name === "newMap" || name === "openMap") &&
+      (given || autosave) &&
+      args.replace !== true &&
+      read().sectors.length > 0
+    ) {
+      throw new Error(
+        `Others share this map, so ${name} would erase their work. Call it with "replace": true to do it anyway, or use importMap to add a file.`,
+      );
+    }
     if (name === "newMap") {
       store.update(() => ({ map: blankMap, value: null }));
       return "Started an empty map.";

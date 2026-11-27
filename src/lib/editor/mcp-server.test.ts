@@ -213,6 +213,39 @@ describe("the wadsmith MCP server", () => {
     );
   });
 
+  it("imports a part whose corners all meet rooms already there in place", () => {
+    const doorway = { ...testMap.sectors[3], door: undefined };
+    const base = {
+      ...testMap,
+      sectors: testMap.sectors.slice(0, 3),
+      switches: [],
+    };
+    const part = {
+      vertices: Object.fromEntries(
+        doorway.vertices.map((id) => [id, testMap.vertices[id]]),
+      ),
+      sectors: [doorway],
+      things: [],
+      switches: [],
+    };
+    const { call, disk, server } = start(base);
+    disk.set("doorway.json", serializeMap(part));
+    expect(call("importMap", { path: "doorway.json" }).failed).toBe(false);
+    const added = server.map().sectors.at(-1);
+    expect(added?.vertices).toEqual(doorway.vertices);
+  });
+
+  it("asks before newMap or openMap erase a map others share", () => {
+    const { call, server } = start(testMap, "shared.json");
+    call("saveMap", { path: "copy.json" });
+    expect(call("newMap").text).toMatch(/would erase their work/);
+    expect(call("openMap", { path: "copy.json" }).failed).toBe(true);
+    expect(server.map().sectors).toHaveLength(4);
+    expect(call("newMap", { replace: true }).failed).toBe(false);
+    expect(server.map().sectors).toHaveLength(0);
+    expect(call("openMap", { path: "copy.json" }).failed).toBe(false);
+  });
+
   it("passes on what its store has to say", () => {
     const notices = ["The live link dropped."];
     const { call } = start(undefined, undefined, {
