@@ -220,6 +220,22 @@ it("hands the bottom of the view to Doom's status bar on the automap", () => {
   expect(container.querySelector("[aria-label=Minimap]")).toBeNull();
 });
 
+function scoreRow(peer: number, slot: number): ScoreRow {
+  return {
+    peer,
+    slot,
+    name: `Player ${peer}`,
+    host: peer === 1,
+    you: peer === 1,
+    frags: 0,
+    deaths: 0,
+    kills: 0,
+    items: 0,
+    secrets: 0,
+    ping: null,
+  };
+}
+
 function renderHud(
   current: GameStatus,
   isBetween = false,
@@ -280,20 +296,4 @@ function renderHud(
     ),
   );
   return container;
-}
-
-function scoreRow(peer: number, slot: number): ScoreRow {
-  return {
-    peer,
-    slot,
-    name: `Player ${peer}`,
-    host: peer === 1,
-    you: peer === 1,
-    frags: 0,
-    deaths: 0,
-    kills: 0,
-    items: 0,
-    secrets: 0,
-    ping: null,
-  };
 }
