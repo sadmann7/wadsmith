@@ -34,8 +34,8 @@ import { boundsOf, fitView } from "@/lib/editor/fit-view";
 import { currentKeys } from "@/lib/editor/keymap";
 import {
   estimateLabelWidth,
-  getIsLabelCovered,
   labelPoint,
+  type LabelSpot,
 } from "@/lib/editor/map-labels";
 import {
   getIsDragging,
@@ -2373,9 +2373,8 @@ export const mapEditor = definePrimitive({
       attrs: (state, { props }) => {
         const at = captionPoint(state, props);
         return {
-          "data-covered": getIsCaptionCovered(state, props, at)
-            ? ""
-            : undefined,
+          "data-small": at.isSmall ? "" : undefined,
+          "data-covered": at.isCovered ? "" : undefined,
           style: css({
             position: "absolute",
             left: `${at.x}px`,
@@ -2386,9 +2385,8 @@ export const mapEditor = definePrimitive({
       live: live<MapEditorState, unknown, CaptionProps>((state, { props }) => {
         const at = captionPoint(state, props);
         return {
-          "data-covered": getIsCaptionCovered(state, props, at)
-            ? ""
-            : undefined,
+          "data-small": at.isSmall ? "" : undefined,
+          "data-covered": at.isCovered ? "" : undefined,
           style: `left:${at.x}px;top:${at.y}px`,
         };
       }),
@@ -2722,7 +2720,10 @@ function lineAttrs(a: Point, b: Point) {
 
 // Placed at the zoom step the canvas hides overlapping names with, so both
 // agree on where a name is.
-function captionPoint(state: MapEditorState, props: CaptionProps): Point {
+function captionPoint(
+  state: MapEditorState,
+  props: CaptionProps,
+): Point & Partial<LabelSpot> {
   const loops = [props.corners, ...(props.holes ?? [])].map((loop) =>
     loop.map((key) => pointOf(state, key)),
   );
@@ -2746,23 +2747,6 @@ function captionPoint(state: MapEditorState, props: CaptionProps): Point {
     return { x: spot.x + moving.dx, y: spot.y + moving.dy };
   }
   return roomPoint(draftMap(state, moving), sector);
-}
-
-function getIsCaptionCovered(
-  state: MapEditorState,
-  props: CaptionProps,
-  at: Point,
-) {
-  const sector = sectorById(state.map, props.value);
-  return (
-    sector !== undefined &&
-    getIsLabelCovered(
-      at,
-      estimateLabelWidth(sector.name),
-      zoomStep(state.viewport.zoom),
-      state.map.things,
-    )
-  );
 }
 
 // A drag keeps one key list, and each frame is a new draft, so the names
