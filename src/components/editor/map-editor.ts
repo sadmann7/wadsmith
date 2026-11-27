@@ -1715,7 +1715,11 @@ export const mapEditor = definePrimitive({
             else change("tool", "select", { reason: "draw" });
           } else if (event.key === "Backspace" && drawing.length > 0) {
             store.set({ drawing: drawing.slice(0, -1) });
-          } else if (event.key === "Delete" && deleteSelection()) {
+          } else if (
+            event.key === "Delete" &&
+            drawing.length === 0 &&
+            deleteSelection()
+          ) {
             event.preventDefault();
             return;
           } else {
