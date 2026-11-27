@@ -15,11 +15,14 @@ export function estimateLabelWidth(name: string, detail = "") {
   return Math.max(name.length * 7.5, detail.length * 6.6) + 8;
 }
 
+// Callers pass the zoom step, which can run up to a fifth over the zoom, so
+// screen sizes grow by this much to stay clear at any zoom in the step.
+const stepSlack = 1.2;
+
 // Screen distances from a thing's middle that a label keeps clear of: its
-// icon's radius with a little air, plus half a two-line label's height. Both
-// grow by the most the zoom step can run over the zoom.
-const thingReach = 14 * 1.2;
-const labelHalfHeight = 16 * 1.2;
+// icon's radius with a little air, plus half a two-line label's height.
+const thingReach = 14 * stepSlack;
+const labelHalfHeight = 16 * stepSlack;
 
 // A label sits near the top of its room, clear of pillars and things, or
 // lower down when the top has no clear spot. A room with none keeps its name
@@ -59,7 +62,7 @@ export function getIsLabelCovered(
   zoom: number,
   things: Point[],
 ) {
-  const half = (width / 2) * 1.2 + thingReach;
+  const half = (width / 2) * stepSlack + thingReach;
   const rise = thingReach + labelHalfHeight;
   const near = thingsIn(things, {
     left: at.x - half / zoom,
@@ -67,17 +70,16 @@ export function getIsLabelCovered(
     top: at.y - rise / zoom,
     bottom: at.y + rise / zoom,
   });
-  return coveredWidth(at, width * 1.2, zoom, near) > 0;
+  return coveredWidth(at, width * stepSlack, zoom, near) > 0;
 }
 
 // Keeps the bigger room's label where two would overlap. The sizes are rough,
-// from the text's length, and the zoom step can run up to a fifth over the
-// zoom, so they're scaled up to match.
+// from the text's length.
 export function clearLabels<Room extends LabelRoom>(
   rooms: Room[],
   zoom: number,
 ) {
-  const scale = 1.2 / zoom;
+  const scale = stepSlack / zoom;
   const placed: Box[] = [];
   const kept = new Set(
     rooms
@@ -158,7 +160,7 @@ function withoutThings(
   zoom: number,
   width: number,
 ) {
-  const reach = (thingReach + width * 0.1) / zoom;
+  const reach = (thingReach + (width / 2) * (stepSlack - 1)) / zoom;
   const rise = (thingReach + labelHalfHeight) / zoom;
   return things
     .filter((thing) => Math.abs(thing.y - y) < rise)
