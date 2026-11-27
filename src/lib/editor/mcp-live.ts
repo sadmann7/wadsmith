@@ -24,6 +24,8 @@ const droppedReasons: Record<string, string> = {
   "missing-corners":
     "Someone removed a corner that edit drew on at the same moment, so it was taken back. Look at the map again and redo it.",
   "too-big": "That edit was too big to send, so it was taken back.",
+  taken:
+    "Someone added something with the same id at the same moment, so that edit was taken back. Redo it.",
 };
 
 // Joins an online map's live link, so the server's edits land on the map
