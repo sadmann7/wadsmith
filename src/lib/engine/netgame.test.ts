@@ -51,6 +51,12 @@ const deathmatchMap: GameMap = deathmatchSpots.reduce(
   testMap,
 );
 
+const threePlayerMap = addThing(
+  addThing(testMap, "player-2", { x: 96, y: 256 }).map,
+  "player-3",
+  { x: 160, y: 256 },
+).map;
+
 const deathmatchCases: [string, GameMap][] = [
   ["the test map", deathmatchMap],
   ...featuredMaps
@@ -101,6 +107,36 @@ describe.skipIf(!ready)("network game through shared memory", () => {
       ([a, b]) =>
         a.players[1].x === b.players[1].x && a.players[1].y === b.players[1].y,
     );
+  }, 60_000);
+
+  it("gives game slots in peer order whatever order the guests join in", async () => {
+    const room = createRoom(threePlayerMap);
+    const host = room.join(hostPeer, "host");
+    const late = room.join(3, "guest");
+    await waitFor(host.query, (state) => state.waitingPlayers === 2);
+    const early = room.join(guestPeer, "guest");
+    await waitFor(host.query, (state) => state.waitingPlayers === 3);
+    expect(await host.launch()).toBe(true);
+
+    const allIn = async () => {
+      const states = await Promise.all([
+        host.query(),
+        early.query(),
+        late.query(),
+      ]);
+      return states.every(Boolean) ? states : null;
+    };
+    const started = await waitFor(allIn, (states) =>
+      states.every((state) => state.inLevel),
+    );
+    expect(started.map((state) => state.consolePlayer)).toEqual([0, 1, 2]);
+    expect(
+      defined(started[0]).scores.map(({ slot, peer }) => [slot, peer]),
+    ).toEqual([
+      [0, hostPeer],
+      [1, guestPeer],
+      [2, 3],
+    ]);
   }, 60_000);
 
   it.each(deathmatchCases)(
