@@ -582,8 +582,8 @@ export const mapEditor = definePrimitive({
       const surface = root();
       const camera = store.get().cameraPosition;
       if (!surface || !camera) return;
+      const zoom = zooming?.to.zoom ?? store.get().viewport.zoom;
       stopZooming();
-      const { zoom } = store.get().viewport;
       viewport.setViewport({
         x: surface.clientWidth / 2 - camera.x * zoom,
         y: surface.clientHeight / 2 - camera.y * zoom,
@@ -744,8 +744,8 @@ export const mapEditor = definePrimitive({
     const centerOn = (point: Point) => {
       const surface = root();
       if (!surface) return;
+      const zoom = zooming?.to.zoom ?? store.get().viewport.zoom;
       stopZooming();
-      const { zoom } = store.get().viewport;
       viewport.setViewport({
         x: surface.clientWidth / 2 - point.x * zoom,
         y: surface.clientHeight / 2 - point.y * zoom,
