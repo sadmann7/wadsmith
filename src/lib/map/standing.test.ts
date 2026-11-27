@@ -179,6 +179,22 @@ describe("walking the 3D view", () => {
     });
   });
 
+  it("stops at a long slanted wall and slides along it", () => {
+    const wedge: GameMap = {
+      vertices: {
+        a: { x: 0, y: 0 },
+        b: { x: 20000, y: 20000 },
+        c: { x: 0, y: 20000 },
+      },
+      sectors: [{ ...testMap.sectors[0], vertices: ["a", "b", "c"] }],
+      things: [],
+      switches: [],
+    };
+    expect(
+      walkStep(wedge, { x: 9970, y: 10030 }, { x: 9990, y: 10010 }),
+    ).toEqual({ x: 9990, y: 10030 });
+  });
+
   it("walks through a door that stands open", () => {
     expect(walkStep(testMap, { x: 472, y: 160 }, { x: 484, y: 160 })).toEqual({
       x: 484,
