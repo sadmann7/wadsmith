@@ -16,6 +16,7 @@ describe("starter map", () => {
       rooms: [],
       things: [],
       exits: [],
+      islands: [],
     });
   });
 
