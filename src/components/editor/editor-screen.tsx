@@ -220,6 +220,7 @@ import {
 import { createFlatAssets, readWadAssets } from "@/lib/wad/assets";
 import { compileMap } from "@/lib/wad/compile";
 import {
+  type CustomThings,
   customThingsOf,
   customThingWarnings,
   thingCategory,
@@ -229,6 +230,7 @@ import {
 import type {
   AgentReport,
   EditMode,
+  MapGrab,
   MapTool,
   MapViewStatus,
   ZoomRequest,
@@ -269,8 +271,9 @@ import { TransformDialog } from "./transform-dialog";
 
 const modeHints: Record<EditMode, string> = {
   vertices:
-    "Drag corners to reshape rooms, or nudge them with the arrow keys. Shift-click adds to the selection.",
-  lines: "Click a wall to change its textures or what it does.",
+    "Drag a corner, a wall or a room to move it. Drag from empty space, or Shift-drag, to select a box.",
+  lines:
+    "Click a wall to change its textures or what it does. Drag a wall or a room to move it.",
   sectors:
     "Click a room to select it, and drag it to move it. Shift-click adds a room, and Shift-drag selects a box.",
   things:
@@ -587,6 +590,7 @@ export function EditorScreen({
   const visibleLayout = narrow && layout === "split" ? "map" : layout;
   const [surface, setSurface] = React.useState<string | null>(null);
   const [drafts] = React.useState(createDraftChannel);
+  const [grabs] = React.useState(createGrabChannel);
   const [camera] = React.useState(() => new SceneCamera(initialMap));
   const [history] = React.useState(() =>
     createEditHistory({ limit: 200, groupDelay: 500 }),
@@ -2576,6 +2580,7 @@ export function EditorScreen({
                         setSelection(walls);
                       }}
                       onViewChange={updateViewStatus}
+                      onGrabChange={grabs.publish}
                       thingKind={thingKind}
                       thingType={placingType}
                       customThings={customThings}
@@ -3263,13 +3268,20 @@ export function EditorScreen({
         <footer className="status-bar" data-agent-hidden>
           <p className="status-hint">
             <strong>{modeNames[railMode]}</strong>
-            {tool === "select"
-              ? modeHints[editMode]
-              : tool === "thing"
-                ? `Placing ${placingLabel}. ${toolHints.thing}`
-                : tool === "draw" && drawShape !== "outline"
-                  ? shapeHints[drawShape]
-                  : toolHints[tool]}
+            {tool === "select" ? (
+              <GrabHint
+                grabs={grabs}
+                map={map}
+                customThings={customThings}
+                fallback={modeHints[editMode]}
+              />
+            ) : tool === "thing" ? (
+              `Placing ${placingLabel}. ${toolHints.thing}`
+            ) : tool === "draw" && drawShape !== "outline" ? (
+              shapeHints[drawShape]
+            ) : (
+              toolHints[tool]
+            )}
           </p>
           <div>
             {tool === "draw" ? (
@@ -3739,6 +3751,57 @@ function subscribeNarrow(listener: () => void) {
 
 function getIsNarrow() {
   return matchMedia(narrowQuery).matches;
+}
+
+interface GrabHintProps {
+  grabs: ReturnType<typeof createGrabChannel>;
+  map: GameMap;
+  customThings: CustomThings;
+  fallback: string;
+}
+
+function GrabHint({ grabs, map, customThings, fallback }: GrabHintProps) {
+  const grab = React.useSyncExternalStore(grabs.subscribe, grabs.get, noGrab);
+  return grab ? grabText(grab, map, customThings) : fallback;
+}
+
+function grabText(grab: MapGrab, map: GameMap, customThings: CustomThings) {
+  if (grab.kind === "selection") return "Drag to move the selection.";
+  if (grab.kind === "corner") return "Drag to move the corner.";
+  if (grab.kind === "wall") return "Drag to move the wall.";
+  if (grab.kind === "room") {
+    const id = grab.key.slice(roomKeyPrefix.length);
+    const room = map.sectors.find((sector) => sector.id === id);
+    return `Drag to move ${room?.name ?? "the room"}.`;
+  }
+  const thing = map.things.find(
+    (item) => `${thingKeyPrefix}${item.id}` === grab.key,
+  );
+  return thing
+    ? `Drag to move the ${thingLabel(thing, customThings).toLowerCase()}.`
+    : "Drag to move the thing.";
+}
+
+function noGrab() {
+  return null;
+}
+
+function createGrabChannel() {
+  let grab: MapGrab | null = null;
+  const listeners = new Set<() => void>();
+  return {
+    get: () => grab,
+    subscribe: (listener: () => void) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    publish: (next: MapGrab | null) => {
+      grab = next;
+      for (const listener of listeners) listener();
+    },
+  };
 }
 
 function createDraftChannel() {

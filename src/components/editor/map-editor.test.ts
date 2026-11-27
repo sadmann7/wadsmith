@@ -11,7 +11,7 @@ import { drawRoom, removeCorner } from "@/lib/map/reshape";
 import { testMap } from "@/lib/map/test-map";
 import { SceneCamera } from "@/lib/preview/scene-camera";
 
-import { mapEditor, type MapTool } from "./map-editor";
+import { mapEditor, type MapGrab, type MapTool } from "./map-editor";
 
 type Instance = ReturnType<typeof mapEditor>;
 
@@ -742,6 +742,199 @@ describe("map editor drags during a co-op edit", () => {
   });
 });
 
+describe("map editor drags from inside a room", () => {
+  it("move a room with what stands in it in every mode but things", () => {
+    for (const editMode of ["vertices", "lines", "sectors"] as const) {
+      const changes: GameMap[] = [];
+      const instance = mapEditor({
+        id,
+        map: testMap,
+        editMode,
+        onMapChange: (next) => {
+          changes.push(next);
+        },
+      });
+      const surface = rootSurface(instance);
+      instance.api.pointerdown(pointer(440, 140));
+      surface.move(472, 140);
+      surface.move(504, 172);
+      surface.release(504, 172);
+      expect(changes).toHaveLength(1);
+      expect(changes[0].vertices.v13).toEqual({ x: 560, y: 128 });
+      expect(changes[0].vertices.v1).toEqual(testMap.vertices.v1);
+      expect(
+        changes[0].things.find((thing) => thing.id === "shotgun-1"),
+      ).toMatchObject({ x: 512, y: 192 });
+    }
+  });
+
+  it("move a wall rather than its room when the press lands on it", () => {
+    let result = null as GameMap | null;
+    const instance = mapEditor({
+      id,
+      map: testMap,
+      onMapChange: (next) => {
+        result = next;
+      },
+    });
+    const surface = rootSurface(instance);
+    instance.api.pointerdown(pointer(440, 100));
+    surface.move(440, 116);
+    surface.move(440, 132);
+    surface.release(440, 132);
+    expect(defined(result).vertices.v3).toEqual({ x: 384, y: 128 });
+    expect(defined(result).vertices.v13).toEqual({ x: 496, y: 128 });
+    expect(defined(result).vertices.v4).toEqual(testMap.vertices.v4);
+  });
+
+  it("box in from empty space, and from inside a room with Shift", () => {
+    let changes = 0;
+    const instance = mapEditor({
+      id,
+      map: testMap,
+      onMapChange: () => {
+        changes += 1;
+      },
+    });
+    const surface = rootSurface(instance);
+    const { store } = instance.part("handle", { value: "v1" });
+    instance.api.pointerdown(pointer(-20, -20));
+    surface.move(0, 0);
+    surface.move(20, 20);
+    surface.release(20, 20);
+    expect(store.get().selection).toEqual(["v1"]);
+    instance.api.pointerdown(pointer(440, 140, { shiftKey: true }));
+    surface.move(480, 180);
+    surface.move(520, 240);
+    surface.release(520, 240);
+    expect(changes).toBe(0);
+    expect(store.get().selection).toEqual(
+      expect.arrayContaining(["v1", "v14", "v8", "thing:shotgun-1"]),
+    );
+  });
+
+  it("put a dragged room back on Escape, keeping the selection", () => {
+    let changes = 0;
+    const instance = mapEditor({
+      id,
+      map: testMap,
+      onMapChange: () => {
+        changes += 1;
+      },
+    });
+    const surface = rootSurface(instance);
+    const { store } = instance.part("handle", { value: "v1" });
+    instance.api.pointerdown(pointer(440, 140));
+    surface.move(480, 180);
+    expect(store.get().moving?.keys).toContain("v13");
+    surface.key("Escape");
+    expect(store.get().moving).toBeNull();
+    surface.release(480, 180);
+    expect(changes).toBe(0);
+    expect(store.get().activeSector).toBe("sector-2");
+  });
+
+  it("leave a finger to pan the map", () => {
+    let changes = 0;
+    const instance = mapEditor({
+      id,
+      map: testMap,
+      onMapChange: () => {
+        changes += 1;
+      },
+    });
+    const surface = rootSurface(instance);
+    const { store } = instance.part("handle", { value: "v1" });
+    instance.api.pointerdown(pointer(440, 140, { pointerType: "touch" }));
+    surface.move(480, 180);
+    surface.release(480, 180);
+    expect(changes).toBe(0);
+    expect(store.get().moving).toBeNull();
+  });
+
+  it("name what a drag from the pointer would move", () => {
+    const grabs: (MapGrab | null)[] = [];
+    const instance = mapEditor({
+      id,
+      map: testMap,
+      onGrabChange: (grab) => {
+        grabs.push(grab);
+      },
+    });
+    const { store } = instance.part("handle", { value: "v1" });
+    const hover = (x: number, y: number, key?: string) =>
+      instance.api.pointermove(
+        pointer(x, y, {
+          buttons: 0,
+          target: {
+            closest: () => (key ? { dataset: { mapKey: key } } : null),
+          },
+        }),
+      );
+    hover(440, 140);
+    expect(store.get().grab).toBe("room:sector-2");
+    hover(440, 100);
+    hover(0, 0, "v1");
+    hover(448, 160, "thing:shotgun-1");
+    hover(200, 600);
+    expect(store.get().grab).toBeNull();
+    expect(grabs).toEqual([
+      { kind: "room", key: "room:sector-2" },
+      { kind: "wall", key: "wall:v13|v3" },
+      { kind: "corner", key: "v1" },
+      { kind: "thing", key: "thing:shotgun-1" },
+      null,
+    ]);
+  });
+
+  it("say a drag moves the selection when the room is one of several picked", () => {
+    const grabs: (MapGrab | null)[] = [];
+    const instance = mapEditor({
+      id,
+      map: testMap,
+      editMode: "sectors",
+      selection: ["room:sector-1", "room:sector-2"],
+      onGrabChange: (grab) => {
+        grabs.push(grab);
+      },
+    });
+    instance.api.pointermove(pointer(440, 140, { buttons: 0 }));
+    instance.setOptions({
+      id,
+      map: testMap,
+      editMode: "lines",
+      selection: ["room:sector-1", "room:sector-2"],
+      onGrabChange: (grab) => {
+        grabs.push(grab);
+      },
+    });
+    instance.api.pointermove(pointer(440, 141, { buttons: 0 }));
+    expect(grabs).toEqual([
+      { kind: "selection", key: "room:sector-2" },
+      { kind: "room", key: "room:sector-2" },
+    ]);
+  });
+
+  it("name nothing to move while Shift turns a press into a box", () => {
+    const grabs: (MapGrab | null)[] = [];
+    const instance = mapEditor({
+      id,
+      map: testMap,
+      onGrabChange: (grab) => {
+        grabs.push(grab);
+      },
+    });
+    instance.api.pointermove(pointer(440, 140, { buttons: 0 }));
+    instance.api.keydown(press("Shift", { shiftKey: true }));
+    instance.api.keyup(press("Shift"));
+    expect(grabs).toEqual([
+      { kind: "room", key: "room:sector-2" },
+      null,
+      { kind: "room", key: "room:sector-2" },
+    ]);
+  });
+});
+
 describe("map editor drawing", () => {
   beforeEach(() => {
     vi.stubGlobal("window", new EventTarget());
@@ -1008,12 +1201,12 @@ function dragSurface() {
     },
     pointerLockElement: null,
   });
-  const el = {
+  const el = Object.assign(new EventTarget(), {
     ownerDocument: doc,
     setPointerCapture: () => {},
     hasPointerCapture: () => false,
     releasePointerCapture: () => {},
-  } as unknown as HTMLElement;
+  }) as unknown as HTMLElement;
   const send = (type: string, clientX: number, clientY: number) =>
     doc.dispatchEvent(
       Object.assign(new Event(type), {
@@ -1028,7 +1221,24 @@ function dragSurface() {
     el,
     move: (x: number, y: number) => send("pointermove", x, y),
     release: (x: number, y: number) => send("pointerup", x, y),
+    key: (key: string) =>
+      doc.dispatchEvent(
+        Object.assign(new Event("keydown"), { key, preventDefault: () => {} }),
+      ),
   };
+}
+
+// The map's root, which presses on the map drag through.
+function rootSurface(instance: Instance) {
+  const surface = dragSurface();
+  Object.assign(surface.el, {
+    isConnected: true,
+    focus: () => {},
+    contains: () => true,
+    getBoundingClientRect: () => ({ left: 0, top: 0, right: 0, bottom: 0 }),
+  });
+  instance.part("root", {}).el = surface.el;
+  return surface;
 }
 
 function release(
@@ -1078,7 +1288,11 @@ function scroll(input: Partial<WheelEvent> & { wheelDeltaY?: number }) {
   } as WheelEvent;
 }
 
-function pointer(clientX: number, clientY: number) {
+function pointer(
+  clientX: number,
+  clientY: number,
+  overrides: Record<string, unknown> = {},
+) {
   return {
     clientX,
     clientY,
@@ -1093,6 +1307,7 @@ function pointer(clientX: number, clientY: number) {
     altKey: false,
     target: { closest: () => null },
     preventDefault: () => {},
+    ...overrides,
   } as unknown as PointerEvent;
 }
 
