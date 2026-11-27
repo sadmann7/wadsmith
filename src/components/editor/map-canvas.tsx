@@ -42,6 +42,7 @@ import {
   MapEditor,
   MapFindCamera,
   MapFit,
+  MapGhost,
   MapHandle,
   MapLookHere,
   MapMarker,
@@ -382,6 +383,7 @@ export function MapCanvas({
             />
           ))}
           <MapConnecting className="map-wire map-connecting" />
+          <MapGhost className="map-ghost" />
           <MapDraft className="map-draft" />
         </svg>
         {labels}

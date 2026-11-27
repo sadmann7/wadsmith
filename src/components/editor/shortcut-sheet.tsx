@@ -315,7 +315,11 @@ function groups(keymap: Keymap): { title: string; items: Shortcut[] }[] {
         },
         {
           keys: [key("Drag")],
-          does: "Move what's under the pointer: a thing, a corner, a wall, or a room with what stands in it. Esc puts it back",
+          does: "Move what's under the pointer: a thing, a corner, a wall, or a room with what stands in it. A room snaps to a wall it comes near and joins the room there, and can't land over another. Esc puts it back",
+        },
+        {
+          keys: [key("Alt-drag")],
+          does: "Copy a room with what stands in it",
         },
         {
           keys: [key("Drag"), key("Shift-drag")],

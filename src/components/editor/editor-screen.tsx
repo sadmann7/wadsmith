@@ -3772,7 +3772,7 @@ function grabText(grab: MapGrab, map: GameMap, customThings: CustomThings) {
   if (grab.kind === "room") {
     const id = grab.key.slice(roomKeyPrefix.length);
     const room = map.sectors.find((sector) => sector.id === id);
-    return `Drag to move ${room?.name ?? "the room"}.`;
+    return `Drag to move ${room?.name ?? "the room"}, or Alt-drag to copy it.`;
   }
   const thing = map.things.find(
     (item) => `${thingKeyPrefix}${item.id}` === grab.key,
