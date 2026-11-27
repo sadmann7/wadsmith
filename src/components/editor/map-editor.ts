@@ -2083,6 +2083,7 @@ export const mapEditor = definePrimitive({
         const at = captionPoint(state, props);
         return {
           "data-small": at.isSmall ? "" : undefined,
+          "data-covered": at.isCovered ? "" : undefined,
           style: css({
             position: "absolute",
             left: `${at.x}px`,
@@ -2094,6 +2095,7 @@ export const mapEditor = definePrimitive({
         const at = captionPoint(state, props);
         return {
           "data-small": at.isSmall ? "" : undefined,
+          "data-covered": at.isCovered ? "" : undefined,
           style: `left:${at.x}px;top:${at.y}px`,
         };
       }),

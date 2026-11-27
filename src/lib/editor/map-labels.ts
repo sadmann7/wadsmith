@@ -40,12 +40,13 @@ export const smallLabelScale = 0.75;
 
 export interface LabelSpot extends Point {
   isSmall: boolean;
+  isCovered: boolean;
 }
 
 // A label sits near the top of its room clear of pillars and things, lower
 // down, or past the walls of a room narrower than the name. Failing that it
-// tries again smaller, then stays at the top, small if an icon is under it.
-// Null means no part of the top band is in the room.
+// tries again smaller, then stays at the top, small and covered if an icon
+// is under it. Null means no part of the top band is in the room.
 export function labelPoint(
   loops: Point[][],
   zoom: number,
@@ -86,19 +87,17 @@ export function labelPoint(
     const size = isSmall ? width * smallLabelScale : width;
     for (const y of inside) {
       const at = placeOnBand(loops, zoom, size, y, near, true);
-      if (at) return { ...at, isSmall };
+      if (at) return { ...at, isSmall, isCovered: false };
     }
     for (const y of narrow) {
       const at = spillOnBand(loops, zoom, size, y, near);
-      if (at) return { ...at, isSmall };
+      if (at) return { ...at, isSmall, isCovered: false };
     }
   }
   const at = placeOnBand(loops, zoom, width, top, [], false);
   if (!at) return null;
-  return {
-    ...at,
-    isSmall: coveredWidth(at, width * stepSlack, zoom, near) > 0,
-  };
+  const isCovered = coveredWidth(at, width * stepSlack, zoom, near) > 0;
+  return { ...at, isSmall: isCovered, isCovered };
 }
 
 // Keeps the bigger room's label where two would overlap. The sizes are rough,

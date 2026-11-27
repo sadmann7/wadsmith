@@ -1019,6 +1019,12 @@
     font: 11px var(--font-mono);
   }
 
+  /* Icons are faded in these modes, so a name with no clear spot reads over them. */
+  .map:not([data-mode="lines"], [data-mode="sectors"])
+    .map-label[data-covered] {
+    visibility: hidden;
+  }
+
   .map-label[data-small] strong {
     font-size: 10px;
   }

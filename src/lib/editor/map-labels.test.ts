@@ -22,6 +22,7 @@ describe("labelPoint", () => {
       x: 256,
       y: 24,
       isSmall: false,
+      isCovered: false,
     });
   });
 
@@ -30,6 +31,7 @@ describe("labelPoint", () => {
       x: 256,
       y: 48,
       isSmall: false,
+      isCovered: false,
     });
   });
 
@@ -46,6 +48,7 @@ describe("labelPoint", () => {
       x: 250,
       y: 24,
       isSmall: false,
+      isCovered: false,
     });
   });
 
@@ -55,6 +58,7 @@ describe("labelPoint", () => {
       x: 32,
       y: 96,
       isSmall: false,
+      isCovered: false,
     });
   });
 
@@ -68,6 +72,7 @@ describe("labelPoint", () => {
       x: 16,
       y: 24,
       isSmall: false,
+      isCovered: false,
     });
   });
 
@@ -101,20 +106,21 @@ describe("labelPoint", () => {
       x: 256,
       y: 24,
       isSmall: false,
+      isCovered: false,
     });
   });
 
   it("spills a long name past a narrow room's walls, clear of things beside it", () => {
     const passage = box(100, 0, 140, 256);
     const at = labelPoint([passage], 1, 80, [{ x: 160, y: 24 }]);
-    expect(at).toMatchObject({ x: 120, isSmall: false });
+    expect(at).toMatchObject({ x: 120, isSmall: false, isCovered: false });
     expect(at?.y).toBeCloseTo(24 + 2 * 28.8);
   });
 
   it("shrinks the name when only a smaller one fits clear of a thing", () => {
     const ledge = box(0, 0, 120, 40);
     const at = labelPoint([ledge], 1, 64, [{ x: 70, y: 24 }]);
-    expect(at).toMatchObject({ y: 24, isSmall: true });
+    expect(at).toMatchObject({ y: 24, isSmall: true, isCovered: false });
     expect(70 - defined(at).x).toBeGreaterThanOrEqual(
       14 + (64 * smallLabelScale) / 2,
     );
@@ -126,6 +132,7 @@ describe("labelPoint", () => {
       x: 16,
       y: 24,
       isSmall: true,
+      isCovered: true,
     });
   });
 
