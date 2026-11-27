@@ -136,6 +136,20 @@ describe("labelPoint", () => {
     });
   });
 
+  it("keeps a small name shown when icons crowd it without sitting on it", () => {
+    const ledge = box(0, 0, 100, 40);
+    const things = [
+      { x: 8, y: 24 },
+      { x: 92, y: 24 },
+    ];
+    expect(labelPoint([ledge], 1, 64, things)).toEqual({
+      x: 50,
+      y: 24,
+      isSmall: true,
+      isCovered: false,
+    });
+  });
+
   it("gives up when a pillar covers the whole band", () => {
     const pillar = box(0, 8, 512, 256);
     expect(labelPoint([hall, pillar], 1, 40)).toBeNull();

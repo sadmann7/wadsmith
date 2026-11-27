@@ -45,8 +45,8 @@ export interface LabelSpot extends Point {
 
 // A label sits near the top of its room clear of pillars and things, lower
 // down, or past the walls of a room narrower than the name. Failing that it
-// tries again smaller, then stays at the top, small and covered if an icon
-// is under it. Null means no part of the top band is in the room.
+// tries again smaller, then stays small at the top, covered if an icon is
+// drawn on it. Null means no part of the top band is in the room.
 export function labelPoint(
   loops: Point[][],
   zoom: number,
@@ -96,8 +96,11 @@ export function labelPoint(
   }
   const at = placeOnBand(loops, zoom, width, top, [], false);
   if (!at) return null;
-  const isCovered = coveredWidth(at, width * stepSlack, zoom, near) > 0;
-  return { ...at, isSmall: isCovered, isCovered };
+  return {
+    ...at,
+    isSmall: near.length > 0,
+    isCovered: getIsUnderIcon(at, width * smallLabelScale, zoom, near),
+  };
 }
 
 // Keeps the bigger room's label where two would overlap. The sizes are rough,
@@ -240,22 +243,23 @@ function withoutThings(
     );
 }
 
-function coveredWidth(at: Point, width: number, zoom: number, things: Point[]) {
-  const half = width / 2 / zoom;
-  const reach = thingReach / zoom;
-  const rise = (thingReach + labelHalfHeight) / zoom;
-  return things
-    .filter((thing) => Math.abs(thing.y - at.y) < rise)
-    .reduce(
-      (sum, thing) =>
-        sum +
-        Math.max(
-          0,
-          Math.min(at.x + half, thing.x + reach) -
-            Math.max(at.x - half, thing.x - reach),
-        ),
-      0,
-    );
+// Without the air and slack placement keeps, so a name is only hidden when
+// an icon is drawn on it.
+const iconRadius = 12;
+const nameHalfHeight = 9;
+
+function getIsUnderIcon(
+  at: Point,
+  width: number,
+  zoom: number,
+  things: Point[],
+) {
+  const across = (width / 2 + iconRadius) / zoom;
+  const rise = (nameHalfHeight + iconRadius) / zoom;
+  return things.some(
+    (thing) =>
+      Math.abs(thing.x - at.x) < across && Math.abs(thing.y - at.y) < rise,
+  );
 }
 
 // The parts of a level line inside the outline and outside its holes, left
