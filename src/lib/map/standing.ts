@@ -112,9 +112,9 @@ function overlap(map: GameMap, spot: Point, floor: number) {
 
 // The walls whose line reaches into a player's box at a spot, with how far.
 function* touching(map: GameMap, spot: Point) {
-  for (const [key, owners] of wallOwners(map)) {
-    const [a, b] = key.split("|").map((id) => map.vertices[id]);
-    if (!a || !b) continue;
+  const { cells, wide } = wallIndex(map);
+  const cell = `${Math.floor(spot.x / cellSize)},${Math.floor(spot.y / cellSize)}`;
+  for (const { key, owners, a, b } of inMapOrder(cells.get(cell) ?? [], wide)) {
     const near = nearestOn(a, b, spot);
     const reach = Math.max(
       Math.abs(spot.x - near.x),
@@ -122,6 +122,73 @@ function* touching(map: GameMap, spot: Point) {
     );
     if (reach < playerRadius) {
       yield { key, owners, depth: playerRadius - reach };
+    }
+  }
+}
+
+interface IndexedWall {
+  order: number;
+  key: string;
+  owners: Sector[];
+  a: Point;
+  b: Point;
+}
+
+interface WallIndex {
+  cells: Map<string, IndexedWall[]>;
+  wide: IndexedWall[];
+}
+
+const cellSize = 128;
+const maxCells = 1024;
+const wallIndexes = new WeakMap<GameMap, WallIndex>();
+
+// Each wall is filed under every cell its box, grown by a player's reach,
+// covers, so a spot only looks at the walls of its own cell. A long diagonal
+// wall would fill too many cells, so it is looked at from every spot instead.
+function wallIndex(map: GameMap) {
+  const cached = wallIndexes.get(map);
+  if (cached) return cached;
+  const index: WallIndex = { cells: new Map(), wide: [] };
+  let order = 0;
+  for (const [key, owners] of wallOwners(map)) {
+    const [a, b] = key.split("|").map((id) => map.vertices[id]);
+    if (!a || !b) continue;
+    const wall = { order: order++, key, owners, a, b };
+    const left = Math.floor((Math.min(a.x, b.x) - playerRadius) / cellSize);
+    const right = Math.floor((Math.max(a.x, b.x) + playerRadius) / cellSize);
+    const top = Math.floor((Math.min(a.y, b.y) - playerRadius) / cellSize);
+    const bottom = Math.floor((Math.max(a.y, b.y) + playerRadius) / cellSize);
+    if (!((right - left + 1) * (bottom - top + 1) <= maxCells)) {
+      index.wide.push(wall);
+      continue;
+    }
+    for (let x = left; x <= right; x += 1) {
+      for (let y = top; y <= bottom; y += 1) {
+        const cell = `${x},${y}`;
+        const walls = index.cells.get(cell);
+        if (walls) walls.push(wall);
+        else index.cells.set(cell, [wall]);
+      }
+    }
+  }
+  wallIndexes.set(map, index);
+  return index;
+}
+
+// Depths add up in map order, as they did when every wall was looked at, so
+// the sums come out the same to the last bit.
+function* inMapOrder(near: IndexedWall[], wide: IndexedWall[]) {
+  let i = 0;
+  let j = 0;
+  while (i < near.length || j < wide.length) {
+    if (
+      j >= wide.length ||
+      (i < near.length && near[i].order < wide[j].order)
+    ) {
+      yield near[i++];
+    } else {
+      yield wide[j++];
     }
   }
 }
