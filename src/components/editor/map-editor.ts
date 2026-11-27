@@ -2250,18 +2250,14 @@ export const mapEditor = definePrimitive({
           : state.grab
             ? "wall"
             : undefined,
-        "data-drop": state.dropBlocked
-          ? "blocked"
-          : state.snapWalls.length > 0
-            ? "join"
-            : undefined,
-        "data-copy": state.copying ? "" : undefined,
+        ...dropAttrs(state),
         style: css({
           position: "relative",
           overflow: "clip",
           "touch-action": "none",
         }),
       }),
+      live: live<MapEditorState, unknown, {}>(dropAttrs),
       bind: (el, { api }) => api.attach(el),
       on: {
         wheel: (event, { api }) => api.wheel(event),
@@ -2345,8 +2341,11 @@ export const mapEditor = definePrimitive({
             : undefined,
         "data-hover": state.hoverWall === key ? "" : undefined,
       }),
-      live: live<MapEditorState, unknown, WallProps>((state, { props }) =>
-        wallAttrs(state, props.from, props.to),
+      live: live<MapEditorState, unknown, WallProps>(
+        (state, { key, props }) => ({
+          ...wallAttrs(state, props.from, props.to),
+          "data-snap": state.snapWalls.includes(key) ? "" : undefined,
+        }),
       ),
     }),
     ghost: slot({
@@ -2693,6 +2692,17 @@ function ghostPath(state: MapEditorState) {
       .flatMap(sectorLoops)
       .map((loop) => loop.map((id) => positions[id] ?? map.vertices[id])),
   );
+}
+
+function dropAttrs({ dropBlocked, snapWalls, copying }: MapEditorState) {
+  return {
+    "data-drop": dropBlocked
+      ? "blocked"
+      : snapWalls.length > 0
+        ? "join"
+        : undefined,
+    "data-copy": copying ? "" : undefined,
+  };
 }
 
 function getIsMoving(state: MapEditorState, corners: readonly string[]) {
