@@ -394,7 +394,7 @@ function Waiting({ info, players, peer, onLeave }: WaitingProps) {
               key={player.peer}
               className="flex h-[44px] items-center gap-3 border-b border-border"
             >
-              <PlayerBadge peer={player.peer} />
+              <PlayerBadge peer={player.peer} slot={player.peer - 1} />
               <span className="min-w-0 flex-1 truncate text-sm font-semibold">
                 {player.name}
                 {player.peer === peer || player.peer === hostPeer ? (
