@@ -207,6 +207,7 @@ export function CoopJoin({ code }: CoopJoinProps) {
         title={state.game.title}
         slot={state.game.slot}
         par={state.game.par}
+        intertext={state.game.intertext}
         coop={playing}
         onExit={leave}
       />

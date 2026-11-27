@@ -11,6 +11,7 @@ import { featuredMaps } from "@/lib/map/featured";
 import { testMap } from "@/lib/map/test-map";
 import { compileMap } from "@/lib/wad/compile";
 
+import { disconnectPacket } from "./coop";
 import { NetInbox } from "./net-inbox";
 import { doomKeys } from "./runtime";
 import { RunRecorder } from "./trail";
@@ -159,6 +160,21 @@ describe.skipIf(!ready)("network game through shared memory", () => {
     expect(seen.kills).toBe(1);
   }, 60_000);
 
+  it("drops a guest from the host's engine as soon as it says it left", async () => {
+    const room = createRoom();
+    const host = room.join(hostPeer, "host");
+    const guest = room.join(guestPeer, "guest");
+    await waitFor(host.query, (state) => state.waitingPlayers === 2);
+    expect(await host.launch()).toBe(true);
+    await waitFor(guest.query, (state) => state.inLevel);
+    await waitFor(host.query, (state) => state.playersInGame === 2);
+
+    const left = Date.now();
+    room.deliver(guestPeer, hostPeer, disconnectPacket);
+    await waitFor(host.query, (state) => state.playersInGame === 1);
+    expect(Date.now() - left).toBeLessThan(20_000);
+  }, 60_000);
+
   it.each(deathmatchCases)(
     "starts a deathmatch on %s",
     async (_name, map) => {
@@ -252,7 +268,10 @@ function createRoom(map = coopMap, mode: "coop" | "deathmatch" = "coop") {
     };
   };
 
-  return { join };
+  const deliver = (from: number, to: number, data: Uint8Array) =>
+    inboxes.get(to)?.push(from, data);
+
+  return { join, deliver };
 }
 
 async function waitFor<T>(
