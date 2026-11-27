@@ -60,6 +60,7 @@ import {
   zoomStep,
 } from "@/lib/editor/zoom";
 import { getIsPlayerStart } from "@/lib/map/catalog";
+import { dropRooms, planRoomDrop, type RoomDrop } from "@/lib/map/drop";
 import {
   addSwitch,
   addThing,
@@ -67,7 +68,6 @@ import {
   doorKeyPrefix,
   freeWallNear,
   gridSize,
-  mergeCorners,
   positionsOf,
   removeSwitch,
   roomCenter,
@@ -95,16 +95,12 @@ import {
   loopsPath,
   roomPoint,
   sectorAt,
+  sectorLoops,
   sectorVertices,
   wallKey,
   wallOwners,
 } from "@/lib/map/geometry";
-import {
-  drawLines,
-  drawRoom,
-  joinCornersToWalls,
-  removeCorner,
-} from "@/lib/map/reshape";
+import { drawLines, drawRoom, removeCorner } from "@/lib/map/reshape";
 import { type DrawShape, gridCells, shapeCorners } from "@/lib/map/shapes";
 
 interface ZoomDetails {
@@ -207,6 +203,10 @@ interface MapEditorOptions {
   autoMerge?: boolean;
 }
 
+interface Landing extends RoomDrop {
+  isCopy: boolean;
+}
+
 interface MapEditorState {
   map: GameMap;
   positions: Record<string, Point>;
@@ -229,6 +229,9 @@ interface MapEditorState {
   hoverWall: string | null;
   hoverRooms: string[];
   grab: string | null;
+  snapWalls: string[];
+  dropBlocked: boolean;
+  copying: boolean;
 }
 
 const emptyMap: GameMap = {
@@ -314,6 +317,9 @@ const readsNothing = {
   hoverWall: none,
   hoverRooms: none,
   grab: none,
+  snapWalls: none,
+  dropBlocked: none,
+  copying: none,
 } satisfies Record<keyof MapEditorState, readonly never[]>;
 
 type BoxMode = "replace" | "add" | "remove";
@@ -384,6 +390,9 @@ export const mapEditor = definePrimitive({
       hoverWall: null,
       hoverRooms: [],
       grab: null,
+      snapWalls: [],
+      dropBlocked: false,
+      copying: false,
     };
   },
   sync: (options) => ({
@@ -410,6 +419,9 @@ export const mapEditor = definePrimitive({
     "drawing",
     "cameraPosition",
     "marquee",
+    "snapWalls",
+    "dropBlocked",
+    "copying",
   ],
   api: (context) => {
     const { store } = context;
@@ -429,6 +441,10 @@ export const mapEditor = definePrimitive({
     // selection by the same offset, so a shape drawn on a finer grid keeps its
     // form. The helper would round every item on its own.
     let dropping: string[] | null = null;
+    // Where a dragged room lands, worked out while it's dragged.
+    let landing: Landing | null = null;
+    let planned: Landing | null = null;
+    const snappedDrafts = new WeakSet<MoveDraft>();
     // What a press on a selected room drags: its corners, the rooms inside it
     // and the things standing in them, whether or not each is selected.
     let carried: string[] | null = null;
@@ -449,11 +465,23 @@ export const mapEditor = definePrimitive({
       },
       set: (positions, details) => {
         const keys = dropping;
+        const plan = landing;
         dropping = null;
+        landing = null;
         const current = store.get().positions;
         const anchor = keys?.[0];
         let next = positions;
-        if (details.reason === "drag" && keys && anchor && current[anchor]) {
+        if (details.reason === "drag" && plan?.isBlocked) {
+          announce("Rooms can't overlap, so the room stayed where it was.");
+          return false;
+        }
+        if (
+          details.reason === "drag" &&
+          !plan &&
+          keys &&
+          anchor &&
+          current[anchor]
+        ) {
           const at = snapPoint(positions[anchor], grid());
           const dx = at.x - current[anchor].x;
           const dy = at.y - current[anchor].y;
@@ -464,21 +492,20 @@ export const mapEditor = definePrimitive({
             if (from) next[key] = { x: from.x + dx, y: from.y + dy };
           }
         }
-        const moved = applyPositions(store.get().map, next);
+        const { map } = store.get();
+        const moved = applyPositions(map, next);
+        if (details.reason !== "drag" || !keys) {
+          return change("map", moved, details);
+        }
         // A corner dropped onto another, or onto a wall, joins it.
-        const corners = (keys ?? []).filter(
-          (key) => !key.startsWith(thingKeyPrefix),
-        );
-        const merging = context.options().autoMerge !== false;
-        const joined =
-          details.reason === "drag" && corners.length > 0
-            ? mergeCorners(
-                merging ? joinCornersToWalls(moved, corners) : moved,
-                corners,
-              )
-            : moved;
-        const done = change("map", joined, details);
-        if (done && joined !== moved) select([]);
+        const landed = dropRooms(map, moved, keys, {
+          copy: plan?.isCopy ?? false,
+          join: context.options().autoMerge !== false,
+        });
+        if (!landed) return false;
+        const done = change("map", landed.map, details);
+        if (done && plan?.isCopy) select(landed.keys);
+        else if (done && landed.map !== moved) select([]);
         return done;
       },
     });
@@ -514,6 +541,54 @@ export const mapEditor = definePrimitive({
     });
     context.onDestroy(stopCorners);
 
+    const showDrop = (plan: Landing | null) => {
+      planned = plan;
+      const walls = plan?.walls ?? none;
+      const { snapWalls, dropBlocked, copying } = store.get();
+      const isBlocked = plan?.isBlocked ?? false;
+      const isCopy = plan?.isCopy ?? false;
+      if (
+        dropBlocked === isBlocked &&
+        copying === isCopy &&
+        snapWalls.length === walls.length &&
+        snapWalls.every((wall, index) => wall === walls[index])
+      ) {
+        return;
+      }
+      store.set({
+        snapWalls: walls.length === 0 ? [] : [...walls],
+        dropBlocked: isBlocked,
+        copying: isCopy,
+      });
+    };
+    let altHeld = false;
+    const snapDraft = (moving: MoveDraft): MoveDraft => {
+      const { map, positions, viewport: view } = store.get();
+      const from = positions[moving.keys[0]];
+      if (!from) return moving;
+      const at = snapPoint(
+        { x: from.x + moving.dx, y: from.y + moving.dy },
+        grid(),
+      );
+      const plan = planRoomDrop(
+        map,
+        moving.keys,
+        { x: at.x - from.x, y: at.y - from.y },
+        wallReach / view.zoom,
+        altHeld,
+      );
+      showDrop(plan && { ...plan, isCopy: altHeld });
+      return plan
+        ? { ...moving, dx: plan.offset.x, dy: plan.offset.y }
+        : moving;
+    };
+    const holdAlt = (held: boolean) => {
+      if (held === altHeld) return;
+      altHeld = held;
+      const { moving } = store.get();
+      if (moving) store.set({ moving: { ...moving } });
+    };
+
     let lastDraft: MoveDraft | null = null;
     let lastPositions = store.get().positions;
     const stopWatching = store.subscribe(() => {
@@ -534,18 +609,31 @@ export const mapEditor = definePrimitive({
         context.options().onDraftMapChange?.(null);
         return;
       }
+      // A dragged room lands on the grid, flush against a wall it comes near,
+      // so the draft is moved there before anything draws it.
+      if (moving && !snappedDrafts.has(moving)) {
+        const snapped = snapDraft(moving);
+        snappedDrafts.add(snapped);
+        if (snapped !== moving) {
+          store.set({ moving: snapped });
+          return;
+        }
+      }
       // The drop commits right after the draft clears; a cancelled drag
       // commits nothing, so the keys are let go once that moment has passed.
       if (!moving && lastDraft) {
         dropping = lastDraft.keys;
+        landing = planned;
         carried = null;
         queueMicrotask(() => {
           dropping = null;
+          landing = null;
         });
       }
       lastDraft = moving;
       const { onDraftMapChange } = context.options();
       if (!moving) {
+        showDrop(null);
         onDraftMapChange?.(null);
         return;
       }
@@ -1772,6 +1860,7 @@ export const mapEditor = definePrimitive({
       pointerdown(event: PointerEvent) {
         press = { x: event.clientX, y: event.clientY };
         pressing = true;
+        altHeld = event.altKey;
         // A second finger joins the press it follows and doesn't start one.
         if (event.isPrimary) carried = null;
         root()?.focus({ preventScroll: true });
@@ -1877,6 +1966,7 @@ export const mapEditor = definePrimitive({
         reportPointer?.(null);
       },
       pointermove(event: PointerEvent) {
+        if (store.get().moving) holdAlt(event.altKey);
         if (
           touchPress?.held &&
           event.pointerType === "touch" &&
@@ -1989,6 +2079,13 @@ export const mapEditor = definePrimitive({
       keydown(event: KeyboardEvent) {
         if (event.defaultPrevented || openMenuFromKey(event)) return;
         holdKey(event);
+        // Alt held while a room is dragged copies it, and would otherwise
+        // move focus to the browser's menu bar.
+        if (event.key === "Alt" && store.get().moving) {
+          holdAlt(true);
+          event.preventDefault();
+          return;
+        }
         // Space held over the map pans with the pointer, though a focused
         // button inside it still presses.
         if (event.key === " " && event.target === root()) {
@@ -2093,6 +2190,10 @@ export const mapEditor = definePrimitive({
       },
       keyup(event: KeyboardEvent) {
         if (event.key === " ") spaceHeld = false;
+        if (event.key === "Alt" && store.get().moving) {
+          holdAlt(false);
+          event.preventDefault();
+        }
         holdKey(event);
       },
       pressPort(event: PointerEvent, key: string, el: HTMLElement) {
@@ -2149,6 +2250,12 @@ export const mapEditor = definePrimitive({
           : state.grab
             ? "wall"
             : undefined,
+        "data-drop": state.dropBlocked
+          ? "blocked"
+          : state.snapWalls.length > 0
+            ? "join"
+            : undefined,
+        "data-copy": state.copying ? "" : undefined,
         style: css({
           position: "relative",
           overflow: "clip",
@@ -2198,6 +2305,7 @@ export const mapEditor = definePrimitive({
       }),
       attrs: (state, { key, props }) => ({
         d: sectorPath(state, props.corners, props.holes),
+        "data-moving": getIsMoving(state, props.corners) ? "" : undefined,
         "data-active": state.activeSector === key ? "" : undefined,
         "data-hover": state.hoverRooms.includes(key) ? "" : undefined,
         "data-grab": state.grab === `${roomKeyPrefix}${key}` ? "" : undefined,
@@ -2210,6 +2318,7 @@ export const mapEditor = definePrimitive({
       }),
       live: live<MapEditorState, unknown, SectorProps>((state, { props }) => ({
         d: sectorPath(state, props.corners, props.holes),
+        "data-moving": getIsMoving(state, props.corners) ? "" : undefined,
       })),
     }),
     wall: slot<WallProps>({
@@ -2224,9 +2333,11 @@ export const mapEditor = definePrimitive({
         highlightedWall: ({ key }) => [key],
         selection: ({ key }) => [`${wallKeyPrefix}${key}`],
         hoverWall: ({ key }) => [key],
+        snapWalls: ({ key }) => [key],
       }),
       attrs: (state, { key, props }) => ({
         ...wallAttrs(state, props.from, props.to),
+        "data-snap": state.snapWalls.includes(key) ? "" : undefined,
         "data-selected":
           state.highlightedWall === key ||
           state.selection.includes(`${wallKeyPrefix}${key}`)
@@ -2237,6 +2348,12 @@ export const mapEditor = definePrimitive({
       live: live<MapEditorState, unknown, WallProps>((state, { props }) =>
         wallAttrs(state, props.from, props.to),
       ),
+    }),
+    ghost: slot({
+      attrs: (state) => ({ d: ghostPath(state) }),
+      live: live<MapEditorState, unknown, {}>((state) => ({
+        d: ghostPath(state),
+      })),
     }),
     draft: slot({
       attrs: (state) => ({ points: draftPoints(state) }),
@@ -2560,7 +2677,29 @@ function movedDraft(
 }
 
 function wallAttrs(state: MapEditorState, from: string, to: string) {
-  return lineAttrs(pointOf(state, from), pointOf(state, to));
+  return {
+    ...lineAttrs(pointOf(state, from), pointOf(state, to)),
+    "data-moving": getIsMoving(state, [from, to]) ? "" : undefined,
+  };
+}
+
+function ghostPath(state: MapEditorState) {
+  const { moving, copying, map, positions } = state;
+  if (!moving || !copying) return "";
+  const keys = movedKeys(moving);
+  return loopsPath(
+    map.sectors
+      .filter((sector) => sector.vertices.every((id) => keys.has(id)))
+      .flatMap(sectorLoops)
+      .map((loop) => loop.map((id) => positions[id] ?? map.vertices[id])),
+  );
+}
+
+function getIsMoving(state: MapEditorState, corners: readonly string[]) {
+  const { moving } = state;
+  if (!moving || corners.length === 0) return false;
+  const keys = movedKeys(moving);
+  return corners.every((corner) => keys.has(corner));
 }
 
 function marqueeStyle({ marquee }: MapEditorState) {
@@ -2813,6 +2952,7 @@ const parts = createParts(mapEditor, {
   world: "div",
   sector: "path",
   wall: "line",
+  ghost: "path",
   draft: "polyline",
   marquee: "div",
   measure: "div",
@@ -2834,6 +2974,7 @@ export const MapWorld = parts.World;
 // renders again only when its own props change.
 export const MapSector = React.memo(parts.Sector);
 export const MapWall = React.memo(parts.Wall);
+export const MapGhost = parts.Ghost;
 export const MapDraft = parts.Draft;
 export const MapMarquee = parts.Marquee;
 export const MapMeasure = parts.Measure;

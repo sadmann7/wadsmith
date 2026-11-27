@@ -4,9 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GameMap } from "@/lib/map/types";
 
 import { defined } from "@/lib/defined";
-import { applyPositions, removeThing } from "@/lib/map/edit";
+import { addRoom, addThing, applyPositions, removeThing } from "@/lib/map/edit";
 import { pickedRooms } from "@/lib/map/fragment";
-import { roomPoint } from "@/lib/map/geometry";
+import { roomPoint, wallOwners } from "@/lib/map/geometry";
 import { drawRoom, removeCorner } from "@/lib/map/reshape";
 import { testMap } from "@/lib/map/test-map";
 import { SceneCamera } from "@/lib/preview/scene-camera";
@@ -16,6 +16,7 @@ import { mapEditor, type MapGrab, type MapTool } from "./map-editor";
 type Instance = ReturnType<typeof mapEditor>;
 
 const id = "map";
+const empty: GameMap = { vertices: {}, sectors: [], things: [], switches: [] };
 
 interface Slot {
   selects: {
@@ -756,15 +757,15 @@ describe("map editor drags from inside a room", () => {
       });
       const surface = rootSurface(instance);
       instance.api.pointerdown(pointer(440, 140));
-      surface.move(472, 140);
-      surface.move(504, 172);
-      surface.release(504, 172);
+      surface.move(440, 172);
+      surface.move(440, 204);
+      surface.release(440, 204);
       expect(changes).toHaveLength(1);
-      expect(changes[0].vertices.v13).toEqual({ x: 560, y: 128 });
+      expect(changes[0].vertices.v13).toEqual({ x: 496, y: 160 });
       expect(changes[0].vertices.v1).toEqual(testMap.vertices.v1);
       expect(
         changes[0].things.find((thing) => thing.id === "shotgun-1"),
-      ).toMatchObject({ x: 512, y: 192 });
+      ).toMatchObject({ x: 448, y: 224 });
     }
   });
 
@@ -932,6 +933,100 @@ describe("map editor drags from inside a room", () => {
       null,
       { kind: "room", key: "room:sector-2" },
     ]);
+  });
+});
+
+describe("map editor drops of a dragged room", () => {
+  const hall = addRoom(empty, box(0, 0, 256, 256), {}, 1);
+  const started = addThing(hall.map, "player", { x: 128, y: 128 }).map;
+  const loose = addRoom(started, box(320, 64, 448, 192), {}, 1);
+  const map = loose.map;
+  const sharedWalls = (next: GameMap) =>
+    [...wallOwners(next)].filter(
+      ([, owners]) => owners.length === 2 && owners[0] !== owners[1],
+    );
+
+  it("snap a room flush to a wall it comes near, light that wall and join them", () => {
+    const changes: GameMap[] = [];
+    const instance = mapEditor({
+      id,
+      map,
+      editMode: "sectors",
+      onMapChange: (next) => {
+        changes.push(next);
+      },
+    });
+    const surface = rootSurface(instance, true);
+    const { store } = instance.part("handle", { value: "v1" });
+    instance.api.pointerdown(pointer(384, 128));
+    surface.move(360, 128);
+    surface.move(328, 128);
+    expect(store.get().moving).toMatchObject({ dx: -64, dy: 0 });
+    expect(store.get().snapWalls).toHaveLength(1);
+    expect(partAttrs(instance.part("root", {}))["data-drop"]).toBe("join");
+    const [glowing] = store.get().snapWalls;
+    const [from, to] = defined(glowing).split("|");
+    expect(
+      partAttrs(instance.part("wall", { value: glowing, from, to }))[
+        "data-snap"
+      ],
+    ).toBe("");
+    surface.release(328, 128);
+    expect(changes).toHaveLength(1);
+    expect(sharedWalls(changes[0])).toHaveLength(1);
+    expect(store.get().snapWalls).toEqual([]);
+  });
+
+  it("refuse a drop over another room, and mark the spot as blocked", () => {
+    let changes = 0;
+    const instance = mapEditor({
+      id,
+      map,
+      editMode: "sectors",
+      onMapChange: () => {
+        changes += 1;
+      },
+    });
+    const surface = rootSurface(instance, true);
+    const { store } = instance.part("handle", { value: "v1" });
+    instance.api.pointerdown(pointer(384, 128));
+    surface.move(320, 128);
+    surface.move(256, 128);
+    expect(store.get().dropBlocked).toBe(true);
+    expect(partAttrs(instance.part("root", {}))["data-drop"]).toBe("blocked");
+    surface.release(256, 128);
+    expect(changes).toBe(0);
+    expect(store.get().dropBlocked).toBe(false);
+  });
+
+  it("copy a room with Alt held, and leave the room where it was", () => {
+    const changes: GameMap[] = [];
+    const instance = mapEditor({
+      id,
+      map,
+      editMode: "sectors",
+      onMapChange: (next) => {
+        changes.push(next);
+      },
+    });
+    const surface = rootSurface(instance, true);
+    const { store } = instance.part("handle", { value: "v1" });
+    instance.api.pointerdown(pointer(384, 128, { altKey: true }));
+    surface.move(384, 200);
+    surface.move(384, 264);
+    expect(store.get().copying).toBe(true);
+    expect(store.get().moving).toMatchObject({ dx: 0, dy: 128 });
+    surface.release(384, 264);
+    expect(changes).toHaveLength(1);
+    const [next] = changes;
+    expect(next.sectors).toHaveLength(3);
+    expect(next.vertices).toMatchObject(map.vertices);
+    expect(sharedWalls(next)).toHaveLength(1);
+    expect(
+      pickedRooms(next, store.get().selection, null).filter(
+        (room) => room !== loose.id,
+      ),
+    ).toHaveLength(1);
   });
 });
 
@@ -1192,10 +1287,16 @@ function listen(instance: Instance) {
 
 // Pointer moves reach the drag through the element's document, and wait for
 // a frame that only a release flushes here.
-function dragSurface() {
+// With `frames`, a drag's moves land at once rather than on a frame that
+// never comes.
+function dragSurface(frames = false) {
   const doc = Object.assign(new EventTarget(), {
     defaultView: {
-      requestAnimationFrame: () => 1,
+      requestAnimationFrame: (run: FrameRequestCallback) => {
+        if (!frames) return 1;
+        run(0);
+        return 0;
+      },
       cancelAnimationFrame: () => {},
       setTimeout: () => 0,
     },
@@ -1229,8 +1330,8 @@ function dragSurface() {
 }
 
 // The map's root, which presses on the map drag through.
-function rootSurface(instance: Instance) {
-  const surface = dragSurface();
+function rootSurface(instance: Instance, frames = false) {
+  const surface = dragSurface(frames);
   Object.assign(surface.el, {
     isConnected: true,
     focus: () => {},

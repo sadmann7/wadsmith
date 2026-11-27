@@ -920,6 +920,37 @@
     stroke: var(--color-primary);
   }
 
+  .map-ghost {
+    fill: color-mix(in oklab, var(--color-map-wall) 8%, transparent);
+    stroke: var(--color-map-wall);
+    stroke-width: 1;
+    stroke-dasharray: 4 4;
+    vector-effect: non-scaling-stroke;
+    pointer-events: none;
+  }
+
+  .map-wall[data-snap] {
+    stroke: var(--color-primary);
+    stroke-width: 5;
+    filter: drop-shadow(0 0 3px var(--color-primary));
+  }
+
+  .map[data-drop="blocked"] {
+    cursor: not-allowed;
+  }
+
+  .map[data-copy]:not([data-drop="blocked"]) {
+    cursor: copy;
+  }
+
+  .map[data-drop="blocked"] .map-wall[data-moving] {
+    stroke: var(--color-destructive);
+  }
+
+  .map[data-drop="blocked"] .map-sector[data-moving] {
+    fill: color-mix(in oklab, var(--color-destructive) 20%, transparent);
+  }
+
   .map-marquee {
     border: calc(1px / var(--canvas-zoom, 1)) solid var(--color-primary);
     background: color-mix(in oklab, var(--color-primary) 10%, transparent);
