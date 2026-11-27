@@ -76,9 +76,14 @@ describe.skipIf(!ready)("fast actions in the engine", () => {
   }, 60_000);
 
   it("opens a fast door sooner than a door", async () => {
+    const featured = defined(
+      featuredMaps.find((item) =>
+        item.map.switches.some((entry) => entry.door !== null),
+      ),
+    );
     const doors = (fast: boolean): GameMap => ({
-      ...starterMap,
-      sectors: starterMap.sectors.map((sector) =>
+      ...featured.map,
+      sectors: featured.map.sectors.map((sector) =>
         sector.door ? { ...sector, door: { ...sector.door, fast } } : sector,
       ),
     });

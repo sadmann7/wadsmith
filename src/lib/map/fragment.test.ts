@@ -7,6 +7,7 @@ import { defined } from "@/lib/defined";
 import type { Transform } from "./fragment";
 import type { GameMap, LineAction } from "./types";
 
+import { arenaMap } from "./arena-map";
 import {
   addDetail,
   addRoom,
@@ -28,7 +29,6 @@ import {
   transformParts,
 } from "./fragment";
 import { wallKey, wallOwners } from "./geometry";
-import { starterMap } from "./starter-map";
 import { islandMap, testMap } from "./test-map";
 import { freedoomNames } from "./textures";
 import { inspectMap, issuesSince, newProblems, validateMap } from "./validate";
@@ -577,25 +577,20 @@ describe("turning, flipping and resizing", () => {
 
   it("finds the doors a turn or flip of a joined room would break", () => {
     const arena = defined(
-      starterMap.sectors.find((sector) => sector.name === "Arena"),
+      arenaMap.sectors.find((sector) => sector.name === "Arena"),
     );
-    const arenaKeys = partKeys(
-      starterMap,
-      selectedParts(starterMap, [], arena.id),
-    );
+    const arenaKeys = partKeys(arenaMap, selectedParts(arenaMap, [], arena.id));
     const steps: Transform[] = [
       { kind: "rotate", degrees: 90 },
       { kind: "rotate", degrees: -90 },
       { kind: "mirror", axis: "vertical" },
     ];
     for (const step of steps) {
-      const turned = defined(transformParts(starterMap, arenaKeys, step, 32));
-      const broken = newProblems(starterMap, turned).map(
-        (issue) => issue.target,
-      );
+      const turned = defined(transformParts(arenaMap, arenaKeys, step, 32));
+      const broken = newProblems(arenaMap, turned).map((issue) => issue.target);
       for (const door of ["Arena door", "Blue door"]) {
         const room = defined(
-          starterMap.sectors.find((sector) => sector.name === door),
+          arenaMap.sectors.find((sector) => sector.name === door),
         );
         expect(broken).toContain(room.id);
       }
@@ -604,9 +599,9 @@ describe("turning, flipping and resizing", () => {
 
   it("names the door a turn breaks, not a room that was already broken", () => {
     const arena = defined(
-      starterMap.sectors.find((sector) => sector.name === "Arena"),
+      arenaMap.sectors.find((sector) => sector.name === "Arena"),
     );
-    const broken = addRoom(starterMap, [
+    const broken = addRoom(arenaMap, [
       { x: 2048, y: 0 },
       { x: 2112, y: 0 },
       { x: 2176, y: 0 },
@@ -620,7 +615,7 @@ describe("turning, flipping and resizing", () => {
       ),
     );
     const named = newProblems(broken.map, turned).map((issue) => issue.target);
-    const doors = starterMap.sectors
+    const doors = arenaMap.sectors
       .filter(
         (sector) => sector.name === "Arena door" || sector.name === "Blue door",
       )
@@ -631,15 +626,15 @@ describe("turning, flipping and resizing", () => {
 
   it("carries a resized room's doors along, bending a far wall in the way", () => {
     const arenaKeys = partKeys(
-      starterMap,
-      selectedParts(starterMap, [], "sector-3"),
+      arenaMap,
+      selectedParts(arenaMap, [], "sector-3"),
     );
     const halve: Transform = { kind: "scale", factor: 0.5 };
     const {
       map: shrunk,
       problems,
       stranded,
-    } = transformKeepingDoors(starterMap, arenaKeys, [halve], 32);
+    } = transformKeepingDoors(arenaMap, arenaKeys, [halve], 32);
     expect(problems).toEqual([]);
     expect(stranded).toEqual([]);
     const at = (id: string) => defined(shrunk).vertices[id];
@@ -652,24 +647,24 @@ describe("turning, flipping and resizing", () => {
       expect(Math.abs(at(near).x - at(far).x)).toBe(16);
       expect(at(far).y).toBe(at(near).y);
     }
-    expect(at("v3")).toEqual(starterMap.vertices.v3);
-    expect(at("v21")).toEqual(starterMap.vertices.v21);
+    expect(at("v3")).toEqual(arenaMap.vertices.v3);
+    expect(at("v21")).toEqual(arenaMap.vertices.v21);
     const straight = defined(
-      transformParts(starterMap, arenaKeys, halve, 32, "walls"),
+      transformParts(arenaMap, arenaKeys, halve, 32, "walls"),
     );
     expect(straight.vertices.v21.x).toBe(straight.vertices.v19.x);
-    expect(newProblems(starterMap, straight)).not.toEqual([]);
+    expect(newProblems(arenaMap, straight)).not.toEqual([]);
     const plain = defined(
-      transformParts(starterMap, arenaKeys, halve, 32, "none"),
+      transformParts(arenaMap, arenaKeys, halve, 32, "none"),
     );
-    expect(plain.vertices.v13).toEqual(starterMap.vertices.v13);
+    expect(plain.vertices.v13).toEqual(arenaMap.vertices.v13);
   });
 
   it("leaves behind only the door it would carry onto a monster", () => {
     const map: GameMap = {
-      ...starterMap,
+      ...arenaMap,
       things: [
-        ...starterMap.things,
+        ...arenaMap.things,
         { id: "imp-near-door", kind: "imp", x: 490, y: 160, angle: 0 },
       ],
     };
@@ -699,14 +694,14 @@ describe("turning, flipping and resizing", () => {
 
   it("weighs each door with the other doors carried", () => {
     const map: GameMap = {
-      ...starterMap,
+      ...arenaMap,
       vertices: {
-        ...starterMap.vertices,
+        ...arenaMap.vertices,
         v13: { x: 480, y: 96 },
         v14: { x: 480, y: 224 },
       },
       things: [
-        ...starterMap.things,
+        ...arenaMap.things,
         { id: "imp-in-corridor", kind: "imp", x: 468, y: 160, angle: 0 },
       ],
     };
@@ -730,9 +725,9 @@ describe("turning, flipping and resizing", () => {
 
   it("weighs a monster in a door on a map without a player start", () => {
     const map: GameMap = {
-      ...starterMap,
+      ...arenaMap,
       things: [
-        ...starterMap.things.filter((thing) => thing.kind !== "player"),
+        ...arenaMap.things.filter((thing) => thing.kind !== "player"),
         { id: "imp-near-door", kind: "imp", x: 490, y: 160, angle: 0 },
       ],
     };
@@ -745,9 +740,9 @@ describe("turning, flipping and resizing", () => {
 
   it("carries a door onto a monster with a warning when leaving it breaks it", () => {
     const map: GameMap = {
-      ...starterMap,
+      ...arenaMap,
       things: [
-        ...starterMap.things,
+        ...arenaMap.things,
         { id: "zombie-near-door", kind: "zombieman", x: 952, y: 160, angle: 0 },
       ],
     };
@@ -773,9 +768,9 @@ describe("turning, flipping and resizing", () => {
 
   it("names only the warnings the map check lists while an error stands", () => {
     const map: GameMap = {
-      ...starterMap,
+      ...arenaMap,
       things: [
-        ...starterMap.things.filter((thing) => thing.kind !== "player"),
+        ...arenaMap.things.filter((thing) => thing.kind !== "player"),
         { id: "zombie-near-door", kind: "zombieman", x: 952, y: 160, angle: 0 },
       ],
     };
@@ -800,9 +795,9 @@ describe("turning, flipping and resizing", () => {
 
   it("lists warnings by the map check's game context", () => {
     const map: GameMap = {
-      ...starterMap,
+      ...arenaMap,
       things: [
-        ...starterMap.things,
+        ...arenaMap.things,
         { id: "zombie-near-door", kind: "zombieman", x: 952, y: 160, angle: 0 },
       ],
     };
@@ -879,20 +874,20 @@ describe("turning, flipping and resizing", () => {
 
   it("keeps the far room's wall straight around a door set into it", () => {
     const corridor = defined(
-      starterMap.sectors.find((sector) => sector.id === "sector-2"),
+      arenaMap.sectors.find((sector) => sector.id === "sector-2"),
     );
     const door = defined(
-      starterMap.sectors.find((sector) => sector.id === "sector-4"),
+      arenaMap.sectors.find((sector) => sector.id === "sector-4"),
     );
     const map: GameMap = {
-      ...starterMap,
+      ...arenaMap,
       vertices: {
-        ...starterMap.vertices,
+        ...arenaMap.vertices,
         top: { x: 496, y: 64 },
         middle: { x: 496, y: 160 },
         bottom: { x: 496, y: 256 },
       },
-      sectors: starterMap.sectors.map((sector) =>
+      sectors: arenaMap.sectors.map((sector) =>
         sector === corridor
           ? {
               ...sector,
@@ -921,7 +916,7 @@ describe("turning, flipping and resizing", () => {
 
   it("carries two doors set into one far wall", () => {
     const box = (id: string, vertices: string[], door = false) => ({
-      ...defined(starterMap.sectors.find((sector) => sector.id === "sector-2")),
+      ...defined(arenaMap.sectors.find((sector) => sector.id === "sector-2")),
       id,
       name: id,
       vertices,
@@ -987,18 +982,18 @@ describe("turning, flipping and resizing", () => {
 
   it("leaves doors alone when a turn or flip moves a room", () => {
     const arenaKeys = partKeys(
-      starterMap,
-      selectedParts(starterMap, [], "sector-3"),
+      arenaMap,
+      selectedParts(arenaMap, [], "sector-3"),
     );
     const turned = defined(
       transformParts(
-        starterMap,
+        arenaMap,
         arenaKeys,
         { kind: "mirror", axis: "vertical" },
         32,
       ),
     );
-    expect(turned.vertices.v13).toEqual(starterMap.vertices.v13);
+    expect(turned.vertices.v13).toEqual(arenaMap.vertices.v13);
   });
 
   it("finds nothing new when a room joined to no other turns", () => {
