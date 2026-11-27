@@ -71,13 +71,72 @@ export function findUnreachable(
   // Crates, windows and scenery are often out of reach on purpose, so a room
   // is only named when it holds something the player can't get to.
   const holding = new Set([...things, ...exits].map(({ room }) => room));
+  const islands = findIslands(map, reached, hasRoom);
+  const loose = new Set(islands.flat());
   const rooms = map.sectors.filter(
     (sector) =>
       holding.has(sector) &&
+      !loose.has(sector) &&
       sector.ceiling - sector.floor >= playerHeight &&
       hasRoom(sector),
   );
-  return { rooms, things, exits };
+  return { rooms, things, exits, islands };
+}
+
+const islandMarkers = new Set<Thing["kind"]>([
+  "spawn-spot",
+  "boss-shooter",
+  "boss-brain",
+]);
+
+// Groups of rooms that share no wall with the rest of the map, the way a room
+// drawn beside another without touching its wall ends up. A group something
+// acts on, by a tag or a line action, is a teleport landing or a control room
+// on purpose, and so is one holding a spawner's spots.
+function findIslands(
+  map: GameMap,
+  reached: Set<Sector>,
+  hasRoom: (sector: Sector) => boolean,
+) {
+  const parent = new Map<Sector, Sector>();
+  const root = (sector: Sector): Sector => {
+    const up = parent.get(sector);
+    if (!up || up === sector) return sector;
+    const top = root(up);
+    parent.set(sector, top);
+    return top;
+  };
+  const acted = new Set<Sector>();
+  for (const [wall, owners] of wallOwners(map)) {
+    const line = map.lines?.[wall];
+    if (line?.action || (line?.raw && line.raw.special > 0)) {
+      for (const owner of owners) acted.add(owner);
+    }
+    const [first, ...rest] = owners;
+    for (const other of rest) parent.set(root(other), root(first));
+  }
+  for (const thing of map.things) {
+    if (!islandMarkers.has(thing.kind)) continue;
+    const room = sectorAt(map, thing);
+    if (room) acted.add(room);
+  }
+  const groups = new Map<Sector, Sector[]>();
+  for (const sector of map.sectors) {
+    const top = root(sector);
+    groups.set(top, [...(groups.get(top) ?? []), sector]);
+  }
+  return [...groups.values()].filter(
+    (group) =>
+      !group.some(
+        (sector) => reached.has(sector) || sector.tag || acted.has(sector),
+      ) &&
+      group.some(
+        (sector) =>
+          !sector.door &&
+          sector.ceiling - sector.floor >= playerHeight &&
+          hasRoom(sector),
+      ),
+  );
 }
 
 function roomWalls(map: GameMap) {
