@@ -69,7 +69,7 @@ import {
   movesSector,
   opensDoor,
 } from "./lines";
-import { findUnreachable } from "./reach";
+import { findUnreachable, getIsApart, getIsRoomy, joinedGroups } from "./reach";
 
 // What the browser plays on, which a map can outgrow after it was saved.
 export interface CheckContext {
@@ -179,6 +179,7 @@ export function inspectMap(map: GameMap, context: CheckContext = {}) {
   const players = map.things.filter((thing) => thing.kind === "player");
   if (players.length === 0) {
     issues.push({ id: "no-player", message: "Place a player start." });
+    if (layers.rooms?.length === 0) validateCorners(map, warnings);
   }
   for (const kind of thingKinds) {
     if (!getIsPlayerStart(kind)) continue;
@@ -921,20 +922,7 @@ function validateReach(
       touch = findTouches(map, item).find(({ other }) => !members.has(other));
       if (touch) break;
     }
-    const room = touch?.room ?? group[0];
-    const others = group.length - 1;
-    warnings.push({
-      id: `unreachable-island:${room.id}${touch ? `:${touch.other.id}` : ""}`,
-      message:
-        others === 0
-          ? `${room.name} isn't joined to the rest of the map`
-          : `${room.name} and ${others} ${others === 1 ? "room" : "rooms"} beside it aren't joined to the rest of the map`,
-      detail: touch
-        ? `It touches ${touch.other.name} only at a corner. Rooms join where they share a wall.`
-        : "The player can't get there from the start. Rooms join where they share a wall.",
-      target: room.id,
-      ...(touch ? { fixLabel: "Join" } : {}),
-    });
+    warnings.push(islandIssue(touch?.room ?? group[0], group.length, touch));
   }
   for (const sector of found.rooms) {
     warnings.push({
@@ -960,6 +948,65 @@ function validateReach(
       target: wall,
     });
   }
+}
+
+// With no player start there's nothing to reach from, so only rooms that
+// look joined but meet another group only at a corner are named. The smaller
+// group is the loose one, or the one drawn last when both are the same size.
+function validateCorners(map: GameMap, warnings: MapIssue[]) {
+  const groups = joinedGroups(map);
+  if (groups.length < 2) return;
+  const groupOf = new Map<Sector, Sector[]>();
+  for (const group of groups) {
+    for (const sector of group) groupOf.set(sector, group);
+  }
+  // A touch is found from either room, so the largest group needs no pass.
+  const largest = groups.reduce((a, b) => (b.length > a.length ? b : a));
+  const order = new Map(map.sectors.map((sector, index) => [sector, index]));
+  const last = (group: Sector[]) =>
+    Math.max(...group.map((sector) => order.get(sector) ?? 0));
+  const apart = getIsApart(map);
+  const roomy = getIsRoomy(map);
+  const named = new Set<Sector[]>();
+  for (const room of map.sectors) {
+    if (groupOf.get(room) === largest) continue;
+    for (const touch of findTouches(map, room)) {
+      const mine = defined(groupOf.get(room));
+      const theirs = defined(groupOf.get(touch.other));
+      if (mine === theirs) continue;
+      const isMineLoose =
+        mine.length < theirs.length ||
+        (mine.length === theirs.length && last(mine) > last(theirs));
+      const group = isMineLoose ? mine : theirs;
+      if (named.has(group) || apart(group) || !roomy(group)) continue;
+      named.add(group);
+      warnings.push(
+        islandIssue(
+          isMineLoose ? room : touch.other,
+          group.length,
+          isMineLoose
+            ? touch
+            : { room: touch.other, other: room, at: touch.at },
+        ),
+      );
+    }
+  }
+}
+
+function islandIssue(room: Sector, size: number, touch?: Touch): MapIssue {
+  const others = size - 1;
+  return {
+    id: `unreachable-island:${room.id}${touch ? `:${touch.other.id}` : ""}`,
+    message:
+      others === 0
+        ? `${room.name} isn't joined to the rest of the map`
+        : `${room.name} and ${others} ${others === 1 ? "room" : "rooms"} beside it aren't joined to the rest of the map`,
+    detail: touch
+      ? `It touches ${touch.other.name} only at a corner. Rooms join where they share a wall.`
+      : "The player can't get there from the start. Rooms join where they share a wall.",
+    target: room.id,
+    ...(touch ? { fixLabel: "Join" } : {}),
+  };
 }
 
 const skills: ThingSkill[] = ["easy", "medium", "hard"];
