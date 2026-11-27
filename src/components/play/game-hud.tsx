@@ -1033,7 +1033,7 @@ function Scoreboard({ title, par, status, rows, deathmatch }: ScoreboardProps) {
               className={`border-t border-border ${row.you ? "bg-primary/10" : ""}`}
             >
               <td className="w-6 py-2.5 pl-5">
-                <PlayerBadge peer={row.peer} slot={row.slot} />
+                <PlayerBadge slot={row.slot} />
               </td>
               <td className="py-2.5 pl-3">
                 <span className="text-base font-semibold">{row.name}</span>

@@ -189,7 +189,7 @@ it("colors another player's minimap marker by their game slot", () => {
   expect(marker.getAttribute("fill")).toBe("var(--color-info)");
 });
 
-it("colors a scoreboard player like their minimap marker, by game slot", () => {
+it("numbers and colors a scoreboard player by game slot, like their minimap marker", () => {
   const rows = [scoreRow(1, 0), scoreRow(3, 1)];
   const others = [{ peer: 3, slot: 1, x: 64, y: -128 }];
   for (const deathmatch of [false, true]) {
@@ -208,6 +208,7 @@ it("colors a scoreboard player like their minimap marker, by game slot", () => {
     expect(marker.getAttribute("fill")).toBe("var(--color-info)");
     expect(badge.className).toContain("text-info");
     expect(badge.className).not.toContain("text-warning");
+    expect(badge.textContent).toBe("2");
     React.act(() => root?.unmount());
   }
 });
