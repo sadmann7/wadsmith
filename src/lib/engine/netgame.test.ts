@@ -27,6 +27,7 @@ interface Snapshot {
   playersInGame: number;
   consolePlayer: number;
   inLevel: boolean;
+  map: number;
   frags: number;
   kills: number;
   gameTic: number;
@@ -200,14 +201,115 @@ describe.skipIf(!ready)("network game through shared memory", () => {
     },
     60_000,
   );
+
+  it("keeps the guest on the tally with the host after the host's exit press", async () => {
+    const room = createRoom(exitMap, "coop", 100);
+    const host = room.join(hostPeer, "host");
+    const guest = room.join(guestPeer, "guest");
+    await waitFor(host.query, (state) => state.waitingPlayers === 2);
+    expect(await host.launch()).toBe(true);
+    const bothIn = async () => {
+      const [a, b] = await Promise.all([host.query(), guest.query()]);
+      return a && b ? [a, b] : null;
+    };
+    await waitFor(
+      bothIn,
+      ([a, b]) => a.inLevel && b.inLevel && a.playersInGame === 2,
+    );
+    // Input during the opening screen melt is lost.
+    await sleep(1000);
+
+    // Input that keeps changing makes each engine mispredict the other
+    // player's tics around the exit and roll back across it.
+    let turning = true;
+    const turns = (async () => {
+      for (let left = true; turning; left = !left) {
+        const key = left ? doomKeys.left : doomKeys.right;
+        guest.key(true, key);
+        await sleep(57);
+        guest.key(false, key);
+      }
+    })();
+    await sleep(300);
+    host.key(true, doomKeys.use);
+    await sleep(150);
+    host.key(false, doomKeys.use);
+    await sleep(600);
+    turning = false;
+    await turns;
+    await sleep(1500);
+
+    const tally = defined(await bothIn());
+    expect(tally.map(({ map, inLevel }) => ({ map, inLevel }))).toEqual([
+      { map: 1, inLevel: false },
+      { map: 1, inLevel: false },
+    ]);
+
+    for (let press = 0; press < 2; press += 1) {
+      guest.key(true, doomKeys.use);
+      await sleep(150);
+      guest.key(false, doomKeys.use);
+      await sleep(500);
+    }
+    await waitFor(bothIn, ([a, b]) =>
+      [a, b].every((state) => state.inLevel && state.map === 2),
+    );
+  }, 60_000);
 });
+
+// One room with the host facing the exit switch.
+const exitMap: GameMap = {
+  vertices: {
+    a: { x: 0, y: 0 },
+    b: { x: 96, y: 0 },
+    c: { x: 160, y: 0 },
+    d: { x: 256, y: 0 },
+    e: { x: 256, y: 256 },
+    f: { x: 0, y: 256 },
+  },
+  sectors: [
+    {
+      id: "hall",
+      vertices: ["a", "b", "c", "d", "e", "f"],
+      floor: 0,
+      ceiling: 128,
+      light: 160,
+      floorTexture: "FLOOR4_8",
+      ceilingTexture: "CEIL3_5",
+      wallTexture: "STARTAN3",
+    },
+  ],
+  things: [
+    { id: "player-1", kind: "player", x: 128, y: 40, angle: 90 },
+    { id: "player-2", kind: "player-2", x: 200, y: 160, angle: 90 },
+  ],
+  switches: [
+    {
+      id: "exit",
+      sector: "hall",
+      from: "b",
+      to: "c",
+      texture: "SW1STRTN",
+      door: null,
+    },
+  ],
+  lines: {
+    "b|c": {
+      action: { kind: "exit", trigger: "switch", repeat: false, tag: 0 },
+    },
+  },
+};
 
 const coopMap = addThing(testMap, "player-2", { x: 96, y: 256 }).map;
 
 const relayDelayMs = 20;
 
 // Stands in for the room: it forwards each packet to its peer after a delay.
-function createRoom(map = coopMap, mode: "coop" | "deathmatch" = "coop") {
+function createRoom(
+  map = coopMap,
+  mode: "coop" | "deathmatch" = "coop",
+  delayMs = relayDelayMs,
+) {
   const inboxes = new Map<number, NetInbox>();
   let nextId = 0;
 
@@ -238,7 +340,7 @@ function createRoom(map = coopMap, mode: "coop" | "deathmatch" = "coop") {
       if (message.type === "send") {
         setTimeout(
           () => inboxes.get(message.to)?.push(peer, message.data),
-          relayDelayMs,
+          delayMs,
         );
       } else if (message.type === "reply") {
         replies.get(message.id)?.(message.value);
@@ -283,4 +385,8 @@ async function waitFor<T>(
     if (value !== null && done(value)) return value;
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
