@@ -815,7 +815,9 @@ interface ScoreboardProps {
 function Scoreboard({ title, par, status, rows, deathmatch }: ScoreboardProps) {
   const columns = deathmatch
     ? (["frags", "deaths"] as const)
-    : (["kills", "items", "secrets"] as const);
+    : (["kills", "items", "secrets"] as const).filter(
+        (column) => column !== "items" || status?.totalItems,
+      );
   const sorted = deathmatch
     ? rows.toSorted((a, b) => b.frags - a.frags || a.peer - b.peer)
     : rows.toSorted((a, b) => a.peer - b.peer);

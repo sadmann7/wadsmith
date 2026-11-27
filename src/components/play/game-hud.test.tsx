@@ -8,7 +8,7 @@ import type { GameStatus } from "@/lib/engine/runtime";
 import { defined } from "@/lib/defined";
 import { blankMap } from "@/lib/map/starter-map";
 
-import { GameHud } from "./game-hud";
+import { GameHud, type ScoreRow } from "./game-hud";
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
@@ -66,7 +66,45 @@ it("leaves items out of the tally between levels when there were none", () => {
   expect(tally.className).toContain("grid-cols-3");
 });
 
-function renderHud(current: GameStatus, isBetween = false) {
+it("keeps items in the tally between levels when there were some", () => {
+  const container = renderHud({ ...status, items: 2, totalItems: 2 }, true);
+  const tally = defined(
+    container.querySelector("[aria-label='MAP01 complete'] dl"),
+  );
+  expect(tally.textContent).toContain("Items2 / 2");
+  expect(tally.className).toContain("grid-cols-4");
+});
+
+it("shows the items column on the co-op scoreboard only when there are some", () => {
+  const row: ScoreRow = {
+    peer: 1,
+    name: "Host",
+    host: true,
+    you: true,
+    frags: 0,
+    deaths: 0,
+    kills: 1,
+    items: 0,
+    secrets: 0,
+    ping: null,
+  };
+  const empty = renderHud(status, false, [row]);
+  const heads = () =>
+    [...document.querySelectorAll("[aria-label=Scoreboard] th")].map(
+      (cell) => cell.textContent,
+    );
+  expect(empty.querySelector("[aria-label=Scoreboard]")).not.toBeNull();
+  expect(heads()).toEqual(["Player", "kills", "secrets", "Ping"]);
+  React.act(() => root?.unmount());
+  renderHud({ ...status, totalItems: 3 }, false, [row]);
+  expect(heads()).toEqual(["Player", "kills", "items", "secrets", "Ping"]);
+});
+
+function renderHud(
+  current: GameStatus,
+  isBetween = false,
+  scores: ScoreRow[] | null = null,
+) {
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -81,9 +119,9 @@ function renderHud(current: GameStatus, isBetween = false) {
         status={current}
         fullscreen={false}
         showHelp={false}
-        coop={null}
+        coop={scores ? "host" : null}
         deathmatch={false}
-        scores={null}
+        scores={scores}
         others={[]}
         stall={null}
         episode={isBetween}
