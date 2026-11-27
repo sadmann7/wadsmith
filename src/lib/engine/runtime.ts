@@ -442,6 +442,7 @@ export class DoomGame {
       connected: module._wadsmith_net_connected() !== 0,
       waitingPlayers: module._wadsmith_net_waiting_players(),
       playersInGame: module._wadsmith_players_in_game(),
+      gameTic: module._wadsmith_game_tic(),
       consolePlayer: module._wadsmith_console_player(),
       scores: netSlots
         .map((slot) => ({
