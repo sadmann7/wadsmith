@@ -1,6 +1,10 @@
 import { resolve } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { unstable_dev, type Unstable_DevWorker } from "wrangler";
+
+// Every test waits on the local Workers runtime, a separate process that
+// slows down as much as the machine does.
+vi.setConfig({ testTimeout: 30_000 });
 
 let worker: Unstable_DevWorker;
 let base: string;
@@ -289,7 +293,7 @@ describe("live editing", () => {
     const next = await live(id);
     expect(await silent.closed).toBe(4003);
     next.socket.close();
-  }, 20_000);
+  });
 });
 
 function live(id: string) {

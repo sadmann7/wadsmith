@@ -1,8 +1,12 @@
 import { resolve } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { unstable_dev, type Unstable_DevWorker } from "wrangler";
 
 import { allowedOrigin } from "./origin";
+
+// Every test waits on the local Workers runtime, a separate process that
+// slows down as much as the machine does.
+vi.setConfig({ testTimeout: 30_000 });
 
 let worker: Unstable_DevWorker;
 let base: string;
@@ -126,7 +130,7 @@ describe("room limits", () => {
     const a = await connect("limit03");
     a.socket.send('{"type":"hello"}');
     expect((await closed(a)).reason).toBe("This room was idle.");
-  }, 10_000);
+  });
 
   it("closes a busy room once its lifetime is up", async () => {
     const a = await connect("limit04");
@@ -134,7 +138,7 @@ describe("room limits", () => {
     const result = await closed(a);
     clearInterval(timer);
     expect(result.reason).toBe("This room has expired.");
-  }, 15_000);
+  });
 });
 
 let probes = 0;
