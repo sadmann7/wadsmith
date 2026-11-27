@@ -1,4 +1,5 @@
 import {
+  announce,
   bindDrag,
   type ChangeDetails,
   type ConnectDraft,
@@ -46,9 +47,16 @@ import {
   wallTarget,
 } from "@/lib/editor/map-target";
 import {
+  createPinchZoom,
   createWheelZoom,
+  furthestZoom,
+  maxZoom,
   minZoom,
+  restingZoom,
   steppedZoom,
+  type View,
+  viewBetween,
+  zoomedView,
   zoomStep,
 } from "@/lib/editor/zoom";
 import { getIsPlayerStart } from "@/lib/map/catalog";
@@ -99,11 +107,22 @@ import {
 } from "@/lib/map/reshape";
 import { type DrawShape, gridCells, shapeCorners } from "@/lib/map/shapes";
 
+interface ZoomDetails {
+  reason: "wheel" | "zoom-key";
+  event?: Event;
+}
+
+const zoomKey: ZoomDetails = { reason: "zoom-key" };
+const zoomDuration = 120;
+const pinchRest = 150;
+const notchFrame = 16;
+
 export type MapTool = "select" | "draw" | "line" | "thing" | "switch";
 export type EditMode = "vertices" | "lines" | "sectors" | "things";
 export interface ZoomRequest {
   id: number;
-  steps: number;
+  steps?: number;
+  zoom?: number;
   at?: Point | null;
 }
 
@@ -388,8 +407,8 @@ export const mapEditor = definePrimitive({
     const viewport = createViewport<MapEditorState>(context, {
       key: "viewport",
       surface: root,
-      minZoom: () => minZoom,
-      maxZoom: () => 4,
+      minZoom: () => Math.min(furthestMapZoom(), store.get().viewport.zoom),
+      maxZoom: () => maxZoom,
     });
 
     const grid = () => context.options().grid ?? gridSize;
@@ -545,6 +564,7 @@ export const mapEditor = definePrimitive({
     let fitSelectionRequest = context.options().fitSelectionRequest ?? 0;
     let zoomRequest = context.options().zoomRequest?.id ?? 0;
     const readWheel = createWheelZoom();
+    const readPinch = createPinchZoom();
     let fitAround = context.options().fitAround ?? "";
     let selectAllRequest = context.options().selectAllRequest ?? 0;
     let drawRequest = context.options().drawRequest?.id ?? 0;
@@ -587,7 +607,7 @@ export const mapEditor = definePrimitive({
       const request = options.fitRequest ?? 0;
       if (request === fitRequest) return;
       fitRequest = request;
-      fitMap();
+      fitMap(true);
     });
     context.onOptions((options) => {
       const request = options.fitSelectionRequest ?? 0;
@@ -595,22 +615,109 @@ export const mapEditor = definePrimitive({
       fitSelectionRequest = request;
       fitSelection();
     });
-    const stepZoom = (
-      steps: number,
-      at?: Point,
-      details: { reason: "wheel" | "zoom-key"; event?: Event } = {
-        reason: "zoom-key",
-      },
-    ) => viewport.zoomTo(steppedZoom(viewport.get().zoom, steps), at, details);
+    let zooming: { frame: number; to: View } | null = null;
+    const stopZooming = () => {
+      if (zooming) cancelAnimationFrame(zooming.frame);
+      zooming = null;
+    };
+    context.onDestroy(stopZooming);
+    const animateTo = (to: View, details: ZoomDetails) => {
+      stopZooming();
+      if (getIsStill()) {
+        viewport.setViewport(to, details);
+        return;
+      }
+      const from = viewport.get();
+      let shown = from;
+      let start: number | null = null;
+      const tick = (now: number) => {
+        const view = viewport.get();
+        if (
+          view.x !== shown.x ||
+          view.y !== shown.y ||
+          view.zoom !== shown.zoom
+        ) {
+          zooming = null;
+          return;
+        }
+        start ??= now;
+        const t = Math.min(1, (now - start) / zoomDuration);
+        viewport.setViewport(
+          t === 1 ? to : viewBetween(from, to, 1 - (1 - t) ** 3),
+          details,
+        );
+        shown = viewport.get();
+        zooming = t === 1 ? null : { frame: requestAnimationFrame(tick), to };
+      };
+      zooming = { frame: requestAnimationFrame(tick), to };
+    };
+    const surfacePoint = (at?: Point) => {
+      const box = root()?.getBoundingClientRect();
+      if (!box) return { x: 0, y: 0 };
+      return {
+        x: (at?.x ?? box.left + box.width / 2) - box.left,
+        y: (at?.y ?? box.top + box.height / 2) - box.top,
+      };
+    };
+    const animateZoom = (zoom: number, at?: Point, details = zoomKey) => {
+      const from = zooming?.to ?? viewport.get();
+      const next = Math.min(maxZoom, Math.max(furthestMapZoom(), zoom));
+      if (next === from.zoom) return;
+      animateTo(zoomedView(from, next, surfacePoint(at)), details);
+    };
+    const stepZoom = (steps: number, at?: Point, details = zoomKey) =>
+      animateZoom(
+        steppedZoom(
+          (zooming?.to ?? viewport.get()).zoom,
+          steps,
+          furthestMapZoom(),
+        ),
+        at,
+        details,
+      );
     // The zoom shortcuts step around the pointer, so the viewport keeps only
-    // its reset key.
+    // its reset key, which this animates too.
     const resetZoomKey = (event: KeyboardEvent) => {
-      if (event.key === "0") viewport.keydown(event);
+      if (event.key !== "0" || event.altKey || event.ctrlKey || event.metaKey) {
+        return;
+      }
+      event.preventDefault();
+      animateZoom(1, undefined, { reason: "zoom-key", event });
+      announce("Zoom 100%");
+    };
+    let pinchEnd: ReturnType<typeof setTimeout> | undefined;
+    let lastNotch = Number.NEGATIVE_INFINITY;
+    context.onDestroy(() => clearTimeout(pinchEnd));
+    const settlePinch = (at: Point) => {
+      const { zoom } = viewport.get();
+      const rest = restingZoom(zoom);
+      if (rest !== zoom) animateZoom(rest, at);
+    };
+    const touches = new Set<number>();
+    let pinchFrom = 1;
+    const pan = (event: PointerEvent) => {
+      stopZooming();
+      viewport.pointerdown(event);
+      const surface = root();
+      if (event.pointerType !== "touch" || !surface) return;
+      if (touches.size === 0) pinchFrom = viewport.get().zoom;
+      touches.add(event.pointerId);
+      const lift = (up: PointerEvent) => {
+        if (up.pointerId !== event.pointerId) return;
+        surface.removeEventListener("pointerup", lift);
+        surface.removeEventListener("pointercancel", lift);
+        touches.delete(up.pointerId);
+        if (touches.size > 0 || viewport.get().zoom === pinchFrom) return;
+        settlePinch({ x: up.clientX, y: up.clientY });
+      };
+      surface.addEventListener("pointerup", lift);
+      surface.addEventListener("pointercancel", lift);
     };
     context.onOptions(({ zoomRequest: request }) => {
       if (!request || request.id === zoomRequest) return;
       zoomRequest = request.id;
-      stepZoom(request.steps, request.at ?? undefined);
+      if (request.zoom !== undefined) animateZoom(request.zoom);
+      else stepZoom(request.steps ?? 0, request.at ?? undefined);
     });
     context.onOptions((options) => {
       const around = options.fitAround ?? "";
@@ -1178,11 +1285,11 @@ export const mapEditor = definePrimitive({
 
     const fitPoints = (
       points: Point[],
-      maxZoom: number,
+      most: number,
       parts: Point[][] = [points],
-    ) => {
+    ): View | null => {
       const surface = root();
-      if (points.length === 0 || !surface) return;
+      if (points.length === 0 || !surface) return null;
       const box = surface.getBoundingClientRect();
       const around = context.options().fitAround;
       const overlays = around
@@ -1197,20 +1304,17 @@ export const mapEditor = definePrimitive({
             };
           })
         : [];
-      viewport.setViewport(
-        fitView(
-          boundsOf(points),
-          box,
-          { padding: 56, minZoom, maxZoom },
-          overlays,
-          parts.map(boundsOf),
-        ),
+      return fitView(
+        boundsOf(points),
+        box,
+        { padding: 56, minZoom, maxZoom: most },
+        overlays,
+        parts.map(boundsOf),
       );
     };
-    const fitMap = () => {
+    const mapFitView = () => {
       const { map, positions } = store.get();
       const points = Object.values(positions);
-      if (points.length === 0) return;
       const rooms = map.sectors.map(sectorVertices);
       const inRooms = new Set(rooms.flat());
       const parts = [
@@ -1219,7 +1323,43 @@ export const mapEditor = definePrimitive({
           .filter((key) => !inRooms.has(key))
           .map((key) => [positions[key]]),
       ].filter((part) => part.length > 0);
-      fitPoints(points, 1.25, parts);
+      return fitPoints(points, 1.25, parts);
+    };
+    let furthest: {
+      positions: Record<string, Point>;
+      width: number;
+      height: number;
+      zoom: number;
+    } | null = null;
+    const furthestMapZoom = () => {
+      const { positions } = store.get();
+      const width = root()?.clientWidth ?? 0;
+      const height = root()?.clientHeight ?? 0;
+      if (width === 0 || height === 0) return minZoom;
+      if (
+        furthest?.positions !== positions ||
+        furthest.width !== width ||
+        furthest.height !== height
+      ) {
+        furthest = {
+          positions,
+          width,
+          height,
+          zoom: furthestZoom(mapFitView()?.zoom ?? 1),
+        };
+      }
+      return furthest.zoom;
+    };
+    const fitMap = (animate = false) => {
+      const view = mapFitView();
+      if (!view) return;
+      if (animate) {
+        animateTo(view, zoomKey);
+        fittedView = view;
+        return;
+      }
+      stopZooming();
+      viewport.setViewport(view);
       fittedView = store.get().viewport;
     };
     const getIsFitView = () => {
@@ -1246,8 +1386,9 @@ export const mapEditor = definePrimitive({
         ...things.map((id) => `${thingKeyPrefix}${id}`),
       ];
       const points = keys.flatMap((key) => positions[key] ?? []);
-      if (points.length === 0) fitMap();
-      else fitPoints(points, 4);
+      const view = points.length > 0 ? fitPoints(points, maxZoom) : null;
+      if (view) animateTo(view, zoomKey);
+      else fitMap(true);
     };
 
     const selectedTarget = (): MapTarget => {
@@ -1534,7 +1675,7 @@ export const mapEditor = definePrimitive({
         if (tool === "draw" || tool === "line") {
           if (event.button !== 0 || spaceHeld) {
             ignoreClick = true;
-            viewport.pointerdown(event);
+            pan(event);
             return;
           }
           if (
@@ -1557,7 +1698,7 @@ export const mapEditor = definePrimitive({
         // held down, pans instead.
         const fine = event.pointerType !== "touch" && event.button === 0;
         if (event.button !== 0 || spaceHeld) {
-          viewport.pointerdown(event);
+          pan(event);
           return;
         }
         const at = viewport.toCanvas(event.clientX, event.clientY);
@@ -1603,7 +1744,7 @@ export const mapEditor = definePrimitive({
         }
         // A finger or a pen has no Shift or middle button, so it pans.
         if (event.pointerType !== "mouse") {
-          viewport.pointerdown(event);
+          pan(event);
           return;
         }
         // The browser would stretch the page's text selection to here.
@@ -1795,18 +1936,34 @@ export const mapEditor = definePrimitive({
       },
       wheel(event: WheelEvent) {
         const steps = readWheel(event);
+        const at = { x: event.clientX, y: event.clientY };
         if (steps === null) {
-          viewport.wheel(event);
+          if (!event.ctrlKey && !event.metaKey) {
+            viewport.wheel(event);
+            return;
+          }
+          event.preventDefault();
+          stopZooming();
+          const unit =
+            event.deltaMode === 1
+              ? 16
+              : event.deltaMode === 2
+                ? (root()?.clientHeight ?? 1)
+                : 1;
+          viewport.zoomBy(readPinch(event, unit), at, {
+            reason: "wheel",
+            event,
+          });
+          clearTimeout(pinchEnd);
+          pinchEnd = setTimeout(() => settlePinch(at), pinchRest);
           return;
         }
         event.preventDefault();
-        if (steps !== 0) {
-          stepZoom(
-            steps,
-            { x: event.clientX, y: event.clientY },
-            { reason: "wheel", event },
-          );
-        }
+        // A fast spin sends several notches a frame, and each frame steps
+        // once at most.
+        if (steps === 0 || event.timeStamp - lastNotch < notchFrame) return;
+        lastNotch = event.timeStamp;
+        stepZoom(Math.sign(steps), at, { reason: "wheel", event });
       },
       keyup(event: KeyboardEvent) {
         if (event.key === " ") spaceHeld = false;
@@ -2143,7 +2300,7 @@ export const mapEditor = definePrimitive({
     }),
     fit: slot({
       attrs: () => ({ type: "button", "data-map-control": "" }),
-      press: ({ api }) => api.fitMap(),
+      press: ({ api }) => api.fitMap(true),
     }),
   }),
   agent: {
@@ -2572,3 +2729,11 @@ export const MapMarker = parts.Marker;
 export const MapCamera = parts.Camera;
 export const MapFindCamera = parts.FindCamera;
 export const MapLookHere = parts.LookHere;
+
+function getIsStill() {
+  return (
+    typeof requestAnimationFrame !== "function" ||
+    typeof matchMedia !== "function" ||
+    matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+}

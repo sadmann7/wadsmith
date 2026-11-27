@@ -471,33 +471,63 @@ describe("map editor parts", () => {
     expect(picked).toEqual([`thing:${placed?.id}`]);
   });
 
-  it("zoom a step at a time on each zoom request", () => {
+  it("zoom a level at a time on each zoom request", () => {
     const instance = mapEditor({ id, map: testMap });
     instance.api.viewport.zoomTo(0.9);
     const zoom = () => instance.api.viewport.get().zoom;
     instance.setOptions({ id, map: testMap, zoomRequest: { id: 1, steps: 1 } });
     expect(zoom()).toBeCloseTo(1);
     instance.setOptions({ id, map: testMap, zoomRequest: { id: 2, steps: 1 } });
-    expect(zoom()).toBeCloseTo(1.25);
+    expect(zoom()).toBeCloseTo(1.5);
     instance.setOptions({ id, map: testMap, zoomRequest: { id: 2, steps: 1 } });
-    expect(zoom()).toBeCloseTo(1.25);
+    expect(zoom()).toBeCloseTo(1.5);
     instance.setOptions({
       id,
       map: testMap,
       zoomRequest: { id: 3, steps: -2 },
     });
-    expect(zoom()).toBeCloseTo(0.8);
+    expect(zoom()).toBeCloseTo(2 / 3);
+    instance.setOptions({ id, map: testMap, zoomRequest: { id: 4, zoom: 2 } });
+    expect(zoom()).toBe(2);
   });
 
   it("zoom on a mouse wheel's notch, and not on a trackpad's scroll", () => {
     const instance = mapEditor({ id, map: testMap });
     const zoom = () => instance.api.viewport.get().zoom;
     instance.api.wheel(scroll({ deltaY: 100, wheelDeltaY: -120 }));
-    expect(zoom()).toBeCloseTo(0.8);
+    expect(zoom()).toBeCloseTo(2 / 3);
     instance.api.wheel(
       scroll({ deltaY: 4, wheelDeltaY: -12, timeStamp: 1000 }),
     );
-    expect(zoom()).toBeCloseTo(0.8);
+    expect(zoom()).toBeCloseTo(2 / 3);
+  });
+
+  it("step once a frame however fast the wheel spins", () => {
+    const instance = mapEditor({ id, map: testMap });
+    const zoom = () => instance.api.viewport.get().zoom;
+    for (let notch = 0; notch < 10; notch++) {
+      instance.api.wheel(
+        scroll({ deltaY: -100, wheelDeltaY: 120, timeStamp: notch }),
+      );
+    }
+    expect(zoom()).toBeCloseTo(1.5);
+    instance.api.wheel(
+      scroll({ deltaY: -100, wheelDeltaY: 120, timeStamp: 20 }),
+    );
+    expect(zoom()).toBeCloseTo(2);
+  });
+
+  it("follow a pinch but cap how far one flick goes", () => {
+    const instance = mapEditor({ id, map: testMap });
+    const zoom = () => instance.api.viewport.get().zoom;
+    instance.api.wheel(scroll({ deltaY: -2, ctrlKey: true }));
+    expect(zoom()).toBeCloseTo(Math.exp(0.02));
+    for (let event = 0; event < 12; event++) {
+      instance.api.wheel(
+        scroll({ deltaY: -25, ctrlKey: true, timeStamp: 100 }),
+      );
+    }
+    expect(zoom()).toBeCloseTo(Math.exp(0.22));
   });
 
   it("leave - and = to the zoom shortcuts", () => {
