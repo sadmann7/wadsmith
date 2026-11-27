@@ -127,9 +127,11 @@ describe("live editing", () => {
         client: "a".repeat(24),
       }),
     );
-    expect(await a.next()).toEqual({
+    const welcome = await a.next();
+    expect(welcome).toEqual({
       type: "welcome",
       peer: 1,
+      suffix: expect.stringMatching(/^[a-z]{3}$/),
       revision: 1,
       map: {
         ...map,
@@ -137,12 +139,20 @@ describe("live editing", () => {
       },
       peers: [],
     });
+    // Bo asks for the letters Ana's ids end with, and gets others.
     const b = await live(id);
-    b.socket.send(JSON.stringify({ type: "hello", secret, name: "Bo" }));
-    expect(await b.next()).toMatchObject({
-      peer: 2,
-      peers: [{ peer: 1, name: "Ana" }],
-    });
+    b.socket.send(
+      JSON.stringify({
+        type: "hello",
+        secret,
+        name: "Bo",
+        suffix: welcome.suffix,
+      }),
+    );
+    const bo = await b.next();
+    expect(bo).toMatchObject({ peer: 2, peers: [{ peer: 1, name: "Ana" }] });
+    expect(bo.suffix).toMatch(/^[a-z]{3}$/);
+    expect(bo.suffix).not.toBe(welcome.suffix);
     expect(await a.next()).toEqual({ type: "join", peer: 2, name: "Bo" });
 
     const moved = { id: "imp-1", kind: "imp", x: 64, y: 0, angle: 0 };
@@ -150,7 +160,7 @@ describe("live editing", () => {
       JSON.stringify({
         type: "patch",
         id: 7,
-        patch: { set: { things: { "imp-1": moved } } },
+        patch: { merge: { things: { "imp-1": { x: 64 } } } },
       }),
     );
     const echo = {
@@ -168,10 +178,20 @@ describe("live editing", () => {
       JSON.stringify({
         type: "patch",
         id: 7,
-        patch: { set: { things: { "imp-1": moved } } },
+        patch: { merge: { things: { "imp-1": { x: 64 } } } },
       }),
     );
     expect(await a.next()).toEqual({ type: "ack", id: 7, revision: 2 });
+
+    // An add under an id someone else just took is turned away.
+    b.socket.send(
+      JSON.stringify({
+        type: "patch",
+        id: 1,
+        patch: { set: { things: { "imp-1": { ...moved, x: 9 } } } },
+      }),
+    );
+    expect(await b.next()).toEqual({ type: "refused", id: 1, error: "taken" });
     expect(await (await send(`/maps/${id}`)).json()).toMatchObject({
       revision: 2,
       map: { things: [moved] },
@@ -241,9 +261,14 @@ describe("live editing", () => {
         JSON.stringify({
           type: "patch",
           id: x,
-          patch: {
-            set: { things: { t: { id: "t", kind: "imp", x, y: 0, angle: 0 } } },
-          },
+          patch:
+            x === 1
+              ? {
+                  set: {
+                    things: { t: { id: "t", kind: "imp", x, y: 0, angle: 0 } },
+                  },
+                }
+              : { merge: { things: { t: { x } } } },
         }),
       );
     }

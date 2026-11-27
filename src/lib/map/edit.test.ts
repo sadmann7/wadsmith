@@ -8,7 +8,10 @@ import {
   applyPositions,
   defaultDoor,
   newRoomLooks,
+  nextId,
+  nextIds,
   positionsOf,
+  setIdSuffix,
   setRoomDoor,
   updateSector,
   wallNear,
@@ -16,6 +19,21 @@ import {
 import { testMap } from "./test-map";
 
 const blank: GameMap = { vertices: {}, sectors: [], things: [], switches: [] };
+
+describe("nextId", () => {
+  it("counts past every id, and ends new ones with the suffix set", () => {
+    const used = ["sector-2", "sector-4kq", "sector-x", "player-2-1"];
+    expect(nextId("sector-", used)).toBe("sector-5");
+    expect(nextId("player-", used)).toBe("player-1");
+    setIdSuffix("ab");
+    try {
+      expect(nextId("sector-", used)).toBe("sector-5ab");
+      expect(nextIds("v", ["v9"], 2)).toEqual(["v10ab", "v11ab"]);
+    } finally {
+      setIdSuffix("");
+    }
+  });
+});
 
 describe("applyPositions", () => {
   it("keeps every thing and corner that didn't move", () => {

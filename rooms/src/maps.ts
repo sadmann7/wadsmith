@@ -6,10 +6,13 @@ import { DurableObject } from "cloudflare:workers";
 import { ConnectionLimits } from "./limits";
 import {
   applyPatch,
+  fitPatch,
   type MapPatch,
   maxPatchLength,
   missingCorners,
   parsePatch,
+  randomSuffix,
+  suffixPattern,
 } from "./map-patch";
 
 export interface MapsEnv {
@@ -36,6 +39,8 @@ interface Editor {
   since: number;
   // Names one browser's link across its reconnects.
   client?: string;
+  // Ends the ids this browser makes, unlike any other editor's.
+  suffix?: string;
 }
 
 const clientPattern = /^[0-9a-f]{24}$/;
@@ -176,11 +181,18 @@ class MapCopy extends DurableObject<MapsEnv> {
       typeof data.client === "string" && clientPattern.test(data.client)
         ? data.client
         : undefined;
+    const taken = new Set(others.map((item) => item.editor.suffix));
+    let suffix =
+      typeof data.suffix === "string" && suffixPattern.test(data.suffix)
+        ? data.suffix
+        : "";
+    while (!suffix || taken.has(suffix)) suffix = randomSuffix();
     socket.serializeAttachment({
       peer,
       name,
       since: Date.now(),
       client,
+      suffix,
     } satisfies Editor);
     // The welcome carries the map as it stands, so the link starts from what
     // every later edit it hears lands on.
@@ -189,6 +201,7 @@ class MapCopy extends DurableObject<MapsEnv> {
       JSON.stringify({
         type: "welcome",
         peer,
+        suffix,
         revision,
         map,
         peers: others.map(({ editor: other }) => ({
@@ -221,7 +234,13 @@ class MapCopy extends DurableObject<MapsEnv> {
       );
       return;
     }
-    const map = applyPatch(current.map, patch);
+    const fit = fitPatch(current.map, patch);
+    if ("error" in fit) {
+      socket.send(JSON.stringify({ type: "refused", id, error: fit.error }));
+      return;
+    }
+    const fitted = fit.patch;
+    const map = applyPatch(current.map, fitted);
     // An edit that would leave a room on corners that are gone is turned
     // away, and its sender's copy takes it back.
     const before = missingCorners(current.map);
@@ -233,7 +252,7 @@ class MapCopy extends DurableObject<MapsEnv> {
     }
     // A map grows by at most what the patch holds, so the whole map is
     // measured again only when that could take it past the limit.
-    let size = this.size + byteLength(JSON.stringify(patch));
+    let size = this.size + byteLength(JSON.stringify(fitted));
     if (size > maxMapBytes) size = byteLength(JSON.stringify(map));
     if (size > maxMapBytes) {
       socket.send(
@@ -246,7 +265,7 @@ class MapCopy extends DurableObject<MapsEnv> {
     // Each edit is kept in a small log entry before anyone hears of it, and
     // the log folds into the whole map at most once a second.
     await this.ctx.storage.put({
-      [logKey(revision)]: JSON.stringify(patch),
+      [logKey(revision)]: JSON.stringify(fitted),
       revision,
       ...(seenKey && { [seenKey]: { id, at: Date.now() } }),
     });
@@ -257,7 +276,7 @@ class MapCopy extends DurableObject<MapsEnv> {
     this.broadcast(
       JSON.stringify({
         type: "patch",
-        patch,
+        patch: fitted,
         revision,
         peer: editor.peer,
         client: editor.client,
