@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import type { GameMap, Thing } from "@/lib/map/types";
 
 import { minimapSpan } from "@/lib/engine/runtime";
+import { buildMap, rect } from "@/lib/map/featured/build-map";
+import { firstLight } from "@/lib/map/featured/first-light";
 import { starterMap } from "@/lib/map/starter-map";
 
 import {
@@ -12,6 +14,7 @@ import {
   minimapKeys,
   minimapLines,
   minimapView,
+  secretAreas,
   showsCrosshair,
 } from "./minimap";
 
@@ -62,6 +65,149 @@ describe("minimapLines", () => {
         Math.min(Math.abs(line.from.y), Math.abs(line.to.y)) === 192,
     );
     expect(secret?.kind).toBe("wall");
+  });
+});
+
+describe("secretAreas", () => {
+  const named = (ids: string[]) =>
+    ids.map(
+      (id) => starterMap.sectors.find((sector) => sector.id === id)?.name,
+    );
+
+  it("finds the secret room and the secret door that leads to it", () => {
+    expect(secretAreas(starterMap).map(named)).toEqual([
+      ["Secret", "Secret door"],
+    ]);
+  });
+
+  it("finds a room marked secret even with no secret line leading to it", () => {
+    expect(secretAreas({ ...starterMap, lines: {} }).map(named)).toEqual([
+      ["Secret"],
+    ]);
+    expect(
+      secretAreas(firstLight).map((ids) =>
+        ids.map((id) => firstLight.sectors.find((s) => s.id === id)?.name),
+      ),
+    ).toEqual([["Secret"]]);
+    expect(secretAreas({ ...starterMap, things: [] })).toEqual([]);
+  });
+
+  it("follows teleporters before calling a room secret", () => {
+    const room = (name: string, x: number, tag?: number) => ({
+      name,
+      points: rect(x, 0, 128, 128),
+      floor: 0,
+      ceiling: 128,
+      light: 160,
+      floorTexture: "FLOOR4_8",
+      ceilingTexture: "CEIL3_5",
+      wallTexture: "STARTAN3",
+      ...(tag ? { tag } : {}),
+    });
+    const map = buildMap({
+      name: "Teleport",
+      rooms: [room("Start", 0), room("Far", 512, 1), room("Hidden", 640)],
+      things: [
+        { kind: "player", at: [64, 64] },
+        { kind: "teleport-destination", at: [576, 64] },
+      ],
+      lines: [
+        {
+          wall: [
+            [128, 0],
+            [128, 128],
+          ],
+          settings: {
+            action: { kind: "teleport", trigger: "walk", repeat: true, tag: 1 },
+          },
+        },
+        {
+          wall: [
+            [640, 0],
+            [640, 128],
+          ],
+          settings: { secret: true },
+        },
+      ],
+    });
+    expect(
+      secretAreas(map).map((ids) =>
+        ids.map((id) => map.sectors.find((s) => s.id === id)?.name),
+      ),
+    ).toEqual([["Hidden"]]);
+  });
+
+  it("keeps a secret room hidden when a teleporter in it leads back", () => {
+    const map = buildMap({
+      name: "Return",
+      rooms: [
+        {
+          name: "Start",
+          points: rect(0, 0, 128, 128),
+          floor: 0,
+          ceiling: 128,
+          light: 160,
+          floorTexture: "FLOOR4_8",
+          ceilingTexture: "CEIL3_5",
+          wallTexture: "STARTAN3",
+          tag: 1,
+        },
+        {
+          name: "Hidden",
+          points: rect(128, 0, 128, 128),
+          floor: 0,
+          ceiling: 128,
+          light: 160,
+          floorTexture: "FLOOR4_8",
+          ceilingTexture: "CEIL3_5",
+          wallTexture: "STARTAN3",
+        },
+      ],
+      things: [
+        { kind: "player", at: [32, 64] },
+        { kind: "teleport-destination", at: [96, 64] },
+      ],
+      lines: [
+        {
+          wall: [
+            [128, 0],
+            [128, 128],
+          ],
+          settings: { secret: true },
+        },
+        {
+          wall: [
+            [256, 0],
+            [256, 128],
+          ],
+          settings: {
+            action: { kind: "teleport", trigger: "walk", repeat: true, tag: 1 },
+          },
+        },
+      ],
+    });
+    expect(
+      secretAreas(map).map((ids) =>
+        ids.map((id) => map.sectors.find((s) => s.id === id)?.name),
+      ),
+    ).toEqual([["Hidden"]]);
+  });
+
+  it("leaves a secret room's walls off the minimap until it is found", () => {
+    const hidden = new Set(secretAreas(starterMap).flat());
+    const shown = minimapLines(starterMap, hidden);
+    const inSecret = (line: { from: { x: number }; to: { x: number } }) =>
+      Math.min(line.from.x, line.to.x) >= 1536;
+    expect(minimapLines(starterMap).some(inSecret)).toBe(true);
+    expect(shown.some(inSecret)).toBe(false);
+    expect(
+      shown.find(
+        (line) =>
+          line.from.x === 1520 &&
+          line.to.x === 1520 &&
+          Math.min(Math.abs(line.from.y), Math.abs(line.to.y)) === 192,
+      )?.kind,
+    ).toBe("wall");
   });
 });
 
