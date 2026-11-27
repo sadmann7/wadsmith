@@ -214,6 +214,19 @@ describe.skipIf(!ready)("generated map in the engine", () => {
     expect(game.status().keys & 4).toBe(4);
     expect(game.status().tics).toBeGreaterThan(start.tics);
   }, 30_000);
+
+  it("reports the live monsters near the player for the minimap", async () => {
+    const map = playerAt(openMap, 96, 160, 0);
+    const before = await launch(map);
+    await waitForPlay(before);
+    const others = before.status().monsters.length;
+    stopGames();
+    const game = await launch(addThing(map, "imp", { x: 288, y: 160 }).map);
+    await waitForPlay(game);
+    const { monsters } = game.status();
+    expect(monsters).toHaveLength(others + 1);
+    expect(monsters).toContainEqual({ x: 288, y: -160, angle: 0 });
+  }, 30_000);
 });
 
 describe.skipIf(!ready)("a loaded WAD in the engine", () => {

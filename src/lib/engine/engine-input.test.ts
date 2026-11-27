@@ -135,8 +135,10 @@ describe.skipIf(!ready)("controls in the engine", () => {
       return dark / (pixels.length / 4);
     };
     expect(darkShare()).toBeLessThan(0.5);
+    expect(game.status().automap).toBe(false);
     await holdKey(game, "Tab", 80);
     expect(darkShare()).toBeGreaterThan(0.5);
+    expect(game.status().automap).toBe(true);
   }, 20_000);
 
   it("selects weapons with the number keys", async () => {
