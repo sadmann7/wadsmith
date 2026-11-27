@@ -91,84 +91,6 @@ const status: GameStatus = {
 
 const guestSlot = 1;
 
-function network(gameTic: number, lagging = 0): NetworkState {
-  return {
-    connected: true,
-    waitingPlayers: 2,
-    playersInGame: 2,
-    gameTic,
-    consolePlayer: 0,
-    scores: [1, 2].map((peer, slot) => ({
-      slot,
-      peer,
-      frags: 0,
-      deaths: 0,
-      kills: 0,
-      items: 0,
-      secrets: 0,
-      x: 0,
-      y: 0,
-    })),
-    lagging,
-  };
-}
-
-function coopSession(role: CoopSession["role"]): CoopSession {
-  return {
-    role,
-    peer: role === "host" ? 1 : 2,
-    mode: "coop",
-    skill: "medium",
-    wad: new Uint8Array(),
-    send: () => {},
-    listen: () => {},
-    players: () => 2,
-    roster: () => [
-      { peer: 1, name: "Host", ping: null },
-      { peer: 2, name: "Guest", ping: 20 },
-    ],
-    announceStall: () => {},
-    listenStall: () => {},
-    onServerReady: () => {},
-  } as CoopSession;
-}
-
-async function renderCoop(role: CoopSession["role"]) {
-  const container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-  React.act(() =>
-    root?.render(
-      <GameView
-        map={testMap}
-        title="Test"
-        slot="MAP01"
-        par={null}
-        intertext="The end."
-        coop={coopSession(role)}
-        onExit={() => {}}
-      />,
-    ),
-  );
-  await React.act(async () => {
-    await vi.waitFor(() => expect(options).not.toBeNull());
-  });
-  return defined(options);
-}
-
-function report(client: ClientOptions, next: GameStatus, state: NetworkState) {
-  React.act(() => {
-    client.network?.onState(state);
-    client.onStatus(next);
-  });
-}
-
-function waitingText() {
-  return [...document.querySelectorAll("[role=status]")]
-    .map((element) => element.textContent)
-    .filter((text) => text?.startsWith("Waiting for"));
-}
-
 it.each(["host", "guest"] as const)(
   "keeps the %s's tally and ending text clear of the waiting message",
   async (role) => {
@@ -210,3 +132,81 @@ it("names a guest the host waits on at the tally", async () => {
     "Waiting for GuestEveryone waits so the game stays in step.0 s",
   ]);
 });
+
+function network(gameTic: number, lagging = 0): NetworkState {
+  return {
+    connected: true,
+    waitingPlayers: 2,
+    playersInGame: 2,
+    gameTic,
+    consolePlayer: 0,
+    scores: [1, 2].map((peer, slot) => ({
+      slot,
+      peer,
+      frags: 0,
+      deaths: 0,
+      kills: 0,
+      items: 0,
+      secrets: 0,
+      x: 0,
+      y: 0,
+    })),
+    lagging,
+  };
+}
+
+function coopSession(role: CoopSession["role"]): CoopSession {
+  return {
+    role,
+    peer: role === "host" ? 1 : 2,
+    mode: "coop",
+    skill: "medium",
+    wad: new Uint8Array(),
+    send: () => {},
+    listen: () => {},
+    players: () => 2,
+    roster: () => [
+      { peer: 1, name: "Host", ready: true, progress: 1, ping: null },
+      { peer: 2, name: "Guest", ready: true, progress: 1, ping: 20 },
+    ],
+    announceStall: () => {},
+    listenStall: () => {},
+    onServerReady: () => {},
+  };
+}
+
+async function renderCoop(role: CoopSession["role"]) {
+  const container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  React.act(() =>
+    root?.render(
+      <GameView
+        map={testMap}
+        title="Test"
+        slot="MAP01"
+        par={null}
+        intertext="The end."
+        coop={coopSession(role)}
+        onExit={() => {}}
+      />,
+    ),
+  );
+  await React.act(async () => {
+    await vi.waitFor(() => expect(options).not.toBeNull());
+  });
+  return defined(options);
+}
+
+function report(client: ClientOptions, next: GameStatus, state: NetworkState) {
+  React.act(() => {
+    client.network?.onState(state);
+    client.onStatus(next);
+  });
+}
+
+function waitingText() {
+  return [...document.querySelectorAll("[role=status]")]
+    .map((element) => element.textContent)
+    .filter((text) => text?.startsWith("Waiting for"));
+}
