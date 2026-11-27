@@ -9,7 +9,9 @@ import type { GameMap, KeyColor, Thing } from "./types";
 import { mapBalance } from "./balance";
 import { deathmatchStarts, thingCatalog } from "./catalog";
 import { removeSwitch, removeThings, updateLine, updateSector } from "./edit";
+import { sectorAt } from "./geometry";
 import { findTouches, joinTouch } from "./join";
+import { getIsInLineOfFire } from "./line-of-fire";
 import { endsLevel, fitLineAction, triggersFor } from "./lines";
 import { findStuckThings } from "./stuck";
 import {
@@ -134,6 +136,15 @@ export function mapWarnings(
       detail: `${listPlayers(missing)} ${missing.length === 1 ? "has" : "have"} none`,
     });
   }
+  for (const [behind, ahead] of findStartsInFire(map)) {
+    warnings.push({
+      id: `start-in-fire:${ahead.id}`,
+      severity: "warning",
+      message: `${startName(ahead)} is in the line of fire`,
+      detail: `${startName(behind)} faces it, so in co-op the first shot hits a teammate. Stand the starts side by side.`,
+      target: ahead.id,
+    });
+  }
   if (!getHasExit(map) && !getIsArena(map, custom)) {
     warnings.push({
       id: "no-exit",
@@ -165,6 +176,27 @@ function coopGaps(map: GameMap) {
 }
 
 const starts = new Set(["player", "player-2", "player-3", "player-4"]);
+
+function startName({ kind }: Thing) {
+  return kind === "player" ? "Player 1 start" : thingCatalog[kind].label;
+}
+
+// Co-op starts in the same room as another start that faces them.
+function findStartsInFire(map: GameMap) {
+  const coop = map.things.filter((thing) => starts.has(thing.kind));
+  const found = new Map<Thing, Thing>();
+  for (const behind of coop) {
+    const room = sectorAt(map, behind);
+    if (!room) continue;
+    for (const ahead of coop) {
+      if (ahead === behind || found.has(ahead)) continue;
+      if (!getIsInLineOfFire(behind, ahead)) continue;
+      if (sectorAt(map, ahead) !== room) continue;
+      found.set(ahead, behind);
+    }
+  }
+  return [...found].map(([ahead, behind]) => [behind, ahead] as const);
+}
 
 function listPlayers(players: number[]) {
   const names = players.map(String);
@@ -211,7 +243,7 @@ const buildGroups: {
   {
     name: "Player start",
     passed: "1 found",
-    ids: /^(no-player|many-players|outside|in-door|coop-starts|deathmatch-starts)(:|$)/,
+    ids: /^(no-player|many-players|outside|in-door|coop-starts|deathmatch-starts|start-in-fire)(:|$)/,
     needsValidRooms: true,
   },
   {
