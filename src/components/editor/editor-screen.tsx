@@ -278,8 +278,8 @@ const modeHints: Record<EditMode, string> = {
 };
 
 const toolHints: Record<Exclude<MapTool, "select">, string> = {
-  draw: "Click corners, then click the first one or press Enter. A room drawn against a wall shares corners with it.",
-  line: "Click points inside a room, then click the last one again or press Enter. A line can hold a middle texture or a walk-over action.",
+  draw: "Click corners, then click the first one or press Enter. Esc stops drawing. A room drawn against a wall shares corners with it.",
+  line: "Click points inside a room, then click the last one again or press Enter. Esc stops drawing. A line can hold a middle texture or a walk-over action.",
   thing:
     "Click a floor to place it, or press Enter in 3D to place it ahead. Esc, or picking the thing again, stops placing.",
   switch:
@@ -287,13 +287,11 @@ const toolHints: Record<Exclude<MapTool, "select">, string> = {
 };
 
 const shapeHints: Record<Exclude<DrawShape, "outline">, string> = {
-  rectangle:
-    "Click one corner, then the opposite one. Choose another shape in the status bar.",
-  polygon:
-    "Click the middle, then where one corner goes. Choose another shape in the status bar.",
+  rectangle: "Click one corner, then the opposite one. Esc stops drawing.",
+  polygon: "Click the middle, then where one corner goes. Esc stops drawing.",
   ellipse:
-    "Click one corner of the box round it, then the opposite one. Choose another shape in the status bar.",
-  grid: "Click one corner, then the opposite one, for rooms about 128 across. Choose another shape in the status bar.",
+    "Click one corner of the box round it, then the opposite one. Esc stops drawing.",
+  grid: "Click one corner, then the opposite one, for rooms about 128 across. Esc stops drawing.",
 };
 
 const noLinks: MapLink[] = [];
@@ -443,7 +441,11 @@ export function EditorScreen({
   // render.
   const mapRef = React.useRef(initialMap);
   const agentEdit = React.useRef<number | undefined>(undefined);
-  const [tool, setTool] = React.useState<MapTool>("select");
+  const [tool, setTool] = React.useState<MapTool>(() =>
+    initialMap.sectors.length === 0 && loadLayout().view !== "scene"
+      ? "draw"
+      : "select",
+  );
   const [gridSetting, setGridSetting] = React.useState(loadGrid);
   // Snapping off still lands on whole units, which is all the engine stores.
   const grid = gridSetting.snap ? gridSetting.size : 1;
@@ -1142,13 +1144,13 @@ export function EditorScreen({
     }
   });
 
-  // Esc stops placing things from wherever the focus is, such as the
-  // button that picked the thing.
+  // Esc stops placing things or drawing from wherever the focus is, such as
+  // the button that picked the tool.
   const onPlacingEscape = React.useEffectEvent((event: KeyboardEvent) => {
     if (
       event.key !== "Escape" ||
       event.defaultPrevented ||
-      tool !== "thing" ||
+      (tool !== "thing" && tool !== "draw" && tool !== "line") ||
       !notTyping() ||
       document.activeElement?.closest('[role="dialog"]') ||
       !mapKeys()
