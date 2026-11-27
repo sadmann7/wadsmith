@@ -83,6 +83,12 @@ export function findUnreachable(
   return { rooms, things, exits, islands };
 }
 
+const islandMarkers = new Set<Thing["kind"]>([
+  "spawn-spot",
+  "boss-shooter",
+  "boss-brain",
+]);
+
 // Groups of rooms that share no wall with the rest of the map, the way a room
 // drawn beside another without touching its wall ends up. A group something
 // acts on, by a tag or a line action, is a teleport landing or a control room
@@ -132,12 +138,6 @@ function findIslands(
       ),
   );
 }
-
-const islandMarkers = new Set<Thing["kind"]>([
-  "spawn-spot",
-  "boss-shooter",
-  "boss-brain",
-]);
 
 function roomWalls(map: GameMap) {
   const walls = new Map<Sector, RoomWall[]>();

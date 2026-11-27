@@ -5,15 +5,6 @@ import type { ThingKind, ThingSkill } from "./types";
 import { checkMap } from "./checks";
 import { buildMap, rect } from "./featured/build-map";
 
-const look = {
-  floor: 0,
-  ceiling: 128,
-  light: 160,
-  floorTexture: "FLOOR4_8",
-  ceilingTexture: "CEIL3_5",
-  wallTexture: "STARTAN3",
-};
-
 describe("stuck things", () => {
   it("warns about a barrel 8 from a shotgun guy", () => {
     expect(
@@ -111,6 +102,15 @@ describe("stuck things", () => {
   });
 });
 
+const look = {
+  floor: 0,
+  ceiling: 128,
+  light: 160,
+  floorTexture: "FLOOR4_8",
+  ceilingTexture: "CEIL3_5",
+  wallTexture: "STARTAN3",
+};
+
 function stuck(
   things: [ThingKind, number, number, ThingSkill[]?][],
   { player = true } = {},
@@ -119,7 +119,9 @@ function stuck(
     name: "Stuck",
     rooms: [{ name: "Hall", points: rect(0, 0, 512, 512), ...look }],
     things: [
-      ...(player ? [{ kind: "player" as const, at: [32, 32] as const }] : []),
+      ...(player
+        ? [{ kind: "player" as const, at: [32, 32] as [number, number] }]
+        : []),
       ...things.map(([kind, x, y, skills]) => ({
         kind,
         at: [x, y] as [number, number],

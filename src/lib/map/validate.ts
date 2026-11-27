@@ -925,7 +925,7 @@ function validateReach(
           ? `${room.name} isn't joined to the rest of the map`
           : `${room.name} and ${others} ${others === 1 ? "room" : "rooms"} beside it aren't joined to the rest of the map`,
       detail: touch
-        ? `It touches ${touch.other.name} only at a corner, so there's no way through. Rooms join where they share a wall.`
+        ? `It touches ${touch.other.name} only at a corner. Rooms join where they share a wall.`
         : "The player can't get there from the start. Rooms join where they share a wall.",
       target: room.id,
       ...(touch ? { fixLabel: "Join" } : {}),

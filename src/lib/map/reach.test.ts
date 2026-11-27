@@ -358,7 +358,7 @@ describe("rooms not joined to the map", () => {
       id: "unreachable-island:sector-3",
       message: "Octagon isn't joined to the rest of the map",
       detail:
-        "It touches Corridor only at a corner, so there's no way through. Rooms join where they share a wall.",
+        "It touches Corridor only at a corner. Rooms join where they share a wall.",
       fixLabel: "Join",
       target: "sector-3",
     });
@@ -458,29 +458,6 @@ function cornerMap(): GameMap {
   });
 }
 
-function room(
-  name: string,
-  x: number,
-  floor: number,
-  ceiling: number,
-  extra: Partial<RoomSpec> = {},
-): RoomSpec {
-  return {
-    name,
-    points: rect(x, 0, 128, 128),
-    floor,
-    ceiling,
-    ...look,
-    ...extra,
-  };
-}
-
-function reachWarnings(map: GameMap, custom?: CustomThings) {
-  return inspectMap(map, { custom })
-    .warnings.filter((issue) => issue.id.startsWith("unreachable"))
-    .map((issue) => issue.message);
-}
-
 function twoRooms(
   floor: number,
   ceiling = 128,
@@ -508,4 +485,27 @@ function twoRooms(
         ]
       : [],
   });
+}
+
+function room(
+  name: string,
+  x: number,
+  floor: number,
+  ceiling: number,
+  extra: Partial<RoomSpec> = {},
+): RoomSpec {
+  return {
+    name,
+    points: rect(x, 0, 128, 128),
+    floor,
+    ceiling,
+    ...look,
+    ...extra,
+  };
+}
+
+function reachWarnings(map: GameMap, custom?: CustomThings) {
+  return inspectMap(map, { custom })
+    .warnings.filter((issue) => issue.id.startsWith("unreachable"))
+    .map((issue) => issue.message);
 }

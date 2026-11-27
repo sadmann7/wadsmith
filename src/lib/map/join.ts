@@ -84,76 +84,6 @@ export function crossing(a: Point, b: Point, c: Point, d: Point): Point | null {
   );
 }
 
-// Only the walls near the rooms are looked at, so a room drawn in one corner
-// of a big map costs the same as on a small one.
-function findCut(map: GameMap, rooms: Set<string>, skipped: Set<string>) {
-  const fresh = new Map<string, Wall>();
-  const others = new Map<string, Wall>();
-  for (const sector of map.sectors) {
-    const into = rooms.has(sector.id) ? fresh : others;
-    for (const { from, to } of sectorEdges(sector)) {
-      const key = wallKey(from, to);
-      into.set(key, {
-        key,
-        from,
-        to,
-        a: map.vertices[from],
-        b: map.vertices[to],
-      });
-    }
-  }
-  if (fresh.size === 0) return null;
-  const points = [...fresh.values()].flatMap(({ a, b }) => [a, b]);
-  const left = Math.min(...points.map((point) => point.x)) - 1;
-  const right = Math.max(...points.map((point) => point.x)) + 1;
-  const top = Math.min(...points.map((point) => point.y)) - 1;
-  const bottom = Math.max(...points.map((point) => point.y)) + 1;
-  const near = [...others.values()].filter(
-    ({ key, a, b }) =>
-      !fresh.has(key) &&
-      Math.max(a.x, b.x) >= left &&
-      Math.min(a.x, b.x) <= right &&
-      Math.max(a.y, b.y) >= top &&
-      Math.min(a.y, b.y) <= bottom,
-  );
-  const offer = (cut: Cut) => (skipped.has(cutKey(cut)) ? null : cut);
-  for (const mine of fresh.values()) {
-    for (const other of near) {
-      const shared = [other.from, other.to].filter(
-        (id) => id === mine.from || id === mine.to,
-      );
-      if (shared.length === 2) continue;
-      for (const [id, point] of [
-        [other.from, other.a],
-        [other.to, other.b],
-      ] as const) {
-        if (!shared.includes(id) && getIsWithin(mine.a, mine.b, point)) {
-          const cut = offer({ walls: [mine.key], at: point });
-          if (cut) return cut;
-        }
-      }
-      for (const [id, point] of [
-        [mine.from, mine.a],
-        [mine.to, mine.b],
-      ] as const) {
-        if (!shared.includes(id) && getIsWithin(other.a, other.b, point)) {
-          const cut = offer({ walls: [other.key], at: point });
-          if (cut) return cut;
-        }
-      }
-      if (shared.length > 0) continue;
-      const at = crossing(mine.a, mine.b, other.a, other.b);
-      const cut = at && offer({ walls: [mine.key, other.key], at });
-      if (cut) return cut;
-    }
-  }
-  return null;
-}
-
-function cutKey({ walls, at }: Cut) {
-  return `${walls.join("+")}@${at.x},${at.y}`;
-}
-
 export interface Touch {
   room: Sector;
   other: Sector;
@@ -189,10 +119,6 @@ export function findTouches(map: GameMap, room: Sector): Touch[] {
   return touches;
 }
 
-// Half the width of the opening a corner join makes, either side of the point.
-const openingHalf = 64;
-const narrowestOpening = 40;
-
 // Joins two rooms that touch at a point: the pointed room's corner opens out
 // along the other room's straight wall, so the two share a wall there.
 export function joinTouch(map: GameMap, { room, other, at }: Touch) {
@@ -210,6 +136,10 @@ export function joinTouch(map: GameMap, { room, other, at }: Touch) {
   return null;
 }
 
+// Half the width of the opening a corner join makes, either side of the point.
+const openingHalf = 64;
+const narrowestOpening = 40;
+
 function openCorner(
   map: GameMap,
   point: string,
@@ -222,8 +152,6 @@ function openCorner(
   const at = pointedRoom.vertices.indexOf(point);
   const along = flatRoom.vertices.indexOf(point);
   if (at < 0 || along < 0) return null;
-  const ring = (loop: string[], index: number) =>
-    loop[(index + loop.length) % loop.length];
   const p = map.vertices[point];
   const sides = [
     ring(flatRoom.vertices, along - 1),
@@ -310,4 +238,78 @@ function getShareWall(map: GameMap, first: string, second: string) {
     if (ids.includes(first) && ids.includes(second)) return true;
   }
   return false;
+}
+
+function ring(loop: string[], index: number) {
+  return loop[(index + loop.length) % loop.length];
+}
+
+// Only the walls near the rooms are looked at, so a room drawn in one corner
+// of a big map costs the same as on a small one.
+function findCut(map: GameMap, rooms: Set<string>, skipped: Set<string>) {
+  const fresh = new Map<string, Wall>();
+  const others = new Map<string, Wall>();
+  for (const sector of map.sectors) {
+    const into = rooms.has(sector.id) ? fresh : others;
+    for (const { from, to } of sectorEdges(sector)) {
+      const key = wallKey(from, to);
+      into.set(key, {
+        key,
+        from,
+        to,
+        a: map.vertices[from],
+        b: map.vertices[to],
+      });
+    }
+  }
+  if (fresh.size === 0) return null;
+  const points = [...fresh.values()].flatMap(({ a, b }) => [a, b]);
+  const left = Math.min(...points.map((point) => point.x)) - 1;
+  const right = Math.max(...points.map((point) => point.x)) + 1;
+  const top = Math.min(...points.map((point) => point.y)) - 1;
+  const bottom = Math.max(...points.map((point) => point.y)) + 1;
+  const near = [...others.values()].filter(
+    ({ key, a, b }) =>
+      !fresh.has(key) &&
+      Math.max(a.x, b.x) >= left &&
+      Math.min(a.x, b.x) <= right &&
+      Math.max(a.y, b.y) >= top &&
+      Math.min(a.y, b.y) <= bottom,
+  );
+  const offer = (cut: Cut) => (skipped.has(cutKey(cut)) ? null : cut);
+  for (const mine of fresh.values()) {
+    for (const other of near) {
+      const shared = [other.from, other.to].filter(
+        (id) => id === mine.from || id === mine.to,
+      );
+      if (shared.length === 2) continue;
+      for (const [id, point] of [
+        [other.from, other.a],
+        [other.to, other.b],
+      ] as const) {
+        if (!shared.includes(id) && getIsWithin(mine.a, mine.b, point)) {
+          const cut = offer({ walls: [mine.key], at: point });
+          if (cut) return cut;
+        }
+      }
+      for (const [id, point] of [
+        [mine.from, mine.a],
+        [mine.to, mine.b],
+      ] as const) {
+        if (!shared.includes(id) && getIsWithin(other.a, other.b, point)) {
+          const cut = offer({ walls: [other.key], at: point });
+          if (cut) return cut;
+        }
+      }
+      if (shared.length > 0) continue;
+      const at = crossing(mine.a, mine.b, other.a, other.b);
+      const cut = at && offer({ walls: [mine.key, other.key], at });
+      if (cut) return cut;
+    }
+  }
+  return null;
+}
+
+function cutKey({ walls, at }: Cut) {
+  return `${walls.join("+")}@${at.x},${at.y}`;
 }

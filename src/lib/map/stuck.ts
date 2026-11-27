@@ -7,28 +7,9 @@ import { getBlocksPlayer } from "./complevel";
 import { vanillaThings } from "./doom-info";
 import { wallOwners } from "./geometry";
 
-const radii = new Map(
-  vanillaThings
-    .filter(([type]) => type > 0)
-    .map(([type, , radius]) => [type, radius]),
-);
+const cellSize = 256;
 
-// The scenery Doom makes solid. Corpses, pools, candles and hanging bodies
-// marked as passable are left out, since nothing bumps into them.
-const solidScenery = new Set([
-  25, 26, 27, 28, 29, 30, 31, 32, 33, 35, 36, 37, 41, 42, 43, 44, 45, 46, 47,
-  48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 70, 72, 73, 74, 75, 76, 77, 78, 85,
-  86, 2028, 2035,
-]);
-
-const playerRadius = 16;
-
-const starts = new Set<ThingKind>([
-  "player",
-  "player-2",
-  "player-3",
-  "player-4",
-]);
+const cellOf = (value: number) => Math.floor(value / cellSize);
 
 interface Body {
   thing: Thing;
@@ -37,45 +18,10 @@ interface Body {
   moves: boolean;
 }
 
-function bodyOf(thing: Thing, custom: CustomThings): Body | null {
-  const isPlayer = starts.has(thing.kind);
-  if (thing.kind === "custom") {
-    const patched = custom.get(thing.type ?? 0);
-    return patched?.category === "enemy"
-      ? { thing, radius: patched.radius, isPlayer, moves: true }
-      : null;
-  }
-  const { doomType, category } = thingCatalog[thing.kind];
-  if (!isPlayer && category !== "enemy" && !solidScenery.has(doomType)) {
-    return null;
-  }
-  const radius = isPlayer
-    ? playerRadius
-    : (custom.get(doomType)?.radius ?? radii.get(doomType));
-  return radius
-    ? { thing, radius, isPlayer, moves: isPlayer || category === "enemy" }
-    : null;
-}
-
-const allSkills = ["easy", "medium", "hard"] as const;
-
-function getShareSkill(a: Thing, b: Thing) {
-  return allSkills.some(
-    (skill) =>
-      (!a.skills || a.skills.includes(skill)) &&
-      (!b.skills || b.skills.includes(skill)),
-  );
-}
-
-const cellSize = 256;
-
-const cellOf = (value: number) => Math.floor(value / cellSize);
-
 // Monsters and players whose box overlaps another solid thing's, or that a
 // wall blocking them runs through. Doom moves a thing only to a spot clear of
-// both, so it stays put until something dies. Scenery never moves, so scenery
-// against scenery or a wall is left alone, and two things that never appear
-// on the same difficulty never meet.
+// both, so it stays put. Scenery never moves, and things on different
+// difficulties never meet.
 export function findStuckThings(map: GameMap, custom: CustomThings) {
   const bodies = map.things.flatMap((thing) => bodyOf(thing, custom) ?? []);
   const cells = new Map<string, Body[]>();
@@ -136,6 +82,59 @@ export function findStuckThings(map: GameMap, custom: CustomThings) {
     }
   }
   return { overlaps, walls };
+}
+
+const radii = new Map(
+  vanillaThings
+    .filter(([type]) => type > 0)
+    .map(([type, , radius]) => [type, radius]),
+);
+
+// The scenery Doom makes solid. Corpses, pools, candles and hanging bodies
+// marked as passable are left out, since nothing bumps into them.
+const solidScenery = new Set([
+  25, 26, 27, 28, 29, 30, 31, 32, 33, 35, 36, 37, 41, 42, 43, 44, 45, 46, 47,
+  48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 70, 72, 73, 74, 75, 76, 77, 78, 85,
+  86, 2028, 2035,
+]);
+
+const playerRadius = 16;
+
+const starts = new Set<ThingKind>([
+  "player",
+  "player-2",
+  "player-3",
+  "player-4",
+]);
+
+function bodyOf(thing: Thing, custom: CustomThings): Body | null {
+  const isPlayer = starts.has(thing.kind);
+  if (thing.kind === "custom") {
+    const patched = custom.get(thing.type ?? 0);
+    return patched?.category === "enemy"
+      ? { thing, radius: patched.radius, isPlayer, moves: true }
+      : null;
+  }
+  const { doomType, category } = thingCatalog[thing.kind];
+  if (!isPlayer && category !== "enemy" && !solidScenery.has(doomType)) {
+    return null;
+  }
+  const radius = isPlayer
+    ? playerRadius
+    : (custom.get(doomType)?.radius ?? radii.get(doomType));
+  return radius
+    ? { thing, radius, isPlayer, moves: isPlayer || category === "enemy" }
+    : null;
+}
+
+const allSkills = ["easy", "medium", "hard"] as const;
+
+function getShareSkill(a: Thing, b: Thing) {
+  return allSkills.some(
+    (skill) =>
+      (!a.skills || a.skills.includes(skill)) &&
+      (!b.skills || b.skills.includes(skill)),
+  );
 }
 
 function getOverlap(a: Body, b: Body) {
