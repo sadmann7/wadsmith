@@ -950,6 +950,7 @@ export const mapEditor = definePrimitive({
     };
     let pointer: Point | null = null;
     let spaceHeld = false;
+    let pressing = false;
 
     // What a drag from a point moves: the thing or corner under it, then a
     // wall in corner and line mode, then the room around it, with the rest of
@@ -1041,10 +1042,8 @@ export const mapEditor = definePrimitive({
     context.onDestroy(() => reportGrab(null));
 
     // What a press would pick or drag, drawn highlighted: the wall in line
-    // mode, with the rooms its action works on, and the room or wall a drag
-    // would move.
-    // Shift, Ctrl, Cmd or Space held turns a press into a box or a pan, which
-    // moves nothing.
+    // mode, with the rooms its action works on, and what a drag would move,
+    // which is nothing while Shift, Ctrl, Cmd or Space makes it a box or pan.
     let hoverKey: string | undefined;
     const hover = (at: Point | null, key?: string, boxing = false) => {
       hoverKey = key;
@@ -1079,7 +1078,7 @@ export const mapEditor = definePrimitive({
     };
 
     const holdKey = (event: KeyboardEvent) => {
-      if (!pointer || !holdKeys.has(event.key) || store.get().moving) return;
+      if (!pointer || !holdKeys.has(event.key) || pressing) return;
       hover(
         pointer,
         hoverKey,
@@ -1628,6 +1627,7 @@ export const mapEditor = definePrimitive({
       ...agentMethods,
       pointerdown(event: PointerEvent) {
         press = { x: event.clientX, y: event.clientY };
+        pressing = true;
         // A second finger joins the press it follows and doesn't start one.
         if (event.isPrimary) carried = null;
         root()?.focus({ preventScroll: true });
@@ -1745,8 +1745,9 @@ export const mapEditor = definePrimitive({
           context.options().onContextTarget?.(null);
         }
         pointer = viewport.toCanvas(event.clientX, event.clientY);
+        pressing = event.buttons !== 0;
         // A press keeps what it grabbed shown until it lets go.
-        if (event.buttons === 0) {
+        if (!pressing) {
           const target = event.target as Partial<Element> | null;
           hover(
             pointer,
@@ -1762,6 +1763,7 @@ export const mapEditor = definePrimitive({
       },
       click(event: MouseEvent) {
         carried = null;
+        pressing = false;
         if (ignoreClick) {
           ignoreClick = false;
           return;
