@@ -108,25 +108,35 @@ describe("dropping a room among others", () => {
     ).toBe(false);
   });
 
-  it("moves a room joined to the inside wall of the room around it", () => {
+  it("doesn't snap a room to the wall of the room around it", () => {
     const hall = addRoom(empty, box(0, 0, 512, 512), {}, 1);
-    const inner = addRoom(hall.map, box(8, 128, 72, 192), {}, 1);
+    const inner = addRoom(hall.map, box(24, 128, 88, 192), {}, 1);
     const keys = roomKeys(inner.map, inner.id);
-    const drop = defined(planRoomDrop(inner.map, keys, { x: -6, y: 0 }, 14));
-    expect(drop.offset).toEqual({ x: -8, y: 0 });
-    const joined = land(inner.map, keys, drop.offset).map;
-    const again = roomKeys(joined, inner.id);
-    for (const offset of [
-      { x: 0, y: 32 },
-      { x: 64, y: 0 },
-      { x: 64, y: 64 },
-    ]) {
-      expect(defined(planRoomDrop(joined, again, offset, 14)).isBlocked).toBe(
-        false,
-      );
-    }
+    expect(planRoomDrop(inner.map, keys, { x: -16, y: 0 }, 14)).toEqual({
+      offset: { x: -16, y: 0 },
+      walls: [],
+      isBlocked: false,
+    });
+  });
+
+  it("lets a room move inside the rooms two levels around it", () => {
+    const hall = addRoom(empty, box(0, 0, 512, 512), {}, 1);
+    const middle = addRoom(hall.map, box(64, 64, 320, 320), {}, 1);
+    const inner = addRoom(middle.map, box(128, 128, 192, 192), {}, 1);
+    const keys = roomKeys(inner.map, inner.id);
     expect(
-      defined(planRoomDrop(joined, again, { x: 520, y: 0 }, 14)).isBlocked,
+      defined(planRoomDrop(inner.map, keys, { x: 32, y: 64 }, 14)).isBlocked,
+    ).toBe(false);
+  });
+
+  it("blocks a drop that folds a joined room's walls onto each other", () => {
+    const { map, room } = twoRooms();
+    const joined = land(map, roomKeys(map, room), { x: -64, y: 0 }).map;
+    // The hall's shared corners would come out level with its own corners.
+    expect(
+      defined(
+        planRoomDrop(joined, roomKeys(joined, room), { x: 0, y: -192 }, 14),
+      ).isBlocked,
     ).toBe(true);
   });
 

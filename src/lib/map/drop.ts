@@ -52,12 +52,16 @@ export function planRoomDrop(
   if (rooms.length === 0) return null;
   const movedIds = new Set(rooms.map((room) => room.id));
   const containers = sectorContainers(map);
-  const holders = new Set(
-    rooms.flatMap((room) => {
-      const container = containers.get(room.id);
-      return container && !movedIds.has(container.id) ? [container.id] : [];
-    }),
-  );
+  const holders = new Set<string>();
+  for (const room of rooms) {
+    for (
+      let container = containers.get(room.id);
+      container && !holders.has(container.id);
+      container = containers.get(container.id)
+    ) {
+      if (!movedIds.has(container.id)) holders.add(container.id);
+    }
+  }
   const outlines = (sectors: Sector[]): Outline[] =>
     sectors.map((sector) => {
       const polygon = loopPolygon(map, sector.vertices);
@@ -135,6 +139,7 @@ export function planRoomDrop(
       );
     const walls = new Set<string>();
     for (const other of around) {
+      if (holders.has(other.sector.id)) continue;
       for (const wall of other.edges) {
         if (
           placed.some((room) =>
@@ -148,8 +153,11 @@ export function planRoomDrop(
     return { offset: shift, walls: [...walls], isBlocked };
   };
 
+  // Against the wall of a room it's inside, a room would share that room's
+  // side of the wall, so only the walls of rooms beside it pull it.
   const pulls: { shift: Point; distance: number }[] = [];
   for (const other of near(offset)) {
+    if (holders.has(other.sector.id)) continue;
     for (const wall of other.edges) {
       for (const outline of mine) {
         for (const edge of outline.edges) {
@@ -288,11 +296,23 @@ function getIsWithin(inner: Point[], outer: Point[]) {
   );
 }
 
-// Whether two walls of a room that don't meet at a corner cross each other.
+// Whether two walls of a room cross or run along each other.
 function getIsTwisted(polygon: Point[]) {
   const edges = ringPairs(polygon);
   return edges.some(([p, q], index) =>
-    edges.slice(index + 2).some(([r, s]) => getIsCrossing(p, q, r, s)),
+    edges.some(
+      ([r, s], other) =>
+        other > index &&
+        (getIsCrossing(p, q, r, s) ||
+          (cross(p, q, r) === 0 &&
+            cross(p, q, s) === 0 &&
+            overlapAlong(
+              { key: "", a: r, b: s },
+              { key: "", a: p, b: q },
+              { x: q.x - p.x, y: q.y - p.y },
+              Math.hypot(q.x - p.x, q.y - p.y),
+            ) > 0)),
+    ),
   );
 }
 
