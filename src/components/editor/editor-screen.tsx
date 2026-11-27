@@ -1767,6 +1767,7 @@ export function EditorScreen({
   // without an undo step, and is saved like any edit, which sends nothing back.
   const showPatch = (patch: MapPatch) => {
     const next = applyPatch(mapRef.current, patch);
+    camera.keep(next);
     mapRef.current = next;
     setMap(next);
     onSave(next);
