@@ -8,11 +8,21 @@ interface LabelRoom {
   name: string;
   detail?: string;
   box: Box;
-  at: Point;
+  at: Point & { isSmall?: boolean };
 }
 
+// Widths of 13px IBM Plex Sans Condensed, the name's font, by kind of letter.
+const narrowLetters = /[ !'(),\-.1:;Iijlrt|]/;
+const wideLetters = /[A-HJ-Zmw]/;
+
 export function estimateLabelWidth(name: string, detail = "") {
-  return Math.max(name.length * 7.5, detail.length * 6.6) + 8;
+  let nameWidth = 0;
+  for (const letter of name) {
+    if (narrowLetters.test(letter)) nameWidth += 3.6;
+    else if (wideLetters.test(letter)) nameWidth += 8.6;
+    else nameWidth += 6.6;
+  }
+  return Math.max(nameWidth, detail.length * 6.6) + 8;
 }
 
 // Callers pass the zoom step, which can run up to a fifth over the zoom, so
@@ -24,16 +34,24 @@ const stepSlack = 1.2;
 const thingReach = 14 * stepSlack;
 const labelHalfHeight = 16 * stepSlack;
 
-// A label sits near the top of its room, clear of pillars and things, or
-// lower down when the top has no clear spot. A room with none keeps its name
-// at the top, since moving it aside would crowd out a neighbour's. Null means
-// no part of the top band is in the room.
+// A name with no clear spot at full size is drawn this much smaller, as
+// `.map-label[data-small]` does.
+export const smallLabelScale = 0.75;
+
+export interface LabelSpot extends Point {
+  isSmall: boolean;
+}
+
+// A label sits near the top of its room clear of pillars and things, lower
+// down, or past the walls of a room narrower than the name. Failing that it
+// tries again smaller, then stays at the top, small if an icon is under it.
+// Null means no part of the top band is in the room.
 export function labelPoint(
   loops: Point[][],
   zoom: number,
   width: number,
   things: Point[] = [],
-): Point | null {
+): LabelSpot | null {
   const [outline] = loops;
   if (!outline?.length) return null;
   const ys = outline.map((point) => point.y);
@@ -46,31 +64,41 @@ export function labelPoint(
   };
   const top = box.top + labelInset / zoom;
   const bottom = box.bottom - labelInset / zoom;
-  const near = thingsIn(things, box);
-  const step = (labelHalfHeight * 1.5) / zoom;
-  for (let y = top; y === top || (near.length > 0 && y <= bottom); y += step) {
-    const at = placeOnBand(loops, zoom, width, y, near, true);
-    if (at) return at;
-  }
-  return placeOnBand(loops, zoom, width, top, [], false);
-}
-
-// Whether a thing's icon would sit on a label placed there.
-export function getIsLabelCovered(
-  at: Point,
-  width: number,
-  zoom: number,
-  things: Point[],
-) {
-  const half = (width / 2) * stepSlack + thingReach;
-  const rise = thingReach + labelHalfHeight;
+  const middle = (box.top + box.bottom) / 2;
+  const spill = ((width / 2) * stepSlack + thingReach) / zoom;
+  const rise = (thingReach + labelHalfHeight) / zoom;
   const near = thingsIn(things, {
-    left: at.x - half / zoom,
-    right: at.x + half / zoom,
-    top: at.y - rise / zoom,
-    bottom: at.y + rise / zoom,
+    left: box.left - spill,
+    right: box.right + spill,
+    top: box.top - rise,
+    bottom: box.bottom + rise,
   });
-  return coveredWidth(at, width * stepSlack, zoom, near) > 0;
+  const step = (labelHalfHeight * 1.5) / zoom;
+  const bands = (from: number, to: number) => {
+    const levels = [from];
+    if (near.length === 0) return levels;
+    for (let y = from + step; y <= to; y += step) levels.push(y);
+    return levels;
+  };
+  const inside = bands(top, bottom);
+  const narrow = bands(Math.min(top, middle), Math.max(bottom, middle));
+  for (const isSmall of near.length > 0 ? [false, true] : [false]) {
+    const size = isSmall ? width * smallLabelScale : width;
+    for (const y of inside) {
+      const at = placeOnBand(loops, zoom, size, y, near, true);
+      if (at) return { ...at, isSmall };
+    }
+    for (const y of narrow) {
+      const at = spillOnBand(loops, zoom, size, y, near);
+      if (at) return { ...at, isSmall };
+    }
+  }
+  const at = placeOnBand(loops, zoom, width, top, [], false);
+  if (!at) return null;
+  return {
+    ...at,
+    isSmall: coveredWidth(at, width * stepSlack, zoom, near) > 0,
+  };
 }
 
 // Keeps the bigger room's label where two would overlap. The sizes are rough,
@@ -79,12 +107,12 @@ export function clearLabels<Room extends LabelRoom>(
   rooms: Room[],
   zoom: number,
 ) {
-  const scale = stepSlack / zoom;
   const placed: Box[] = [];
   const kept = new Set(
     rooms
       .toSorted((a, b) => areaOf(b.box) - areaOf(a.box))
       .filter(({ name, detail, at }) => {
+        const scale = (stepSlack / zoom) * (at.isSmall ? smallLabelScale : 1);
         const halfWidth = (estimateLabelWidth(name, detail) / 2) * scale;
         const halfHeight = (detail ? 16 : 10) * scale;
         const label = {
@@ -151,6 +179,43 @@ function placeOnBand(
   if (fits(widest)) return { x: (widest[0] + widest[1]) / 2, y };
   if (isStrict || loops.length > 1 || !home) return null;
   return { x: center.x, y };
+}
+
+// A name wider than a room's span may hang past its walls, as long as no
+// icon is under it. Not past a pillar's, which would cover the pillar.
+function spillOnBand(
+  loops: Point[][],
+  zoom: number,
+  width: number,
+  y: number,
+  things: Point[],
+): Point | null {
+  if (loops.length > 1) return null;
+  const half = width / 2 / zoom;
+  const reach = ((width / 2) * stepSlack + thingReach) / zoom;
+  const rise = (thingReach + labelHalfHeight) / zoom;
+  const blocking = things.filter((thing) => Math.abs(thing.y - y) < rise);
+  let best: { x: number; off: number } | null = null;
+  for (const [left, right] of spansAt(loops, y)) {
+    if (right - left >= half * 2) continue;
+    const home = (left + right) / 2;
+    const clear = blocking.reduce(
+      (current, thing) =>
+        current.flatMap(([from, to]): [number, number][] =>
+          [
+            [from, Math.min(to, thing.x - reach)] as [number, number],
+            [Math.max(from, thing.x + reach), to] as [number, number],
+          ].filter(([start, end]) => start <= end),
+        ),
+      [[left, right]] as [number, number][],
+    );
+    for (const [from, to] of clear) {
+      const x = Math.min(to, Math.max(from, home));
+      const off = Math.abs(x - home);
+      if (!best || off < best.off) best = { x, off };
+    }
+  }
+  return best && { x: best.x, y };
 }
 
 function withoutThings(
