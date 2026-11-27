@@ -51,6 +51,7 @@ import {
   setRoomDoor,
   setRoomWalls,
   splitWall,
+  startFacing,
   updateLine,
   updateLineSide,
   updateSector,
@@ -2231,7 +2232,14 @@ function flagsOf(args: Args): Partial<Thing> {
 function placed(map: GameMap, args: Args, point: Point) {
   const { kind, type } = thingChoice(args);
   standsIn(map, kind, point);
-  const added = addThing(map, kind, point, 0, 1, type);
+  const added = addThing(
+    map,
+    kind,
+    point,
+    startFacing(map, kind, point),
+    1,
+    type,
+  );
   return {
     map: updateThing(added.map, added.id, flagsOf(args)),
     result: added.id,

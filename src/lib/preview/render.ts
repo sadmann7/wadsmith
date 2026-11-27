@@ -12,10 +12,9 @@ import type {
 import { defined } from "@/lib/defined";
 import { doorTrackTexture, thingCatalog } from "@/lib/map/catalog";
 import {
-  clearView,
   loopEdges,
   loopPolygon,
-  roomPoint,
+  overlook,
   sectorAt,
   sectorDetails,
   sectorEdges,
@@ -709,8 +708,7 @@ export function startCamera(map: GameMap): Camera {
     const first = Object.values(map.vertices)[0] ?? { x: 0, y: 0 };
     return { ...first, angle: 0 };
   }
-  const at = roomPoint(map, room);
-  return { ...at, angle: clearView(map, room, at) };
+  return overlook(map, room);
 }
 
 const eyeHeight = 41;
