@@ -541,7 +541,9 @@ export const mapEditor = definePrimitive({
     });
     context.onDestroy(stopCorners);
 
-    const showDrop = (plan: Landing | null) => {
+    // The glow, red outline and copy state to show for a plan, or null when
+    // they already show it.
+    const dropPatch = (plan: Landing | null) => {
       planned = plan;
       const walls = plan?.walls ?? none;
       const { snapWalls, dropBlocked, copying } = store.get();
@@ -553,19 +555,19 @@ export const mapEditor = definePrimitive({
         snapWalls.length === walls.length &&
         snapWalls.every((wall, index) => wall === walls[index])
       ) {
-        return;
+        return null;
       }
-      store.set({
+      return {
         snapWalls: walls.length === 0 ? [] : [...walls],
         dropBlocked: isBlocked,
         copying: isCopy,
-      });
+      };
     };
     let altHeld = false;
-    const snapDraft = (moving: MoveDraft): MoveDraft => {
+    const snapDraft = (moving: MoveDraft) => {
       const { map, positions, viewport: view } = store.get();
       const from = positions[moving.keys[0]];
-      if (!from) return moving;
+      if (!from) return { draft: moving, patch: dropPatch(null) };
       const at = snapPoint(
         { x: from.x + moving.dx, y: from.y + moving.dy },
         grid(),
@@ -577,10 +579,12 @@ export const mapEditor = definePrimitive({
         wallReach / view.zoom,
         altHeld,
       );
-      showDrop(plan && { ...plan, isCopy: altHeld });
-      return plan
-        ? { ...moving, dx: plan.offset.x, dy: plan.offset.y }
-        : moving;
+      return {
+        draft: plan
+          ? { ...moving, dx: plan.offset.x, dy: plan.offset.y }
+          : moving,
+        patch: dropPatch(plan && { ...plan, isCopy: altHeld }),
+      };
     };
     const holdAlt = (held: boolean) => {
       if (held === altHeld) return;
@@ -605,17 +609,18 @@ export const mapEditor = definePrimitive({
         }
         lastDraft = null;
         carried = null;
-        store.set({ moving: null });
+        store.set({ moving: null, ...dropPatch(null) });
         context.options().onDraftMapChange?.(null);
         return;
       }
       // A dragged room lands on the grid, flush against a wall it comes near,
-      // so the draft is moved there before anything draws it.
-      if (moving && !snappedDrafts.has(moving)) {
-        const snapped = snapDraft(moving);
-        snappedDrafts.add(snapped);
-        if (snapped !== moving) {
-          store.set({ moving: snapped });
+      // so the draft is moved there before anything draws it. An edit from
+      // someone else can open or close the spot it lands on.
+      if (moving && (!snappedDrafts.has(moving) || isRemapped)) {
+        const { draft, patch } = snapDraft(moving);
+        snappedDrafts.add(draft);
+        if (draft !== moving || patch) {
+          store.set({ ...patch, moving: draft });
           return;
         }
       }
@@ -633,7 +638,8 @@ export const mapEditor = definePrimitive({
       lastDraft = moving;
       const { onDraftMapChange } = context.options();
       if (!moving) {
-        showDrop(null);
+        const patch = dropPatch(null);
+        if (patch) store.set(patch);
         onDraftMapChange?.(null);
         return;
       }

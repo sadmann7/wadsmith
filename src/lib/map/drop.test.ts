@@ -6,7 +6,13 @@ import type { GameMap, Point } from "./types";
 
 import { checkMap } from "./checks";
 import { dropRooms, getDoOverlap, planRoomDrop } from "./drop";
-import { addRoom, addThing, applyPositions, positionsOf } from "./edit";
+import {
+  addRoom,
+  addThing,
+  applyPositions,
+  makePillar,
+  positionsOf,
+} from "./edit";
 import { partKeys, selectedParts } from "./fragment";
 import { wallOwners } from "./geometry";
 
@@ -88,6 +94,35 @@ function looseWarnings(map: GameMap) {
   return checkMap(map).filter((issue) => issue.id.startsWith("unreachable"));
 }
 
+describe("dropping a room among others", () => {
+  it("blocks dragging a joined room through the room it's joined to", () => {
+    const { map, room } = twoRooms();
+    const keys = roomKeys(map, room);
+    const joined = land(map, keys, { x: -64, y: 0 }).map;
+    const again = roomKeys(joined, room);
+    expect(
+      defined(planRoomDrop(joined, again, { x: -320, y: 0 }, 14)).isBlocked,
+    ).toBe(true);
+    expect(
+      defined(planRoomDrop(joined, again, { x: 0, y: 32 }, 14)).isBlocked,
+    ).toBe(false);
+  });
+
+  it("blocks a room moved over a pillar in the room around it", () => {
+    const hall = addRoom(empty, box(0, 0, 512, 512), {}, 1);
+    const post = addRoom(hall.map, box(256, 256, 320, 320), {}, 1);
+    const pillared = defined(makePillar(post.map, post.id));
+    const inner = addRoom(pillared, box(64, 64, 128, 128), {}, 1);
+    const keys = roomKeys(inner.map, inner.id);
+    expect(
+      defined(planRoomDrop(inner.map, keys, { x: 224, y: 224 }, 14)).isBlocked,
+    ).toBe(true);
+    expect(
+      defined(planRoomDrop(inner.map, keys, { x: 64, y: 0 }, 14)).isBlocked,
+    ).toBe(false);
+  });
+});
+
 describe("copying a dragged room", () => {
   it("leaves the room where it was and lands a joined copy", () => {
     const { map, room } = twoRooms();
@@ -110,6 +145,19 @@ describe("copying a dragged room", () => {
       defined(withThing.sectors.find((sector) => sector.id === room)).vertices,
     );
     expect(sharedWalls(landed.map)).toHaveLength(1);
+  });
+
+  it("copies a room about inside the room around it", () => {
+    const hall = addRoom(empty, box(0, 0, 512, 512), {}, 1);
+    const inner = addRoom(hall.map, box(128, 128, 192, 192), {}, 1);
+    const keys = roomKeys(inner.map, inner.id);
+    const drop = defined(
+      planRoomDrop(inner.map, keys, { x: 128, y: 128 }, 14, true),
+    );
+    expect(drop.isBlocked).toBe(false);
+    expect(land(inner.map, keys, drop.offset, true).map.sectors).toHaveLength(
+      3,
+    );
   });
 
   it("blocks a copy dropped over the room it copies", () => {

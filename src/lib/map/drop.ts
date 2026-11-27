@@ -31,6 +31,7 @@ interface Segment {
 interface Outline {
   sector: Sector;
   polygon: Point[];
+  holes: Point[][];
   edges: Segment[];
 }
 
@@ -63,6 +64,9 @@ export function planRoomDrop(
       return {
         sector,
         polygon,
+        holes: (sector.holes ?? [])
+          .filter((hole) => !hole.every((id) => moved.has(id)))
+          .map((hole) => loopPolygon(map, hole)),
         edges: loopEdges(sector.vertices).map(({ from, to }) => ({
           key: wallKey(from, to),
           a: map.vertices[from],
@@ -72,13 +76,22 @@ export function planRoomDrop(
     });
   const mine = outlines(rooms);
   const box = grow(boxOf(mine.flatMap((outline) => outline.polygon)), reach);
+  const whole = map.sectors.filter((sector) =>
+    sectorVertices(sector).every((id) => map.vertices[id]),
+  );
   const others = outlines(
-    map.sectors.filter(
-      (sector) =>
-        (copy || !sectorVertices(sector).some((id) => moved.has(id))) &&
-        sectorVertices(sector).every((id) => map.vertices[id]),
+    whole.filter(
+      (sector) => copy || !sectorVertices(sector).some((id) => moved.has(id)),
     ),
   );
+  // Rooms that share corners with the dragged ones stretch with them.
+  const bent = copy
+    ? []
+    : whole.filter(
+        (sector) =>
+          !movedIds.has(sector.id) &&
+          sector.vertices.some((id) => moved.has(id)),
+      );
   const near = (shift: Point) => {
     const reached = shiftBox(box, shift);
     return others.filter((outline) =>
@@ -89,14 +102,25 @@ export function planRoomDrop(
   const judge = (shift: Point) => {
     const placed = mine.map((outline) => moveOutline(outline, shift));
     const around = near(shift);
-    const isBlocked = placed.some((room) =>
-      around.some((other) =>
-        holders.has(other.sector.id) && !copy
-          ? !getIsWithin(room.polygon, other.polygon) &&
-            getDoOverlap(room.polygon, other.polygon)
-          : getDoOverlap(room.polygon, other.polygon),
+    const stretched = bent.map((sector) =>
+      sector.vertices.map((id) =>
+        moved.has(id) ? add(map.vertices[id], shift) : map.vertices[id],
       ),
     );
+    const isBlocked =
+      stretched.some(getIsTwisted) ||
+      placed.some(
+        (room) =>
+          stretched.some((polygon) => getDoOverlap(room.polygon, polygon)) ||
+          around.some(
+            (other) =>
+              (holders.has(other.sector.id)
+                ? !getIsWithin(room.polygon, other.polygon) &&
+                  getDoOverlap(room.polygon, other.polygon)
+                : getDoOverlap(room.polygon, other.polygon)) ||
+              other.holes.some((hole) => getDoOverlap(room.polygon, hole)),
+          ),
+      );
     const walls = new Set<string>();
     for (const other of around) {
       for (const wall of other.edges) {
@@ -249,6 +273,14 @@ function getIsWithin(inner: Point[], outer: Point[]) {
   }
   return samplePoints(inner).every(
     (point) => onRing(point, outer) || pointInPolygon(point, outer),
+  );
+}
+
+// Whether two walls of a room that don't meet at a corner cross each other.
+function getIsTwisted(polygon: Point[]) {
+  const edges = ringPairs(polygon);
+  return edges.some(([p, q], index) =>
+    edges.slice(index + 2).some(([r, s]) => getIsCrossing(p, q, r, s)),
   );
 }
 
