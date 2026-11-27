@@ -2,8 +2,10 @@ import type { GameMap, Point, Sector } from "./types";
 
 import { findVertexAt, splitWall } from "./edit";
 import {
+  boxOf,
   cross,
   loopEdges,
+  loopPolygon,
   onSegment,
   sectorEdges,
   segmentsIntersect,
@@ -94,11 +96,13 @@ export interface Touch {
 // other's wall or corner, so the two look joined but share no wall.
 export function findTouches(map: GameMap, room: Sector): Touch[] {
   if (room.door) return [];
-  const neighbours = new Set<Sector>();
-  for (const owners of wallOwners(map).values()) {
-    if (owners.includes(room))
-      for (const owner of owners) neighbours.add(owner);
-  }
+  const owners = wallOwners(map);
+  const neighbours = new Set(
+    sectorEdges(room).flatMap(
+      ({ from, to }) => owners.get(wallKey(from, to)) ?? [],
+    ),
+  );
+  const box = boxOf(loopPolygon(map, room.vertices));
   const outline = (sector: Sector) =>
     loopEdges(sector.vertices).map(({ from, to }) => ({
       a: map.vertices[from],
@@ -109,6 +113,14 @@ export function findTouches(map: GameMap, room: Sector): Touch[] {
   for (const other of map.sectors) {
     if (other === room || other.door || neighbours.has(other)) continue;
     const theirs = outline(other);
+    const near = theirs.some(
+      ({ a, b }) =>
+        Math.max(a.x, b.x) >= box.left &&
+        Math.min(a.x, b.x) <= box.right &&
+        Math.max(a.y, b.y) >= box.top &&
+        Math.min(a.y, b.y) <= box.bottom,
+    );
+    if (!near) continue;
     const at =
       mine.find(({ a }) => theirs.some((edge) => onSegment(edge.a, edge.b, a)))
         ?.a ??
@@ -233,11 +245,14 @@ function openCorner(
 }
 
 function getShareWall(map: GameMap, first: string, second: string) {
-  for (const owners of wallOwners(map).values()) {
-    const ids = owners.map((owner) => owner.id);
-    if (ids.includes(first) && ids.includes(second)) return true;
-  }
-  return false;
+  const walls = (id: string) => {
+    const sector = map.sectors.find((item) => item.id === id);
+    return sector
+      ? sectorEdges(sector).map(({ from, to }) => wallKey(from, to))
+      : [];
+  };
+  const mine = new Set(walls(first));
+  return walls(second).some((wall) => mine.has(wall));
 }
 
 function ring(loop: string[], index: number) {

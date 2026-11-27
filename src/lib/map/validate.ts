@@ -59,7 +59,7 @@ import {
   wallKey,
   wallOwners,
 } from "./geometry";
-import { findTouches } from "./join";
+import { findTouches, type Touch } from "./join";
 import {
   describeLine,
   getIsTeleport,
@@ -915,7 +915,11 @@ function validateReach(
   const found = findUnreachable(map, custom);
   if (!found) return;
   for (const group of found.islands) {
-    const touch = group.map((room) => findTouches(map, room)[0]).find(Boolean);
+    let touch: Touch | undefined;
+    for (const item of group) {
+      touch = findTouches(map, item)[0];
+      if (touch) break;
+    }
     const room = touch?.room ?? group[0];
     const others = group.length - 1;
     warnings.push({

@@ -80,6 +80,10 @@ describe("stuck things", () => {
     ).toEqual([]);
   });
 
+  it("leaves Commander Keen against a wall alone", () => {
+    expect(stuck([["commander-keen", 10, 256]])).toEqual([]);
+  });
+
   it("says another when both things are the same kind", () => {
     expect(
       stuck([

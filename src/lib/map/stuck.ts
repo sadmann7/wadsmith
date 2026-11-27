@@ -98,6 +98,10 @@ const solidScenery = new Set([
   86, 2028, 2035,
 ]);
 
+// Commander Keen hangs from the ceiling and the boss brain sits in its wall,
+// so neither ever moves.
+const stillEnemies = new Set([72, 88]);
+
 const playerRadius = 16;
 
 const starts = new Set<ThingKind>([
@@ -123,7 +127,13 @@ function bodyOf(thing: Thing, custom: CustomThings): Body | null {
     ? playerRadius
     : (custom.get(doomType)?.radius ?? radii.get(doomType));
   return radius
-    ? { thing, radius, isPlayer, moves: isPlayer || category === "enemy" }
+    ? {
+        thing,
+        radius,
+        isPlayer,
+        moves:
+          isPlayer || (category === "enemy" && !stillEnemies.has(doomType)),
+      }
     : null;
 }
 

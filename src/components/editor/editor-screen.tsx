@@ -644,6 +644,14 @@ export function EditorScreen({
     ],
     [context, customThings, limitIssues, map],
   );
+  // A join fix reshapes rooms, too slow to redo on every render of a big map.
+  const shownChecks = React.useMemo(
+    () =>
+      checks
+        .slice(0, 8)
+        .map((issue) => ({ issue, fixed: fixIssue(map, issue) })),
+    [checks, map],
+  );
   const issues = checks.filter((issue) => issue.severity === "error");
   const canPlay = issues.length === 0;
   const liveHealth: MapHealth = checks.some(
@@ -2750,9 +2758,8 @@ export function EditorScreen({
                   <span>{checkSummary}</span>
                 </h2>
                 <ul>
-                  {checks.slice(0, 8).map((issue) => {
+                  {shownChecks.map(({ issue, fixed }) => {
                     const { title, detail } = issueText(issue);
-                    const fixed = fixIssue(map, issue);
                     const target = issue.target
                       ? targetForIssue(map, issue.target)
                       : null;
