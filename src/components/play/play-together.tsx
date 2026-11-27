@@ -432,7 +432,7 @@ function Lobby({ code, players, max, links, lost, onRemove }: LobbyProps) {
           ))}
           {open.map((slot) => (
             <li
-              key={slot}
+              key={`open-${slot}`}
               className="flex h-[44px] items-center gap-3 border-b border-border text-sm text-muted-foreground"
             >
               <PlayerBadge slot={slot} open />
