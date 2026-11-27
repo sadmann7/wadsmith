@@ -1760,8 +1760,8 @@ export function EditorScreen({
     [history, syncUndoable, watchExternal],
   );
 
-  // Someone else's edit lands on the map as it stands, without an undo step,
-  // and is saved like any edit, which sends nothing back.
+  // Someone else's edit, or a new name, lands on the map as it stands,
+  // without an undo step, and is saved like any edit, which sends nothing back.
   const showPatch = (patch: MapPatch) => {
     const next = applyPatch(mapRef.current, patch);
     mapRef.current = next;
