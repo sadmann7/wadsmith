@@ -8,7 +8,6 @@ export class SceneCamera {
   walked = false;
   private current: Camera;
   private start: Camera;
-  private readonly others = new WeakSet<GameMap>();
   private readonly listeners = new Set<() => void>();
 
   constructor(map: GameMap) {
@@ -51,15 +50,15 @@ export class SceneCamera {
     const start = startCamera(map);
     const moved = !sameSpot(start, this.start);
     this.start = start;
-    if (this.walked || !inRoom || (moved && !this.others.has(map))) {
+    if (this.walked || !inRoom || moved) {
       this.walked = false;
       this.position = start;
     }
   }
 
-  // Marks a map as someone else's edit, which leaves the camera where it is.
+  // Takes someone else's edit as the new start without moving the camera.
   keep(map: GameMap) {
-    this.others.add(map);
+    this.start = startCamera(map);
   }
 
   reset(map: GameMap) {

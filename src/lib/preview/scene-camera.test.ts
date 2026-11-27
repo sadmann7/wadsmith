@@ -56,6 +56,7 @@ describe("SceneCamera", () => {
     camera.keep(theirs);
     camera.sync(theirs);
     expect(camera.position).toEqual(before);
+    camera.sync({ ...theirs, sectors: [...theirs.sectors] }, true);
     camera.sync({ ...theirs, sectors: [...theirs.sectors] });
     expect(camera.position).toEqual(before);
   });
