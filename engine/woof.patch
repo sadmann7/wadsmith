@@ -215,10 +215,25 @@ index 7ccdd33..c56fc22 100644
  
  //----------------------------------------------------------------------------
 diff --git a/src/d_rollback.c b/src/d_rollback.c
-index d24ba10..461efc0 100644
+index d24ba10..b8b3181 100644
 --- a/src/d_rollback.c
 +++ b/src/d_rollback.c
-@@ -434,3 +434,16 @@ boolean RB_BeginRollback(int *start_tic, int *end_tic)
+@@ -425,6 +425,14 @@ boolean RB_BeginRollback(int *start_tic, int *end_tic)
+ 
+     P_LoadKeyframe(keyframe);
+ 
++    // Keyframes are only saved before a level exit, and the resim presses the
++    // exit again on the tic it really happens.
++
++    if (gameaction == ga_completed)
++    {
++        gameaction = ga_nothing;
++    }
++
+     // The keyframes of the diverged tics are about to be replaced.
+ 
+     for (int t = keyframe_tic + 1; t <= *end_tic; ++t)
+@@ -434,3 +442,16 @@ boolean RB_BeginRollback(int *start_tic, int *end_tic)
  
      return true;
  }

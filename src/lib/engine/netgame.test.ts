@@ -212,18 +212,19 @@ describe.skipIf(!ready)("network game through shared memory", () => {
       const [a, b] = await Promise.all([host.query(), guest.query()]);
       return a && b ? [a, b] : null;
     };
-    await waitFor(
+    const [started] = await waitFor(
       bothIn,
       ([a, b]) => a.inLevel && b.inLevel && a.playersInGame === 2,
     );
-    // Input during the opening screen melt is lost.
-    await sleep(1000);
+    // Game time stands still during the opening screen melt, so input there
+    // is lost.
+    await waitFor(host.query, (state) => state.gameTic > started.gameTic + 5);
 
     // Input that keeps changing makes each engine mispredict the other
     // player's tics around the exit and roll back across it.
-    let turning = true;
+    const turnsEnd = Date.now() + 1050;
     const turns = (async () => {
-      for (let left = true; turning; left = !left) {
+      for (let left = true; Date.now() < turnsEnd; left = !left) {
         const key = left ? doomKeys.left : doomKeys.right;
         guest.key(true, key);
         await sleep(57);
@@ -234,23 +235,23 @@ describe.skipIf(!ready)("network game through shared memory", () => {
     host.key(true, doomKeys.use);
     await sleep(150);
     host.key(false, doomKeys.use);
-    await sleep(600);
-    turning = false;
     await turns;
     await sleep(1500);
 
-    const tally = defined(await bothIn());
-    expect(tally.map(({ map, inLevel }) => ({ map, inLevel }))).toEqual([
-      { map: 1, inLevel: false },
-      { map: 1, inLevel: false },
-    ]);
+    const onTally = { map: 1, inLevel: false };
+    const places = async () =>
+      defined(await bothIn()).map(({ map, inLevel }) => ({ map, inLevel }));
+    expect(await places()).toEqual([onTally, onTally]);
 
-    for (let press = 0; press < 2; press += 1) {
-      guest.key(true, doomKeys.use);
-      await sleep(150);
-      guest.key(false, doomKeys.use);
-      await sleep(500);
-    }
+    guest.key(true, doomKeys.use);
+    await sleep(150);
+    guest.key(false, doomKeys.use);
+    await sleep(1000);
+    expect(await places()).toEqual([onTally, onTally]);
+
+    guest.key(true, doomKeys.use);
+    await sleep(150);
+    guest.key(false, doomKeys.use);
     await waitFor(bothIn, ([a, b]) =>
       [a, b].every((state) => state.inLevel && state.map === 2),
     );
@@ -270,6 +271,7 @@ const exitMap: GameMap = {
   sectors: [
     {
       id: "hall",
+      name: "Hall",
       vertices: ["a", "b", "c", "d", "e", "f"],
       floor: 0,
       ceiling: 128,
