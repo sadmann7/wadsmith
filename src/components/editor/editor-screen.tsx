@@ -3624,7 +3624,9 @@ export function EditorScreen({
           music={music}
           sky={sky}
           intertext={intertext}
-          onAddStarts={(players) => commit(addPlayerStarts(map, players))}
+          onAddStarts={(players) =>
+            commit(addPlayerStarts(map, players, customThings))
+          }
           onStart={(hosted) => {
             setCoopLobby(false);
             setGame({ map, coop: hosted });
