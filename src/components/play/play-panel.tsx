@@ -886,6 +886,7 @@ function GameSession({
             fullscreen={fullscreen}
             showHelp={showHelp && !noteSpot && !noteSaved}
             crosshair={crosshair}
+            skill={coop?.skill ?? skill}
             coop={coop?.role ?? null}
             deathmatch={coop?.mode === "deathmatch"}
             scores={

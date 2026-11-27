@@ -106,6 +106,7 @@ it("shows the items column on the co-op scoreboard only when there are some", ()
 
 interface HudOptions {
   map?: GameMap | null;
+  others?: { peer: number; slot: number; x: number; y: number }[];
   crosshair?: boolean;
   mouseMode?: MouseMode;
 }
@@ -172,11 +173,25 @@ it("draws doors, the exit, keys and nearby monsters on the minimap", () => {
   expect(holding.querySelector("[data-key=blue]")).toBeNull();
 });
 
+it("colors another player's minimap marker by their game slot", () => {
+  const container = renderHud(status, false, null, {
+    map: starterMap,
+    others: [{ peer: 3, slot: 1, x: 64, y: -128 }],
+  });
+  const marker = defined(container.querySelector("[data-peer='3']"));
+  expect(marker.getAttribute("fill")).toBe("var(--color-info)");
+});
+
 function renderHud(
   current: GameStatus,
   isBetween = false,
   scores: ScoreRow[] | null = null,
-  { map = null, crosshair = true, mouseMode = "locked" }: HudOptions = {},
+  {
+    map = null,
+    others = [],
+    crosshair = true,
+    mouseMode = "locked",
+  }: HudOptions = {},
 ) {
   const container = document.createElement("div");
   document.body.append(container);
@@ -193,10 +208,11 @@ function renderHud(
         fullscreen={false}
         showHelp={false}
         crosshair={crosshair}
+        skill="medium"
         coop={scores ? "host" : null}
         deathmatch={false}
         scores={scores}
-        others={[]}
+        others={others}
         stall={null}
         episode={isBetween}
         between={

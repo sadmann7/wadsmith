@@ -1,5 +1,6 @@
 import type { MouseMode } from "@/lib/engine/mouse-capture";
-import type { GameMap, KeyColor, Point } from "@/lib/map/types";
+import type { Skill } from "@/lib/engine/runtime";
+import type { GameMap, KeyColor, Point, Thing } from "@/lib/map/types";
 
 import { minimapSpan } from "@/lib/engine/runtime";
 import { keyThings } from "@/lib/map/catalog";
@@ -84,10 +85,20 @@ export function minimapLines(map: GameMap): MinimapLine[] {
   return lines;
 }
 
+interface KeyGame {
+  skill: Skill;
+  mode: GameMode;
+}
+
 // Keys still lying in the level. A key the player holds is left out, since
 // picking it up is what took it off the floor.
-export function minimapKeys(map: GameMap, held: number): MinimapKey[] {
+export function minimapKeys(
+  map: GameMap,
+  held: number,
+  { skill, mode }: KeyGame,
+): MinimapKey[] {
   return map.things.flatMap((thing) => {
+    if (!spawnsIn(thing, skill, mode)) return [];
     const color = keyColors.find((each) =>
       keyThings[each].includes(thing.kind),
     );
@@ -97,6 +108,8 @@ export function minimapKeys(map: GameMap, held: number): MinimapKey[] {
     return [{ id: thing.id, x: thing.x, y: thing.y, color, skull }];
   });
 }
+
+export type GameMode = "solo" | "coop" | "deathmatch";
 
 // The engine is y-up and the map is y-down.
 export function fromEngine({ x, y }: Point): Point {
@@ -152,6 +165,13 @@ export function showsCrosshair({
     !automap &&
     !covered
   );
+}
+
+// Doom never spawns a key in deathmatch.
+function spawnsIn(thing: Thing, skill: Skill, mode: GameMode) {
+  if (mode === "deathmatch") return false;
+  if (thing.skills && !thing.skills.includes(skill)) return false;
+  return mode === "solo" ? !thing.multiplayer : !thing.notCoop;
 }
 
 // Bits as the engine reports them: the three keycards, then the three skull

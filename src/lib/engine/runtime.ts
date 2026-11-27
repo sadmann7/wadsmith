@@ -161,9 +161,10 @@ export interface Monster {
 
 const monsterFields = 3;
 // The minimap shows a square this many map units across, centered on the
-// player, and the engine reports monsters out to its corners.
+// player, and the engine reports monsters in the same square and a little past
+// its edges.
 export const minimapSpan = 640;
-const monsterRange = Math.ceil((minimapSpan / 2) * Math.SQRT2);
+const monsterRange = minimapSpan / 2 + 32;
 
 export type Resolution = "classic" | "high";
 

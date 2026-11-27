@@ -25,6 +25,7 @@ import { Slider } from "@/components/ui/slider";
 import { skillNames } from "@/lib/engine/coop";
 import {
   fromEngine,
+  type GameMode,
   heldKeys,
   isInView,
   minimapKeys,
@@ -53,6 +54,7 @@ interface SoundSettings {
 
 interface OtherPlayer {
   peer: number;
+  slot: number;
   x: number;
   y: number;
 }
@@ -327,6 +329,7 @@ interface GameHudProps {
   fullscreen: boolean;
   showHelp: boolean;
   crosshair: boolean;
+  skill: Skill;
   coop: "host" | "guest" | null;
   deathmatch: boolean;
   scores: ScoreRow[] | null;
@@ -358,6 +361,7 @@ export function GameHud({
   fullscreen,
   showHelp,
   crosshair,
+  skill,
   coop,
   deathmatch,
   scores,
@@ -584,7 +588,13 @@ export function GameHud({
             </button>
           </div>
           {map && status && inLevel && !status.automap ? (
-            <Minimap map={map} status={status} others={others} />
+            <Minimap
+              map={map}
+              status={status}
+              others={others}
+              skill={skill}
+              mode={deathmatch ? "deathmatch" : coop ? "coop" : "solo"}
+            />
           ) : null}
         </div>
       </div>
@@ -672,9 +682,11 @@ interface MinimapProps {
   map: GameMap;
   status: GameStatus;
   others: OtherPlayer[];
+  skill: Skill;
+  mode: GameMode;
 }
 
-function Minimap({ map, status, others }: MinimapProps) {
+function Minimap({ map, status, others, skill, mode }: MinimapProps) {
   const lines = React.useMemo(() => minimapLines(map), [map]);
   const lineLayer = React.useMemo(
     () =>
@@ -698,7 +710,7 @@ function Minimap({ map, status, others }: MinimapProps) {
   const player = fromEngine(status);
   const view = minimapView(player);
   const margin = 4 * unit;
-  const keys = minimapKeys(map, status.keys).filter((key) =>
+  const keys = minimapKeys(map, status.keys, { skill, mode }).filter((key) =>
     isInView(key, view, margin),
   );
   const monsters = status.monsters
@@ -759,7 +771,7 @@ function Minimap({ map, status, others }: MinimapProps) {
               cx={other.x}
               cy={0 - other.y}
               r={3.5 * unit}
-              fill={playerFills[other.peer - 1] ?? playerFills[0]}
+              fill={playerFills[other.slot] ?? playerFills[0]}
               stroke="var(--color-map-bg)"
               strokeWidth={1.5}
               vectorEffect="non-scaling-stroke"

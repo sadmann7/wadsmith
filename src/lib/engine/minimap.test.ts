@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import type { GameMap, Thing } from "@/lib/map/types";
+
 import { minimapSpan } from "@/lib/engine/runtime";
 import { starterMap } from "@/lib/map/starter-map";
 
@@ -64,6 +66,8 @@ describe("minimapLines", () => {
 });
 
 describe("keys", () => {
+  const solo = { skill: "medium" as const, mode: "solo" as const };
+
   it("reads the engine's key bits in Doom's order", () => {
     expect(heldKeys(0)).toEqual([]);
     expect(heldKeys(0b100101)).toEqual([
@@ -74,11 +78,36 @@ describe("keys", () => {
   });
 
   it("leaves a key off the minimap once the player holds it", () => {
-    expect(minimapKeys(starterMap, 0)).toEqual([
+    expect(minimapKeys(starterMap, 0, solo)).toEqual([
       expect.objectContaining({ color: "blue", skull: false }),
     ]);
-    expect(minimapKeys(starterMap, 1)).toEqual([]);
-    expect(minimapKeys(starterMap, 0b1000)).toHaveLength(1);
+    expect(minimapKeys(starterMap, 1, solo)).toEqual([]);
+    expect(minimapKeys(starterMap, 0b1000, solo)).toHaveLength(1);
+  });
+
+  it("leaves out keys this skill or game mode never spawns", () => {
+    const keyed = (change: Partial<Thing>): GameMap => ({
+      ...starterMap,
+      things: starterMap.things.map((thing) =>
+        thing.kind === "blue-key" ? { ...thing, ...change } : thing,
+      ),
+    });
+    const hardOnly = keyed({ skills: ["hard"] });
+    expect(minimapKeys(hardOnly, 0, solo)).toEqual([]);
+    expect(minimapKeys(hardOnly, 0, { ...solo, skill: "hard" })).toHaveLength(
+      1,
+    );
+    const multiplayer = keyed({ multiplayer: true });
+    expect(minimapKeys(multiplayer, 0, solo)).toEqual([]);
+    expect(minimapKeys(multiplayer, 0, { ...solo, mode: "coop" })).toHaveLength(
+      1,
+    );
+    expect(
+      minimapKeys(keyed({ notCoop: true }), 0, { ...solo, mode: "coop" }),
+    ).toEqual([]);
+    expect(minimapKeys(starterMap, 0, { ...solo, mode: "deathmatch" })).toEqual(
+      [],
+    );
   });
 });
 
