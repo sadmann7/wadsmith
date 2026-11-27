@@ -1424,6 +1424,23 @@ export function argsListError(action: string, args: unknown) {
   return `A step's args are a list. Put the arguments of ${action} in one, in order or as one object by name, like "args": [${example}].`;
 }
 
+// A modal dialog or drawer leaves the map inert, and agents can't press its
+// buttons, so the person has to finish or close it first.
+export function dialogOpenError(
+  action: string,
+  components: { component: string; label?: string; open?: unknown }[],
+) {
+  const open = components.findLast(
+    (item) =>
+      (item.component.endsWith("dialog") || item.component === "drawer") &&
+      item.open === true,
+  );
+  if (!open) return null;
+  const kind = open.component === "drawer" ? "drawer" : "dialog";
+  const name = open.label ? `The "${open.label}" ${kind}` : `A ${kind}`;
+  return `${name} is open, so the map takes no ${action} until it closes. Ask the person to finish or close it, then run ${action} again.`;
+}
+
 // Adds another map's rooms, things and switches where they stand, moved by
 // the offset, with the checks an edit gets. Its player starts come along only
 // when the map has none.

@@ -1,6 +1,10 @@
 import { createAgent } from "@ui-sdk/react/agent";
 
-import { agentActionNames, argsListError } from "./agent-actions";
+import {
+  agentActionNames,
+  argsListError,
+  dialogOpenError,
+} from "./agent-actions";
 import { createAgentSession } from "./agent-session";
 import { registerMapTools } from "./webmcp";
 
@@ -29,7 +33,7 @@ export const agent: typeof bridge = {
     const step = (input?.steps ?? []).findIndex(
       (item) => item?.args != null && !Array.isArray(item.args),
     );
-    if (step < 0) return bridge.act(input, options);
+    if (step < 0) return withDialogError(input, bridge.act(input, options));
     const { action, args } = input.steps[step];
     return Promise.resolve({
       ok: false,
@@ -54,3 +58,27 @@ export function actForPerson(action: string, args: unknown[]) {
 (window as { unregisterMapTools?: () => void }).unregisterMapTools?.();
 const unregister = registerMapTools(agent);
 Object.assign(window, { agent, unregisterMapTools: unregister });
+
+// The bridge's own answer while a dialog is open says the map takes nothing,
+// which leaves an agent stuck, so it names the dialog instead.
+async function withDialogError(
+  input: Parameters<typeof bridge.act>[0],
+  acting: ReturnType<typeof bridge.act>,
+) {
+  const outcome = await acting;
+  if (outcome.ok || typeof outcome.error !== "object" || !outcome.error) {
+    return outcome;
+  }
+  const failed = input?.steps?.[outcome.error.step];
+  if (
+    !failed ||
+    !mapActions.has(failed.action) ||
+    !outcome.error.message.endsWith("It takes: nothing.")
+  ) {
+    return outcome;
+  }
+  const message = dialogOpenError(failed.action, bridge.snapshot());
+  return message
+    ? { ...outcome, error: { ...outcome.error, message } }
+    : outcome;
+}
