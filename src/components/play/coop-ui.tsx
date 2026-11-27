@@ -5,32 +5,25 @@ import * as React from "react";
 import type { GameMap } from "@/lib/map/types";
 
 import { MapPlan } from "@/components/map-plan";
+import { playerColor } from "@/lib/engine/player-colors";
 import { formatRoomCode } from "@/lib/engine/room";
 
-// Doom's own player colors: green, indigo, brown and red.
-const playerColors = [
-  "border-success text-success",
-  "border-info text-info",
-  "border-warning text-warning",
-  "border-destructive text-destructive",
-];
-
 interface PlayerBadgeProps {
-  peer: number;
+  slot: number;
   open?: boolean;
 }
 
-export function PlayerBadge({ peer, open = false }: PlayerBadgeProps) {
+export function PlayerBadge({ slot, open = false }: PlayerBadgeProps) {
   return (
     <span
       aria-hidden="true"
       className={`grid size-[22px] shrink-0 place-items-center rounded-full border-[1.5px] font-mono text-xs ${
         open
           ? "border-dashed border-input text-muted-foreground"
-          : (playerColors[peer - 1] ?? playerColors[0])
+          : playerColor(slot).badge
       }`}
     >
-      {peer}
+      {slot + 1}
     </span>
   );
 }

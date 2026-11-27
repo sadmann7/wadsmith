@@ -332,7 +332,7 @@ function Lobby({ code, players, max, links, lost, onRemove }: LobbyProps) {
   const link = inviteLink(code);
   const open = Array.from(
     { length: Math.max(0, max - players.length) },
-    (_, index) => players.length + index + 1,
+    (_, index) => players.length + index,
   );
   return (
     <>
@@ -382,12 +382,12 @@ function Lobby({ code, players, max, links, lost, onRemove }: LobbyProps) {
           Players
         </SectionLabel>
         <ul className="m-0 list-none p-0">
-          {players.map((player) => (
+          {players.map((player, slot) => (
             <li
               key={player.peer}
               className="flex h-[44px] items-center gap-3 border-b border-border"
             >
-              <PlayerBadge peer={player.peer} />
+              <PlayerBadge slot={slot} />
               <span className="min-w-0 flex-1 truncate text-sm font-semibold">
                 {player.name}
                 {player.peer === hostPeer ? (
@@ -431,12 +431,12 @@ function Lobby({ code, players, max, links, lost, onRemove }: LobbyProps) {
               ) : null}
             </li>
           ))}
-          {open.map((peer) => (
+          {open.map((slot) => (
             <li
-              key={peer}
+              key={`open-${slot}`}
               className="flex h-[44px] items-center gap-3 border-b border-border text-sm text-muted-foreground"
             >
-              <PlayerBadge peer={peer} open />
+              <PlayerBadge slot={slot} open />
               Open slot
             </li>
           ))}

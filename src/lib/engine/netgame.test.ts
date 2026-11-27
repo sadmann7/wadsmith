@@ -28,6 +28,7 @@ interface Snapshot {
   consolePlayer: number;
   inLevel: boolean;
   frags: number;
+  kills: number;
   gameTic: number;
   players: { x: number; y: number }[];
   scores: { slot: number; peer: number; frags: number; kills: number }[];
@@ -51,6 +52,12 @@ const deathmatchMap: GameMap = deathmatchSpots.reduce(
   (map, spot) => addThing(map, "deathmatch-start", spot).map,
   testMap,
 );
+
+const threePlayerMap = addThing(
+  addThing(testMap, "player-2", { x: 96, y: 256 }).map,
+  "player-3",
+  { x: 160, y: 256 },
+).map;
 
 const deathmatchCases: [string, GameMap][] = [
   ["the test map", deathmatchMap],
@@ -104,6 +111,55 @@ describe.skipIf(!ready)("network game through shared memory", () => {
     );
   }, 60_000);
 
+  it("gives game slots in peer order whatever order the guests join in", async () => {
+    const room = createRoom(threePlayerMap);
+    const host = room.join(hostPeer, "host");
+    const late = room.join(3, "guest");
+    await waitFor(host.query, (state) => state.waitingPlayers === 2);
+    const early = room.join(guestPeer, "guest");
+    await waitFor(host.query, (state) => state.waitingPlayers === 3);
+    expect(await host.launch()).toBe(true);
+
+    const allIn = async () => {
+      const states = await Promise.all([
+        host.query(),
+        early.query(),
+        late.query(),
+      ]);
+      return states.every(Boolean) ? states : null;
+    };
+    const started = await waitFor(allIn, (states) =>
+      states.every((state) => state.inLevel),
+    );
+    expect(started.map((state) => state.consolePlayer)).toEqual([0, 1, 2]);
+    expect(
+      defined(started[0]).scores.map(({ slot, peer }) => [slot, peer]),
+    ).toEqual([
+      [0, hostPeer],
+      [1, guestPeer],
+      [2, 3],
+    ]);
+  }, 60_000);
+
+  it("counts the host's kills in the guest's status", async () => {
+    const map = addThing(coopMap, "zombieman", { x: 224, y: 160 }).map;
+    const room = createRoom(map);
+    const host = room.join(hostPeer, "host");
+    const guest = room.join(guestPeer, "guest");
+    await waitFor(host.query, (state) => state.waitingPlayers === 2);
+    expect(await host.launch()).toBe(true);
+    await waitFor(guest.query, (state) => state.inLevel);
+
+    host.key(true, doomKeys.fire);
+    await waitFor(host.query, (state) => state.kills > 0);
+    host.key(false, doomKeys.fire);
+
+    const seen = await waitFor(guest.query, (state) =>
+      state.scores.some((score) => score.slot === 0 && score.kills > 0),
+    );
+    expect(seen.kills).toBe(1);
+  }, 60_000);
+
   it("drops a guest from the host's engine as soon as it says it left", async () => {
     const room = createRoom();
     const host = room.join(hostPeer, "host");
@@ -146,9 +202,9 @@ describe.skipIf(!ready)("network game through shared memory", () => {
   );
 });
 
-const relayDelayMs = 20;
-
 const coopMap = addThing(testMap, "player-2", { x: 96, y: 256 }).map;
+
+const relayDelayMs = 20;
 
 // Stands in for the room: it forwards each packet to its peer after a delay.
 function createRoom(map = coopMap, mode: "coop" | "deathmatch" = "coop") {

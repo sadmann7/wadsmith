@@ -2,6 +2,7 @@ import * as React from "react";
 
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { playerColor } from "@/lib/engine/player-colors";
 import {
   formatTics,
   killersOf,
@@ -11,9 +12,6 @@ import {
   suggestedPar,
   ticsPerSecond,
 } from "@/lib/map/playtest";
-
-// Doom's own player colors: green, indigo, brown and red.
-const playerColors = ["bg-success", "bg-info", "bg-warning", "bg-destructive"];
 
 interface PlaytestPanelProps {
   saved: SavedPlaytest;
@@ -93,7 +91,7 @@ export function PlaytestPanel({
             <li key={player} className="flex items-center gap-1.5">
               <span
                 aria-hidden="true"
-                className={`size-2 rounded-full ${playerColors[player % playerColors.length]}`}
+                className={`size-2 rounded-full ${playerColor(player).dot}`}
               />
               Player {player + 1}
             </li>

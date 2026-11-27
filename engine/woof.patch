@@ -453,7 +453,30 @@ diff --git a/src/nw_server.c b/src/nw_server.c
 index 142a217..e1539c3 100644
 --- a/src/nw_server.c
 +++ b/src/nw_server.c
-@@ -2105,3 +2105,35 @@ void NW_SV_Shutdown(void)
+@@ -243,8 +243,20 @@ static void NW_SV_AssignPlayers(void)
+         {
+             if (!clients[i].drone)
+             {
+-                sv_players[pl] = &clients[i];
+-                sv_players[pl]->player_number = pl;
++                // Wadsmith's engines join under their room peer numbers, and
++                // the slots follow those so the lobby can show them early.
++                int at = pl;
++
++                while (at > 0 && atoi(sv_players[at - 1]->name)
++                                     > atoi(clients[i].name))
++                {
++                    sv_players[at] = sv_players[at - 1];
++                    sv_players[at]->player_number = at;
++                    --at;
++                }
++
++                sv_players[at] = &clients[i];
++                sv_players[at]->player_number = at;
+                 ++pl;
+             }
+             else
+@@ -2105,3 +2117,35 @@ void NW_SV_Shutdown(void)
      master_server = NULL;
      server_initialized = false;
  }

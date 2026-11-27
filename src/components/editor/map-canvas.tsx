@@ -22,6 +22,7 @@ import {
 } from "@/lib/editor/map-labels";
 import { thingIcons } from "@/lib/editor/thing-icons";
 import { zoomStep } from "@/lib/editor/zoom";
+import { playerColor } from "@/lib/engine/player-colors";
 import { generalizedTrigger, getIsGeneralized } from "@/lib/map/boom";
 import { doorKeyPrefix, switchKeyPrefix, thingKeyPrefix } from "@/lib/map/edit";
 import {
@@ -171,7 +172,7 @@ export function MapCanvas({
       // oxlint-disable-next-line react/no-array-index-key -- A run's paths never change order.
       key={index}
       className="map-trail-path"
-      data-player={path.player % trailColors}
+      style={{ stroke: playerColor(path.player).fill }}
       points={path.points.join(" ")}
     />
   ));
@@ -545,8 +546,6 @@ function thingLook(kind: ThingKind) {
   return look;
 }
 
-// Doom gives its four players a color each, and a path wears its player's.
-const trailColors = 4;
 const peerColors = 4;
 
 // A hit's mark grows with the damage, up to this many times its size.

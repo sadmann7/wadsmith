@@ -289,6 +289,8 @@ export function hostRoom(
         return;
       }
       byNonce.set(message.nonce, free);
+      // The engine gives game slots in peer order, so a player's place in the
+      // roster is their slot.
       players = [
         ...players,
         {

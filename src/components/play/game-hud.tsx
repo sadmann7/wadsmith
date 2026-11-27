@@ -16,7 +16,7 @@ import {
 import * as React from "react";
 
 import type { MouseMode } from "@/lib/engine/mouse-capture";
-import type { GameMap, KeyColor } from "@/lib/map/types";
+import type { GameMap, KeyColor, Point } from "@/lib/map/types";
 
 import { MapPlan } from "@/components/map-plan";
 import { Button } from "@/components/ui/button";
@@ -32,8 +32,10 @@ import {
   type MinimapLineKind,
   minimapLines,
   minimapView,
+  secretAreas,
   showsCrosshair,
 } from "@/lib/engine/minimap";
+import { playerColor } from "@/lib/engine/player-colors";
 import {
   type Cheats,
   fragLimit,
@@ -44,6 +46,7 @@ import {
   screenSize,
   type Skill,
 } from "@/lib/engine/runtime";
+import { sectorAt } from "@/lib/map/geometry";
 
 import { PlayerBadge } from "./coop-ui";
 
@@ -67,6 +70,7 @@ interface NextLevel {
 
 export interface ScoreRow {
   peer: number;
+  slot: number;
   name: string;
   host: boolean;
   you: boolean;
@@ -320,6 +324,8 @@ export function GameTopBar({
   );
 }
 
+const noAreas: number[] = [];
+
 interface GameHudProps {
   map: GameMap | null;
   title: string;
@@ -387,6 +393,23 @@ export function GameHud({
   const ammoName = status ? ammoNames[status.ammoType] : undefined;
   const scoresOpen = scores !== null && inLevel && !finished;
   const automap = status?.automap ?? false;
+  const areas = React.useMemo(() => (map ? secretAreas(map) : []), [map]);
+  const [found, setFound] = React.useState<{
+    map: GameMap | null;
+    areas: number[];
+  }>({ map, areas: [] });
+  const foundAreas = found.map === map ? found.areas : noAreas;
+  const here =
+    map && status?.inLevel ? sectorAt(map, fromEngine(status))?.id : undefined;
+  const area = here ? areas.findIndex((ids) => ids.includes(here)) : -1;
+  if (area >= 0 && !foundAreas.includes(area)) {
+    setFound({ map, areas: [...foundAreas, area] });
+  }
+  const hidden = React.useMemo(
+    () =>
+      new Set(areas.filter((_, index) => !foundAreas.includes(index)).flat()),
+    [areas, foundAreas],
+  );
   const showsDot =
     status !== null &&
     showsCrosshair({
@@ -598,6 +621,7 @@ export function GameHud({
               others={others}
               skill={skill}
               mode={deathmatch ? "deathmatch" : coop ? "coop" : "solo"}
+              hidden={hidden}
             />
           ) : null}
         </div>
@@ -666,13 +690,6 @@ const keyFills: Record<KeyColor, string> = {
   yellow: "var(--color-key-yellow)",
   red: "var(--color-key-red)",
 };
-// Doom's own player colors: green, indigo, brown and red.
-const playerFills = [
-  "var(--color-success)",
-  "var(--color-info)",
-  "var(--color-warning)",
-  "var(--color-destructive)",
-];
 const arrowPath = "M1 0L-0.7 0.6L-0.35 0L-0.7-0.6Z";
 const monsterPath = "M1 0L-0.8 0.75L-0.8-0.75Z";
 
@@ -689,10 +706,13 @@ interface MinimapProps {
   others: OtherPlayer[];
   skill: Skill;
   mode: GameMode;
+  hidden: ReadonlySet<string>;
 }
 
-function Minimap({ map, status, others, skill, mode }: MinimapProps) {
-  const lines = React.useMemo(() => minimapLines(map), [map]);
+function Minimap({ map, status, others, skill, mode, hidden }: MinimapProps) {
+  const player = fromEngine(status);
+  const isShown = (point: Point) => !hidden.has(sectorAt(map, point)?.id ?? "");
+  const lines = React.useMemo(() => minimapLines(map, hidden), [map, hidden]);
   const lineLayer = React.useMemo(
     () =>
       lines.map(({ key, from, to, kind, lock }) => (
@@ -712,15 +732,15 @@ function Minimap({ map, status, others, skill, mode }: MinimapProps) {
       )),
     [lines],
   );
-  const player = fromEngine(status);
   const view = minimapView(player);
   const margin = 4 * unit;
-  const keys = minimapKeys(map, status.keys, { skill, mode }).filter((key) =>
-    isInView(key, view, margin),
+  const keys = minimapKeys(map, status.keys, { skill, mode }).filter(
+    (key) => isInView(key, view, margin) && isShown(key),
   );
   const monsters = status.monsters
     .map((monster) => ({ ...fromEngine(monster), angle: monster.angle }))
-    .filter((monster) => isInView(monster, view, margin));
+    .filter((monster) => isInView(monster, view, margin) && isShown(monster));
+  const partners = others.filter((other) => isShown(fromEngine(other)));
   const half = minimapSpan / 2;
   return (
     <div className="overflow-hidden rounded-[3px] bg-map-bg/75 ring-1 ring-border/60 backdrop-blur-[2px] @max-xl:hidden">
@@ -769,14 +789,14 @@ function Minimap({ map, status, others, skill, mode }: MinimapProps) {
               transform={`translate(${monster.x} ${monster.y}) rotate(${-monster.angle}) scale(${4.5 * unit})`}
             />
           ))}
-          {others.map((other) => (
+          {partners.map((other) => (
             <circle
               key={other.peer}
               data-peer={other.peer}
               cx={other.x}
               cy={0 - other.y}
               r={3.5 * unit}
-              fill={playerFills[other.slot] ?? playerFills[0]}
+              fill={playerColor(other.slot).fill}
               stroke="var(--color-map-bg)"
               strokeWidth={1.5}
               vectorEffect="non-scaling-stroke"
@@ -991,8 +1011,6 @@ function Scoreboard({ title, par, status, rows, deathmatch }: ScoreboardProps) {
   const sorted = deathmatch
     ? rows.toSorted((a, b) => b.frags - a.frags || a.peer - b.peer)
     : rows.toSorted((a, b) => a.peer - b.peer);
-  const teamKills = rows.reduce((total, row) => total + row.kills, 0);
-  const teamSecrets = rows.reduce((total, row) => total + row.secrets, 0);
   return (
     <section
       aria-label="Scoreboard"
@@ -1013,7 +1031,7 @@ function Scoreboard({ title, par, status, rows, deathmatch }: ScoreboardProps) {
           {deathmatch
             ? `First to ${fragLimit} frags`
             : status
-              ? `Kills ${teamKills} / ${status.totalKills} · Secrets ${teamSecrets} / ${status.totalSecrets}`
+              ? `Kills ${status.kills} / ${status.totalKills} · Secrets ${status.secrets} / ${status.totalSecrets}`
               : ""}
         </span>
       </header>
@@ -1038,7 +1056,7 @@ function Scoreboard({ title, par, status, rows, deathmatch }: ScoreboardProps) {
               className={`border-t border-border ${row.you ? "bg-primary/10" : ""}`}
             >
               <td className="w-6 py-2.5 pl-5">
-                <PlayerBadge peer={row.peer} />
+                <PlayerBadge slot={row.slot} />
               </td>
               <td className="py-2.5 pl-3">
                 <span className="text-base font-semibold">{row.name}</span>
