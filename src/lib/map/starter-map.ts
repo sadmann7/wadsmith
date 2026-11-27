@@ -318,28 +318,28 @@ export const starterMap: GameMap = buildMap({
         [1136, 192],
         [1136, 320],
       ],
-      settings: step("Step 1"),
+      settings: step("Courtyard"),
     },
     {
       wall: [
         [1168, 192],
         [1168, 320],
       ],
-      settings: step("Step 2"),
+      settings: step("Step 1"),
     },
     {
       wall: [
         [1200, 192],
         [1200, 320],
       ],
-      settings: step("Step 3"),
+      settings: step("Step 2"),
     },
     {
       wall: [
         [1232, 192],
         [1232, 320],
       ],
-      settings: step("Storeroom"),
+      settings: step("Step 3"),
     },
     {
       wall: [

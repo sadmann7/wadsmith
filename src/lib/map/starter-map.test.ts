@@ -6,7 +6,7 @@ import { checkViews } from "@/lib/wad/view-check";
 
 import { mapBalance } from "./balance";
 import { checkMap } from "./checks";
-import { sectorAt } from "./geometry";
+import { sectorAt, wallOwners } from "./geometry";
 import { findUnreachable } from "./reach";
 import { starterMap } from "./starter-map";
 
@@ -62,6 +62,23 @@ describe("starter map", () => {
       names.add(new TextDecoder().decode(name).replace(/\0+$/, ""));
     }
     expect(names).toContain("DOORBLU");
+  });
+
+  it("puts step art on the face of each riser", () => {
+    const owners = wallOwners(starterMap);
+    const steps = Object.entries(starterMap.lines ?? {}).flatMap(
+      ([wall, line]) =>
+        Object.entries(line.sides ?? {})
+          .filter(([, side]) => side.lower === "STEP1")
+          .map(([room]) => ({ wall, room })),
+    );
+    expect(steps.length).toBeGreaterThan(0);
+    for (const { wall, room } of steps) {
+      const [a, b] = defined(owners.get(wall));
+      const [low, high] = a.floor < b.floor ? [a, b] : [b, a];
+      expect(room, wall).toBe(low.id);
+      expect(high.floor).toBeGreaterThan(low.floor);
+    }
   });
 
   it("opens every door from the door itself, with no remote switch", () => {
