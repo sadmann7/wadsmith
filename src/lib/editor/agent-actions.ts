@@ -57,6 +57,7 @@ import {
   updateSwitch,
   updateThing,
 } from "@/lib/map/edit";
+import { pasteParts } from "@/lib/map/fragment";
 import {
   boxOf,
   sectorAt,
@@ -1407,6 +1408,42 @@ export function runAgentAction(
   }
   const settled = settle(map, next, context);
   return { ...settled, result: result ?? null };
+}
+
+// Adds another map's rooms, things and switches where they stand, moved by
+// the offset, with the checks an edit gets. Its player starts come along only
+// when the map has none.
+export function importMapPart(
+  map: GameMap,
+  part: GameMap,
+  offset: Point = { x: 0, y: 0 },
+  context: CheckContext = {},
+): AgentOutcome {
+  const points = [...Object.values(part.vertices), ...part.things];
+  if (points.length === 0) throw new Error("That map is empty.");
+  const box = boxOf(points);
+  const at = {
+    x: (box.left + box.right) / 2 + offset.x,
+    y: (box.top + box.bottom) / 2 + offset.y,
+  };
+  const pasted = pasteParts(map, part, at, 1, false, false);
+  if (!pasted) throw new Error("That map is empty.");
+  const starts = map.things.some((thing) => getIsPlayerStart(thing.kind))
+    ? []
+    : part.things
+        .filter((thing) => getIsPlayerStart(thing.kind))
+        .map((thing) => ({
+          ...thing,
+          x: thing.x + offset.x,
+          y: thing.y + offset.y,
+        }));
+  const next = { ...pasted.map, things: [...pasted.map.things, ...starts] };
+  const settled = settle(map, next, context);
+  const things = settled.map.things.length - map.things.length;
+  return {
+    ...settled,
+    result: `Added ${pasted.sectors.length} rooms and ${things} things.`,
+  };
 }
 
 const askFirstNames = new Set([

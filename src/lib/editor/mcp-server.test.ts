@@ -2,13 +2,17 @@ import { describe, expect, it } from "vitest";
 
 import type { TextureSource } from "@/lib/wad/resources";
 
-import { parseMapFile } from "@/lib/map/storage";
+import { parseMapFile, serializeMap } from "@/lib/map/storage";
 import { testMap } from "@/lib/map/test-map";
 import { readLumps } from "@/lib/wad/inspect";
 import { packWad } from "@/lib/wad/pack";
 
 import { agentActionNames } from "./agent-actions";
-import { createMcpServer, type McpServerOptions } from "./mcp-server";
+import {
+  createMcpServer,
+  type McpServerOptions,
+  memoryStore,
+} from "./mcp-server";
 
 describe("the wadsmith MCP server", () => {
   it("introduces itself and lists every action as a tool", () => {
@@ -37,6 +41,7 @@ describe("the wadsmith MCP server", () => {
       ...agentActionNames,
       "newMap",
       "openMap",
+      "importMap",
       "saveMap",
       "exportWad",
     ]);
@@ -160,14 +165,103 @@ describe("the wadsmith MCP server", () => {
     const kept = parseMapFile(disk.get("kept.json") as string);
     expect(kept.sectors[2].light).toBe(96);
   });
+
+  it("builds on another server's edits to a shared file", () => {
+    const disk = new Map<string, string | Uint8Array>();
+    const ana = start(testMap, "shared.json", {}, disk);
+    const bo = start(undefined, "shared.json", {}, disk);
+    ana.call("placeThing", { kind: "medikit", room: "Arena" });
+    // Bo's server opened before the file existed, and still sees Ana's edit.
+    const added = JSON.parse(
+      bo.call("placeThing", { kind: "medikit", room: "Arena" }).text,
+    ) as { result: string };
+    expect(added.result).toBe("medikit-2");
+    ana.call("updateRoom", { room: "Arena", light: 96 });
+    const kept = parseMapFile(disk.get("shared.json") as string);
+    expect(
+      kept.things.filter((thing) => thing.kind === "medikit"),
+    ).toHaveLength(2);
+    expect(kept.sectors[2].light).toBe(96);
+    expect(bo.server.map()).toEqual(kept);
+  });
+
+  it("imports another map file's rooms where they stand", () => {
+    const { call, disk, server } = start(testMap);
+    call("saveMap", { path: "part.json" });
+    const imported = call("importMap", { path: "part.json", x: 2048 });
+    expect(imported.failed).toBe(false);
+    expect(JSON.parse(imported.text)).toMatchObject({
+      result: "Added 4 rooms and 3 things.",
+    });
+    const map = server.map();
+    expect(map.sectors).toHaveLength(8);
+    expect(new Set(map.sectors.map((sector) => sector.id)).size).toBe(8);
+    // The map keeps its own player start.
+    expect(map.things.filter((thing) => thing.kind === "player")).toHaveLength(
+      1,
+    );
+    const moved = map.things.at(-1);
+    const source = testMap.things.at(-1);
+    expect(moved?.x).toBe((source?.x ?? 0) + 2048);
+    expect(call("importMap", { path: "nowhere.json" }).failed).toBe(true);
+    disk.set(
+      "empty.json",
+      serializeMap({ vertices: {}, sectors: [], things: [], switches: [] }),
+    );
+    expect(call("importMap", { path: "empty.json" }).text).toBe(
+      "That map is empty.",
+    );
+  });
+
+  it("imports a part whose corners all meet rooms already there in place", () => {
+    const doorway = { ...testMap.sectors[3], door: undefined };
+    const base = {
+      ...testMap,
+      sectors: testMap.sectors.slice(0, 3),
+      switches: [],
+    };
+    const part = {
+      vertices: Object.fromEntries(
+        doorway.vertices.map((id) => [id, testMap.vertices[id]]),
+      ),
+      sectors: [doorway],
+      things: [],
+      switches: [],
+    };
+    const { call, disk, server } = start(base);
+    disk.set("doorway.json", serializeMap(part));
+    expect(call("importMap", { path: "doorway.json" }).failed).toBe(false);
+    const added = server.map().sectors.at(-1);
+    expect(added?.vertices).toEqual(doorway.vertices);
+  });
+
+  it("asks before newMap or openMap erase a map others share", () => {
+    const { call, server } = start(testMap, "shared.json");
+    call("saveMap", { path: "copy.json" });
+    expect(call("newMap").text).toMatch(/would erase their work too/);
+    expect(call("openMap", { path: "copy.json" }).failed).toBe(true);
+    expect(server.map().sectors).toHaveLength(4);
+    expect(call("newMap", { replace: true }).failed).toBe(false);
+    expect(server.map().sectors).toHaveLength(0);
+    expect(call("openMap", { path: "copy.json" }).failed).toBe(false);
+  });
+
+  it("passes on what its store has to say", () => {
+    const notices = ["The live link dropped."];
+    const { call } = start(undefined, undefined, {
+      store: { ...memoryStore(testMap), notices: () => notices.splice(0) },
+    });
+    expect(call("listRooms").text).toMatch(/\n\nThe live link dropped\.$/);
+    expect(call("listRooms").text).not.toMatch(/live link/);
+  });
 });
 
 function start(
   map?: typeof testMap,
   autosave?: string,
   options: Partial<McpServerOptions> = {},
+  disk = new Map<string, string | Uint8Array>(),
 ) {
-  const disk = new Map<string, string | Uint8Array>();
   const server = createMcpServer({
     ...options,
     map,
