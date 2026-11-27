@@ -60,6 +60,14 @@ describe("labelPoint", () => {
     expect(defined(at).y - 24).toBeGreaterThanOrEqual(14 + 16);
   });
 
+  it("sees a thing in a room across the map's origin", () => {
+    const at = labelPoint([box(-256, -256, 256, 256)], 1, 40, [
+      { x: 0, y: -224 },
+    ]);
+    expect(at?.y).toBe(-232);
+    expect(at && Math.abs(at.x)).toBeGreaterThanOrEqual(14 + 20);
+  });
+
   it("ignores things outside the room", () => {
     expect(labelPoint([hall], 1, 40, [{ x: 256, y: -200 }])).toEqual({
       x: 256,
@@ -93,7 +101,7 @@ describe("getIsLabelCovered", () => {
   it("tells a label an icon sits on from one beside it", () => {
     const at = { x: 100, y: 100 };
     expect(getIsLabelCovered(at, 40, 1, [{ x: 125, y: 100 }])).toBe(true);
-    expect(getIsLabelCovered(at, 40, 1, [{ x: 140, y: 100 }])).toBe(false);
+    expect(getIsLabelCovered(at, 40, 1, [{ x: 150, y: 100 }])).toBe(false);
     expect(getIsLabelCovered(at, 40, 1, [{ x: 100, y: 140 }])).toBe(false);
   });
 });

@@ -16,9 +16,10 @@ export function estimateLabelWidth(name: string, detail = "") {
 }
 
 // Screen distances from a thing's middle that a label keeps clear of: its
-// icon's radius with a little air, plus half a two-line label's height.
-const thingReach = 14;
-const labelHalfHeight = 16;
+// icon's radius with a little air, plus half a two-line label's height. Both
+// grow by the most the zoom step can run over the zoom.
+const thingReach = 14 * 1.2;
+const labelHalfHeight = 16 * 1.2;
 
 // A label sits near the top of its room, clear of pillars and things, or
 // lower down when the top has no clear spot. A room with none keeps its name
@@ -34,15 +35,15 @@ export function labelPoint(
   if (!outline?.length) return null;
   const ys = outline.map((point) => point.y);
   const xs = outline.map((point) => point.x);
-  const top = Math.min(...ys) + labelInset / zoom;
-  const bottom = Math.max(...ys) - labelInset / zoom;
-  const near = things.filter(
-    (thing) =>
-      thing.x >= Math.min(...xs) &&
-      thing.x <= Math.max(...xs) &&
-      thing.y >= Math.min(...ys) &&
-      thing.y <= Math.max(...ys),
-  );
+  const box = {
+    left: Math.min(...xs),
+    right: Math.max(...xs),
+    top: Math.min(...ys),
+    bottom: Math.max(...ys),
+  };
+  const top = box.top + labelInset / zoom;
+  const bottom = box.bottom - labelInset / zoom;
+  const near = thingsIn(things, box);
   const step = (labelHalfHeight * 1.5) / zoom;
   for (let y = top; y === top || (near.length > 0 && y <= bottom); y += step) {
     const at = placeOnBand(loops, zoom, width, y, near, true);
@@ -58,7 +59,15 @@ export function getIsLabelCovered(
   zoom: number,
   things: Point[],
 ) {
-  return coveredWidth(at, width, zoom, things) > 0;
+  const half = (width / 2) * 1.2 + thingReach;
+  const rise = thingReach + labelHalfHeight;
+  const near = thingsIn(things, {
+    left: at.x - half / zoom,
+    right: at.x + half / zoom,
+    top: at.y - rise / zoom,
+    bottom: at.y + rise / zoom,
+  });
+  return coveredWidth(at, width * 1.2, zoom, near) > 0;
 }
 
 // Keeps the bigger room's label where two would overlap. The sizes are rough,
@@ -122,6 +131,7 @@ function placeOnBand(
     things,
     y,
     zoom,
+    width,
   );
   if (spans.length === 0) return null;
   const half = width / 2 / zoom;
@@ -146,8 +156,9 @@ function withoutThings(
   things: Point[],
   y: number,
   zoom: number,
+  width: number,
 ) {
-  const reach = thingReach / zoom;
+  const reach = (thingReach + width * 0.1) / zoom;
   const rise = (thingReach + labelHalfHeight) / zoom;
   return things
     .filter((thing) => Math.abs(thing.y - y) < rise)
@@ -214,4 +225,48 @@ function overlap(a: [number, number][], b: [number, number][]) {
 
 function areaOf(box: Box) {
   return (box.right - box.left) * (box.bottom - box.top);
+}
+
+// Things bucketed by a coarse grid, once per things list, so a room looks
+// only at the things near it on a big map.
+const thingBuckets = new WeakMap<Point[], Map<string, Point[]>>();
+
+const thingCell = 256;
+
+function thingsIn(things: Point[], box: Box) {
+  let buckets = thingBuckets.get(things);
+  if (!buckets) {
+    buckets = new Map();
+    for (const thing of things) {
+      const key = `${Math.floor(thing.x / thingCell)},${Math.floor(thing.y / thingCell)}`;
+      const bucket = buckets.get(key);
+      if (bucket) bucket.push(thing);
+      else buckets.set(key, [thing]);
+    }
+    thingBuckets.set(things, buckets);
+  }
+  const found: Point[] = [];
+  for (
+    let column = Math.floor(box.left / thingCell);
+    column <= Math.floor(box.right / thingCell);
+    column += 1
+  ) {
+    for (
+      let row = Math.floor(box.top / thingCell);
+      row <= Math.floor(box.bottom / thingCell);
+      row += 1
+    ) {
+      for (const thing of buckets.get(`${column},${row}`) ?? []) {
+        if (
+          thing.x >= box.left &&
+          thing.x <= box.right &&
+          thing.y >= box.top &&
+          thing.y <= box.bottom
+        ) {
+          found.push(thing);
+        }
+      }
+    }
+  }
+  return found;
 }
