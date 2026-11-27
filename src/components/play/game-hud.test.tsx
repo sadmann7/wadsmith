@@ -162,14 +162,19 @@ it("draws doors, the exit, keys and nearby monsters on the minimap", () => {
   expect(minimap.querySelector("[data-kind=exit]")).not.toBeNull();
   expect(minimap.querySelector("[data-lock=blue]")).not.toBeNull();
   React.act(() => root?.unmount());
-  const nearKey = renderHud({ ...start, x: 700 }, false, null, {
+  const nearKey = renderHud({ ...start, x: 1456, y: -160 }, false, null, {
     map: starterMap,
   });
   expect(nearKey.querySelector("[data-key=blue]")).not.toBeNull();
   React.act(() => root?.unmount());
-  const holding = renderHud({ ...start, x: 700, keys: 1 }, false, null, {
-    map: starterMap,
-  });
+  const holding = renderHud(
+    { ...start, x: 1456, y: -160, keys: 1 },
+    false,
+    null,
+    {
+      map: starterMap,
+    },
+  );
   expect(holding.querySelector("[data-key=blue]")).toBeNull();
 });
 
