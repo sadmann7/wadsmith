@@ -54,9 +54,11 @@ export function NewMapPanel({ map, corners, drawing }: NewMapPanelProps) {
         <section className="inspector-section" aria-label="New sector">
           <h2>
             This sector will use
-            <span>
-              {corners.length} {corners.length === 1 ? "corner" : "corners"}
-            </span>
+            {corners.length > 0 ? (
+              <span>
+                {corners.length} {corners.length === 1 ? "corner" : "corners"}
+              </span>
+            ) : null}
           </h2>
           <dl className="m-0 grid grid-cols-[1fr_auto] gap-x-3 gap-y-1.5">
             {defaults.map(([label, value]) => (

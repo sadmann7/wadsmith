@@ -94,6 +94,8 @@ import {
 } from "@/lib/map/reshape";
 import { type DrawShape, gridCells, shapeCorners } from "@/lib/map/shapes";
 
+const noCorners: Point[] = [];
+
 export type MapTool = "select" | "draw" | "line" | "thing" | "switch";
 export type EditMode = "vertices" | "lines" | "sectors" | "things";
 export interface ZoomRequest {
@@ -352,6 +354,9 @@ export const mapEditor = definePrimitive({
       ? { map: options.map, positions: positionsOf(options.map) }
       : {}),
     ...(options.tool ? { tool: options.tool } : {}),
+    ...(options.tool && options.tool !== "draw" && options.tool !== "line"
+      ? { drawing: noCorners, cursor: null }
+      : {}),
     ...(options.editMode ? { editMode: options.editMode } : {}),
     ...(options.thingKind ? { thingKind: options.thingKind } : {}),
     ...(options.activeSector !== undefined
@@ -707,7 +712,6 @@ export const mapEditor = definePrimitive({
       store.set({ drawing: [], cursor: null });
       change("map", room.map, { reason: "draw" });
       select([], room.id);
-      change("tool", "select", { reason: "draw" });
     };
 
     // A grid of rooms is drawn a cell at a time, each sharing the walls of
@@ -723,7 +727,6 @@ export const mapEditor = definePrimitive({
       store.set({ drawing: [], cursor: null });
       change("map", next, { reason: "draw" });
       select(ids.map((id) => `${roomKeyPrefix}${id}`));
-      change("tool", "select", { reason: "draw" });
     };
 
     const finishRoom = () => {
@@ -739,7 +742,6 @@ export const mapEditor = definePrimitive({
       store.set({ drawing: [], cursor: null });
       change("map", added.map, { reason: "draw" });
       select([], added.rooms[0] ?? null);
-      change("tool", "select", { reason: "draw" });
     };
 
     const clickLine = (point: Point) => {
@@ -1700,7 +1702,8 @@ export const mapEditor = definePrimitive({
             if (tool === "draw") finishRoom();
             else finishLine();
           } else if (event.key === "Escape") {
-            store.set({ drawing: [], cursor: null });
+            if (drawing.length > 0) store.set({ drawing: [], cursor: null });
+            else change("tool", "select", { reason: "draw" });
           } else if (event.key === "Backspace") {
             store.set({ drawing: drawing.slice(0, -1) });
           } else {

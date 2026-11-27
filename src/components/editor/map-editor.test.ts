@@ -806,6 +806,56 @@ describe("map editor drawing", () => {
     instance.api.click(pointer(2256, 2128));
     expect(defined(result).sectors).toHaveLength(testMap.sectors.length + 1);
   });
+
+  it("keep the draw tool after a room, so the next one starts on the next click", () => {
+    const tools: string[] = [];
+    let result = testMap;
+    const options = {
+      id,
+      map: testMap,
+      tool: "draw" as const,
+      drawShape: "rectangle" as const,
+      onToolChange: (tool: string) => tools.push(tool),
+      onMapChange: (next: GameMap) => {
+        result = next;
+        instance.setOptions({ ...options, map: next });
+      },
+    };
+    const instance = mapEditor(options);
+    for (const y of [2000, 2400]) {
+      instance.api.pointerdown(pointer(2000, y));
+      instance.api.pointermove(pointer(2256, y + 128));
+      release(2256, y + 128);
+    }
+    expect(result.sectors).toHaveLength(testMap.sectors.length + 2);
+    expect(tools).toEqual([]);
+  });
+
+  it("drop a half-drawn room when another tool is picked", () => {
+    const instance = mapEditor({ id, map: testMap, tool: "draw" });
+    const { store } = instance.part("handle", { value: "v1" });
+    store.set({ drawing: [{ x: 2000, y: 2000 }] });
+    instance.setOptions({ id, map: testMap, tool: "select" });
+    instance.setOptions({ id, map: testMap, tool: "draw" });
+    expect(store.get().drawing).toEqual([]);
+  });
+
+  it("drop the room being drawn on Esc, and leave the draw tool on the next", () => {
+    const tools: string[] = [];
+    const instance = mapEditor({
+      id,
+      map: testMap,
+      tool: "draw",
+      onToolChange: (tool) => tools.push(tool),
+    });
+    const { store } = instance.part("handle", { value: "v1" });
+    store.set({ drawing: [{ x: 2000, y: 2000 }] });
+    instance.api.keydown(press("Escape"));
+    expect(store.get().drawing).toEqual([]);
+    expect(tools).toEqual([]);
+    instance.api.keydown(press("Escape"));
+    expect(tools).toEqual(["select"]);
+  });
 });
 
 // Wires parts the way a renderer does, so a change reaches a part only when
