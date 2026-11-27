@@ -150,9 +150,9 @@ describe.skipIf(!ready)("network game through shared memory", () => {
   );
 });
 
-const relayDelayMs = 20;
-
 const coopMap = addThing(testMap, "player-2", { x: 96, y: 256 }).map;
+
+const relayDelayMs = 20;
 
 // Stands in for the room: it forwards each packet to its peer after a delay.
 function createRoom(map = coopMap, mode: "coop" | "deathmatch" = "coop") {

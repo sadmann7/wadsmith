@@ -186,11 +186,6 @@ export const maxVolume = 15;
 const widescreen16by9 = 3;
 const classicScreen: Screen = { resolution: "classic", widescreen: false };
 const netSlots = [0, 1, 2, 3];
-// Co-op players share one level, so its tallies count the whole team.
-function teamCount(count: (player: number) => number) {
-  return netSlots.reduce((total, slot) => total + count(slot), 0);
-}
-
 const levelState = 0;
 const finaleState = 2;
 
@@ -671,6 +666,11 @@ export async function startDoom({
   const game = new DoomGame(doomModule, events, screen);
   game.run();
   return game;
+}
+
+// Co-op players share one level, so its tallies count the whole team.
+function teamCount(count: (player: number) => number) {
+  return netSlots.reduce((total, slot) => total + count(slot), 0);
 }
 
 function exitCode(error: unknown) {
