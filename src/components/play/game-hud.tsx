@@ -386,6 +386,7 @@ export function GameHud({
   const inLevel = status?.inLevel ?? false;
   const ammoName = status ? ammoNames[status.ammoType] : undefined;
   const scoresOpen = scores !== null && inLevel && !finished;
+  const automap = status?.automap ?? false;
   const showsDot =
     status !== null &&
     showsCrosshair({
@@ -393,7 +394,7 @@ export function GameHud({
       mouseMode,
       inLevel,
       health: status.health,
-      automap: status.automap,
+      automap,
       covered: finished || noteOpen || between !== null || scoresOpen,
     });
   const tabHelp = coop ? "Tab scores" : "Tab automap";
@@ -403,7 +404,9 @@ export function GameHud({
       : `${mouseMode === "denied" ? "" : "Click to aim with the mouse · "}WASD move · ←→ turn · Space fire · E use · ${tabHelp}`;
   return (
     <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden text-foreground">
-      <div className="absolute inset-x-0 bottom-0 h-40 bg-linear-to-t from-void/60 to-transparent" />
+      <div
+        className={`absolute inset-x-0 bottom-0 h-40 bg-linear-to-t from-void/60 to-transparent ${automap ? "hidden" : ""}`}
+      />
       {showsDot ? (
         <span
           aria-hidden="true"
@@ -537,12 +540,13 @@ export function GameHud({
             <p role="status" className="m-0 text-sm text-foreground">
               Note saved to this spot.
             </p>
-          ) : showHelp && !finished && mouseMode !== "released" ? (
+          ) : showHelp && !finished && !automap && mouseMode !== "released" ? (
             <p className="m-0 max-w-[520px] font-mono text-xs text-muted-foreground @max-xl:hidden">
               {help}
             </p>
           ) : null}
-          {inLevel && status ? (
+          {/* The automap brings back Doom's own status bar along the bottom. */}
+          {inLevel && status && !automap ? (
             <div className="flex items-end gap-6 @max-2xl:gap-4">
               <Vital
                 label="Health"
@@ -561,7 +565,7 @@ export function GameHud({
           ) : null}
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">
-          <div className={canEdit ? "flex gap-2" : "hidden"}>
+          <div className={canEdit && !automap ? "flex gap-2" : "hidden"}>
             <button
               type="button"
               className={buttonClass}
@@ -587,7 +591,7 @@ export function GameHud({
               </kbd>
             </button>
           </div>
-          {map && status && inLevel && !status.automap ? (
+          {map && status && inLevel && !automap ? (
             <Minimap
               map={map}
               status={status}
@@ -601,6 +605,7 @@ export function GameHud({
     </div>
   );
 }
+
 interface EndGameConfirmProps {
   names: string[];
   onKeepPlaying: () => void;

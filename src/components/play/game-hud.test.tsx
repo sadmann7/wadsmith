@@ -182,6 +182,14 @@ it("colors another player's minimap marker by their game slot", () => {
   expect(marker.getAttribute("fill")).toBe("var(--color-info)");
 });
 
+it("hands the bottom of the view to Doom's status bar on the automap", () => {
+  const container = renderHud({ ...status, automap: true }, false, null, {
+    map: starterMap,
+  });
+  expect(container.textContent).not.toContain("Health");
+  expect(container.querySelector("[aria-label=Minimap]")).toBeNull();
+});
+
 function renderHud(
   current: GameStatus,
   isBetween = false,
