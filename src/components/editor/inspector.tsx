@@ -1227,6 +1227,7 @@ export function ThingInspector({
       ) : null}
       <PlaceThings
         picked={placing}
+        hasStart={map.things.some((thing) => thing.kind === "player")}
         kinds={kinds}
         custom={custom}
         onPick={onPlace}
@@ -2119,6 +2120,7 @@ const thingTabs: { value: ThingTab; label: string }[] = [
 
 interface PlaceThingsProps {
   picked: ThingPick | null;
+  hasStart: boolean;
   kinds: readonly ThingKind[];
   custom: CustomThings;
   onPick: (pick: ThingPick | null) => void;
@@ -2133,13 +2135,21 @@ interface ThingEntry {
   color: string;
 }
 
-function PlaceThings({ picked, kinds, custom, onPick }: PlaceThingsProps) {
+function PlaceThings({
+  picked,
+  hasStart,
+  kinds,
+  custom,
+  onPick,
+}: PlaceThingsProps) {
   const [tab, setTab] = React.useState<ThingTab>(() =>
     picked?.kind === "custom"
       ? "custom"
       : picked
         ? tabOf(picked.kind)
-        : "enemy",
+        : hasStart
+          ? "enemy"
+          : tabOf("player"),
   );
   const [query, setQuery] = React.useState("");
   const entries: ThingEntry[] = [
