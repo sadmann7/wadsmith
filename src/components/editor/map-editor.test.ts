@@ -11,7 +11,7 @@ import { drawRoom, removeCorner } from "@/lib/map/reshape";
 import { testMap } from "@/lib/map/test-map";
 import { SceneCamera } from "@/lib/preview/scene-camera";
 
-import { mapEditor } from "./map-editor";
+import { mapEditor, type MapTool } from "./map-editor";
 
 type Instance = ReturnType<typeof mapEditor>;
 
@@ -838,6 +838,50 @@ describe("map editor drawing", () => {
     instance.setOptions({ id, map: testMap, tool: "select" });
     instance.setOptions({ id, map: testMap, tool: "draw" });
     expect(store.get().drawing).toEqual([]);
+  });
+
+  it.each(["select", "line"] as const)(
+    "keep the corner a draw request starts from in the %s tool as the draw tool comes on",
+    (from) => {
+      let tool: MapTool = from;
+      const options = {
+        id,
+        map: testMap,
+        onToolChange: (next: MapTool) => {
+          tool = next;
+        },
+      };
+      const instance = mapEditor({ ...options, tool });
+      const { store } = instance.part("handle", { value: "v1" });
+      const drawRequest = { id: 1, point: { x: 2000, y: 2000 } };
+      instance.setOptions({ ...options, tool, drawRequest });
+      instance.setOptions({ ...options, tool, drawRequest });
+      expect(tool).toBe("draw");
+      expect(store.get().drawing).toEqual([{ x: 2000, y: 2000 }]);
+    },
+  );
+
+  it("delete the room just drawn with Delete while still drawing", () => {
+    let result = testMap;
+    const options = {
+      id,
+      map: testMap,
+      tool: "draw" as const,
+      drawShape: "rectangle" as const,
+      onMapChange: (next: GameMap) => {
+        result = next;
+        instance.setOptions({ ...options, map: next });
+      },
+      onActiveSectorChange: (sector: string | null) =>
+        instance.setOptions({ ...options, map: result, activeSector: sector }),
+    };
+    const instance = mapEditor(options);
+    instance.api.pointerdown(pointer(2000, 2000));
+    instance.api.pointermove(pointer(2256, 2128));
+    release(2256, 2128);
+    expect(result.sectors).toHaveLength(testMap.sectors.length + 1);
+    instance.api.keydown(press("Delete"));
+    expect(result.sectors).toHaveLength(testMap.sectors.length);
   });
 
   it("drop the room being drawn on Esc, and leave the draw tool on the next", () => {

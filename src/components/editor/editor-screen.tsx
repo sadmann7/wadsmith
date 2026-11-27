@@ -436,7 +436,9 @@ export function EditorScreen({
   const mapRef = React.useRef(initialMap);
   const agentEdit = React.useRef<number | undefined>(undefined);
   const [tool, setTool] = React.useState<MapTool>(() =>
-    initialMap.sectors.length === 0 ? "draw" : "select",
+    initialMap.sectors.length === 0 && loadLayout().view !== "scene"
+      ? "draw"
+      : "select",
   );
   const [gridSetting, setGridSetting] = React.useState(loadGrid);
   // Snapping off still lands on whole units, which is all the engine stores.

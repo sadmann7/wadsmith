@@ -94,8 +94,6 @@ import {
 } from "@/lib/map/reshape";
 import { type DrawShape, gridCells, shapeCorners } from "@/lib/map/shapes";
 
-const noCorners: Point[] = [];
-
 export type MapTool = "select" | "draw" | "line" | "thing" | "switch";
 export type EditMode = "vertices" | "lines" | "sectors" | "things";
 export interface ZoomRequest {
@@ -354,9 +352,6 @@ export const mapEditor = definePrimitive({
       ? { map: options.map, positions: positionsOf(options.map) }
       : {}),
     ...(options.tool ? { tool: options.tool } : {}),
-    ...(options.tool && options.tool !== "draw" && options.tool !== "line"
-      ? { drawing: noCorners, cursor: null }
-      : {}),
     ...(options.editMode ? { editMode: options.editMode } : {}),
     ...(options.thingKind ? { thingKind: options.thingKind } : {}),
     ...(options.activeSector !== undefined
@@ -645,9 +640,23 @@ export const mapEditor = definePrimitive({
       if (fitted) centerOn(request.point);
       else focusAfterFit = request.point;
     });
+    // A half-drawn outline belongs to the tool it was drawn with.
+    let shownTool = context.options().tool;
+    context.onOptions(({ tool }) => {
+      if (!tool || tool === shownTool) return;
+      const left = shownTool;
+      shownTool = tool;
+      if (
+        (left === "draw" || left === "line") &&
+        store.get().drawing.length > 0
+      ) {
+        store.set({ drawing: [], cursor: null });
+      }
+    });
     context.onOptions(({ drawRequest: request }) => {
       if (!request || request.id === drawRequest) return;
       drawRequest = request.id;
+      shownTool = "draw";
       store.set({ drawing: [snapPoint(request.point, grid())], cursor: null });
       change("tool", "draw", { reason: "draw" });
     });
@@ -1704,8 +1713,11 @@ export const mapEditor = definePrimitive({
           } else if (event.key === "Escape") {
             if (drawing.length > 0) store.set({ drawing: [], cursor: null });
             else change("tool", "select", { reason: "draw" });
-          } else if (event.key === "Backspace") {
+          } else if (event.key === "Backspace" && drawing.length > 0) {
             store.set({ drawing: drawing.slice(0, -1) });
+          } else if (event.key === "Delete" && deleteSelection()) {
+            event.preventDefault();
+            return;
           } else {
             resetZoomKey(event);
             return;
