@@ -991,8 +991,6 @@ function Scoreboard({ title, par, status, rows, deathmatch }: ScoreboardProps) {
   const sorted = deathmatch
     ? rows.toSorted((a, b) => b.frags - a.frags || a.peer - b.peer)
     : rows.toSorted((a, b) => a.peer - b.peer);
-  const teamKills = rows.reduce((total, row) => total + row.kills, 0);
-  const teamSecrets = rows.reduce((total, row) => total + row.secrets, 0);
   return (
     <section
       aria-label="Scoreboard"
@@ -1013,7 +1011,7 @@ function Scoreboard({ title, par, status, rows, deathmatch }: ScoreboardProps) {
           {deathmatch
             ? `First to ${fragLimit} frags`
             : status
-              ? `Kills ${teamKills} / ${status.totalKills} · Secrets ${teamSecrets} / ${status.totalSecrets}`
+              ? `Kills ${status.kills} / ${status.totalKills} · Secrets ${status.secrets} / ${status.totalSecrets}`
               : ""}
         </span>
       </header>
