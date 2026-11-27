@@ -386,12 +386,10 @@ export function GameHud({
                 label="Enemies"
                 value={status ? `${status.kills} / ${status.totalKills}` : "-"}
               />
-              {status?.totalItems ? (
-                <Stat
-                  label="Items"
-                  value={`${status.items} / ${status.totalItems}`}
-                />
-              ) : null}
+              <Stat
+                label="Items"
+                value={status ? `${status.items} / ${status.totalItems}` : "-"}
+              />
               <Stat
                 label="Secrets"
                 value={
@@ -706,19 +704,15 @@ function BetweenLevels({
         <h2 className="m-0 text-[26px] leading-tight font-bold">{title}</h2>
       </div>
       {status ? (
-        <dl
-          className={`m-0 grid gap-3 border-y border-border py-3 ${status.totalItems ? "grid-cols-4" : "grid-cols-3"}`}
-        >
+        <dl className="m-0 grid grid-cols-4 gap-3 border-y border-border py-3">
           <Tally
             label="Kills"
             value={`${status.kills} / ${status.totalKills}`}
           />
-          {status.totalItems ? (
-            <Tally
-              label="Items"
-              value={`${status.items} / ${status.totalItems}`}
-            />
-          ) : null}
+          <Tally
+            label="Items"
+            value={`${status.items} / ${status.totalItems}`}
+          />
           <Tally
             label="Secrets"
             value={`${status.secrets} / ${status.totalSecrets}`}
