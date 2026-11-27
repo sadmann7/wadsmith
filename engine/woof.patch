@@ -29,10 +29,39 @@ index 1597098..441f6d7 100644
  
  // [FG] get the path to the default configuration dir to use
 diff --git a/src/d_loop.c b/src/d_loop.c
-index 4a85d9d..c50f5df 100644
+index 4a85d9d..f95b7fa 100644
 --- a/src/d_loop.c
 +++ b/src/d_loop.c
-@@ -1016,7 +1016,8 @@ void TryRunTics(void)
+@@ -822,6 +822,14 @@ static void TryRunTicsRollback(void)
+                 ticcmd_t cmds[NW_MAXPLAYERS];
+                 boolean ingame[NW_MAXPLAYERS];
+ 
++                // A keyframe can't restore a level once it has ended, so a
++                // resimulated exit stops at the first unconfirmed tic.
++                if (i >= RB_RunLimit())
++                {
++                    RB_DiscardTics(i, end_tic);
++                    break;
++                }
++
+                 RB_PrepareTic(i, &ticdata[i % BACKUPTICS].cmds[localplayer],
+                               cmds, ingame);
+                 RB_MaybeSaveKeyframe(i);
+@@ -883,6 +891,13 @@ static void TryRunTicsRollback(void)
+         ticcmd_t cmds[NW_MAXPLAYERS];
+         boolean ingame[NW_MAXPLAYERS];
+ 
++        // An exit in this batch ends prediction, and a pending rollback may
++        // undo it, so neither lets the game leave the level unconfirmed.
++        if (tic >= RB_RunLimit() || RB_NeedsRollback())
++        {
++            break;
++        }
++
+         RB_PrepareTic(tic, &ticdata[tic % BACKUPTICS].cmds[localplayer],
+                       cmds, ingame);
+         RB_MaybeSaveKeyframe(tic);
+@@ -1016,7 +1031,8 @@ void TryRunTics(void)
                  return;
              }
  
@@ -185,6 +214,58 @@ index 7ccdd33..c56fc22 100644
  #endif
  
  //----------------------------------------------------------------------------
+diff --git a/src/d_rollback.c b/src/d_rollback.c
+index d24ba10..ab8e173 100644
+--- a/src/d_rollback.c
++++ b/src/d_rollback.c
+@@ -425,6 +425,15 @@ boolean RB_BeginRollback(int *start_tic, int *end_tic)
+ 
+     P_LoadKeyframe(keyframe);
+ 
++    // A keyframe is never saved with a game action pending, so an action a
++    // tic set comes from a tic the resim replays.
++
++    if (gameaction == ga_completed || gameaction == ga_reloadlevel
++        || gameaction == ga_savegame)
++    {
++        gameaction = ga_nothing;
++    }
++
+     // The keyframes of the diverged tics are about to be replaced.
+ 
+     for (int t = keyframe_tic + 1; t <= *end_tic; ++t)
+@@ -434,3 +443,16 @@ boolean RB_BeginRollback(int *start_tic, int *end_tic)
+ 
+     return true;
+ }
++
++void RB_DiscardTics(int start_tic, int end_tic)
++{
++    for (int t = start_tic; t < end_tic; ++t)
++    {
++        const int slot = t % BACKUPTICS;
++
++        if (used_tic[slot] == t)
++        {
++            used_tic[slot] = -1;
++        }
++    }
++}
+diff --git a/src/d_rollback.h b/src/d_rollback.h
+index d9f4116..eb5feef 100644
+--- a/src/d_rollback.h
++++ b/src/d_rollback.h
+@@ -73,4 +73,10 @@ boolean RB_NeedsRollback(void);
+ 
+ boolean RB_BeginRollback(int *start_tic, int *end_tic);
+ 
++// Forget the inputs used for tics from start_tic up to end_tic, which a
++// resimulation stopped short of, so their confirmed data can't schedule a
++// rollback.
++
++void RB_DiscardTics(int start_tic, int end_tic);
++
+ #endif
 diff --git a/src/g_game.c b/src/g_game.c
 index f65c6c5..feb1b68 100644
 --- a/src/g_game.c
@@ -450,7 +531,7 @@ index 6427083..29f1949 100644
      {
          I_Error("Failed to initialize video: %s", SDL_GetError());
 diff --git a/src/nw_server.c b/src/nw_server.c
-index 142a217..e1539c3 100644
+index 142a217..3d54233 100644
 --- a/src/nw_server.c
 +++ b/src/nw_server.c
 @@ -243,8 +243,20 @@ static void NW_SV_AssignPlayers(void)

@@ -77,6 +77,7 @@ port.on("message", (command: Command) => {
       value: {
         ...game.network(),
         inLevel: game.status().inLevel,
+        map: game.status().map,
         frags: game.status().frags,
         kills: game.status().kills,
         players: [0, 1].map((player) => game.playerPosition(player)),
