@@ -1766,6 +1766,7 @@ export function EditorScreen({
   // and is saved like any edit, which sends nothing back.
   const takeRemote = React.useEffectEvent((patch: MapPatch) => {
     const next = applyPatch(mapRef.current, patch);
+    camera.keep(next);
     mapRef.current = next;
     setMap(next);
     onSave(next);
