@@ -11,7 +11,7 @@ import { drawRoom, removeCorner } from "@/lib/map/reshape";
 import { testMap } from "@/lib/map/test-map";
 import { SceneCamera } from "@/lib/preview/scene-camera";
 
-import { type MapGrab, mapEditor, type MapTool } from "./map-editor";
+import { mapEditor, type MapGrab, type MapTool } from "./map-editor";
 
 type Instance = ReturnType<typeof mapEditor>;
 
@@ -773,7 +773,7 @@ describe("map editor drags from inside a room", () => {
     surface.move(20, 20);
     surface.release(20, 20);
     expect(store.get().selection).toEqual(["v1"]);
-    instance.api.pointerdown({ ...pointer(440, 140), shiftKey: true });
+    instance.api.pointerdown(pointer(440, 140, { shiftKey: true }));
     surface.move(480, 180);
     surface.move(520, 240);
     surface.release(520, 240);
@@ -815,7 +815,7 @@ describe("map editor drags from inside a room", () => {
     });
     const surface = rootSurface(instance);
     const { store } = instance.part("handle", { value: "v1" });
-    instance.api.pointerdown({ ...pointer(440, 140), pointerType: "touch" });
+    instance.api.pointerdown(pointer(440, 140, { pointerType: "touch" }));
     surface.move(480, 180);
     surface.release(480, 180);
     expect(changes).toBe(0);
@@ -833,13 +833,14 @@ describe("map editor drags from inside a room", () => {
     });
     const { store } = instance.part("handle", { value: "v1" });
     const hover = (x: number, y: number, key?: string) =>
-      instance.api.pointermove({
-        ...pointer(x, y),
-        buttons: 0,
-        target: {
-          closest: () => (key ? { dataset: { mapKey: key } } : null),
-        },
-      } as unknown as PointerEvent);
+      instance.api.pointermove(
+        pointer(x, y, {
+          buttons: 0,
+          target: {
+            closest: () => (key ? { dataset: { mapKey: key } } : null),
+          },
+        }),
+      );
     hover(440, 140);
     expect(store.get().grab).toBe("room:sector-2");
     hover(440, 100);
@@ -867,7 +868,7 @@ describe("map editor drags from inside a room", () => {
         grabs.push(grab);
       },
     });
-    instance.api.pointermove({ ...pointer(440, 140), buttons: 0 });
+    instance.api.pointermove(pointer(440, 140, { buttons: 0 }));
     expect(grabs).toEqual([{ kind: "selection", key: "room:sector-2" }]);
   });
 });
@@ -1225,7 +1226,11 @@ function scroll(input: Partial<WheelEvent> & { wheelDeltaY?: number }) {
   } as WheelEvent;
 }
 
-function pointer(clientX: number, clientY: number) {
+function pointer(
+  clientX: number,
+  clientY: number,
+  overrides: Record<string, unknown> = {},
+) {
   return {
     clientX,
     clientY,
@@ -1240,6 +1245,7 @@ function pointer(clientX: number, clientY: number) {
     altKey: false,
     target: { closest: () => null },
     preventDefault: () => {},
+    ...overrides,
   } as unknown as PointerEvent;
 }
 

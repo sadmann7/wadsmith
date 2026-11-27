@@ -3256,11 +3256,13 @@ export function EditorScreen({
                 customThings={customThings}
                 fallback={modeHints[editMode]}
               />
-            ) : tool === "thing"
-                ? `Placing ${placingLabel}. ${toolHints.thing}`
-                : tool === "draw" && drawShape !== "outline"
-                  ? shapeHints[drawShape]
-                  : toolHints[tool]}
+            ) : tool === "thing" ? (
+              `Placing ${placingLabel}. ${toolHints.thing}`
+            ) : tool === "draw" && drawShape !== "outline" ? (
+              shapeHints[drawShape]
+            ) : (
+              toolHints[tool]
+            )}
           </p>
           <div>
             {tool === "draw" ? (
