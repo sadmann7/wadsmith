@@ -502,7 +502,6 @@ export function EditorScreen({
     doorsOpen: boolean;
     floorsMoved: boolean;
   } | null>(null);
-  const playButton = React.useRef<HTMLButtonElement>(null);
   const fileInput = React.useRef<HTMLInputElement>(null);
   const [notice, setNotice] = React.useState("");
   // A dialog opened from a room's menu keeps what the menu worked on, which
@@ -2050,7 +2049,7 @@ export function EditorScreen({
   const exitGame = () => {
     setGame(null);
     onPlayingChange(false, false);
-    requestAnimationFrame(() => playButton.current?.focus());
+    focusPane(visibleLayout === "split" ? focusedPane.current : visibleLayout);
   };
 
   const replaceMap = (next: GameMap) => {
@@ -2469,12 +2468,7 @@ export function EditorScreen({
               <Users size={14} aria-hidden="true" />
               <span className="max-xl:sr-only">Play together</span>
             </Button>
-            <Button
-              variant="primary"
-              ref={playButton}
-              disabled={!canPlay}
-              onClick={play}
-            >
+            <Button variant="primary" disabled={!canPlay} onClick={play}>
               <Play size={14} aria-hidden="true" />
               Play
             </Button>
