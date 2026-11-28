@@ -635,15 +635,22 @@ function GameSession({
 
   React.useEffect(() => () => clearInterval(advanceTimer.current), []);
 
+  const tapUse = () => {
+    gameRef.current?.key(true, doomKeys.use);
+    setTimeout(() => gameRef.current?.key(false, doomKeys.use), 60);
+  };
+
   // Doom's tally and story screens move on when a player presses use.
   const nextLevel = () => {
     setBetween(null);
     clearInterval(advanceTimer.current);
-    advanceTimer.current = setInterval(() => {
-      gameRef.current?.key(true, doomKeys.use);
-      setTimeout(() => gameRef.current?.key(false, doomKeys.use), 60);
-    }, advanceTapMs);
+    advanceTimer.current = setInterval(tapUse, advanceTapMs);
     requestAnimationFrame(focusGame);
+  };
+
+  const respawn = () => {
+    tapUse();
+    focusGame();
   };
 
   const pressKey = (source: string, key: number) => {
@@ -942,6 +949,7 @@ function GameSession({
             finished={finished}
             audioUnavailable={audioUnavailable}
             onRestart={onRestart}
+            onRespawn={respawn}
             onExit={requestExit}
             onOpenNote={openNote}
             onSaveNote={(text) => {

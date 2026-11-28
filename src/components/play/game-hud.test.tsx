@@ -112,6 +112,8 @@ interface HudOptions {
   crosshair?: boolean;
   mouseMode?: MouseMode;
   deathmatch?: boolean;
+  coop?: "host" | "guest" | null;
+  onRespawn?: () => void;
 }
 
 it("shows the crosshair dot only while the mouse aims a living player", () => {
@@ -132,6 +134,46 @@ it("shows the crosshair dot only while the mouse aims a living player", () => {
   React.act(() => root?.unmount());
   renderHud({ ...status, automap: true });
   expect(dot()).toBeNull();
+});
+
+it("offers a dead player a way to try again", () => {
+  let respawns = 0;
+  const container = renderHud(status, false, null, {
+    mouseMode: "idle",
+    onRespawn: () => {
+      respawns += 1;
+    },
+  });
+  const panel = () => container.querySelector("[aria-label='You died']");
+  expect(panel()).toBeNull();
+  redraw({ ...status, health: 0 });
+  expect(panel()?.textContent).toContain("Press E to try again.");
+  const button = defined(panel()?.querySelector("button"));
+  expect(button.textContent).toBe("Try again");
+  React.act(() => button.click());
+  expect(respawns).toBe(1);
+});
+
+it("keeps the paused panel over the death panel while the mouse is released", () => {
+  const container = renderHud({ ...status, health: 0 }, false, null, {
+    mouseMode: "released",
+  });
+  expect(container.querySelector("[aria-label='You died']")).toBeNull();
+  expect(container.querySelector("[aria-label=Paused]")).not.toBeNull();
+});
+
+it("keeps the death panel up in co-op, where a released mouse doesn't pause", () => {
+  const container = renderHud({ ...status, health: 0 }, false, null, {
+    mouseMode: "released",
+    coop: "guest",
+  });
+  const panel = defined(container.querySelector("[aria-label='You died']"));
+  expect(panel.textContent).toContain("Press E to respawn.");
+});
+
+it("leaves the automap clear for a dead player", () => {
+  const container = renderHud({ ...status, health: 0, automap: true });
+  expect(container.querySelector("[aria-label='You died']")).toBeNull();
 });
 
 it("shows held keys as colored key icons and nothing without keys", () => {
@@ -283,6 +325,8 @@ function renderHud(
     crosshair = true,
     mouseMode = "locked",
     deathmatch = false,
+    coop = scores ? "host" : null,
+    onRespawn = () => {},
   }: HudOptions = {},
 ) {
   const container = document.createElement("div");
@@ -301,7 +345,7 @@ function renderHud(
       showHelp={false}
       crosshair={crosshair}
       skill="medium"
-      coop={scores ? "host" : null}
+      coop={coop}
       deathmatch={deathmatch}
       scores={scores}
       others={others}
@@ -325,6 +369,7 @@ function renderHud(
       finished={false}
       audioUnavailable={false}
       onRestart={noop}
+      onRespawn={onRespawn}
       onExit={noop}
       onOpenNote={noop}
       onSaveNote={noop}

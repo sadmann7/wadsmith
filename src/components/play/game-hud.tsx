@@ -352,6 +352,7 @@ interface GameHudProps {
   finished: boolean;
   audioUnavailable: boolean;
   onRestart: () => void;
+  onRespawn: () => void;
   onExit: () => void;
   onOpenNote: () => void;
   onSaveNote: (text: string) => void;
@@ -384,6 +385,7 @@ export function GameHud({
   finished,
   audioUnavailable,
   onRestart,
+  onRespawn,
   onExit,
   onOpenNote,
   onSaveNote,
@@ -420,6 +422,16 @@ export function GameHud({
       automap,
       covered: finished || noteOpen || between !== null || scoresOpen,
     });
+  const isDead =
+    inLevel &&
+    status !== null &&
+    status.health <= 0 &&
+    !finished &&
+    between === null &&
+    !noteOpen &&
+    !scoresOpen &&
+    !automap &&
+    (mouseMode !== "released" || coop !== null);
   const tabHelp = coop ? "Tab scores" : "Tab automap";
   const help =
     mouseMode === "locked"
@@ -542,7 +554,22 @@ export function GameHud({
           deathmatch={deathmatch}
         />
       ) : null}
-      {mouseMode === "released" && !finished && !noteOpen ? (
+      {isDead ? (
+        <section
+          aria-label="You died"
+          className={`${panelClass} absolute top-1/2 left-1/2 grid w-[min(320px,calc(100%-32px))] -translate-1/2 justify-items-center gap-3 border border-input p-4 text-center`}
+        >
+          <div className="grid gap-1">
+            <h2 className="m-0 text-xl font-semibold">You died</h2>
+            <p role="status" className="m-0 text-foreground">
+              Press E to {coop ? "respawn" : "try again"}.
+            </p>
+          </div>
+          <Button variant="primary" onClick={onRespawn}>
+            {coop ? "Respawn" : "Try again"}
+          </Button>
+        </section>
+      ) : mouseMode === "released" && !finished && !noteOpen ? (
         <section
           aria-label={coop ? "Mouse released" : "Paused"}
           className="absolute top-1/2 left-1/2 grid w-[min(320px,calc(100%-32px))] -translate-1/2 gap-1 rounded-[3px] border border-input bg-card/90 p-4 text-center"
