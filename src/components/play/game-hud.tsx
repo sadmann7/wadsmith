@@ -28,9 +28,12 @@ import {
   type GameMode,
   heldKeys,
   isInView,
+  linesInTiles,
   minimapKeys,
   type MinimapLineKind,
   minimapLines,
+  minimapTileRange,
+  minimapTiles,
   minimapView,
   secretAreas,
   showsCrosshair,
@@ -739,25 +742,26 @@ interface MinimapProps {
 function Minimap({ map, status, others, skill, mode, hidden }: MinimapProps) {
   const player = fromEngine(status);
   const isShown = (point: Point) => !hidden.has(sectorAt(map, point)?.id ?? "");
-  const lines = React.useMemo(() => minimapLines(map, hidden), [map, hidden]);
-  const lineLayer = React.useMemo(
-    () =>
-      lines.map(({ key, from, to, kind, lock }) => (
-        <line
-          key={key}
-          data-kind={kind}
-          data-lock={lock}
-          x1={from.x}
-          y1={from.y}
-          x2={to.x}
-          y2={to.y}
-          stroke={lock ? keyFills[lock] : lineStyles[kind].stroke}
-          strokeWidth={lineStyles[kind].width}
-          strokeLinecap="round"
-          vectorEffect="non-scaling-stroke"
-        />
-      )),
-    [lines],
+  const tiles = React.useMemo(
+    () => minimapTiles(minimapLines(map, hidden)),
+    [map, hidden],
+  );
+  const lineLayer = linesInTiles(tiles, minimapTileRange(player)).map(
+    ({ key, from, to, kind, lock }) => (
+      <line
+        key={key}
+        data-kind={kind}
+        data-lock={lock}
+        x1={from.x}
+        y1={from.y}
+        x2={to.x}
+        y2={to.y}
+        stroke={lock ? keyFills[lock] : lineStyles[kind].stroke}
+        strokeWidth={lineStyles[kind].width}
+        strokeLinecap="round"
+        vectorEffect="non-scaling-stroke"
+      />
+    ),
   );
   const view = minimapView(player);
   const margin = 4 * unit;

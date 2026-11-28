@@ -188,7 +188,7 @@ it("shows held keys as colored key icons and nothing without keys", () => {
   expect(labels).toEqual(["Blue key", "Red skull key"]);
 });
 
-it("draws doors, the exit, keys and nearby monsters on the minimap", () => {
+it("draws nearby lines, doors, the exit, keys and monsters on the minimap", () => {
   const start = { ...status, x: 96, y: -128 };
   const container = renderHud(
     {
@@ -204,8 +204,14 @@ it("draws doors, the exit, keys and nearby monsters on the minimap", () => {
   );
   const minimap = defined(container.querySelector("[aria-label=Minimap]"));
   expect(minimap.querySelectorAll("[data-monster]")).toHaveLength(1);
-  expect(minimap.querySelector("[data-kind=exit]")).not.toBeNull();
-  expect(minimap.querySelector("[data-lock=blue]")).not.toBeNull();
+  expect(minimap.querySelector("[data-kind=wall]")).not.toBeNull();
+  expect(minimap.querySelector("[data-kind=exit]")).toBeNull();
+  React.act(() => root?.unmount());
+  const nearExit = renderHud({ ...start, x: 944, y: 160 }, false, null, {
+    map: starterMap,
+  });
+  expect(nearExit.querySelector("[data-kind=exit]")).not.toBeNull();
+  expect(nearExit.querySelector("[data-lock=blue]")).not.toBeNull();
   React.act(() => root?.unmount());
   const nearKey = renderHud({ ...start, x: 1456, y: -160 }, false, null, {
     map: starterMap,
