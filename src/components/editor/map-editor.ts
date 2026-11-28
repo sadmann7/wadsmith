@@ -2874,23 +2874,42 @@ function lineAttrs(a: Point, b: Point) {
   };
 }
 
+// Every map edit brings new positions, so a name's spot is kept per positions
+// and zoom step, and the frames of a zoom within one step reuse it. A drag
+// moves corners without new positions, so it places names afresh.
+const placedNames = new WeakMap<
+  Record<string, Point>,
+  Map<string, LabelSpot | null>
+>();
+
 // Placed at the zoom step the canvas hides overlapping names with, so both
 // agree on where a name is.
 function captionPoint(
   state: MapEditorState,
   props: CaptionProps,
 ): Point & Partial<LabelSpot> {
-  const loops = [props.corners, ...(props.holes ?? [])].map((loop) =>
-    loop.map((key) => pointOf(state, key)),
-  );
   const sector = sectorById(state.map, props.value);
   if (!sector) return centroid(state, props.corners);
-  const at = labelPoint(
-    loops,
-    zoomStep(state.viewport.zoom),
-    estimateLabelWidth(sector.name),
-    state.map.things,
-  );
+  const step = zoomStep(state.viewport.zoom);
+  let placed = state.moving ? undefined : placedNames.get(state.positions);
+  if (!placed && !state.moving) {
+    placed = new Map();
+    placedNames.set(state.positions, placed);
+  }
+  const key = `${props.value} ${step}`;
+  let at = placed?.get(key);
+  if (at === undefined) {
+    const loops = [props.corners, ...(props.holes ?? [])].map((loop) =>
+      loop.map((corner) => pointOf(state, corner)),
+    );
+    at = labelPoint(
+      loops,
+      step,
+      estimateLabelWidth(sector.name),
+      state.map.things,
+    );
+    placed?.set(key, at);
+  }
   if (at) return at;
   const spot = roomPoint(state.map, sector);
   const { moving } = state;

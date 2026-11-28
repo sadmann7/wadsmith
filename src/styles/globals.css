@@ -228,6 +228,15 @@
     height: 0;
   }
 
+  /* `--canvas-zoom` changes on every frame of a zoom, and a change to an
+     inherited property restyles every element below it. Only the world's own
+     HTML children read it, so the map's SVG and everything inside those
+     children keep a fixed value. */
+  .map-svg,
+  .map-world > * > * {
+    --canvas-zoom: initial;
+  }
+
   .map-svg {
     position: absolute;
     top: 0;
