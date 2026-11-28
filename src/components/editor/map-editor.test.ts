@@ -32,7 +32,12 @@ describe("map editor parts", () => {
     const parts = listen(instance);
     instance.api.viewport.panBy(40, 0);
     instance.api.viewport.zoomTo(2);
-    expect(parts.heard()).toEqual(["caption sector-2", "caption sector-2"]);
+    expect(parts.heard()).toEqual([
+      "caption sector-1",
+      "caption sector-1",
+      "caption sector-2",
+      "caption sector-2",
+    ]);
   });
 
   it("wake only the parts of a moved corner", () => {
@@ -40,6 +45,7 @@ describe("map editor parts", () => {
     const parts = listen(instance);
     instance.setOptions({ id, map: moved(testMap, "v1", 8) });
     expect(parts.heard()).toEqual([
+      "caption sector-1",
       "handle v1",
       "port door:sector-4",
       "port door:sector-4",
@@ -48,17 +54,16 @@ describe("map editor parts", () => {
     ]);
   });
 
-  it("wake the parts of a dragged corner, and every shape it may reshape", () => {
+  it("wake only the parts of a dragged corner", () => {
     const instance = mapEditor({ id, map: testMap });
     const parts = listen(instance);
     const { store } = instance.part("handle", { value: "v1" });
     const keys = ["v1"];
     const dragged = [
-      "caption sector-2",
+      "caption sector-1",
       "handle v1",
       "port door:sector-4",
       "sector sector-1",
-      "sector sector-3",
       "wall v1|v15",
     ];
     store.set({ moving: { keys, dx: 8, dy: 0 } });
@@ -1287,6 +1292,7 @@ function listen(instance: Instance) {
   hear("handle", { value: "v10" });
   hear("handle", { value: "thing:imp-1" });
   hear("port", { value: "door:sector-4" });
+  hear("caption", { value: start.id, corners: start.vertices });
   hear("caption", { value: corridor.id, corners: corridor.vertices });
   return { heard: () => heard.splice(0).toSorted() };
 }

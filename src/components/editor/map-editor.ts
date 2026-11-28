@@ -2297,7 +2297,10 @@ export const mapEditor = definePrimitive({
       selects: selects<MapEditorState, unknown, SectorProps>({
         ...readsNothing,
         positions: ({ props }) => sectorCorners(props),
-        moving: whole,
+        moving: {
+          values: ({ props }) => sectorCorners(props),
+          moved: movedDraft,
+        },
         activeSector: ({ key }) => [key],
         selection: ({ key, props }) => [
           ...props.corners,
@@ -2490,7 +2493,10 @@ export const mapEditor = definePrimitive({
             before.things !== after.things,
         },
         positions: ({ props }) => sectorCorners(props),
-        moving: whole,
+        moving: {
+          values: ({ props }) => sectorCorners(props),
+          moved: movedDraft,
+        },
         viewport: whole,
       }),
       attrs: (state, { props }) => {
@@ -2847,7 +2853,7 @@ function centroid(state: MapEditorState, corners: readonly string[]): Point {
 function pointOf(state: MapEditorState, key: string): Point {
   const base = state.positions[key] ?? { x: 0, y: 0 };
   const { moving } = state;
-  return moving?.keys.includes(key)
+  return moving && movedKeys(moving).has(key)
     ? { x: base.x + moving.dx, y: base.y + moving.dy }
     : base;
 }
