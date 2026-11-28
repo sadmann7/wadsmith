@@ -202,6 +202,70 @@ export function minimapView(center: Point, span = minimapSpan) {
   };
 }
 
+// Lines are filed in square tiles half the minimap's span wide, and the
+// minimap draws only the tiles around the player. A big map's thousands of
+// lines would otherwise all repaint each time the minimap moves.
+export interface MinimapTiles {
+  lines: MinimapLine[];
+  cells: Map<string, number[]>;
+}
+
+export interface TileRange {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+export function minimapTiles(lines: MinimapLine[]): MinimapTiles {
+  const cells = new Map<string, number[]>();
+  for (const [index, line] of lines.entries()) {
+    const range = tilesCovering(
+      Math.min(line.from.x, line.to.x),
+      Math.min(line.from.y, line.to.y),
+      Math.max(line.from.x, line.to.x),
+      Math.max(line.from.y, line.to.y),
+    );
+    for (let x = range.left; x <= range.right; x++) {
+      for (let y = range.top; y <= range.bottom; y++) {
+        const key = `${x},${y}`;
+        const cell = cells.get(key);
+        if (cell) cell.push(index);
+        else cells.set(key, [index]);
+      }
+    }
+  }
+  return { lines, cells };
+}
+
+// Past the edge, so lines are already drawn when the minimap's 100 ms glide
+// brings them in.
+const tileMargin = 128;
+
+export function minimapTileRange(center: Point, span = minimapSpan) {
+  const reach = span / 2 + tileMargin;
+  return tilesCovering(
+    center.x - reach,
+    center.y - reach,
+    center.x + reach,
+    center.y + reach,
+  );
+}
+
+// In minimapLines' order, so lines keep their DOM order and stacking as the
+// player crosses from tile to tile.
+export function linesInTiles(tiles: MinimapTiles, range: TileRange) {
+  const found = new Set<number>();
+  for (let x = range.left; x <= range.right; x++) {
+    for (let y = range.top; y <= range.bottom; y++) {
+      for (const index of tiles.cells.get(`${x},${y}`) ?? []) {
+        found.add(index);
+      }
+    }
+  }
+  return [...found].sort((a, b) => a - b).map((index) => tiles.lines[index]);
+}
+
 export function isInView(
   point: Point,
   view: ReturnType<typeof minimapView>,
@@ -255,4 +319,20 @@ function spawnsIn(thing: Thing, skill: Skill, mode: GameMode) {
 // keys, each in Doom's blue, yellow, red order.
 function keyBit({ color, skull }: HeldKey) {
   return 1 << (keyColors.indexOf(color) + (skull ? keyColors.length : 0));
+}
+
+const tileSize = minimapSpan / 2;
+
+function tilesCovering(
+  left: number,
+  top: number,
+  right: number,
+  bottom: number,
+) {
+  return {
+    left: Math.floor(left / tileSize),
+    top: Math.floor(top / tileSize),
+    right: Math.floor(right / tileSize),
+    bottom: Math.floor(bottom / tileSize),
+  };
 }

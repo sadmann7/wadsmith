@@ -11,8 +11,11 @@ import {
   fromEngine,
   heldKeys,
   isInView,
+  linesInTiles,
   minimapKeys,
   minimapLines,
+  minimapTileRange,
+  minimapTiles,
   minimapView,
   secretAreas,
   showsCrosshair,
@@ -65,6 +68,69 @@ describe("minimapLines", () => {
         Math.min(Math.abs(line.from.y), Math.abs(line.to.y)) === 192,
     );
     expect(secret?.kind).toBe("wall");
+  });
+});
+
+describe("minimapTiles", () => {
+  const wall = (key: string, from: [number, number], to: [number, number]) => ({
+    key,
+    from: { x: from[0], y: from[1] },
+    to: { x: to[0], y: to[1] },
+    kind: "wall" as const,
+  });
+  const lines = [
+    wall("near", [10, 10], [50, 10]),
+    wall("edge", [400, 0], [400, 60]),
+    wall("far", [5000, 5000], [5100, 5000]),
+    wall("long", [-4000, 200], [4000, 200]),
+  ];
+  const tiles = minimapTiles(lines);
+  const drawn = (x: number, y: number) =>
+    linesInTiles(tiles, minimapTileRange({ x, y }))
+      .map((line) => line.key)
+      .sort();
+
+  it("draws the lines around the player and leaves far ones out", () => {
+    expect(drawn(0, 0)).toEqual(["edge", "long", "near"]);
+    expect(drawn(5050, 5000)).toEqual(["far"]);
+  });
+
+  it("draws a line just past the edge before the minimap glides to it", () => {
+    expect(minimapSpan / 2 + 64).toBeLessThan(400);
+    expect(drawn(-64, 0)).toContain("edge");
+  });
+
+  it("draws a long line from any tile it crosses, once", () => {
+    expect(drawn(-3000, 200)).toEqual(["long"]);
+    expect(drawn(3000, 200)).toEqual(["long"]);
+  });
+
+  it("keeps the lines in order as the player crosses tiles", () => {
+    const order = (x: number) =>
+      linesInTiles(tiles, minimapTileRange({ x, y: 200 })).map((l) => l.key);
+    expect(order(0)).toEqual(["near", "edge", "long"]);
+    expect(order(-300)).toEqual(["near", "long"]);
+  });
+
+  it("draws every line of a map that fits in view", () => {
+    const all = minimapLines(starterMap);
+    const box = all.flatMap((line) => [line.from, line.to]);
+    const center = {
+      x:
+        (Math.min(...box.map((p) => p.x)) + Math.max(...box.map((p) => p.x))) /
+        2,
+      y:
+        (Math.min(...box.map((p) => p.y)) + Math.max(...box.map((p) => p.y))) /
+        2,
+    };
+    const near = linesInTiles(minimapTiles(all), minimapTileRange(center));
+    const inView = all.filter((line) =>
+      [line.from, line.to].some((point) =>
+        isInView(point, minimapView(center)),
+      ),
+    );
+    expect(near.length).toBeGreaterThanOrEqual(inView.length);
+    for (const line of inView) expect(near).toContain(line);
   });
 });
 
