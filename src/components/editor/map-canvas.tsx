@@ -59,6 +59,7 @@ const worldSize = 65536;
 const gridGap = 6;
 const crowdedRooms = 60;
 const farZoom = 0.5;
+const zoomSettleMs = 150;
 const labelWidth = 80;
 const noSelection: string[] = [];
 const nowhere = { left: 0, top: 0, right: -1, bottom: -1 };
@@ -107,8 +108,21 @@ export function MapCanvas({
   ...props
 }: MapCanvasProps) {
   const [step, setStep] = React.useState(1);
+  // The grid and the marks drawn at a fixed screen size follow every zoom
+  // step at once, since redrawing them is cheap.
+  const [drawStep, setDrawStep] = React.useState(1);
   const [zoomedOut, setZoomedOut] = React.useState(false);
   const [seen, setSeen] = React.useState<Area | null>(null);
+  const zooming = React.useRef<{
+    zoom: number;
+    at: number;
+    hasShown: boolean;
+    timer?: ReturnType<typeof setTimeout>;
+  }>({ zoom: 1, at: Number.NEGATIVE_INFINITY, hasShown: false });
+  React.useEffect(() => {
+    const zoom = zooming.current;
+    return () => clearTimeout(zoom.timer);
+  }, []);
   const crowded = map.sectors.length > crowdedRooms;
   // Zoomed out, a big map's corners and icons would bury its rooms, and every
   // mounted part updates on every pan and zoom.
@@ -122,7 +136,7 @@ export function MapCanvas({
   // Lines closer than a few pixels would turn the grid into a wash, so a fine
   // grid draws every second, fourth or further line when zoomed out.
   let fine = gridSize;
-  while (fine * step < gridGap) fine *= 2;
+  while (fine * drawStep < gridGap) fine *= 2;
   const major = Math.max(64, fine * 8);
 
   const shapes = (
@@ -307,12 +321,36 @@ export function MapCanvas({
       data-crowded={crowded ? "" : undefined}
       data-far={far ? "" : undefined}
       onViewChange={(status) => {
-        setStep(zoomStep(status.zoom));
-        setZoomedOut(status.zoom < farZoom);
-        // A hidden pane reports no size, which says nothing about its view.
-        if (status.view.right > status.view.left) {
-          const next = areaAround(status.view);
-          setSeen((current) => (sameArea(current, next) ? current : next));
+        // Placing a big map's names, icons and corners again can take longer
+        // than a frame, so it waits behind the view the viewport is drawing,
+        // and until a zoom has settled.
+        const zoom = zooming.current;
+        const hasSize = status.view.right > status.view.left;
+        const showView = () =>
+          React.startTransition(() => {
+            setStep(zoomStep(status.zoom));
+            setZoomedOut(status.zoom < farZoom);
+            // A hidden pane reports no size, which says nothing about its view.
+            if (hasSize) {
+              const next = areaAround(status.view);
+              setSeen((current) => (keepsArea(current, next) ? current : next));
+            }
+          });
+        setDrawStep(zoomStep(status.zoom));
+        clearTimeout(zoom.timer);
+        const now = performance.now();
+        if (status.zoom !== zoom.zoom) {
+          zoom.zoom = status.zoom;
+          zoom.at = now;
+        }
+        // A pane's first view and the fit that follows it in the same task
+        // show at once. After that, every zoom waits until it has been still
+        // for a moment.
+        if (zoom.hasShown && now - zoom.at < zoomSettleMs) {
+          zoom.timer = setTimeout(showView, zoom.at + zoomSettleMs - now);
+        } else {
+          if (hasSize) queueMicrotask(() => (zoom.hasShown = true));
+          showView();
         }
         onViewChange?.(status);
       }}
@@ -369,7 +407,7 @@ export function MapCanvas({
                 className="map-link-end"
                 cx={to.x}
                 cy={to.y}
-                r={linkEnd / step}
+                r={linkEnd / drawStep}
               />
             </g>
           ))}
@@ -379,7 +417,7 @@ export function MapCanvas({
               // oxlint-disable-next-line react/no-array-index-key -- A run's marks never change order.
               key={index}
               mark={mark}
-              size={markSize / step}
+              size={markSize / drawStep}
             />
           ))}
           <MapConnecting className="map-wire map-connecting" />
@@ -596,13 +634,17 @@ function areaAround(view: Area): Area {
   };
 }
 
-function sameArea(a: Area | null, b: Area) {
+// An area that still holds the view and its margin stays while it's at most
+// a few times wider than they need, so zooming in mounts and unmounts nothing
+// until it has gone that far.
+function keepsArea(current: Area | null, next: Area) {
   return (
-    a !== null &&
-    a.left === b.left &&
-    a.top === b.top &&
-    a.right === b.right &&
-    a.bottom === b.bottom
+    current !== null &&
+    current.left <= next.left &&
+    current.top <= next.top &&
+    current.right >= next.right &&
+    current.bottom >= next.bottom &&
+    current.right - current.left <= (next.right - next.left) * 4
   );
 }
 
