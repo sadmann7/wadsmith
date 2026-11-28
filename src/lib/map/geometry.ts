@@ -18,6 +18,13 @@ interface Outline {
   polygon: Point[];
   box: Box;
   area: number;
+  inside?: Point;
+}
+
+interface SectorShape {
+  points: (Point | undefined)[];
+  isWhole: boolean;
+  outline: Outline | null;
 }
 
 interface SectorIndex {
@@ -35,6 +42,14 @@ const scanLines = 32;
 const containerCache = new WeakMap<GameMap, Map<string, Sector | null>>();
 const ownerCache = new WeakMap<GameMap, Map<string, Sector[]>>();
 const pointCache = new WeakMap<GameMap, Map<string, Point>>();
+const lastContainers = new WeakMap<
+  Sector[],
+  {
+    shapes: Map<Sector, SectorShape>;
+    containers: Map<string, Sector | null>;
+    deciders: Map<string, Sector | null>;
+  }
+>();
 
 export function loopEdges(loop: string[]): Edge[] {
   return loop.map((from, index) => ({
@@ -105,12 +120,17 @@ export function signedArea(polygon: Point[]) {
 }
 
 export function boxOf(points: Point[]): Box {
-  return {
-    left: Math.min(...points.map((point) => point.x)),
-    right: Math.max(...points.map((point) => point.x)),
-    top: Math.min(...points.map((point) => point.y)),
-    bottom: Math.max(...points.map((point) => point.y)),
-  };
+  let left = Infinity;
+  let right = -Infinity;
+  let top = Infinity;
+  let bottom = -Infinity;
+  for (const { x, y } of points) {
+    if (x < left) left = x;
+    if (x > right) right = x;
+    if (y < top) top = y;
+    if (y > bottom) bottom = y;
+  }
+  return { left, right, top, bottom };
 }
 
 export function pointInPolygon(point: Point, polygon: Point[]) {
@@ -327,39 +347,59 @@ export function holeAt(map: GameMap, point: Point) {
 export function sectorContainers(map: GameMap) {
   const cached = containerCache.get(map);
   if (cached) return cached;
-  const containers = new Map<string, Sector | null>();
-  // A room with a missing corner has no outline, so it is neither inside
-  // anything nor around anything.
-  const outlines = map.sectors
-    .filter((sector) => sectorVertices(sector).every((id) => map.vertices[id]))
-    .map((sector) => {
-      const polygon = sectorPolygon(map, sector);
-      return {
-        sector,
-        polygon,
-        area: Math.abs(signedArea(polygon)),
-        box: boxOf(polygon),
-      };
-    })
-    .toSorted((a, b) => a.area - b.area);
-  outlines.forEach((outline, index) => {
-    let container: Sector | null = null;
-    if (outline.polygon.length >= 3) {
-      const inside = interiorPoint(outline.polygon);
-      for (let other = index + 1; other < outlines.length; other += 1) {
-        const candidate = outlines[other];
-        if (candidate.area <= outline.area) continue;
-        if (!boxContains(candidate.box, outline.box)) continue;
-        if (!pointInPolygon(inside, candidate.polygon)) continue;
-        const inHole = sectorHoles(map, candidate.sector).some((hole) =>
-          pointInPolygon(inside, hole),
-        );
-        container = inHole ? null : candidate.sector;
-        break;
+  const { sectors } = map;
+  const shapes = new Map(
+    sectors.map((sector) => [sector, sectorShape(map, sector)]),
+  );
+  const index = sectorIndex(map);
+  const last = lastContainers.get(sectors);
+  const containers = new Map(last?.containers);
+  const deciders = new Map(last?.deciders);
+  // A map with the same rooms as the last one differs only where corners
+  // moved, so only the rooms those reach are placed again.
+  let redo: Iterable<Sector> = sectors;
+  if (last) {
+    const changed = new Set(
+      sectors.filter(
+        (sector) => shapes.get(sector) !== last.shapes.get(sector),
+      ),
+    );
+    const reached = new Set(changed);
+    for (const sector of sectors) {
+      const decider = last.deciders.get(sector.id);
+      if (decider && changed.has(decider)) reached.add(sector);
+    }
+    for (const sector of changed) {
+      const box = shapes.get(sector)?.outline?.box;
+      if (!box) continue;
+      for (const other of sectorsInBox(index, box)) {
+        const outline = index.outlines.get(other);
+        if (outline && inBox(box, insideOf(outline))) reached.add(other);
       }
     }
-    containers.set(outline.sector.id, container);
-  });
+    redo = reached;
+  }
+  for (const sector of redo) {
+    containers.delete(sector.id);
+    deciders.delete(sector.id);
+    // A room with a missing corner has no outline, so it is neither inside
+    // anything nor around anything.
+    if (!shapes.get(sector)?.isWhole) continue;
+    const decider = deciderOf(index, shapes, sector);
+    deciders.set(sector.id, decider);
+    const outline = index.outlines.get(sector);
+    containers.set(
+      sector.id,
+      decider &&
+        outline &&
+        !sectorHoles(map, decider).some((hole) =>
+          pointInPolygon(insideOf(outline), hole),
+        )
+        ? decider
+        : null,
+    );
+  }
+  lastContainers.set(sectors, { shapes, containers, deciders });
   containerCache.set(map, containers);
   return containers;
 }
@@ -374,22 +414,9 @@ export function containerOf(map: GameMap, sector: Sector) {
 export function wallOwners(map: GameMap) {
   const cached = ownerCache.get(map);
   if (cached) return cached;
-  const owners = new Map<string, Sector[]>();
-  const pillarSides = new Set<string>();
-  for (const sector of map.sectors) {
-    sectorLoops(sector).forEach((loop, at) => {
-      for (const { from, to } of loopEdges(loop)) {
-        const key = wallKey(from, to);
-        owners.set(key, [...(owners.get(key) ?? []), sector]);
-        if (at > 0) pillarSides.add(`${sector.id}:${key}`);
-      }
-    });
-    // A line drawn inside a room has that room on both of its sides.
-    for (const { from, to } of sectorDetails(sector)) {
-      const key = wallKey(from, to);
-      owners.set(key, [...(owners.get(key) ?? []), sector, sector]);
-    }
-  }
+  const walls = sectorWalls(map.sectors);
+  const owners = new Map(walls.owners);
+  const { pillarSides } = walls;
   for (const sector of map.sectors) {
     const container = containerOf(map, sector);
     if (!container) continue;
@@ -506,21 +533,14 @@ function sectorIndex(map: GameMap): SectorIndex {
   const outlines = new Map<Sector, Outline>();
   const cells = new Map<number, Sector[]>();
   for (const sector of map.sectors) {
-    const polygon = sectorPolygon(map, sector);
-    if (polygon.length === 0 || polygon.some((point) => !point)) continue;
-    const box = boxOf(polygon);
-    outlines.set(sector, { polygon, box, area: Math.abs(signedArea(polygon)) });
-    const left = Math.floor(box.left / cellSize);
-    const right = Math.floor(box.right / cellSize);
-    const top = Math.floor(box.top / cellSize);
-    const bottom = Math.floor(box.bottom / cellSize);
-    for (let x = left; x <= right; x += 1) {
-      for (let y = top; y <= bottom; y += 1) {
-        const key = (x + cellOffset) * cellRow + y + cellOffset;
-        const filed = cells.get(key);
-        if (filed) filed.push(sector);
-        else cells.set(key, [sector]);
-      }
+    const { outline } = sectorShape(map, sector);
+    if (!outline) continue;
+    const { box } = outline;
+    outlines.set(sector, outline);
+    for (const key of boxCells(box)) {
+      const filed = cells.get(key);
+      if (filed) filed.push(sector);
+      else cells.set(key, [sector]);
     }
   }
   const index = { outlines, cells };
@@ -545,15 +565,6 @@ function inBox(box: Box, point: Point) {
   );
 }
 
-function boxContains(outer: Box, inner: Box) {
-  return (
-    outer.left <= inner.left &&
-    outer.right >= inner.right &&
-    outer.top <= inner.top &&
-    outer.bottom >= inner.bottom
-  );
-}
-
 function roomLoops(map: GameMap, sector: Sector) {
   const inner = map.sectors
     .filter((other) => containerOf(map, other)?.id === sector.id)
@@ -575,4 +586,132 @@ function rayDistance(from: Point, way: Point, a: Point, b: Point) {
   const along = (offset.x * side.y - offset.y * side.x) / facing;
   const across = (offset.x * way.y - offset.y * way.x) / facing;
   return along > 0 && across >= 0 && across <= 1 ? along : Infinity;
+}
+
+const wallCache = new WeakMap<
+  Sector[],
+  { owners: Map<string, Sector[]>; pillarSides: Set<string> }
+>();
+
+// Dragging moves corners and keeps the rooms, so the walls the rooms draw
+// are worked out once for them and shared by every map that has them.
+function sectorWalls(sectors: Sector[]) {
+  const cached = wallCache.get(sectors);
+  if (cached) return cached;
+  const owners = new Map<string, Sector[]>();
+  const pillarSides = new Set<string>();
+  for (const sector of sectors) {
+    sectorLoops(sector).forEach((loop, at) => {
+      for (const { from, to } of loopEdges(loop)) {
+        const key = wallKey(from, to);
+        owners.set(key, [...(owners.get(key) ?? []), sector]);
+        if (at > 0) pillarSides.add(`${sector.id}:${key}`);
+      }
+    });
+    // A line drawn inside a room has that room on both of its sides.
+    for (const { from, to } of sectorDetails(sector)) {
+      const key = wallKey(from, to);
+      owners.set(key, [...(owners.get(key) ?? []), sector, sector]);
+    }
+  }
+  const walls = { owners, pillarSides };
+  wallCache.set(sectors, walls);
+  return walls;
+}
+
+const shapeCache = new WeakMap<Sector, SectorShape>();
+const cornerCache = new WeakMap<Sector, string[]>();
+
+// A corner keeps its point until it moves, so a room whose corners all hold
+// the same points as last time keeps the outline worked out then.
+function sectorShape(map: GameMap, sector: Sector): SectorShape {
+  let corners = cornerCache.get(sector);
+  if (!corners) {
+    corners = sectorVertices(sector);
+    cornerCache.set(sector, corners);
+  }
+  const cached = shapeCache.get(sector);
+  if (
+    cached &&
+    corners.every((id, index) => map.vertices[id] === cached.points[index])
+  ) {
+    return cached;
+  }
+  const points = corners.map((id): Point | undefined => map.vertices[id]);
+  const polygon = sectorPolygon(map, sector);
+  const shape = {
+    points,
+    isWhole: points.every(Boolean),
+    outline:
+      polygon.length === 0 || polygon.some((point) => !point)
+        ? null
+        : {
+            polygon,
+            box: boxOf(polygon),
+            area: Math.abs(signedArea(polygon)),
+          },
+  };
+  shapeCache.set(sector, shape);
+  return shape;
+}
+
+// The smallest room around a room's inside point, which holds the room
+// unless the point is in one of its pillars.
+function deciderOf(
+  index: SectorIndex,
+  shapes: Map<Sector, SectorShape>,
+  sector: Sector,
+) {
+  const outline = index.outlines.get(sector);
+  if (!outline || outline.polygon.length < 3) return null;
+  const inside = insideOf(outline);
+  let best: Outline | null = null;
+  let decider: Sector | null = null;
+  for (const other of index.cells.get(cellOf(inside.x, inside.y)) ?? []) {
+    const candidate = index.outlines.get(other);
+    if (!candidate || !shapes.get(other)?.isWhole) continue;
+    if (candidate.area <= outline.area) continue;
+    if (best && candidate.area >= best.area) continue;
+    if (!boxContains(candidate.box, outline.box)) continue;
+    if (!pointInPolygon(inside, candidate.polygon)) continue;
+    best = candidate;
+    decider = other;
+  }
+  return decider;
+}
+
+function insideOf(outline: Outline) {
+  outline.inside ??= interiorPoint(outline.polygon);
+  return outline.inside;
+}
+
+function sectorsInBox({ cells }: SectorIndex, box: Box) {
+  const found = new Set<Sector>();
+  for (const key of boxCells(box)) {
+    for (const sector of cells.get(key) ?? []) found.add(sector);
+  }
+  return found;
+}
+
+function boxCells(box: Box) {
+  const keys: number[] = [];
+  const left = Math.floor(box.left / cellSize);
+  const right = Math.floor(box.right / cellSize);
+  const top = Math.floor(box.top / cellSize);
+  const bottom = Math.floor(box.bottom / cellSize);
+  for (let x = left; x <= right; x += 1) {
+    for (let y = top; y <= bottom; y += 1) {
+      keys.push((x + cellOffset) * cellRow + y + cellOffset);
+    }
+  }
+  return keys;
+}
+
+function boxContains(outer: Box, inner: Box) {
+  return (
+    outer.left <= inner.left &&
+    outer.right >= inner.right &&
+    outer.top <= inner.top &&
+    outer.bottom >= inner.bottom
+  );
 }

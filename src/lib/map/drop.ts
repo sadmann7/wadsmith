@@ -22,6 +22,8 @@ export interface RoomDrop {
   isBlocked: boolean;
 }
 
+type Box = ReturnType<typeof boxOf>;
+
 interface Segment {
   key: string;
   a: Point;
@@ -31,8 +33,19 @@ interface Segment {
 interface Outline {
   sector: Sector;
   polygon: Point[];
+  box: Box;
   holes: Point[][];
   edges: Segment[];
+}
+
+interface DropSetup {
+  moved: Set<string>;
+  holders: Set<string>;
+  mine: Outline[];
+  others: Outline[];
+  bent: Sector[];
+  box: Box;
+  drops: Map<string, RoomDrop>;
 }
 
 // Where the whole rooms among the keys land: pulled flush against a wall
@@ -45,62 +58,13 @@ export function planRoomDrop(
   reach: number,
   copy = false,
 ): RoomDrop | null {
-  const moved = new Set(keys.filter((key) => !key.startsWith(thingKeyPrefix)));
-  const rooms = map.sectors.filter((sector) =>
-    sectorVertices(sector).every((id) => moved.has(id) && map.vertices[id]),
-  );
-  if (rooms.length === 0) return null;
-  const movedIds = new Set(rooms.map((room) => room.id));
-  const containers = sectorContainers(map);
-  const holders = new Set<string>();
-  for (const room of rooms) {
-    for (
-      let container = containers.get(room.id);
-      container && !holders.has(container.id);
-      container = containers.get(container.id)
-    ) {
-      if (!movedIds.has(container.id)) holders.add(container.id);
-    }
-  }
-  const outlines = (sectors: Sector[]): Outline[] =>
-    sectors.map((sector) => {
-      const polygon = loopPolygon(map, sector.vertices);
-      return {
-        sector,
-        polygon,
-        holes: (sector.holes ?? [])
-          .filter((hole) => !hole.every((id) => moved.has(id)))
-          .map((hole) => loopPolygon(map, hole)),
-        edges: loopEdges(sector.vertices).map(({ from, to }) => ({
-          key: wallKey(from, to),
-          a: map.vertices[from],
-          b: map.vertices[to],
-        })),
-      };
-    });
-  const mine = outlines(rooms);
-  const box = grow(boxOf(mine.flatMap((outline) => outline.polygon)), reach);
-  const whole = map.sectors.filter((sector) =>
-    sectorVertices(sector).every((id) => map.vertices[id]),
-  );
-  const others = outlines(
-    whole.filter(
-      (sector) => copy || !sectorVertices(sector).some((id) => moved.has(id)),
-    ),
-  );
-  // Rooms that share corners with the dragged ones stretch with them.
-  const bent = copy
-    ? []
-    : whole.filter(
-        (sector) =>
-          !movedIds.has(sector.id) &&
-          sector.vertices.some((id) => moved.has(id)),
-      );
+  const setup = dropSetup(map, keys, copy);
+  if (!setup) return null;
+  const { moved, holders, mine, others, bent } = setup;
+  const box = grow(setup.box, reach);
   const near = (shift: Point) => {
     const reached = shiftBox(box, shift);
-    return others.filter((outline) =>
-      boxesMeet(boxOf(outline.polygon), reached),
-    );
+    return others.filter((outline) => boxesMeet(outline.box, reached));
   };
 
   // A room may sit anywhere inside the room it was drawn in.
@@ -114,7 +78,10 @@ export function planRoomDrop(
     holes.some((hole) => getDoOverlap(room, hole));
   const judge = (shift: Point) => {
     const placed = mine.map((outline) => moveOutline(outline, shift));
-    const around = near(shift);
+    // Only rooms that touch where the dragged rooms land can overlap them or
+    // share a wall with them.
+    const reached = shiftBox(setup.box, shift);
+    const around = others.filter((outline) => boxesMeet(outline.box, reached));
     const stretched = bent.map((sector) => ({
       id: sector.id,
       polygon: sector.vertices.map((id) =>
@@ -138,6 +105,7 @@ export function planRoomDrop(
       if (holders.has(other.sector.id)) continue;
       for (const wall of other.edges) {
         if (
+          getDoesSegmentMeet(wall, reached) &&
           placed.some((room) =>
             room.edges.some((edge) => getRunAlong(edge, wall)),
           )
@@ -147,6 +115,15 @@ export function planRoomDrop(
       }
     }
     return { offset: shift, walls: [...walls], isBlocked };
+  };
+  // Moving the pointer brings the same spots back again and again.
+  const judged = (shift: Point) => {
+    const key = `${shift.x},${shift.y}`;
+    const cached = setup.drops.get(key);
+    if (cached) return cached;
+    const drop = judge(shift);
+    setup.drops.set(key, drop);
+    return drop;
   };
 
   // Against the wall of a room it's inside, a room would share that room's
@@ -177,10 +154,10 @@ export function planRoomDrop(
     const spot = `${at.x},${at.y}`;
     if (tried.has(spot)) continue;
     tried.add(spot);
-    const drop = judge(at);
+    const drop = judged(at);
     if (!drop.isBlocked && drop.walls.length > 0) return drop;
   }
-  return judge(offset);
+  return judged(offset);
 }
 
 // A copy takes only the whole rooms among the keys, with the things listed.
@@ -224,6 +201,87 @@ export function getDoOverlap(a: Point[], b: Point[]) {
     }
   }
   return getHasPointIn(a, b) || getHasPointIn(b, a);
+}
+
+// A drag keeps its map and keys while the offset changes, so what doesn't
+// depend on the offset is worked out once per drag.
+const setups = new WeakMap<GameMap, WeakMap<string[], DropSetup | null>[]>();
+
+function dropSetup(map: GameMap, keys: string[], copy: boolean) {
+  const byCopy = setups.get(map) ?? [new WeakMap(), new WeakMap()];
+  setups.set(map, byCopy);
+  const cache = byCopy[copy ? 1 : 0];
+  if (cache.has(keys)) return cache.get(keys) ?? null;
+  const setup = buildDropSetup(map, keys, copy);
+  cache.set(keys, setup);
+  return setup;
+}
+
+function buildDropSetup(
+  map: GameMap,
+  keys: string[],
+  copy: boolean,
+): DropSetup | null {
+  const moved = new Set(keys.filter((key) => !key.startsWith(thingKeyPrefix)));
+  const rooms = map.sectors.filter((sector) =>
+    sectorVertices(sector).every((id) => moved.has(id) && map.vertices[id]),
+  );
+  if (rooms.length === 0) return null;
+  const movedIds = new Set(rooms.map((room) => room.id));
+  const containers = sectorContainers(map);
+  const holders = new Set<string>();
+  for (const room of rooms) {
+    for (
+      let container = containers.get(room.id);
+      container && !holders.has(container.id);
+      container = containers.get(container.id)
+    ) {
+      if (!movedIds.has(container.id)) holders.add(container.id);
+    }
+  }
+  const outlines = (sectors: Sector[]): Outline[] =>
+    sectors.map((sector) => {
+      const polygon = loopPolygon(map, sector.vertices);
+      return {
+        sector,
+        polygon,
+        box: boxOf(polygon),
+        holes: (sector.holes ?? [])
+          .filter((hole) => !hole.every((id) => moved.has(id)))
+          .map((hole) => loopPolygon(map, hole)),
+        edges: loopEdges(sector.vertices).map(({ from, to }) => ({
+          key: wallKey(from, to),
+          a: map.vertices[from],
+          b: map.vertices[to],
+        })),
+      };
+    });
+  const mine = outlines(rooms);
+  const whole = map.sectors.filter((sector) =>
+    sectorVertices(sector).every((id) => map.vertices[id]),
+  );
+  const others = outlines(
+    whole.filter(
+      (sector) => copy || !sectorVertices(sector).some((id) => moved.has(id)),
+    ),
+  );
+  // Rooms that share corners with the dragged ones stretch with them.
+  const bent = copy
+    ? []
+    : whole.filter(
+        (sector) =>
+          !movedIds.has(sector.id) &&
+          sector.vertices.some((id) => moved.has(id)),
+      );
+  return {
+    moved,
+    holders,
+    mine,
+    others,
+    bent,
+    box: boxOf(mine.flatMap((outline) => outline.polygon)),
+    drops: new Map(),
+  };
 }
 
 function moveOutline(outline: Outline, shift: Point): Outline {
@@ -352,8 +410,6 @@ function add(point: Point, shift: Point): Point {
   return { x: point.x + shift.x, y: point.y + shift.y };
 }
 
-type Box = ReturnType<typeof boxOf>;
-
 function grow(box: Box, by: number): Box {
   return {
     left: box.left - by,
@@ -370,6 +426,15 @@ function shiftBox(box: Box, shift: Point): Box {
     top: box.top + shift.y,
     bottom: box.bottom + shift.y,
   };
+}
+
+function getDoesSegmentMeet({ a, b }: Segment, box: Box) {
+  return (
+    Math.min(a.x, b.x) <= box.right &&
+    Math.max(a.x, b.x) >= box.left &&
+    Math.min(a.y, b.y) <= box.bottom &&
+    Math.max(a.y, b.y) >= box.top
+  );
 }
 
 function boxesMeet(a: Box, b: Box, strict = false) {
