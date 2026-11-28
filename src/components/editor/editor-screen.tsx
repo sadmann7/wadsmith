@@ -648,24 +648,27 @@ export function EditorScreen({
     : thingKinds.filter((kind) => !thingCatalog[kind].doom2);
   const limits = useVanillaLimits(map);
   const limitIssues = limits.issues;
+  // Checking a big map takes longer than a frame, so an edit paints first and
+  // its problems show a moment later.
+  const checkedMap = React.useDeferredValue(map);
   const checks = React.useMemo(
     () => [
-      ...checkMap(map, context),
-      ...customThingWarnings(map, customThings),
+      ...checkMap(checkedMap, context),
+      ...customThingWarnings(checkedMap, customThings),
       ...limitIssues,
     ],
-    [context, customThings, limitIssues, map],
+    [checkedMap, context, customThings, limitIssues],
   );
   // A join fix reshapes rooms, too slow to redo on every render of a big map.
   const shownChecks = React.useMemo(
     () =>
       checks
         .slice(0, 8)
-        .map((issue) => ({ issue, fixed: fixIssue(map, issue) })),
-    [checks, map],
+        .map((issue) => ({ issue, fixed: fixIssue(checkedMap, issue) })),
+    [checkedMap, checks],
   );
   const issues = checks.filter((issue) => issue.severity === "error");
-  const canPlay = issues.length === 0;
+  const canPlay = checkedMap === map && issues.length === 0;
   const liveHealth: MapHealth = checks.some(
     (issue) => issue.severity === "error",
   )
@@ -2827,6 +2830,7 @@ export function EditorScreen({
                             type="button"
                             className="border-0 bg-transparent p-0 text-primary"
                             aria-label={`${issue.fixLabel ?? "Fix"}: ${title}`}
+                            disabled={checkedMap !== map}
                             onClick={() => commit(fixed)}
                           >
                             {issue.fixLabel ?? "Fix"}

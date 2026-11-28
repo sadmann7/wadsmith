@@ -448,6 +448,7 @@ export function removeCorner(map: GameMap, id: string): GameMap | null {
 // walls laid along each other join.
 export function joinCornersToWalls(map: GameMap, ids: string[]): GameMap {
   let next = map;
+  let walls = allWalls(next);
   const moved = new Set(ids);
   // Puts a corner into a wall, unless a room along the wall already runs
   // through that corner, which would visit it twice.
@@ -466,12 +467,13 @@ export function joinCornersToWalls(map: GameMap, ids: string[]): GameMap {
     const split = splitWall(next, wall, point, 1, true);
     if (!split || split.id !== corner) return false;
     next = split.map;
+    walls = allWalls(next);
     return true;
   };
   for (const id of ids) {
     const point = next.vertices[id];
     if (!point) continue;
-    for (const [key, { from, to }] of allWalls(next)) {
+    for (const [key, { from, to }] of walls) {
       if (from === id || to === id) continue;
       if (
         getIsWithin(next.vertices[from], next.vertices[to], point) &&
@@ -483,7 +485,7 @@ export function joinCornersToWalls(map: GameMap, ids: string[]): GameMap {
   }
   for (let round = 0; round < mostJoins; round += 1) {
     let joined = false;
-    for (const [key, { from, to }] of allWalls(next)) {
+    for (const [key, { from, to }] of walls) {
       if (!moved.has(from) && !moved.has(to)) continue;
       const a = next.vertices[from];
       const b = next.vertices[to];
